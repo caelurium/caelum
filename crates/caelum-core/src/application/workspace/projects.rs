@@ -19,16 +19,34 @@ impl Workspace {
         );
     }
 
-    pub fn select_project(&mut self, path: &str) {
+    /// Restore this project's conversation, including its linked worktrees. Existing
+    /// context takes precedence over an empty placeholder created before discovery.
+    pub fn select_project(&mut self, path: &str) -> bool {
         if !self.projects.iter().any(|project| project.path == path) {
-            return;
+            return false;
         }
-        self.active_project = Some(path.into());
+        let remembered = self.remembered.get(path).copied();
         if let Some(index) = self
-            .remembered
-            .get(path)
-            .copied()
-            .filter(|i| !self.sessions[*i].archived && !self.sessions[*i].forgotten)
+            .sessions
+            .iter()
+            .enumerate()
+            .filter(|(_, session)| {
+                !session.archived
+                    && !session.forgotten
+                    && !session.archiving
+                    && !session.deleting
+                    && (session.scope.project == path
+                        || self.group_path(&session.scope.project) == path)
+            })
+            .max_by_key(|(index, session)| {
+                (
+                    session.has_context(),
+                    remembered == Some(*index),
+                    session.last_activity,
+                    *index,
+                )
+            })
+            .map(|(index, _)| index)
         {
             self.select(index);
         } else {
@@ -37,6 +55,7 @@ impl Workspace {
                 provider: self.preferences.default_provider,
             });
         }
+        true
     }
 
     pub(super) fn select_open_session_or_new(&mut self, preferred_project: &str, fallback: Scope) {
