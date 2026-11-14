@@ -1,5 +1,193 @@
 use super::*;
 
+fn grouped_runtime(size: (f32, f32)) -> Runtime<Workspace> {
+    let mut rt = live_runtime_size(size);
+    rt.update(|s, _| {
+        let app = &mut s.live.as_mut().unwrap().app;
+        let session = &mut app.sessions[1];
+        session.options.model = Some("openai/gpt-shared".into());
+        app.choices.insert(session.scope.clone(), serde_json::from_value(serde_json::json!({
+            "models": [
+                {"id":"openai/gpt-shared", "name":"GPT Shared", "provider":{"id":"openai","name":"OpenAI"}, "contextWindow":1000000, "efforts":[], "defaultEffort":"high"},
+                {"id":"opencode-go/gpt-shared", "name":"GPT Shared", "provider":{"id":"opencode-go","name":"OpenCode Go"}, "contextWindow":1000000, "efforts":[], "defaultEffort":"medium"},
+                {"id":"opencode-go/kimi-k2", "name":"Kimi K2", "provider":{"id":"opencode-go","name":"OpenCode Go"}, "contextWindow":262144, "efforts":[]},
+                {"id":"opencode-go/glm-5", "name":"GLM-5", "provider":{"id":"opencode-go","name":"OpenCode Go"}, "contextWindow":204800, "efforts":[]}
+            ], "agents":[], "defaultModel":"openai/gpt-shared"
+        })).unwrap());
+        app.select(1);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "model-trigger");
+    rt
+}
+
+#[test]
+fn company_search_and_connection_filters_keep_duplicate_model_identity() {
+    let mut rt = grouped_runtime((800.0, 620.0));
+    fill(&mut rt, "model-search", "openai shared 1m");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("2 models")
+    );
+    assert!(element(&rt, "model-group-OpenAI").visible[3] > 0.0);
+    click(&mut rt, "model-filter-connection-opencode-go");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("1 model")
+    );
+    assert!(element(&rt, "model-search").focused);
+    click(&mut rt, "model-favorite-0");
+    assert_eq!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .app
+            .preferences
+            .favorite_models["opencode"],
+        ["opencode-go/gpt-shared"]
+    );
+    click(&mut rt, "model-filter-favorites");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("1 model")
+    );
+    // Navigation elsewhere must not redirect this captured picker selection.
+    rt.update(|s, _| s.live.as_mut().unwrap().app.select(0));
+    key(&mut rt, Key::Enter, Mods::default());
+    let app = &rt.state.live.as_ref().unwrap().app;
+    assert_eq!(
+        app.sessions[1].options.model.as_deref(),
+        Some("opencode-go/gpt-shared")
+    );
+    assert_eq!(app.sessions[1].options.effort.as_deref(), Some("medium"));
+    assert!(app.sessions[0].options.model.is_none());
+
+    rt.update(|s, _| s.live.as_mut().unwrap().app.select(1));
+    advance(&mut rt, 0.2);
+    click(&mut rt, "model-trigger");
+    click(&mut rt, "model-filter-connection-openai");
+    key(&mut rt, Key::Enter, Mods::default());
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[1]
+            .options
+            .model
+            .as_deref(),
+        Some("openai/gpt-shared")
+    );
+}
+
+#[test]
+fn filter_keyboard_focus_empty_results_and_unavailable_favorites_are_usable() {
+    let mut rt = grouped_runtime((800.0, 620.0));
+    key(&mut rt, Key::Tab, Mods::default());
+    assert!(element(&rt, "model-filter-all").focused);
+    key(&mut rt, Key::Tab, Mods::default());
+    assert!(element(&rt, "model-filter-favorites").focused);
+    key(&mut rt, Key::Text(" ".into()), Mods::default());
+    advance(&mut rt, 0.2);
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| !e.exiting && e.text.as_deref() == Some("No favourite models"))
+    );
+    key(&mut rt, Key::Enter, Mods::default());
+    assert!(rt.state.live.as_ref().unwrap().models.is_open());
+    click(&mut rt, "model-filter-all");
+    fill(&mut rt, "model-search", "Moonshot Go");
+    assert!(element(&rt, "model-group-Moonshot AI").visible[3] > 0.0);
+    click(&mut rt, "model-filter-connection-openai");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("0 models")
+    );
+    click(&mut rt, "model-filter-all");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("1 model")
+    );
+    rt.update(|s, _| {
+        let app = &mut s.live.as_mut().unwrap().app;
+        app.preferences
+            .favorite_models
+            .insert("opencode".into(), vec!["missing/model".into()]);
+        app.sessions[1].options.model = Some("missing/model".into());
+    });
+    fill(&mut rt, "model-search", "missing");
+    assert!(element(&rt, "model-group-Unavailable").visible[3] > 0.0);
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| !e.exiting && e.label.as_deref() == Some("missing/model") && !e.focusable)
+    );
+    key(&mut rt, Key::Enter, Mods::default());
+    assert!(rt.state.live.as_ref().unwrap().models.is_open());
+    click(&mut rt, "model-favorite-0");
+    assert!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .app
+            .preferences
+            .favorite_models["opencode"]
+            .is_empty()
+    );
+    click(&mut rt, "model-filter-favorites");
+    assert_eq!(
+        element(&rt, "model-result-count").text.as_deref(),
+        Some("0 models")
+    );
+}
+
+#[test]
+fn grouped_settings_picker_fits_and_keeps_session_and_provider_defaults_separate() {
+    for size in [(800.0, 620.0), (1280.0, 1000.0)] {
+        for theme in ["dark", "light"] {
+            let mut rt = grouped_runtime(size);
+            key(&mut rt, Key::Escape, Mods::default());
+            rt.update(|s, _| s.live.as_mut().unwrap().app.preferences.theme = theme.into());
+            click(&mut rt, "nav-settings");
+            click(&mut rt, "settings-providers");
+            click(&mut rt, "settings-provider-opencode");
+            click(&mut rt, "settings-model-trigger");
+            advance(&mut rt, 0.3);
+            let popup = element(&rt, "model-popover");
+            assert!(
+                popup
+                    .rect
+                    .iter()
+                    .zip(popup.visible)
+                    .all(|(a, b)| (*a - b).abs() < 1.0),
+                "{size:?} {theme}: {popup:?}"
+            );
+            assert!(element(&rt, "model-scroll").rect[3] >= 186.0);
+            click(&mut rt, "model-filter-connection-opencode-go");
+            fill(&mut rt, "model-search", "shared");
+            key(&mut rt, Key::Enter, Mods::default());
+            advance(&mut rt, 0.2);
+            let app = &rt.state.live.as_ref().unwrap().app;
+            assert_eq!(
+                app.preferences.providers["opencode"].model.as_deref(),
+                Some("opencode-go/gpt-shared")
+            );
+            assert_eq!(
+                app.sessions[1].options.model.as_deref(),
+                Some("openai/gpt-shared")
+            );
+            assert!(element(&rt, "settings-model-trigger").focused);
+            click(&mut rt, "settings-model-trigger");
+            fill(&mut rt, "model-search", "provider default");
+            key(&mut rt, Key::Enter, Mods::default());
+            assert!(
+                rt.state.live.as_ref().unwrap().app.preferences.providers["opencode"]
+                    .model
+                    .is_none()
+            );
+        }
+    }
+}
+
 #[test]
 fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
     use caelum_core::application::{Command, Event, Provider, Reply, Scope};
