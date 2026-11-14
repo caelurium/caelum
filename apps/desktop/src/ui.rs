@@ -417,11 +417,6 @@ pub static CHOICE: Icon = Icon {
     view: 16.0,
     body: r#"<path d="m5 6 3-3 3 3m-6 4 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
-pub static EFFORT: Icon = Icon {
-    name: "reasoning-effort",
-    view: 16.0,
-    body: r#"<path d="M3 12.5a6 6 0 1 1 10 0M8 9l3-4M4 6l1 1M8 3v1M12 6l-1 1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="9" r="1" fill="currentColor"/>"#,
-};
 pub static AGENT: Icon = Icon {
     name: "agent",
     view: 16.0,
@@ -460,47 +455,14 @@ pub fn provider_name(provider: caelum_core::application::Provider) -> &'static s
     }
 }
 
-pub fn brand(s: &crate::Workspace, k: &Kit) -> El {
-    let mut brand = row()
-        .key("brand")
-        .w_full()
-        .h(28.0)
-        .mb(8.0)
-        .gap(10.0)
-        .center_y()
-        .px(8.0)
-        .child(
-            row()
-                .grow(1.0)
-                .gap(10.0)
-                .center_y()
-                .child(icon(&crate::ORBIT, 18.0).color(k.c.text_accent))
-                .child(
-                    text("caelum")
-                        .font(TextStyle::new(15.0, 600.0))
-                        .color(k.c.text_base),
-                )
-                .role("button")
-                .label("Caelum Home")
-                .focusable(s.live.is_some())
-                .focus_ring(1.5, 0.0, k.c.border_focus)
-                .key("brand-home")
-                .on_press(|s: &mut crate::Workspace| {
-                    if s.live.is_some() {
-                        crate::home::open(s);
-                    }
-                }),
-        );
-    if s.sidebar.is_open() {
-        brand = brand.child(
-            crate::quiet_button(&rune_kit::shell::SIDEBAR, "Hide sidebar")
-                .on_press(|s: &mut crate::Workspace| s.sidebar.set_open(false))
-                .build(k)
-                .expanded(true)
-                .key("sidebar-toggle"),
-        );
-    }
-    brand
+pub fn sidebar_collapse(s: &crate::Workspace, k: &Kit) -> Option<El> {
+    s.sidebar.is_open().then(|| {
+        crate::quiet_button(&rune_kit::shell::SIDEBAR, "Hide sidebar")
+            .on_press(|s: &mut crate::Workspace| s.sidebar.set_open(false))
+            .build(k)
+            .expanded(true)
+            .key("sidebar-toggle")
+    })
 }
 
 pub fn caption(value: impl Into<String>, k: &Kit) -> El {
