@@ -29,6 +29,9 @@ interactions = {
     "provider-dropdown": ("providers", [{"t": 0.25, "key": "Default effort-trigger"}]),
     "model-hover": ("models", [{"t": 0.25, "type": "move", "key": "model-favorite-1"}]),
     "model-focus": ("models", [{"t": 0.25, "type": "key", "name": "Tab"}]),
+    "models-connection": ("models", [{"t": 0.25, "key": "model-filter-connection-opencode-go"}]),
+    "models-favorites": ("models", [{"t": 0.25, "key": "model-filter-favorites"}]),
+    "models-search": ("models", [{"t": 0.25, "key": "model-search"}, {"t": 0.4, "paste": "moonshot go"}]),
     "settings-hover": ("settings", [{"t": 0.25, "type": "move", "key": "settings-providers"}]),
     "worktrees-form": ("worktree-create", []),
     "composer-agent": ("composer-options", [{"t": 0.25, "key": "agent-trigger"}]),
@@ -70,6 +73,7 @@ scenes += ("tool-running", "tool-failure", "compaction", "compaction-running", "
 scenes += ("tool-output-long", "vercel-tool-output-long", "tool-search", "vercel-tools")
 scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-queue-error", "composer-attachments")
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
+scenes += ("models-settings",)
 for theme in ("dark", "light"):
     for compact in (False, True):
       for label in (*scenes, *interactions):

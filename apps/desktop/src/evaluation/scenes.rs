@@ -111,6 +111,9 @@ pub(crate) const SCENES: &[Scene] = &[
     ("vercel-about", |s| scene(s, "vercel-about")),
     ("vercel-about-update", |s| scene(s, "vercel-about-update")),
     ("models", |s| scene(s, "models")),
+    ("models-settings", |s| {
+        super::models::scene(s, "models-settings")
+    }),
     ("launcher", |s| scene(s, "launcher")),
     ("session", |s| scene(s, "session")),
     ("timeline", |s| scene(s, "timeline")),

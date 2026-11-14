@@ -48,7 +48,12 @@ heading. Errors lead the logs with a labelled danger-coloured rule. Long output
 has an independent 260-point scroll viewport and line-count footer; previews stop
 at a complete line within 12,000 characters where possible. Copy retains the full
 result, and full-output expansion preserves reading position.
-Model selection is an anchored searchable popover. Inline patch previews open by
+Model selection is an anchored searchable popover with company groups and bundled
+logos. All, Favourites and connection filters narrow the catalogue; search matches
+model names, IDs, companies, connections and context sizes. Each row keeps its
+connection visible, including when two connections offer the same model. Favourites
+stay at the top, and unavailable saved models remain visible and removable.
+Inline patch previews open by
 default and size to their visible file headers, code and unchanged-line gaps. Short
 patches have no expansion footer; longer patches start at a 204-point viewport and
 can expand to half the window height, up to 480 points. Collapsing a file reclaims
@@ -156,6 +161,10 @@ excerpts, highlighted search and stable prompt jumps.
 | Searchable models | Compact session actions |
 | --- | --- |
 | ![Native models](previews/rune-light-models-small.png) | ![Native session actions](previews/rune-dark-session-small.png) |
+
+| Company and connection search | Compact settings catalogue |
+| --- | --- |
+| ![Grouped model search](previews/rune-dark-models-search-small.png) | ![Settings model picker](previews/rune-light-models-settings-small.png) |
 
 | Project/provider launcher | Background commands |
 | --- | --- |
