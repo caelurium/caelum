@@ -209,6 +209,31 @@ pub fn tab(title: &str, selected: bool, k: &Kit) -> El {
     .focus_ring(1.5, 0.0, k.c.border_focus)
 }
 
+pub fn highlighted_tab(title: &str, selected: bool, k: &Kit) -> El {
+    k.interactive(
+        row()
+            .h(30.0)
+            .px(10.0)
+            .center_y()
+            .radius(10.0)
+            .fill(if selected {
+                k.c.pressed
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .child(text(title).font(k.ty.ui_medium).color(if selected {
+                k.c.text_accent
+            } else {
+                k.c.text_muted
+            })),
+    )
+    .role("tab")
+    .label(title)
+    .focusable(true)
+    .focus_selected(selected)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
+}
+
 pub fn notice(title: &str, detail: &str, k: &Kit) -> El {
     card(k)
         .gap(4.0)

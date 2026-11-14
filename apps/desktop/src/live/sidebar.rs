@@ -233,7 +233,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
         .gap(4.0)
         .label("Projects and sessions")
         .child(
-            ui::tab("Home", l.panels.screen == crate::panels::Screen::Home, k)
+            ui::highlighted_tab("Home", l.panels.screen == crate::panels::Screen::Home, k)
                 .w_full()
                 .on_press(crate::home::open)
                 .key("nav-home")
