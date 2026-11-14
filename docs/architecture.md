@@ -29,6 +29,11 @@ provider events. Completion routing preserves each request's original owner and
 generation. The application and parity suites are grouped by capability under
 `application/tests/` and `application/parity_tests/`.
 
+`workspace/home.rs` owns the saved Home draft, target/options and asynchronous
+attachment/project requests. First send creates a fresh stable session only after
+admission, transferring its captured context through the normal durable submission
+path. Home request generations reject results for an older target or draft.
+
 `Runtime` uses eight normal workers, two control workers, bounded command queues,
 a 1,024-event inbox and 256-event UI drains. Arrival wakes Rune; provider I/O
 does not run on the UI thread. Cancellation and permission replies bypass the
@@ -55,6 +60,9 @@ alongside these modules, with embedded fake servers in `tests/fixtures/`.
 - `live.rs`: editor/application synchronization and runtime wake/drain, with
   sidebar, windowed transcript, composer and session menus in `live/`.
 - `state.rs`: pane/view state and the original simulated interaction fixture.
+- `home.rs` / `home/`: Home navigation, native editor, project/provider controls,
+  cached background and deterministic preview scenes. Fresh launches open Home;
+  explicit project launches and notification targets open their conversations.
 - `panels.rs`: panel state, synchronization and routing. `panels/` owns the
   file/change inspector, review/feedback, appearance, launcher, queue and overlay
   views. Local and review diffs have independent state.
@@ -76,6 +84,9 @@ attachments, options, queues and preferences. `CAELUM_STATE` overrides the path;
 prevents concurrent desktop writers. Writes use a private temporary file,
 fsync and atomic replacement; submissions wait for their own durable snapshot.
 Invalid/future state blocks saving instead of becoming an empty workspace.
+
+The optional `home` field stores its independent text, attachment snapshots and
+project/provider/model choices. Older snapshots restore an empty Home draft.
 
 On the first production-default launch, migration prefers the evaluation
 snapshot at `~/.caelum/rune/workspace-v1.json`. Otherwise it imports workspace
@@ -108,3 +119,18 @@ Files and feedback paginate against the expected head/base. Review generations
 reject late pages even after a same-head refresh. Mutations remain locked across
 navigation/refresh and pin the displayed head. GitHub enforces merge permissions
 and repository rules. Selected feedback becomes editable composer context.
+
+Review opening reads the last overview/files from disk alongside a fresh details
+request. `github/cache.rs` owns the best-effort SQLite cache at the workspace
+snapshot path plus `.pr-cache-v1.sqlite3`, preserving isolated state overrides.
+Canonical PR URLs share entries across worktrees; file pages additionally pin both
+base and head commits. The cache retains at most 128 overview/page records and
+32 MiB of JSON, with a 4 MiB per-record limit and seven-day expiry. Eviction reclaims
+SQLite pages. All cache I/O runs on service workers; cache failures fall back to
+GitHub. Read-only review tasks bypass draft saves after workspace restoration.
+
+Cached overviews remain labelled until live details arrive, and do not provide
+current checks or merge actions. Matching commits retain cached files; either
+commit changing invalidates files and old in-flight pages. Uncached file pages
+use the details snapshot followed by the files request and a final canonical
+URL/base/head validation, avoiding a redundant pre-files request.

@@ -64,6 +64,7 @@ interactions = {
 scenes += ("worktree-create", "shell-output", "shells-many", "messages", "archive", "overview", "overview-empty", "overview-blocked", "overview-long", "overview-stale")
 scenes += ("composer-options", "files-tabs", "tools-collapsed", "merge-ready", "merge-blocked", "merge-pending", "merge-conflicts", "merge-behind", "merge-draft", "merge-merged", "merge-closed")
 scenes += ("merge-auto-enabled", "merge-auto-error")
+scenes += ("overview-cached",)
 scenes += ("shells-collapsed", "vercel", "vercel-settings", "sidebar-projects")
 scenes += ("session-feed", "session-feed-current", "session-feed-empty", "session-feed-many", "session-feed-colours")
 scenes += ("sidebar-worktrees", "sidebar-worktrees-many", "sidebar-worktrees-projects", "sidebar-worktrees-vercel", "worktrees-empty")
@@ -74,6 +75,7 @@ scenes += ("tool-output-long", "vercel-tool-output-long", "tool-search", "vercel
 scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-queue-error", "composer-attachments")
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
+scenes += ("home", "home-empty", "home-draft", "home-projects")
 for theme in ("dark", "light"):
     for compact in (False, True):
       for label in (*scenes, *interactions):

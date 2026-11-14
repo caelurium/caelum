@@ -85,7 +85,9 @@ pub(super) fn all(s: &Workspace) -> Vec<Model> {
             }
         })
         .collect();
+    let home_options = l.app.home_options();
     let current = match owner {
+        Owner::Home(_) => home_options.model.as_ref(),
         Owner::Session(index, _) => l.app.sessions[*index].options.model.as_ref(),
         Owner::Defaults(scope) => l
             .app

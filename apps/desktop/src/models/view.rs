@@ -214,7 +214,9 @@ fn view(s: &Workspace, k: &Kit) -> (El, f32) {
     let owner = l.models.owner.as_ref().unwrap();
     let scope = owner.scope();
     let provider = scope.provider;
+    let home_options = l.app.home_options();
     let current = match owner {
+        Owner::Home(_) => home_options.model.as_deref(),
         Owner::Session(i, _) => l.app.sessions[*i].options.model.as_deref(),
         Owner::Defaults(scope) => l
             .app
@@ -391,10 +393,10 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         return;
     };
     let defaults = matches!(owner, Owner::Defaults(_));
-    let anchor = if defaults {
-        "settings-model-trigger"
-    } else {
-        "model-trigger"
+    let anchor = match owner {
+        Owner::Home(_) => "home-model-trigger",
+        Owner::Defaults(_) => "settings-model-trigger",
+        Owner::Session(..) => "model-trigger",
     };
     let window = rune::memo::window_layout("shell");
     let (body, preferred_height) = view(s, k);
