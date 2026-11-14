@@ -92,6 +92,11 @@ impl Draw {
         self.renderer.submit(&self.gpu.queue, encoder);
         self.target.read(&self.gpu.device)
     }
+
+    fn phase(&mut self, rt: &mut Runtime<Workspace>, phase: f64) -> Vec<u8> {
+        self.compositor.motion = Motion::Orbit { phase, last: rt.t };
+        self.frame(rt)
+    }
 }
 
 fn advance(rt: &mut Runtime<Workspace>, seconds: f64) {
@@ -177,7 +182,7 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
 }
 
 #[test]
-fn gpu_art_varies_vertically_and_crosses_the_loop_without_a_jump() {
+fn gpu_art_keeps_its_shape_with_shimmer_stars_and_a_smooth_loop() {
     let mut rt = Runtime::new(
         crate::evaluation::design(),
         |_, cx| {
@@ -193,35 +198,65 @@ fn gpu_art_varies_vertically_and_crosses_the_loop_without_a_jump() {
     rt.set_system_reduced_motion(true);
     advance(&mut rt, 1.0);
     let mut draw = Draw::new();
-    // The original atlas has empty scanlines between rows. Horizontal travel
-    // cannot put ink there; deformation must move characters off those rails.
-    let before = draw.frame(&mut rt);
+    let still = draw.frame(&mut rt);
     rt.set_system_reduced_motion(false);
-    for _ in 0..30 {
-        advance(&mut rt, 0.1);
-        draw.frame(&mut rt);
-    }
-    let after = draw.frame(&mut rt);
-    let vertical = before
+    advance(&mut rt, 0.1);
+    let spinning = draw.phase(&mut rt, 3.25);
+    // Empty scanlines must stay empty: orbiting characters should not bend
+    // the artwork's rows into waves. Fixed stars leave the same gaps too.
+    let (blank_rows, displaced) = still
         .chunks_exact(PIXEL_SIZE.0 as usize * 4)
-        .zip(after.chunks_exact(PIXEL_SIZE.0 as usize * 4))
+        .zip(spinning.chunks_exact(PIXEL_SIZE.0 as usize * 4))
         .filter(|(row, _)| row.chunks_exact(4).all(|p| p[..3].iter().all(|c| *c < 24)))
-        .map(|(_, row)| {
-            row.chunks_exact(4)
+        .fold((0, 0), |(rows, ink), (_, row)| {
+            let moved = row
+                .chunks_exact(4)
                 .filter(|p| p[..3].iter().any(|c| *c > 90))
-                .count()
-        })
-        .sum::<usize>();
+                .count();
+            (rows + 1, ink + moved)
+        });
     assert!(
-        vertical > 200,
-        "the disc must ripple across rows, not only slide horizontally: {vertical}"
+        blank_rows > 50,
+        "the reference must include empty scanlines"
+    );
+    assert_eq!(displaced, 0, "the disc must keep its original row geometry");
+
+    // This top strip has only faint ink in the source artwork. The new bright
+    // points must be sparse stars that stay put as the disc flows beneath them.
+    let sky = PIXEL_SIZE.0 as usize * 100 * 4;
+    let stars = still[..sky]
+        .chunks_exact(4)
+        .filter(|p| p[..3].iter().any(|c| *c > 64))
+        .count();
+    assert!((8..1000).contains(&stars), "a sparse star field: {stars}");
+    assert_eq!(
+        travelled_ink(&still[..sky], &spinning[..sky], PIXEL_SIZE.0 as usize),
+        0,
+        "stars must not drift with the disc"
     );
 
-    draw.compositor.motion = Motion::Orbit {
-        phase: PERIOD - 1.0 / 60.0,
-        last: rt.t,
-    };
-    let end = draw.frame(&mut rt);
+    // Eight seconds returns every row to the same glyph footprint. Individual
+    // characters should now brighten and dim independently of their motion.
+    let before = draw.phase(&mut rt, 1.0);
+    let after = draw.phase(&mut rt, 9.0);
+    let (brighter, dimmer) = before
+        .chunks_exact(4)
+        .zip(after.chunks_exact(4))
+        .filter(|(a, b)| a[..3].iter().any(|c| *c > 90) && b[..3].iter().any(|c| *c > 90))
+        .fold((0, 0), |(brighter, dimmer), (a, b)| {
+            let delta =
+                i16::from(*b[..3].iter().max().unwrap()) - i16::from(*a[..3].iter().max().unwrap());
+            (
+                brighter + usize::from(delta > 4),
+                dimmer + usize::from(delta < -4),
+            )
+        });
+    assert!(
+        brighter > 500 && dimmer > 500,
+        "individual characters must shimmer independently: {brighter} brighter, {dimmer} dimmer"
+    );
+
+    let end = draw.phase(&mut rt, PERIOD - 1.0 / 60.0);
     advance(&mut rt, 1.0 / 30.0);
     let start = draw.frame(&mut rt);
     let difference = end

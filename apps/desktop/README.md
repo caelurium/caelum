@@ -37,10 +37,10 @@ Appearance → Sidebar scope setting. Closing
 the window keeps work running; ⌘Q shuts down owned providers and saves editors.
 
 Fresh launches open **Home**, also available from the sidebar or Caelum logo.
-Home shows coloured ASCII black-hole artwork with rippling bands, eddies and
-evolving characters in dark mode and pale sunlit clouds in light mode. The
-animation respects Reduce Motion and stops requesting frames away from Home. Its
-colour map comes from the original artwork; see [the assets](assets/home/README.md)
+Home shows spinning coloured ASCII black-hole artwork with individual character
+shimmer and a sparse star field in dark mode, and pale sunlit clouds in light mode.
+The animation respects Reduce Motion and stops requesting frames away from Home.
+Its colour map comes from the original artwork; see [the assets](assets/home/README.md)
 for regeneration.
 Its draft and attachments are saved independently of conversations. Choose a
 project/worktree, provider and model, then send to start a fresh session. Explicit
