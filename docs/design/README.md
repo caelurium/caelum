@@ -48,11 +48,12 @@ heading. Errors lead the logs with a labelled danger-coloured rule. Long output
 has an independent 260-point scroll viewport and line-count footer; previews stop
 at a complete line within 12,000 characters where possible. Copy retains the full
 result, and full-output expansion preserves reading position.
-Model selection is an anchored searchable popover with company groups and bundled
+Model selection is a compact, search-first popover with company groups and bundled
 logos. All, Favourites and connection filters narrow the catalogue; search matches
-model names, IDs, companies, connections and context sizes. Each row keeps its
-connection visible, including when two connections offer the same model. Favourites
-stay at the top, and unavailable saved models remain visible and removable.
+model names, IDs, companies, connections and context sizes. Single-line rows show
+connection labels when browsing across connections, with context sizes in tooltips.
+Favourites stay at the top, and star actions appear on hover or keyboard focus.
+Short result sets shrink the popover, and unavailable saved models remain removable.
 Inline patch previews open by
 default and size to their visible file headers, code and unchanged-line gaps. Short
 patches have no expansion footer; longer patches start at a 204-point viewport and
