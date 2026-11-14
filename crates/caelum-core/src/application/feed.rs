@@ -70,6 +70,7 @@ impl Workspace {
                     branches.insert(branch.to_owned());
                 }
                 if let Some(details) = &session.details {
+                    branches.extend(details.branch.iter().cloned());
                     branches.extend(details.branches.iter().cloned());
                 }
             }
@@ -121,6 +122,18 @@ impl Workspace {
     }
 
     pub fn session_branch<'a>(&'a self, session: &'a Session) -> Option<&'a str> {
+        if !session.archived {
+            if let Some(git) = self
+                .services
+                .checkouts
+                .get(&session.scope.project)
+                .and_then(|checkout| checkout.git.as_ref())
+            {
+                // Active rows describe where the next prompt runs. A known
+                // detached HEAD must not fall back to a recorded branch.
+                return git.branch.as_deref();
+            }
+        }
         session
             .details
             .as_ref()
