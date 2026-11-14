@@ -8,6 +8,12 @@ use crate::application::presentation;
 
 impl Conversation {
     pub(super) fn opencode(&mut self, method: &str, data: &Value) {
+        if !self.failure.event(method, data) {
+            return;
+        }
+        if method == "session.execution.failed" {
+            self.activity += 1;
+        }
         if method == "session.execution.started" {
             self.provider_started(data);
         }
@@ -279,14 +285,6 @@ impl Conversation {
             | "session.execution.interrupted"
             | "session.idle" => {
                 self.settle_at(data["_created"].as_u64().unwrap_or_else(presentation::now));
-                if method.ends_with("failed") {
-                    self.put(Entry::new(
-                        format!("opencode-error-{}", self.entries.len()),
-                        EntryKind::Status,
-                        display(&data["error"]),
-                        true,
-                    ));
-                }
             }
             _ => {}
         }

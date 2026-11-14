@@ -182,7 +182,12 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
         ["low", "high"]
     );
     let started = provider
-        .start_session_with_options(&project_path, Some(&choices.models[0].id), Some("build"))
+        .start_session_with_options(
+            &project_path,
+            Some(&choices.models[0].id),
+            None,
+            Some("build"),
+        )
         .unwrap();
     assert_eq!(started.session.id, "ses_fake");
     assert_eq!(started.session.model.as_deref(), Some("local/model/a"));

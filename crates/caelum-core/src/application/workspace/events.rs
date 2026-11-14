@@ -204,6 +204,15 @@ impl Workspace {
             if id.is_none() || session.remote_id.as_deref() != id {
                 continue;
             }
+            if provider == Provider::OpenCode
+                && method == "session.execution.failed"
+                && session
+                    .conversation
+                    .failure
+                    .is_stale(data["_created"].as_u64())
+            {
+                continue;
+            }
             if let Some(id) = data["_event_id"].as_str() {
                 if session.seen_events.iter().any(|seen| seen == id) {
                     continue;

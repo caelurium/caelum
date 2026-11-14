@@ -322,6 +322,7 @@ impl ProviderRuntime {
                         .start_session_with_options(
                             &scope.project,
                             options.model.as_deref(),
+                            options.effort.as_deref(),
                             options.agent.as_deref(),
                         )
                         .map(|s| Summary {

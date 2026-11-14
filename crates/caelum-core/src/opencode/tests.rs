@@ -2,6 +2,7 @@ mod loading;
 mod managed;
 mod registered;
 mod smoke;
+mod startup;
 mod titles;
 
 use super::*;

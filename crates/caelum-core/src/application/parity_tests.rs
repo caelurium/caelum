@@ -2,6 +2,7 @@ mod activity;
 mod archive;
 mod composer;
 mod notifications;
+mod provider_errors;
 mod queue;
 mod review;
 mod tools;

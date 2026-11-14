@@ -72,18 +72,36 @@ impl OpenCodeProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<OpenCodeSessionInfo, OpenCodeError> {
-        self.start_session_with_options(project_path, None, None)
+        self.start_session_with_options(project_path, None, None, None)
     }
 
     pub fn start_session_with_options(
         &self,
         project_path: impl AsRef<Path>,
         model: Option<&str>,
+        effort: Option<&str>,
         agent: Option<&str>,
     ) -> Result<OpenCodeSessionInfo, OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        let model = model.map(|model| model_ref(model, None)).transpose()?;
+        let fallback = if model.is_none() && effort.is_some() {
+            let query = [(
+                "location[directory]",
+                project.path().to_string_lossy().into_owned(),
+            )];
+            let response = server.request_json(Method::GET, "/api/model/default", &query, None)?;
+            Some(response.get("data").and_then(model_id).ok_or_else(|| {
+                OpenCodeError::Protocol("no model available for the selected effort".into())
+            })?)
+        } else {
+            None
+        };
+        // Include the initial variant atomically. Switching it before the first
+        // prompt creates an effort-update history item on the provider side.
+        let model = model
+            .or(fallback.as_deref())
+            .map(|model| model_ref(model, effort))
+            .transpose()?;
         let response = server.request_json(
             Method::POST,
             "/api/session",
