@@ -18,7 +18,7 @@ fn home_keeps_native_selection_undo_and_both_drafts_across_navigation() {
     );
     click(&mut rt, "live-session-0");
     assert_eq!(live(&rt.state).drafts[0].text, "Session draft");
-    click(&mut rt, "brand-home");
+    click(&mut rt, "nav-home");
     assert_eq!(live(&rt.state).home.editor.text, "A café idea");
     assert_eq!(
         (

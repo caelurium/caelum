@@ -12,12 +12,13 @@ PR review occupies the main screen.
 The polished web-client captures remain the historical design reference. Native
 captures use the actual live views with offline data from [`workspace.json`](workspace.json).
 Screens are 1280 × 1000 at one pixel per point, except the 800 × 620 compact/crowded scenes.
-The follow-up captures restore the original 18-point Lucide Orbit mark, keep the
-sidebar toggle beside the brand, and use browser-equivalent unsmoothed system text.
+The sidebar omits the branding row to give projects and sessions more space, with
+the collapse button beside Open project in the Projects header. Native views use
+browser-equivalent unsmoothed system text.
 The inspector sits below the shared toolbar; pane widths adapt to compact windows
 while retaining the user's preferred sizes. The bounded multiline editor and
-composer controls occupy separate rows; borderless model-first labels and icon-led
-effort/agent choices wrap in narrow panes. Their popouts show titles, readable
+composer controls occupy separate rows; borderless, text-only model, effort and
+agent choices wrap in narrow panes. Their popouts show titles, readable
 choices and default options; the provider is chosen in Settings. The controls sit
 beside a labelled Send/Queue action and a separate Stop control; narrow panes put
 actions on their own row. Settings lives in the top toolbar, archive
