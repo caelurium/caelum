@@ -176,6 +176,65 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     assert!(rt.find("home-ascii").is_none());
 }
 
+#[test]
+fn gpu_art_varies_vertically_and_crosses_the_loop_without_a_jump() {
+    let mut rt = Runtime::new(
+        crate::evaluation::design(),
+        |_, cx| {
+            rune::el()
+                .w_full()
+                .h_full()
+                .child(view(cx.is_reduced_motion()))
+        },
+        (800.0, 620.0),
+        Env::new(true, 2.0),
+    );
+    rt.track_marks = true;
+    rt.set_system_reduced_motion(true);
+    advance(&mut rt, 1.0);
+    let mut draw = Draw::new();
+    // The original atlas has empty scanlines between rows. Horizontal travel
+    // cannot put ink there; deformation must move characters off those rails.
+    let before = draw.frame(&mut rt);
+    rt.set_system_reduced_motion(false);
+    for _ in 0..30 {
+        advance(&mut rt, 0.1);
+        draw.frame(&mut rt);
+    }
+    let after = draw.frame(&mut rt);
+    let vertical = before
+        .chunks_exact(PIXEL_SIZE.0 as usize * 4)
+        .zip(after.chunks_exact(PIXEL_SIZE.0 as usize * 4))
+        .filter(|(row, _)| row.chunks_exact(4).all(|p| p[..3].iter().all(|c| *c < 24)))
+        .map(|(_, row)| {
+            row.chunks_exact(4)
+                .filter(|p| p[..3].iter().any(|c| *c > 90))
+                .count()
+        })
+        .sum::<usize>();
+    assert!(
+        vertical > 200,
+        "the disc must ripple across rows, not only slide horizontally: {vertical}"
+    );
+
+    draw.compositor.motion = Motion::Orbit {
+        phase: PERIOD - 1.0 / 60.0,
+        last: rt.t,
+    };
+    let end = draw.frame(&mut rt);
+    advance(&mut rt, 1.0 / 30.0);
+    let start = draw.frame(&mut rt);
+    let difference = end
+        .iter()
+        .zip(&start)
+        .map(|(a, b)| a.abs_diff(*b) as u64)
+        .sum::<u64>();
+    assert!(
+        difference as f64 / (end.len() as f64) < 2.0,
+        "the long cycle must wrap smoothly"
+    );
+}
+
 fn travelled_ink(before: &[u8], after: &[u8], width: usize) -> usize {
     let height = after.len() / (width * 4);
     (1..height - 1)

@@ -8,7 +8,7 @@ use rune::{El, Frame, compose::DeviceKey, effect, render::KIND_EFFECT};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 const MARK: u32 = 0x484f4d45;
-const PERIOD: f64 = 8.0;
+const PERIOD: f64 = 48.0;
 const WIDTH: usize = 300;
 const HEIGHT: usize = 100;
 const GLYPHS: &[u8] = b" .:-=+*#%@";
