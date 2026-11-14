@@ -71,7 +71,7 @@ fn managed_worktrees_keep_parent_groups_in_navigation_search_and_actions() {
                 .as_mut()
                 .unwrap()
                 .app
-                .select_project("/projects/rune")
+                .select_project("/projects/rune");
         });
         advance(&mut rt, 0.2);
         click(&mut rt, "manager-new-worktree");
@@ -195,6 +195,14 @@ fn sidebar_worktrees_switch_exact_checkouts_and_keep_background_work() {
         );
         reveal(&mut rt, &main_key);
         click(&mut rt, &main_key);
+        assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(index));
+        let manage = crate::code_view::source_key(root, "manage-worktrees");
+        reveal(&mut rt, &manage);
+        click(&mut rt, &manage);
+        click(
+            &mut rt,
+            &crate::code_view::source_key(root, "manage-checkout"),
+        );
         assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(0));
         assert!(rt.state.live.as_ref().unwrap().app.sessions[index].working());
         assert!(!rt.state.live.as_ref().unwrap().app.sessions[index].stopping);

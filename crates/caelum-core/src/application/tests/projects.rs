@@ -1,6 +1,133 @@
 use super::*;
 
 #[test]
+fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
+    for provider in Provider::ALL {
+        let mut app = Workspace::default();
+        for path in ["/main", "/linked", "/other", "/empty"] {
+            app.projects.push(ProjectInfo {
+                name: path.into(),
+                path: path.into(),
+            });
+        }
+        app.project_roots.insert("/linked".into(), "/main".into());
+        let other = app.new_session(scope(provider, "/other"));
+        app.sessions[other].draft = "Other project's draft".into();
+        let linked = scope(provider, "/linked");
+        let request = discover_session_list(&mut app, &linked, false);
+        let mut recent = summary(linked.clone(), "recent");
+        recent.updated_at = Some(200);
+        let mut older = summary(linked, "older");
+        older.updated_at = Some(100);
+        app.apply(Event::Completed(
+            request,
+            Ok(Reply::Sessions(vec![recent, older])),
+        ));
+        let recent = 1;
+        let older = 2;
+        let count = app.sessions.len();
+        app.commands();
+
+        // Discovered sessions have never been selected, so there is no remembered entry.
+        app.select_project("/main");
+        assert_eq!(app.selected, Some(recent));
+        assert_eq!(app.sessions.len(), count);
+        assert_eq!(app.active_project.as_deref(), Some("/linked"));
+        assert!(app.commands().iter().any(|(_, command)| {
+            matches!(command, Command::Resume(key) if key.id == "recent" && key.scope.provider == provider)
+        }));
+
+        // An empty main-checkout placeholder must not obscure the project's real sessions.
+        app.new_session(scope(provider, "/main"));
+        app.select(other);
+        let count = app.sessions.len();
+        app.select_project("/main");
+        assert_eq!(app.selected, Some(recent));
+        assert_eq!(app.sessions.len(), count);
+
+        // Recall the user's chosen session ahead of newer activity in the same group.
+        app.select(older);
+        app.select(other);
+        app.select_project("/main");
+        assert_eq!(app.selected, Some(older));
+        for unavailable in ["archived", "forgotten", "archiving", "deleting"] {
+            app.select(older);
+            app.select(other);
+            let session = &mut app.sessions[older];
+            session.archived = unavailable == "archived";
+            session.forgotten = unavailable == "forgotten";
+            session.archiving = unavailable == "archiving";
+            session.deleting = unavailable == "deleting";
+            app.select_project("/main");
+            assert_eq!(app.selected, Some(recent), "{unavailable}");
+            assert_eq!(app.sessions.len(), count);
+            let session = &mut app.sessions[older];
+            session.archived = false;
+            session.forgotten = false;
+            session.archiving = false;
+            session.deleting = false;
+        }
+        assert_eq!(app.sessions[other].draft, "Other project's draft");
+
+        // A genuinely empty project still gets one reusable draft in its own checkout.
+        app.select_project("/empty");
+        let empty = app.selected.unwrap();
+        assert_eq!(app.sessions[empty].scope.project, "/empty");
+        assert_eq!(app.sessions.len(), count + 1);
+        app.select(other);
+        app.select_project("/empty");
+        assert_eq!(app.selected, Some(empty));
+        assert_eq!(app.sessions.len(), count + 1);
+    }
+}
+
+#[test]
+fn project_navigation_keeps_unsent_worktree_context_across_restart() {
+    let mut app = Workspace::default();
+    for path in ["/main", "/linked", "/other"] {
+        app.projects.push(ProjectInfo {
+            name: path.into(),
+            path: path.into(),
+        });
+    }
+    app.project_roots.insert("/linked".into(), "/main".into());
+    let linked = app.new_session(scope(Provider::OpenCode, "/linked"));
+    app.sessions[linked].draft = "Unsent café draft".into();
+    app.sessions[linked].reading = 220.0;
+    app.sessions[linked].options.model = Some("saved-model".into());
+    app.attach(
+        linked,
+        Attachment::new("src/main.rs".into(), "snapshot".into(), None, false),
+    );
+    app.new_session(scope(Provider::Codex, "/main"));
+    let other = app.new_session(scope(Provider::Codex, "/other"));
+    app.select_project("/main");
+    assert_eq!(app.selected, Some(linked));
+    app.select(other);
+
+    let snapshot: Snapshot =
+        serde_json::from_value(serde_json::to_value(app.snapshot()).unwrap()).unwrap();
+    let mut restored = Workspace::default();
+    restored.enable_store("unused-project-navigation.json".into());
+    let load = restored.commands().pop().unwrap().0;
+    restored.apply(Event::Completed(
+        load,
+        Ok(Reply::Snapshot(Some(Box::new(snapshot)))),
+    ));
+    restored.select_project("/main");
+    assert_eq!(restored.selected, Some(linked));
+    assert_eq!(restored.sessions.len(), 3);
+    assert_eq!(restored.active_project.as_deref(), Some("/linked"));
+    assert_eq!(restored.sessions[linked].draft, "Unsent café draft");
+    assert_eq!(restored.sessions[linked].reading, 220.0);
+    assert_eq!(restored.sessions[linked].attachments[0].content, "snapshot");
+    assert_eq!(
+        restored.sessions[linked].options.model.as_deref(),
+        Some("saved-model")
+    );
+}
+
+#[test]
 fn closing_project_groups_keeps_sessions_work_and_drafts_through_reopen_and_restore() {
     let mut app = Workspace::default();
     for path in ["/main", "/linked", "/other"] {
