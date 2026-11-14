@@ -1,6 +1,116 @@
 use super::*;
 
 #[test]
+fn returning_to_a_project_restores_its_active_worktree_session() {
+    use caelum_core::application::{
+        Command, Event, Provider, Reply, Scope, SessionScope, Task, TaskReply,
+    };
+    for provider in Provider::ALL {
+        for size in [(800.0, 620.0), (1280.0, 1000.0)] {
+            let mut rt = live_runtime_size(size);
+            let (mut owner, mut other_session) = (0, 0);
+            rt.update(|s, _| {
+                let l = s.live.as_mut().unwrap();
+                for path in ["/linked", "/other"] {
+                    l.app.projects.push(caelum_protocol::ProjectInfo {
+                        name: path.into(),
+                        path: path.into(),
+                    });
+                }
+                l.app
+                    .project_roots
+                    .insert("/linked".into(), "/project".into());
+                l.app.preferences.session_scope = SessionScope::CurrentProject;
+                owner = l.app.new_session(Scope {
+                    project: "/linked".into(),
+                    provider,
+                });
+                l.app.sessions[owner].remote_id = Some("active-worktree".into());
+                l.app.sessions[owner].conversation.working = true;
+                other_session = l.app.new_session(Scope {
+                    project: "/other".into(),
+                    provider,
+                });
+                l.app.sessions[other_session].draft = "First other draft".into();
+                let next = l.app.new_session(Scope {
+                    project: "/other".into(),
+                    provider,
+                });
+                l.app.sessions[next].draft = "Second other draft".into();
+                l.app.select(owner);
+                l.sync_editors();
+            });
+            advance(&mut rt, 0.2);
+            fill(
+                &mut rt,
+                &format!("live-draft-{owner}"),
+                "Keep this café draft",
+            );
+            rt.update(|s, _| s.live.as_mut().unwrap().drafts[owner].set_selection(2, 8));
+            let count = rt.state.live.as_ref().unwrap().app.sessions.len();
+            for _ in 0..2 {
+                click(&mut rt, &crate::code_view::source_key("/other", "project"));
+                reveal(&mut rt, &format!("live-session-{other_session}"));
+                click(&mut rt, &format!("live-session-{other_session}"));
+                // Settle fixture reads so the return navigation can issue a fresh refresh.
+                rt.update(|s, _| {
+                    let app = &mut s.live.as_mut().unwrap().app;
+                    for (id, command) in app.commands() {
+                        if matches!(command, Command::Task(_)) {
+                            app.apply(Event::Completed(id, Ok(Reply::Task(TaskReply::Done))));
+                        }
+                    }
+                });
+                click(
+                    &mut rt,
+                    &crate::code_view::source_key("/project", "project"),
+                );
+                let l = rt.state.live.as_mut().unwrap();
+                assert_eq!(l.app.selected, Some(owner));
+                assert_eq!(l.app.active_project.as_deref(), Some("/linked"));
+                assert_eq!(l.app.sessions.len(), count);
+                assert!(l.app.sessions[owner].working());
+                assert!(!l.app.sessions[owner].stopping);
+                assert_eq!(l.drafts[owner].text, "Keep this café draft");
+                assert_eq!((l.drafts[owner].anchor, l.drafts[owner].focus), (2, 8));
+                assert_eq!(l.drafts[other_session].text, "First other draft");
+                let commands = l.app.commands();
+                assert!(commands.iter().any(|(_, c)| matches!(c, Command::Task(Task::Git { project }) if project == "/linked")));
+                assert!(!commands.iter().any(|(_, c)| matches!(
+                    c,
+                    Command::Start(..) | Command::Send(..) | Command::Cancel(_)
+                )));
+                for (id, command) in commands {
+                    if matches!(command, Command::Task(_)) {
+                        l.app
+                            .apply(Event::Completed(id, Ok(Reply::Task(TaskReply::Done))));
+                    }
+                }
+                assert!(element(&rt, &format!("live-draft-{owner}")).visible[3] > 0.0);
+            }
+            click(&mut rt, &format!("live-draft-{owner}"));
+            key(
+                &mut rt,
+                Key::Command('z'),
+                Mods {
+                    cmd: true,
+                    ..Default::default()
+                },
+            );
+            assert!(
+                rt.state.live.as_ref().unwrap().drafts[owner]
+                    .text
+                    .is_empty()
+            );
+            assert_eq!(
+                rt.state.live.as_ref().unwrap().drafts[other_session].text,
+                "First other draft"
+            );
+        }
+    }
+}
+
+#[test]
 fn presented_focus_tracks_pointer_tab_accessibility_and_removal() {
     let mut rt = live_runtime();
     let check = |rt: &Runtime<Workspace>| {

@@ -149,7 +149,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     let path = path.clone();
                     move |s: &mut Workspace| {
                         live_mut(s).feed.menu = Menu::Closed;
-                        crate::checkouts::select(s, &path);
+                        crate::checkouts::select_project(s, &path);
                     }
                 }),
                 path.clone(),

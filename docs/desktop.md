@@ -9,6 +9,9 @@ worktree navigation, creation and management. Use a project's **×** or
 right-click → **Close project** to close its checkout group. Sessions, drafts,
 attachments, queues and running work are retained; reopening the folder returns to
 the remembered session. Closing the final project returns to the welcome screen.
+Clicking a project restores its remembered conversation across its worktrees.
+If that session is unavailable or blank, existing conversations and unsent drafts
+take precedence over creating a new session.
 Arrow keys navigate each list; Tab enters a project's actions and Left/Right
 moves between Create worktree and Close.
 Project and session rows share initial badges. Colours are assigned from a varied
@@ -203,8 +206,9 @@ Expand **Worktrees** beneath a project to see the worktrees created
 through Caelum. The section is hidden when that project has no Caelum worktrees.
 Indented folder names and a connecting line show which project
 owns each worktree. Rows show the current worktree and working, queued or unread
-activity; hover for the branch and full path. Click the project card to return to
-its original folder, or a worktree to restore its session, draft and reading position.
+activity; hover for the branch and full path. Click a worktree to restore its
+session, draft and reading position. The project row recalls the project's last
+conversation; **Open project folder** in its worktree manager selects the original checkout.
 Arrow keys and Enter also navigate the list. Disclosure choices persist.
 Right-click a worktree in the sidebar, manager or new-session launcher and choose
 **Delete worktree** to remove it.

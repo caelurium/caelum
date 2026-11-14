@@ -76,19 +76,29 @@ pub fn removal(app: &Application, project: &str, path: &str) -> Option<Task> {
     (!app.services.busy(&task)).then_some(task)
 }
 
+pub fn select_project(s: &mut Workspace, path: &str) {
+    let l = live_mut(s);
+    if l.app.select_project(path) {
+        show_selected(l);
+    }
+}
+
 pub fn select(s: &mut Workspace, path: &str) {
     let l = live_mut(s);
-    l.feed.close();
-    if !l.app.select_checkout(path) {
-        return;
+    if l.app.select_checkout(path) {
+        show_selected(l);
     }
+}
+
+fn show_selected(l: &mut crate::live::Live) {
+    l.feed.close();
     l.sync_editors();
     l.panels.screen = Screen::Conversation;
     l.panels.overlay = None;
     l.panels.archived = false;
     l.session_menu = None;
     l.app.task(Task::Git {
-        project: path.into(),
+        project: l.app.active_project.clone().unwrap(),
     });
     l.app.refresh_files();
 }
