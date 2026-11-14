@@ -441,7 +441,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
     let main = if home::is_home(s) {
-        home::view(s, &k, &mut layers)
+        home::view(s, &k, cx.is_reduced_motion(), &mut layers)
     } else {
         col()
             .w_full()
@@ -688,6 +688,7 @@ fn main() {
     }
     let app = lifecycle::configure(
         rune::App::new(spec())
+            .compositor(home::art::Compositor::default())
             .font_smoothing(rune::FontSmoothing::Off)
             .on_frame_drawn(live::frame_drawn),
     );

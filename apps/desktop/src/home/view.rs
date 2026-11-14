@@ -8,7 +8,7 @@ use crate::{
 use rune::{Color, El, SurfaceFit, TextStyle, col, el, icon, row, text, text_input};
 use rune_kit::{ButtonVariant, Kit};
 
-pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
+pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) -> El {
     let l = live(s);
     let size = rune::memo::window_layout("main-pane").unwrap_or([0.0, 0.0, 1000.0, 900.0]);
     let compact = size[3] < 680.0;
@@ -27,6 +27,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     } else {
         background
     };
+    let background = background.children(k.dark.then(|| super::art::view(reduced_motion)));
     let content = col()
         .key("home-content")
         .w_full()

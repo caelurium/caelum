@@ -69,6 +69,9 @@ alongside these modules, with embedded fake servers in `tests/fixtures/`.
 - `home.rs` / `home/`: Home navigation, native editor, project/provider controls,
   cached background and deterministic preview scenes. Fresh launches open Home;
   explicit project launches and notification targets open their conversations.
+  `home/art` owns the dark-mode ASCII compositor: one colour/glyph grid and atlas,
+  compiled off the UI thread, with render-clock motion independent of view commits.
+  Only a visible animated slot keeps drawing; Reduce Motion uses a static frame.
 - `panels.rs`: panel state, synchronization and routing. `panels/` owns the
   file/change inspector, review/feedback, appearance, launcher, queue and overlay
   views. Local and review diffs have independent state.

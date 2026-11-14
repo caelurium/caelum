@@ -1,4 +1,5 @@
 //! Home owns its native editor and UI state independently of every session.
+pub(crate) mod art;
 mod attachments;
 mod controls;
 mod scenes;
