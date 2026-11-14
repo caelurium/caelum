@@ -84,12 +84,10 @@ fn sidebar(s: &Workspace, k: &Kit) -> El {
         .row_gap(5.0)
         .header_gap(12.0)
         .header_padding(12.0, 12.0)
-        .header(ui::brand(s, k))
         .header(
-            text("Projects")
-                .font(k.ty.small_medium)
-                .color(k.c.text_muted)
-                .px(8.0),
+            SidebarHeader::new("Projects")
+                .action(row().children(ui::sidebar_collapse(s, k)))
+                .build(k),
         )
         .header(
             col()

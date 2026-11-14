@@ -175,15 +175,19 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             })
             .count(roots.len())
             .action(
-                row().gap(1.0).child(crate::panels::navigation(s, k)).child(
-                    quiet_button(&PLUS, "Open project")
-                        .on_press_tx(|s: &mut Workspace, tx| {
-                            live_mut(s).feed.menu = Menu::Closed;
-                            super::super::open_project(s, tx);
-                        })
-                        .build(k)
-                        .key("open-project"),
-                ),
+                row()
+                    .gap(1.0)
+                    .child(crate::panels::navigation(s, k))
+                    .child(
+                        quiet_button(&PLUS, "Open project")
+                            .on_press_tx(|s: &mut Workspace, tx| {
+                                live_mut(s).feed.menu = Menu::Closed;
+                                super::super::open_project(s, tx);
+                            })
+                            .build(k)
+                            .key("open-project"),
+                    )
+                    .children(ui::sidebar_collapse(s, k)),
             )
             .build(k)
             .key("projects-heading"),
