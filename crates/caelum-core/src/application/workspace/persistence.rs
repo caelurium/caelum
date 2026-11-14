@@ -122,6 +122,7 @@ impl Workspace {
             .collect();
         Snapshot {
             version: 1,
+            home: self.home.draft.clone(),
             projects: self.projects.clone(),
             selected: self
                 .selected

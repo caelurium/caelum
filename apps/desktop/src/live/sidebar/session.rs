@@ -10,7 +10,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     let l = live(s);
     let app = &l.app;
     let session = &app.sessions[index];
-    let selected = app.selected == Some(index);
+    let selected = app.selected == Some(index) && l.panels.screen != crate::panels::Screen::Home;
     let error = session.error.as_deref().or_else(|| {
         session
             .conversation
