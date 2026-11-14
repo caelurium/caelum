@@ -10,6 +10,7 @@ mod layout;
 mod lifecycle;
 mod models;
 mod navigation;
+mod provider_errors;
 mod questions;
 mod redraw;
 mod review;

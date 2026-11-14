@@ -412,6 +412,37 @@ pub(super) fn timeline_row(
             format!("live-entry-{index}-{}", entry.id),
         ));
     }
+    if let Some(notice) = session.conversation.failure.notice() {
+        let generation = notice.generation;
+        let details = notice.details.clone();
+        content = content.child(
+            ui::notice("Provider needs attention", &notice.message, k)
+                .key(format!("provider-error-{index}"))
+                .child(
+                    row()
+                        .gap(8.0)
+                        .child(
+                            Button::new("Copy details")
+                                .variant(ButtonVariant::GhostMuted)
+                                .on_press_tx(move |_: &mut Workspace, tx| tx.copy(details.clone()))
+                                .build(k)
+                                .key(format!("copy-provider-error-{index}")),
+                        )
+                        .child(
+                            Button::new("Dismiss")
+                                .variant(ButtonVariant::GhostMuted)
+                                .on_press(move |s: &mut Workspace| {
+                                    live_mut(s).app.sessions[index]
+                                        .conversation
+                                        .failure
+                                        .dismiss(generation);
+                                })
+                                .build(k)
+                                .key(format!("dismiss-provider-error-{index}")),
+                        ),
+                ),
+        );
+    }
     if let Some(error) = &session.error {
         content = content.child(ui::notice("Session needs attention", error, k));
     }

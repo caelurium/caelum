@@ -8,6 +8,7 @@ struct Summary {
     working: bool,
     retrying: bool,
     unread: bool,
+    failure: Option<u64>,
     last_activity: Option<u64>,
 }
 
@@ -18,6 +19,7 @@ impl Summary {
             working: session.working(),
             retrying: session.conversation.retrying,
             unread: session.unread,
+            failure: session.conversation.failure.notice().map(|n| n.generation),
             last_activity: session.last_activity,
         }
     }
@@ -27,6 +29,7 @@ impl Summary {
             && self.working == session.working()
             && self.retrying == session.conversation.retrying
             && self.unread == session.unread
+            && self.failure == session.conversation.failure.notice().map(|n| n.generation)
             && self.last_activity == session.last_activity
     }
 }

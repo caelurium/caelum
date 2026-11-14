@@ -11,6 +11,13 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     let app = &l.app;
     let session = &app.sessions[index];
     let selected = app.selected == Some(index) && l.panels.screen != crate::panels::Screen::Home;
+    let error = session.error.as_deref().or_else(|| {
+        session
+            .conversation
+            .failure
+            .notice()
+            .map(|n| n.message.as_str())
+    });
     let project = crate::checkouts::project_name(app, app.group_path(&session.scope.project));
     let branch = app.session_branch(session).unwrap_or("No branch");
     let branch = app
@@ -42,7 +49,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         "Waiting for background commands"
     } else if session.working() {
         "Working…"
-    } else if session.error.is_some() {
+    } else if error.is_some() {
         "Error"
     } else if session.loading {
         "Loading…"
@@ -55,7 +62,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     let age = super::age(session.last_activity, l.feed.now).0;
     let ink = if pending || waiting {
         k.c.warning.icon
-    } else if session.error.is_some() {
+    } else if error.is_some() {
         k.c.danger.fg
     } else {
         k.c.text_muted
@@ -68,7 +75,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             .radius(3.0)
             .fill(if pending || waiting {
                 k.c.warning.icon
-            } else if session.error.is_some() {
+            } else if error.is_some() {
                 k.c.danger.fg
             } else {
                 k.c.text_accent
@@ -177,7 +184,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         .help(format!(
             "{}\n{branch}\n{provider} · {status}\n{}",
             session.scope.project,
-            session.error.as_deref().unwrap_or("")
+            error.unwrap_or("")
         ))
         .focusable(true)
         .focus_selected(selected)

@@ -255,9 +255,11 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif path == "/api/session":
             if body.get("model"):
-                assert body["model"] == {"providerID": "local", "id": "model/a"}
-                assert body["agent"] == "build"
+                assert body["model"]["providerID"] == "local" and body["model"]["id"] == "model/a"
+                assert body["model"].get("variant") in [None, "high", "max"]
                 SESSION["model"] = body["model"]
+            if body.get("agent"):
+                SESSION["agent"] = body["agent"]
             self.send_json({"data": SESSION})
         elif path == "/api/session/ses_fake/model":
             if body["model"]["id"] == "missing" or body["model"].get("variant") == "invalid":
