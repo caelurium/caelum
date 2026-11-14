@@ -63,6 +63,120 @@ fn search_matches_project_names_branches_and_unicode_worktree_labels() {
     assert_eq!(app.session_feed(None, "", false), [1, 2, 0]);
 }
 
+fn refresh_branch(app: &mut Workspace, project: &str, branch: Option<&str>) {
+    app.apply(Event::Checkout(project.into()));
+    let request = app
+        .commands()
+        .into_iter()
+        .find(|(_, command)| {
+            matches!(command, Command::Task(Task::Git { project: owner }) if owner == project)
+        })
+        .unwrap()
+        .0;
+    app.apply(Event::Completed(
+        request,
+        Ok(Reply::Task(TaskReply::Git(
+            caelum_protocol::GitRepositoryStatus {
+                project_path: project.into(),
+                repository_root: Some(project.into()),
+                branch: branch.map(str::to_owned),
+                changes: vec![],
+            },
+            vec![],
+        ))),
+    ));
+}
+
+#[test]
+fn active_session_branches_follow_checkout_changes_and_detach_without_losing_history() {
+    for provider in Provider::ALL {
+        let mut app = workspace();
+        app.sessions[0].scope.provider = provider;
+        app.sessions[0].details = Some(caelum_protocol::SessionDetails {
+            branch: Some("feature/opened".into()),
+            branches: vec!["feature/earlier".into()],
+            branch_is_current: false,
+            changes: None,
+        });
+        app.sessions[0].draft = "Keep my draft".into();
+        app.select(1);
+        assert_eq!(app.session_branch(&app.sessions[0]), Some("feature/opened"));
+        refresh_branch(&mut app, "/linked", Some("feature/worktree"));
+        for (branch, working) in [
+            (Some("feature/agent"), true),
+            (Some("feature/manual"), false),
+            (None, false),
+            (Some("feature/reattached"), false),
+        ] {
+            app.sessions[0].conversation.working = working;
+            refresh_branch(&mut app, "/alpha", branch);
+            assert_eq!(app.session_branch(&app.sessions[0]), branch);
+            assert_eq!(app.session_branch(&app.sessions[1]), None);
+            assert_eq!(
+                app.session_branch(&app.sessions[2]),
+                Some("feature/worktree")
+            );
+            assert!(app.session_feed(None, "feature/opened", false).is_empty());
+            if let Some(branch) = branch {
+                assert_eq!(app.session_feed(None, branch, false), [0]);
+            }
+        }
+        assert_eq!(app.selected, Some(1));
+        assert_eq!(app.sessions[0].draft, "Keep my draft");
+        assert_eq!(app.sessions[0].last_activity, Some(1000));
+        let details = app.sessions[0].details.as_ref().unwrap();
+        assert_eq!(details.branch.as_deref(), Some("feature/opened"));
+        assert_eq!(details.branches, ["feature/earlier"]);
+
+        // Refreshing PR associations still includes every recorded session branch.
+        for (request, command) in app.commands() {
+            if matches!(command, Command::Task(Task::Discover { .. })) {
+                app.apply(Event::Completed(
+                    request,
+                    Ok(Reply::Task(TaskReply::Discovered(None))),
+                ));
+            }
+        }
+        app.refresh_feed_pull_requests(Some("/alpha"));
+        let branches: std::collections::BTreeSet<_> = app
+            .commands()
+            .into_iter()
+            .filter_map(|(_, command)| match command {
+                Command::Task(Task::Discover { project, branch }) if project == "/alpha" => {
+                    Some(branch)
+                }
+                _ => None,
+            })
+            .collect();
+        for branch in ["feature/opened", "feature/earlier", "feature/reattached"] {
+            assert!(branches.contains(branch), "missing PR branch {branch}");
+        }
+    }
+}
+
+#[test]
+fn archived_session_rows_keep_the_recorded_branch_until_restored() {
+    let mut app = workspace();
+    app.sessions[0].details = Some(caelum_protocol::SessionDetails {
+        branch: Some("feature/archived".into()),
+        branches: vec!["feature/archived".into()],
+        branch_is_current: false,
+        changes: None,
+    });
+    app.sessions[0].archived = true;
+    refresh_branch(&mut app, "/alpha", Some("feature/current"));
+    assert_eq!(
+        app.session_branch(&app.sessions[0]),
+        Some("feature/archived")
+    );
+    assert_eq!(app.session_feed(None, "feature/archived", true), [0]);
+    app.sessions[0].archived = false;
+    assert_eq!(
+        app.session_branch(&app.sessions[0]),
+        Some("feature/current")
+    );
+}
+
 #[test]
 fn recency_and_scope_roundtrip_and_old_snapshots_keep_unknown_recency() {
     let mut original = workspace();

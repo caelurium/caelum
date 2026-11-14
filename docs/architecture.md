@@ -29,11 +29,17 @@ provider events. Completion routing preserves each request's original owner and
 generation. The application and parity suites are grouped by capability under
 `application/tests/` and `application/parity_tests/`.
 
+`workspace/home.rs` owns the saved Home draft, target/options and asynchronous
+attachment/project requests. First send creates a fresh stable session only after
+admission, transferring its captured context through the normal durable submission
+path. Home request generations reject results for an older target or draft.
+
 `Runtime` uses eight normal workers, two conversation workers, two control workers,
-bounded command queues, a 1,024-event inbox and 256-event UI drains. Arrival wakes Rune; provider I/O
-does not run on the UI thread. Cancellation and permission replies bypass the
-normal persistence gate. Resume, history pagination and inbox recovery have reserved
-workers so background catalogues, diffs and discovery cannot occupy their capacity.
+bounded command queues, a 1,024-event inbox and 256-event UI drains. Arrival wakes
+Rune; provider I/O does not run on the UI thread. Cancellation and permission
+replies bypass the normal persistence gate. Resume, history pagination and inbox
+recovery have reserved workers so background catalogues, diffs and discovery
+cannot occupy their capacity.
 The shared `ProviderRuntime` owns providers, brokers, process registration and
 session-branch attribution.
 
@@ -60,6 +66,9 @@ alongside these modules, with embedded fake servers in `tests/fixtures/`.
 - `live.rs`: editor/application synchronization and runtime wake/drain, with
   sidebar, windowed transcript, composer and session menus in `live/`.
 - `state.rs`: pane/view state and the original simulated interaction fixture.
+- `home.rs` / `home/`: Home navigation, native editor, project/provider controls,
+  cached background and deterministic preview scenes. Fresh launches open Home;
+  explicit project launches and notification targets open their conversations.
 - `panels.rs`: panel state, synchronization and routing. `panels/` owns the
   file/change inspector, review/feedback, appearance, launcher, queue and overlay
   views. Local and review diffs have independent state.
@@ -81,6 +90,9 @@ attachments, options, queues and preferences. `CAELUM_STATE` overrides the path;
 prevents concurrent desktop writers. Writes use a private temporary file,
 fsync and atomic replacement; submissions wait for their own durable snapshot.
 Invalid/future state blocks saving instead of becoming an empty workspace.
+
+The optional `home` field stores its independent text, attachment snapshots and
+project/provider/model choices. Older snapshots restore an empty Home draft.
 
 On the first production-default launch, migration prefers the evaluation
 snapshot at `~/.caelum/rune/workspace-v1.json`. Otherwise it imports workspace

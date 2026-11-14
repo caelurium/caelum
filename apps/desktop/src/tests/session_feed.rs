@@ -1,6 +1,91 @@
 use super::*;
 use caelum_core::application::SessionScope;
 
+#[test]
+fn session_rows_refresh_cached_branch_labels_without_remounting_the_draft() {
+    use caelum_core::application::{Command, Event, Provider, Reply, Task, TaskReply};
+    use caelum_protocol::{GitRepositoryStatus, SessionDetails};
+
+    let project = "/projects/caelum";
+    let mut rt = design_runtime("session-feed", (1280.0, 1000.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        for (index, provider) in Provider::ALL.into_iter().enumerate() {
+            l.app.sessions[index].scope.provider = provider;
+            l.app.sessions[index].details = Some(SessionDetails {
+                branch: Some("main".into()),
+                branches: vec!["main".into()],
+                branch_is_current: false,
+                changes: None,
+            });
+        }
+    });
+    fill(&mut rt, "live-draft-0", "Keep this café draft");
+    let caret = rt.state.live.as_ref().unwrap().drafts[0].focus;
+    for (branch, working) in [
+        (Some("feature/agent"), true),
+        (Some("feature/manual"), false),
+        (None, false),
+    ] {
+        rt.update(|s, _| {
+            let l = s.live.as_mut().unwrap();
+            l.app.sessions[0].conversation.working = working;
+            assert!(l.apply_events([Event::Checkout(project.into())]));
+            let request = l
+                .app
+                .commands()
+                .into_iter()
+                .find(|(_, command)| matches!(command, Command::Task(Task::Git { project: owner }) if owner == project))
+                .unwrap()
+                .0;
+            assert!(l.apply_events([Event::Completed(
+                request,
+                Ok(Reply::Task(TaskReply::Git(
+                    GitRepositoryStatus {
+                        project_path: project.into(),
+                        repository_root: Some(project.into()),
+                        branch: branch.map(str::to_owned),
+                        changes: vec![],
+                    },
+                    vec![],
+                ))),
+            )]));
+        });
+        advance(&mut rt, 0.2);
+        let expected = branch.unwrap_or("No branch");
+        for index in 0..2 {
+            let row = element(&rt, &format!("live-session-{index}"));
+            assert!(
+                row.help
+                    .as_deref()
+                    .unwrap()
+                    .contains(&format!("\n{expected}\n"))
+            );
+            assert!(rt.elements().iter().any(|e| {
+                !e.exiting && e.path.starts_with(&row.path) && e.text.as_deref() == Some(expected)
+            }));
+        }
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(l.app.selected, Some(0));
+        assert_eq!(l.drafts[0].text, "Keep this café draft");
+        assert_eq!(l.drafts[0].focus, caret);
+        assert!(l.drafts[0].focused);
+    }
+    key(
+        &mut rt,
+        Key::Command('z'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    advance(&mut rt, 0.1);
+    assert_ne!(
+        rt.state.live.as_ref().unwrap().drafts[0].text,
+        "Keep this café draft"
+    );
+}
+
 fn shell_event(method: &str, session: &str, id: &str) -> caelum_core::application::Event {
     caelum_core::application::Event::OpenCode(caelum_protocol::OpenCodeEvent {
         project_path: "/projects/caelum".into(),

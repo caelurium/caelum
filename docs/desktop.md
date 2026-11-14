@@ -26,7 +26,9 @@ the active feed. Recent activity is saved, and streaming tokens or selecting a
 session do not change its recency. Pull requests below the feed follow the same
 project scope, including **All projects**, and refresh when the project filter
 changes. Switching projects or sessions refreshes that project's scoped PRs too.
-Search text filters sessions only.
+Search text filters sessions only. Active session rows and branch searches follow
+the current Git branch of each session's checkout, including external switches.
+Archived rows use their recorded session branch.
 
 **⇧⌘N** opens the project/provider launcher; **⌘N** reuses that project's
 draft for the default provider chosen in Settings. Each session retains an
