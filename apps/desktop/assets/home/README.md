@@ -6,9 +6,13 @@ rows are significant; omitted trailing spaces/rows are padded to 300 × 100.
 existing `../black-hole-ascii.png`. Spaces have no ink. `glyphs.r8` is a 160 × 28
 single-channel atlas of ` .:-=+*#%@`, rendered with Menlo Regular.
 
-The source grid stays fixed while a shader moves highlights around the disc and
-briefly crossfades neighbouring density glyphs. Colour remains attached to its
-source cell. The shader keeps the reference image's aspect ratio and centre crop.
+The shader slides the characters across the disc, with opposite flow on either
+side of the centre. Each moving character samples the supplied grid's density and
+colour at its new position, retaining the silhouette, void and palette. Adjacent
+source cells blend on the same glyph footprint to keep the motion smooth and the
+ink crisp. Integer cell travel makes the eight-second clock wrap seamless.
+Reduce Motion renders the original stationary grid. The reference image's aspect
+ratio and centre crop are retained.
 
 To regenerate the colour map and atlas, install Pillow and supply a monospace font:
 

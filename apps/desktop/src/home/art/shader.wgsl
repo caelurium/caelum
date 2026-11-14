@@ -38,29 +38,36 @@ fn glyph(index: u32, within: vec2<f32>) -> f32 {
     return textureSampleLevel(glyphs, glyph_sampler, at / vec2<f32>(160.0, 28.0), 0.0).r;
 }
 
+fn ink(at: vec2<i32>, within: vec2<f32>) -> vec3<f32> {
+    let background = linear(vec3<f32>(8.0, 9.0, 11.0) / 255.0);
+    if any(at < vec2<i32>(0)) || any(at >= vec2<i32>(300, 100)) {
+        return background;
+    }
+    let cell = textureLoad(cells, at, 0);
+    return mix(background, linear(vec3<f32>(cell.rgb) / 255.0), glyph(cell.a, within));
+}
+
 @fragment fn fragment(in: Vertex) -> @location(0) vec4<f32> {
     let reference = vec2<f32>(2000.0, 1122.0);
     let scale = max(u.rect.z / reference.x, u.rect.w / reference.y);
     let uv = (in.local - u.rect.zw * 0.5) / (reference * scale) + 0.5;
     let grid = uv * vec2<f32>(300.0, 100.0);
-    let cell = textureLoad(cells, vec2<i32>(floor(grid)), 0);
-    let background = linear(vec3<f32>(8.0, 9.0, 11.0) / 255.0);
-    var colour = background;
-    if cell.a > 0u {
-        let centre = (floor(grid) + 0.5) / vec2<f32>(300.0, 100.0);
-        let p = (centre - vec2<f32>(0.52, 0.43)) * vec2<f32>(1.78, 1.0);
-        let angle = atan2(p.y, p.x);
-        let radius = length(p);
-        let orbit = angle * 2.0 + radius * 9.0 - u.animation.x * 6.2831853 / 24.0;
-        let wave = pow(0.5 + 0.5 * sin(orbit), 5.0);
-        // Preserve the silhouette, void and palette. Only a small fraction of the
-        // ink crossfades to the adjacent density glyph as the highlight passes.
-        let motion = u.animation.y;
-        let morph = smoothstep(0.55, 0.95, wave) * 0.22 * motion;
-        let next = min(cell.a + 1u, 9u);
-        let ink = mix(glyph(cell.a, fract(grid)), glyph(next, fract(grid)), morph);
-        let brightness = mix(1.0, 0.94 + 0.18 * wave, motion);
-        colour = mix(background, linear(vec3<f32>(cell.rgb) / 255.0) * brightness, ink);
+    var colour: vec3<f32>;
+    if u.animation.y > 0.5 {
+        // The two sides of the disc stream in opposite directions. Integer cell
+        // travel per cycle makes the moving lattice seamless at the clock wrap.
+        let travel = clamp(43.0 - floor(grid.y), -16.0, 16.0);
+        let shift = u.animation.x * travel;
+        let moving = grid - vec2<f32>(shift, 0.0);
+        let within = fract(moving);
+        let source = floor(moving) + vec2<f32>(shift, 0.0);
+        let at = vec2<i32>(floor(source));
+        // Read the supplied density and colour at each moving character's new
+        // position. Interpolate on that same glyph footprint, keeping the disc
+        // and void in place without double-exposed or rotating characters.
+        colour = mix(ink(at, within), ink(at + vec2<i32>(1, 0), within), fract(source.x));
+    } else {
+        colour = ink(vec2<i32>(floor(grid)), fract(grid));
     }
     let alpha = clip_alpha(in.position.xy + u.viewport.zw, u.clip, u.fade);
     if u.animation.z > 0.5 {

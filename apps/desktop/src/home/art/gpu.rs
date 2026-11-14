@@ -176,7 +176,12 @@ impl Resources {
             ],
             clip: site.instance.clip,
             fade: site.instance.fade,
-            animation: [phase, site.data[0], f32::from(site.srgb_blend), 0.0],
+            animation: [
+                phase / super::PERIOD as f32,
+                site.data[0],
+                f32::from(site.srgb_blend),
+                0.0,
+            ],
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&uniforms));
         pass.set_pipeline(pipeline);

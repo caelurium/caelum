@@ -4,6 +4,8 @@ use rune::{
     render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer},
 };
 
+const PIXEL_SIZE: (u32, u32) = (1600, 1240);
+
 #[test]
 fn supplied_grid_keeps_its_spacing_colours_and_bounded_atlas() {
     let rows: Vec<_> = SOURCE.lines().collect();
@@ -61,7 +63,7 @@ impl Draw {
     fn new() -> Self {
         let gpu = Gpu::headless();
         let renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
-        let target = Offscreen::new(&gpu.device, 800, 620);
+        let target = Offscreen::new(&gpu.device, PIXEL_SIZE.0, PIXEL_SIZE.1);
         Self {
             gpu,
             renderer,
@@ -80,7 +82,7 @@ impl Draw {
             encoder: &mut encoder,
             target: &self.target.view,
             format: OFFSCREEN_FORMAT,
-            size: (800, 620),
+            size: PIXEL_SIZE,
             dt: 1.0 / 60.0,
             update_ms: 0.0,
             rt,
@@ -103,7 +105,7 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     let app = crate::spec();
     let mut state = crate::evaluation::design();
     crate::home::scene(&mut state, "home");
-    let mut rt = Runtime::new(state, app.view, (800.0, 620.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(state, app.view, (800.0, 620.0), Env::new(true, 2.0));
     rt.track_marks = true;
     rt.poll = app.poll;
     advance(&mut rt, 1.0);
@@ -112,9 +114,13 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     assert!(draw.compositor.animating());
     let commits = rt.stats.commits;
     // Advance the actual render clock; a long jump is intentionally capped.
-    for _ in 0..30 {
+    let mut travelled = 0;
+    for frame in 0..30 {
         advance(&mut rt, 0.1);
-        draw.frame(&mut rt);
+        let pixels = draw.frame(&mut rt);
+        if frame == 1 {
+            travelled = travelled_ink(&before, &pixels, PIXEL_SIZE.0 as usize);
+        }
     }
     let after = draw.frame(&mut rt);
     assert_eq!(
@@ -129,6 +135,10 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     assert!(
         changed > 200,
         "the actual shader must animate: {changed} pixels"
+    );
+    assert!(
+        travelled > 100,
+        "characters must visibly move within 200 ms, not just change brightness: {travelled}"
     );
     assert!(
         rt.elements().len() < 500,
@@ -164,4 +174,21 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     draw.frame(&mut rt);
     assert!(!draw.compositor.animating());
     assert!(rt.find("home-ascii").is_none());
+}
+
+fn travelled_ink(before: &[u8], after: &[u8], width: usize) -> usize {
+    let height = after.len() / (width * 4);
+    (1..height - 1)
+        .flat_map(|y| (1..width - 1).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let at = (y * width + x) * 4;
+            after[at..at + 3].iter().copied().max().unwrap() > 90
+                && (y - 1..=y + 1).all(|row| {
+                    (x - 1..=x + 1).all(|col| {
+                        let old = (row * width + col) * 4;
+                        before[old..old + 3].iter().copied().max().unwrap() < 24
+                    })
+                })
+        })
+        .count()
 }
