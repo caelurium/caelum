@@ -90,6 +90,8 @@ pub(crate) const SCENES: &[Scene] = &[
     ("worktrees-loading", |s| scene(s, "worktrees-loading")),
     ("worktrees-error", |s| scene(s, "worktrees-error")),
     ("provider-error", |s| scene(s, "provider-error")),
+    ("provider-timeout", |s| provider_failure(s, false)),
+    ("provider-rejection", |s| provider_failure(s, true)),
     ("models-empty", |s| scene(s, "models-empty")),
     ("usage-loading", |s| scene(s, "usage-loading")),
     ("files", |s| scene(s, "files")),
@@ -149,3 +151,31 @@ pub(crate) const SCENES: &[Scene] = &[
         }
     }),
 ];
+
+fn provider_failure(s: &mut Workspace, rejected: bool) {
+    use caelum_core::application::Provider;
+    use serde_json::json;
+
+    let l = s.live.as_mut().unwrap();
+    let session = &mut l.app.sessions[0];
+    session.scope.provider = Provider::OpenCode;
+    session.conversation = Default::default();
+    session.conversation.history(
+        Provider::OpenCode,
+        &[json!({"id":"prompt", "type":"user", "text":"Review the workspace changes."})],
+        false,
+    );
+    let error = if rejected {
+        json!({"type":"provider.invalid-request", "message":"Unsupported feature",
+            "response":{"body":json!({"error":{"code":"subscription_sharing_unsupported_capability"}}).to_string()}})
+    } else {
+        json!({"type":"provider.transport", "status":200, "message":"Timed out waiting for response data"})
+    };
+    session.conversation.apply(
+        Provider::OpenCode,
+        "session.execution.failed",
+        &json!({"error":error}),
+    );
+    session.draft = "Keep the next prompt editable.".into();
+    l.sync_editors();
+}

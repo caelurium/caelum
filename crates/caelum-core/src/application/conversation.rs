@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use super::Provider;
 
+mod failure;
 mod opencode;
 mod reconciliation;
 mod timing;
@@ -88,6 +89,7 @@ pub struct Conversation {
     turn_assistant_ids: Vec<String>,
     turn_provider_started: bool,
     output_history: timing::History,
+    pub failure: failure::State,
 }
 
 impl Conversation {
@@ -100,6 +102,7 @@ impl Conversation {
     }
 
     pub fn begin_turn(&mut self, agent: Option<String>, started_at: u64) {
+        self.failure.begin(started_at);
         if !self.working || self.turn_started_at.is_none() {
             self.turn_started_at = Some(started_at);
             self.turn_assistant_ids.clear();

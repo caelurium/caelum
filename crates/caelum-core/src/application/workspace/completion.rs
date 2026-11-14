@@ -588,6 +588,15 @@ impl Workspace {
                     }
                 }
                 if !older && session.revision == revision {
+                    if session.scope.provider == Provider::OpenCode {
+                        session
+                            .conversation
+                            .failure
+                            .history(&page.data, page.is_working.unwrap_or(session.working()));
+                        if session.conversation.failure.notice().is_some() {
+                            session.queue_paused = true;
+                        }
+                    }
                     if let Some(working) = page.is_working {
                         session.conversation.working = working;
                     }
