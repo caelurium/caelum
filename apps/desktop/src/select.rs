@@ -34,7 +34,6 @@ pub struct Select {
     label: String,
     display: Option<String>,
     prominent: bool,
-    icon: Option<&'static rune::Icon>,
     menu_description: Option<String>,
     indicator: &'static rune::Icon,
     field: bool,
@@ -61,7 +60,6 @@ impl Select {
             label: String::new(),
             display: None,
             prominent: false,
-            icon: None,
             menu_description: None,
             indicator: &crate::ui::CHOICE,
             field: false,
@@ -98,10 +96,6 @@ impl Select {
     }
     pub fn prominent(mut self) -> Self {
         self.prominent = true;
-        self
-    }
-    pub fn icon(mut self, value: &'static rune::Icon) -> Self {
-        self.icon = Some(value);
         self
     }
     pub fn menu_description(mut self, value: impl Into<String>) -> Self {
@@ -187,12 +181,6 @@ impl Select {
                 } else {
                     rune::Color::TRANSPARENT
                 })
-                .children(self.icon.map(|glyph| {
-                    icon(glyph, 14.0)
-                        .key(format!("{}-icon", self.key))
-                        .color(k.c.icon_muted)
-                        .a11y_hidden()
-                }))
                 .children((!display.is_empty()).then(|| {
                     text(display)
                         .font(if self.prominent {
@@ -224,10 +212,10 @@ impl Select {
                 .child(icon(self.indicator, 13.0).color(k.c.icon_muted));
         } else {
             field = field
-                .w((rune::text::measure(display, &[], k.ty.ui_medium, None).0
-                    + 26.0
-                    + if self.icon.is_some() { 18.0 } else { 0.0 })
-                .clamp(36.0, 220.0))
+                .w(
+                    (rune::text::measure(display, &[], k.ty.ui_medium, None).0 + 26.0)
+                        .clamp(36.0, 220.0),
+                )
                 .child(icon(&rune_kit::glyphs::CHEVRON_DOWN, 10.0).color(k.c.icon_muted));
         }
         field = field
@@ -326,45 +314,36 @@ impl Select {
         if self.options.is_empty() {
             list = list.child(crate::ui::caption("No matching choices", k).padding(10.0));
         }
-        let mut content =
-            col()
-                .key(format!("{}-content", self.key))
-                .label(&self.label)
-                .w(width)
-                .padding(6.0)
-                .gap(6.0)
-                .focus_return(&anchor)
-                .children(self.menu_description.as_ref().map(|description| {
-                    col()
-                        .w_full()
-                        .gap(3.0)
-                        .px(8.0)
-                        .pt(6.0)
-                        .pb(4.0)
-                        .child(
-                            row()
-                                .gap(7.0)
-                                .center_y()
-                                .children(self.icon.map(|glyph| {
-                                    icon(glyph, 14.0).color(k.c.icon_muted).a11y_hidden()
-                                }))
-                                .child(text(&self.label).font(k.ty.ui_medium).color(k.c.text_base)),
-                        )
-                        .child(text(description).font(k.ty.small).color(k.c.text_muted))
-                        .child(crate::ui::divider(k).mt(7.0))
-                }))
-                .children(self.search)
-                .child(
-                    col()
-                        .w_full()
-                        .max_h(238.0)
-                        .min_h(0.0)
-                        .scroll(rune::ScrollSpec {
-                            stick_bottom: false,
-                        })
-                        .child(list)
-                        .scroll_bar(k),
-                );
+        let mut content = col()
+            .key(format!("{}-content", self.key))
+            .label(&self.label)
+            .w(width)
+            .padding(6.0)
+            .gap(6.0)
+            .focus_return(&anchor)
+            .children(self.menu_description.as_ref().map(|description| {
+                col()
+                    .w_full()
+                    .gap(3.0)
+                    .px(8.0)
+                    .pt(6.0)
+                    .pb(4.0)
+                    .child(text(&self.label).font(k.ty.ui_medium).color(k.c.text_base))
+                    .child(text(description).font(k.ty.small).color(k.c.text_muted))
+                    .child(crate::ui::divider(k).mt(7.0))
+            }))
+            .children(self.search)
+            .child(
+                col()
+                    .w_full()
+                    .max_h(238.0)
+                    .min_h(0.0)
+                    .scroll(rune::ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(list)
+                    .scroll_bar(k),
+            );
         if let Some(f) = self.dismiss {
             content = f(content, layers);
         }

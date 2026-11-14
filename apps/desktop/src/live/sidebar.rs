@@ -232,7 +232,6 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
         .min_h(0.0)
         .gap(4.0)
         .label("Projects and sessions")
-        .child(ui::brand(s, k))
         .child(
             ui::tab("Home", l.panels.screen == crate::panels::Screen::Home, k)
                 .w_full()
