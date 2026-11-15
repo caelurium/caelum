@@ -130,7 +130,7 @@ async fn connect(
         .at(OBJECT, Activation(handle))
         .await?;
     match connection
-        .request_name_with_flags(name, RequestNameFlags::DoNotQueue)
+        .request_name_with_flags(name, RequestNameFlags::DO_NOT_QUEUE)
         .await
     {
         Ok(_) => Ok(Some(connection)),

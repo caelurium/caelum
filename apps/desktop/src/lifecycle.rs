@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+mod install;
 mod launch;
 #[cfg(target_os = "linux")]
 mod linux;

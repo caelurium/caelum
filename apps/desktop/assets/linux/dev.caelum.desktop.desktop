@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Caelum
+Comment=Your code. New horizons.
+Exec=caelum-desktop %u
+Icon=dev.caelum.desktop
+Terminal=false
+Categories=Development;IDE;
+MimeType=x-scheme-handler/caelum;
+StartupWMClass=dev.caelum.desktop

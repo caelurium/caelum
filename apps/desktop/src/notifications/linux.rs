@@ -5,7 +5,7 @@ use caelum_core::application::{Notification, Reply, SessionKey};
 use futures_util::StreamExt;
 use rune::AppHandle;
 use tokio::sync::mpsc;
-use zbus::{Connection, Proxy, zvariant::Value};
+use zbus::{Connection, Proxy, Variant};
 
 use crate::Workspace;
 
@@ -111,8 +111,8 @@ async fn deliver(
             .await;
     }
     let hints = std::collections::HashMap::from([
-        ("desktop-entry", Value::from("dev.caelum.desktop")),
-        ("suppress-sound", Value::from(true)),
+        ("desktop-entry", Variant::from("dev.caelum.desktop")),
+        ("suppress-sound", Variant::from(true)),
     ]);
     let body = escape_markup(&notification.body);
     let args = (

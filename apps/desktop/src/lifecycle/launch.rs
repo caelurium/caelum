@@ -10,6 +10,11 @@ pub(crate) fn run() {
     let mut input = std::env::args().skip(1);
     while let Some(arg) = input.next() {
         match arg.as_str() {
+            #[cfg(target_os = "linux")]
+            "--install" => {
+                super::install::run().unwrap_or_else(|error| fail(&error));
+                return;
+            }
             "--version" | "-V" => {
                 println!("Caelum {}", env!("CARGO_PKG_VERSION"));
                 return;

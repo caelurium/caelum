@@ -67,6 +67,41 @@ fn downloads_match_the_native_platform_architecture_and_published_asset() {
 }
 
 #[test]
+fn linux_downloads_require_the_matching_uploaded_appimage_on_github() {
+    let mut value = release("v1.1.0");
+    value["assets"] = json!(["aarch64", "x86_64"].map(|arch| json!({
+        "name": format!("Caelum-v1.1.0-{arch}.AppImage"), "state": "uploaded",
+        "browser_download_url": format!("{RELEASES_URL}/download/v1.1.0/Caelum-v1.1.0-{arch}.AppImage"),
+    })));
+    for arch in ["aarch64", "x86_64"] {
+        assert!(compare_release(&value, "1.0.0", "linux", arch)
+            .unwrap()
+            .download_url
+            .unwrap()
+            .ends_with(&format!("-{arch}.AppImage")));
+        assert!(compare_release(&value, "1.0.0", "macos", arch)
+            .unwrap()
+            .download_url
+            .is_none());
+    }
+    assert!(compare_release(&value, "1.0.0", "linux", "arm")
+        .unwrap()
+        .download_url
+        .is_none());
+    value["assets"][0]["state"] = json!("new");
+    assert!(compare_release(&value, "1.0.0", "linux", "aarch64")
+        .unwrap()
+        .download_url
+        .is_none());
+    value["assets"][0]["state"] = json!("uploaded");
+    value["assets"][0]["browser_download_url"] = json!("https://example.invalid/other.AppImage");
+    assert!(compare_release(&value, "1.0.0", "linux", "aarch64")
+        .unwrap()
+        .download_url
+        .is_none());
+}
+
+#[test]
 fn handles_http_failures_malformed_responses_and_bounded_payloads() {
     for (status, body, expected) in [
         ("200 OK", release("v1.1.0").to_string(), None),

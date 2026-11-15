@@ -86,9 +86,14 @@ fn compare_release(
         Ordering::Equal => UpdateStatus::UpToDate,
         Ordering::Greater => UpdateStatus::Ahead,
     };
-    let download_url = (platform == "macos" && matches!(architecture, "aarch64" | "x86_64"))
+    let extension = match platform {
+        "macos" => Some("dmg"),
+        "linux" => Some("AppImage"),
+        _ => None,
+    };
+    let download_url = (extension.is_some() && matches!(architecture, "aarch64" | "x86_64"))
         .then(|| {
-            let name = format!("Caelum-v{latest}-{architecture}.dmg");
+            let name = format!("Caelum-v{latest}-{architecture}.{}", extension?);
             let url = format!("{RELEASES_URL}/download/{tag}/{name}");
             release["assets"].as_array()?.iter().find(|asset| {
                 asset["name"] == name

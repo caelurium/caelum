@@ -13,13 +13,32 @@ import tempfile
 from pathlib import Path
 
 
-def asset_names(tag: str) -> set[str]:
-    return {
+def asset_names(tag: str, linux: bool = True) -> set[str]:
+    names = {
         f"Caelum-{tag}-aarch64.dmg",
         f"Caelum-{tag}-x86_64.dmg",
         f"caelum-cli-{tag}-aarch64-apple-darwin.tar.gz",
         f"caelum-cli-{tag}-x86_64-apple-darwin.tar.gz",
     }
+    if linux:
+        names.update(f"Caelum-{tag}-{arch}.AppImage" for arch in ("aarch64", "x86_64"))
+    return names
+
+
+def release_has_linux(tag: str) -> bool:
+    """The immutable release commit owns its asset contract, including recovery."""
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
+        raise SystemExit(f"Invalid release tag: {tag!r}")
+    path = "scripts/release/asset-layout.json"
+    # A missing tag is an error; only a successfully inspected tree without the
+    # manifest is a legacy macOS-only release.
+    present = subprocess.check_output(["git", "ls-tree", "--name-only", tag, "--", path], text=True).strip()
+    if not present:
+        return False
+    layout = json.loads(subprocess.check_output(["git", "show", f"{tag}:{path}"], text=True))
+    if layout != {"version": 1, "linux_desktop": True}:
+        raise SystemExit("Unknown release asset layout")
+    return True
 
 
 def gh(*args: str) -> str:
@@ -42,15 +61,15 @@ def release_for_tag(repository: str, tag: str) -> dict | None:
     return json.loads(gh("api", f"repos/{repository}/releases/{release['databaseId']}"))
 
 
-def parse_checksums(text: str, tag: str) -> dict[str, str]:
+def parse_checksums(text: str, tag: str, linux: bool = True) -> dict[str, str]:
     checksums = {}
     for line in text.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  (?:\./)?([^/]+)", line)
         if not match or match[2] in checksums:
             raise SystemExit(f"Invalid or duplicate release checksum: {line!r}")
         checksums[match[2]] = match[1]
-    if set(checksums) != asset_names(tag):
-        raise SystemExit("Release checksums must contain both architecture DMGs and CLI archives.")
+    if set(checksums) != asset_names(tag, linux):
+        raise SystemExit("Release checksums must contain the complete release asset set.")
     return checksums
 
 
@@ -59,10 +78,10 @@ def checksum(path: Path) -> str:
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
-def prepare_assets(directory: Path, tag: str) -> dict[str, str]:
-    names = asset_names(tag)
+def prepare_assets(directory: Path, tag: str, linux: bool = True) -> dict[str, str]:
+    names = asset_names(tag, linux)
     if {path.name for path in directory.iterdir()} - {"SHA256SUMS"} != names:
-        raise SystemExit("Expected exactly two DMGs and two CLI archives for this tag.")
+        raise SystemExit("Expected the complete release asset set for this tag.")
     if any(not (directory / name).is_file() or (directory / name).stat().st_size == 0 for name in names):
         raise SystemExit("Release assets must be nonempty files.")
     checksums = {name: checksum(directory / name) for name in sorted(names)}
@@ -72,16 +91,16 @@ def prepare_assets(directory: Path, tag: str) -> dict[str, str]:
     return checksums
 
 
-def verify_remote_assets(repository: str, tag: str, release: dict, expected: dict | None = None) -> None:
+def verify_remote_assets(repository: str, tag: str, release: dict, expected: dict | None = None, *, linux: bool = True) -> None:
     assets = {asset["name"]: asset for asset in release["assets"]}
-    if len(assets) != len(release["assets"]) or set(assets) != asset_names(tag) | {"SHA256SUMS"}:
+    if len(assets) != len(release["assets"]) or set(assets) != asset_names(tag, linux) | {"SHA256SUMS"}:
         raise SystemExit("GitHub release has missing, duplicate, or unexpected assets.")
     if any(asset["state"] != "uploaded" or asset["size"] <= 0 for asset in assets.values()):
         raise SystemExit("GitHub release assets are not fully uploaded.")
     with tempfile.TemporaryDirectory() as temp:
         directory = Path(temp)
         gh("release", "download", tag, "--repo", repository, "--pattern", "SHA256SUMS", "--dir", temp)
-        checksums = parse_checksums((directory / "SHA256SUMS").read_text(), tag)
+        checksums = parse_checksums((directory / "SHA256SUMS").read_text(), tag, linux)
         if expected is not None and checksums != expected:
             raise SystemExit("Uploaded checksums do not match the verified build artifacts.")
         for name, digest in checksums.items():
@@ -95,9 +114,9 @@ def verify_remote_assets(repository: str, tag: str, release: dict, expected: dic
                 raise SystemExit(f"Published asset checksum mismatch: {name}")
 
 
-def installation_notes(repository: str, tag: str) -> str:
+def installation_notes(repository: str, tag: str, linux: bool = True) -> str:
     base = f"https://github.com/{repository}/releases/download/{tag}"
-    return f"""## Install on macOS
+    notes = f"""## Install on macOS
 
 | Mac | Desktop app | Standalone CLI |
 | --- | --- | --- |
@@ -121,20 +140,46 @@ shasum -a 256 --ignore-missing -c SHA256SUMS
 Homebrew installation and tap-update availability are described in the [release guide](https://github.com/{repository}/blob/main/docs/releasing.md#install).
 
 """
+    if linux:
+        notes += f"""## Install on Linux
+
+| Architecture | Desktop app |
+| --- | --- |
+| x86_64 (Intel/AMD) | [AppImage]({base}/Caelum-{tag}-x86_64.AppImage) |
+| ARM64 | [AppImage]({base}/Caelum-{tag}-aarch64.AppImage) |
+
+Requires glibc 2.35 or newer, X11 or Wayland, a Vulkan driver, and a D-Bus desktop session.
+File dialogs use the XDG desktop portal and its desktop-specific backend.
+
+Download the matching AppImage and `SHA256SUMS`, then:
+
+```sh
+sha256sum --ignore-missing -c SHA256SUMS
+chmod +x Caelum-{tag}-x86_64.AppImage
+./Caelum-{tag}-x86_64.AppImage --install
+```
+
+Use `aarch64` on ARM64. Installation copies the app into your user data directory
+and registers its application-menu entry and `caelum://` links. Run the same command
+with a newer download to update. If FUSE is unavailable, add
+`--appimage-extract-and-run` before `--install`, or use it to launch directly.
+
+"""
+    return notes
 
 
-def publish(repository: str, tag: str, directory: Path) -> None:
+def publish(repository: str, tag: str, directory: Path, *, linux: bool = True) -> None:
     release = release_for_tag(repository, tag)
     if release is not None and not release["draft"]:
-        verify_remote_assets(repository, tag, release)
+        verify_remote_assets(repository, tag, release, linux=linux)
         print(f"Reusing published release {tag}; its assets and checksums are unchanged.")
         return
 
-    checksums = prepare_assets(directory, tag)
+    checksums = prepare_assets(directory, tag, linux)
     if release is None:
         with tempfile.TemporaryDirectory() as temp:
             notes = Path(temp) / "notes.md"
-            notes.write_text(installation_notes(repository, tag), encoding="utf-8")
+            notes.write_text(installation_notes(repository, tag, linux), encoding="utf-8")
             gh(
                 "release", "create", tag, "--repo", repository, "--verify-tag", "--draft",
                 "--title", tag, "--generate-notes", "--notes-file", str(notes),
@@ -147,15 +192,15 @@ def publish(repository: str, tag: str, directory: Path) -> None:
     if release is None or not release["draft"]:
         raise SystemExit("Release changed while preparing it; rerun to inspect the published assets.")
     for asset in release["assets"]:
-        if asset["name"] not in asset_names(tag) | {"SHA256SUMS"}:
+        if asset["name"] not in asset_names(tag, linux) | {"SHA256SUMS"}:
             raise SystemExit(f"Unexpected draft asset: {asset['name']}")
     gh("release", "upload", tag, "--repo", repository, "--clobber", *(
-        str(directory / name) for name in sorted(asset_names(tag) | {"SHA256SUMS"})
+        str(directory / name) for name in sorted(asset_names(tag, linux) | {"SHA256SUMS"})
     ))
     release = release_for_tag(repository, tag)
     if release is None or not release["draft"]:
         raise SystemExit("Release changed during upload; rerun to inspect its assets.")
-    verify_remote_assets(repository, tag, release, checksums)
+    verify_remote_assets(repository, tag, release, checksums, linux=linux)
     gh(
         "api", "--method", "PATCH", f"repos/{repository}/releases/{release['id']}",
         "-F", "draft=false", "-F", f"prerelease={str('-' in tag).lower()}",
@@ -171,15 +216,17 @@ def main() -> None:
     args = parser.parse_args()
     tag = os.environ["RELEASE_TAG"]
     repository = os.environ["GITHUB_REPOSITORY"]
+    linux = release_has_linux(tag)
     if args.check:
         release = release_for_tag(repository, tag)
         published = release is not None and not release["draft"]
         if published:
-            verify_remote_assets(repository, tag, release)
+            verify_remote_assets(repository, tag, release, linux=linux)
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
             output.write(f"published={str(published).lower()}\n")
+            output.write(f"linux_desktop={str(linux).lower()}\n")
     else:
-        publish(repository, tag, args.assets)
+        publish(repository, tag, args.assets, linux=linux)
 
 
 if __name__ == "__main__":
