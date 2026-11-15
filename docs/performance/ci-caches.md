@@ -26,3 +26,11 @@ queue/setup time. A cache hit is evidence of reuse, not an end-to-end speedup:
 this action excludes workspace build products and incremental state by default,
 so application compilation remains. Hosted timing needs repeated runs before
 claiming a new p50/p95 or the overall feedback target.
+
+The first hosted run with this change,
+[43758097786](https://github.com/ch55secake/caelum/actions/runs/43758097786),
+restored `v0-rust-aarch64-apple-darwin-build-Darwin-arm64-239bdeec-cfc57aa6`
+with `full match: true` from the existing main namespace. Restore took 13 s,
+packaging/verification took 271 s and the complete packaging job took 304 s.
+All CI jobs passed. This confirms cross-workflow reuse on the first PR run;
+the single timing sample is not evidence of a new latency percentile.
