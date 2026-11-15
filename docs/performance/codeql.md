@@ -8,8 +8,10 @@ extraction, and lets CodeQL use the runner's available threads and memory.
 CodeQL's built-in dependency cache currently has no Rust implementation. The
 Rust extractor does support `cargo_target_dir`: its internal build-script and
 macro compilation can reuse Cargo artifacts instead of a fresh scratch
-directory. The workflow gives it `target/codeql` and caches that directory plus
-Cargo downloads with `Swatinem/rust-cache`. Keys include the CodeQL version,
+directory. The workflow gives it a directory under the runner's temporary root,
+outside the source checkout, and caches that directory plus Cargo downloads with
+`Swatinem/rust-cache`. Keeping it outside the checkout prevents warm-cache
+generated Rust from being treated as additional repository source. Keys include the CodeQL version,
 Rust environment, runner architecture and dependency manifests. Each run still
 extracts the current source, finalizes a fresh database and runs every query.
 

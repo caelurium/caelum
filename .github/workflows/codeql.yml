@@ -28,15 +28,16 @@ jobs:
       fail-fast: false
       matrix:
         language: [actions, python, rust]
-    env:
-      # Rust's extractor otherwise creates a fresh scratch target on every run.
-      CODEQL_EXTRACTOR_RUST_OPTION_CARGO_TARGET_DIR: ${{ github.workspace }}/target/codeql
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         if: ${{ matrix.language == 'rust' }}
         with:
           toolchain: '1.95.0'
+      - name: Set persistent Rust extractor output
+        if: ${{ matrix.language == 'rust' }}
+        # Keep generated Rust outside the source root on cold and warm runs.
+        run: echo "CODEQL_EXTRACTOR_RUST_OPTION_CARGO_TARGET_DIR=$RUNNER_TEMP/codeql-cargo-target" >> "$GITHUB_ENV"
       - uses: github/codeql-action/init@v4
         id: codeql
         with:
@@ -46,8 +47,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: ${{ matrix.language == 'rust' }}
         with:
-          shared-key: codeql-rust-${{ steps.codeql.outputs.codeql-version }}
-          workspaces: . -> target/codeql
+          shared-key: codeql-rust-extractor-${{ steps.codeql.outputs.codeql-version }}
+          cache-targets: false
+          cache-directories: ${{ runner.temp }}/codeql-cargo-target
       - name: Analyze the complete default query suite
         uses: github/codeql-action/analyze@v4
         with:
