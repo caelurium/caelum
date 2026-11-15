@@ -589,10 +589,12 @@ dependencies = [
 name = "caelum-desktop"
 version = "0.1.84"
 dependencies = [
+ "blake3",
  "block2 0.6.2",
  "bytemuck",
  "caelum-core",
  "caelum-protocol",
+ "futures-util",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "objc2-user-notifications 0.3.2",
@@ -600,7 +602,9 @@ dependencies = [
  "rune-kit",
  "serde",
  "serde_json",
+ "tokio",
  "wgpu",
+ "zbus 6.2.1",
 ]
 
 [[package]]

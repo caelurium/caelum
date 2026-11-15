@@ -1,9 +1,16 @@
+mod launch;
+#[cfg(target_os = "linux")]
+mod linux;
+
+pub(crate) use launch::run;
+
 use crate::{Workspace, live, panels};
-use rune::{App, MenuItem, Shortcut, Tx};
+use rune::{App, Chrome, KeyEvent, MenuItem, Shortcut, Tx};
 
 pub fn configure(app: App<Workspace>) -> App<Workspace> {
-    app.keep_running()
-        .standard_menus()
+    #[cfg(target_os = "macos")]
+    let app = app.keep_running();
+    app.standard_menus()
         .on_focus(|s, focused, _| {
             if s.live.is_some() {
                 let live = live::live_mut(s);
@@ -63,6 +70,34 @@ pub fn configure(app: App<Workspace>) -> App<Workspace> {
         )
 }
 
+fn chrome() -> Chrome {
+    if cfg!(target_os = "macos") {
+        Chrome {
+            full_size_content: true,
+            traffic_lights: Some((16.0, 17.0)),
+            drag_regions: true,
+        }
+    } else {
+        Chrome::default()
+    }
+}
+
+pub(super) fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+    if ev.is_command('q') {
+        tx.quit();
+    } else if ev.is_command('w') {
+        tx.close_window();
+    } else if ev.is_command(',') && s.live.is_some() {
+        panels::show(s, panels::Screen::Settings);
+    } else {
+        return false;
+    }
+    true
+}
+
 pub fn open_url(s: &mut Workspace, url: &str, _: &mut Tx) {
     // The release smoke test uses this marker to distinguish an OS URL event
     // that never reached the app from one whose project-open request stalled.
@@ -78,16 +113,21 @@ pub fn open_url(s: &mut Workspace, url: &str, _: &mut Tx) {
     if state.evaluation || state.fixture {
         return;
     }
-    // URL events can arrive while the app is idle. Use live_mut so the queued
-    // project-open command schedules a poll and is submitted to the runtime.
-    let live = live::live_mut(s);
     match caelum_core::desktop::project_from_url(url) {
-        Ok(path) => {
-            live.panels.screen = panels::Screen::Conversation;
-            live.panels.overlay = None;
-            live.app.open_project(path.to_string_lossy().into_owned());
-        }
-        Err(error) => live.app.error = Some(error),
+        Ok(path) => activate(s, Some(path.to_string_lossy().into_owned())),
+        Err(error) => live::live_mut(s).app.error = Some(error),
+    }
+}
+
+fn activate(s: &mut Workspace, project: Option<String>) {
+    // Activation can arrive while idle. Schedule the queued project-open effect.
+    if let Some(project) = project
+        && s.live.is_some()
+    {
+        let live = live::live_mut(s);
+        live.panels.screen = panels::Screen::Conversation;
+        live.panels.overlay = None;
+        live.app.open_project(project);
     }
     if let Some(handle) = &s.handle {
         handle.open();

@@ -29,7 +29,7 @@ mod worktree;
 mod tests;
 
 use rune::{
-    Chrome, Cx, El, Icon, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, icon, row, text,
+    Cx, El, Icon, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, icon, row, text,
     text_input,
 };
 use rune_kit::diff::{DiffMode, DiffView};
@@ -607,6 +607,9 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
 }
 
 fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if lifecycle::on_key(s, ev, tx) {
+        return true;
+    }
     if context::is_open(s) {
         return context::key(s, ev);
     }
@@ -657,95 +660,5 @@ fn spec() -> rune::AppSpec<Workspace> {
 }
 
 fn main() {
-    let mut fixtures = false;
-    let mut evaluation = false;
-    let mut design = false;
-    let mut project = None;
-    let mut latency_workload = None;
-    let mut args = Vec::new();
-    let mut input = std::env::args().skip(1);
-    while let Some(arg) = input.next() {
-        match arg.as_str() {
-            "--version" | "-V" => {
-                println!("Caelum {}", env!("CARGO_PKG_VERSION"));
-                return;
-            }
-            "--fixtures" => fixtures = true,
-            "--evaluation-workload" => evaluation = true,
-            "--design-fixture" => design = true,
-            "--latency-workload" => {
-                latency_workload = Some(match input.next().as_deref() {
-                    Some("small") => false,
-                    Some("streaming") => true,
-                    _ => {
-                        eprintln!("--latency-workload requires small or streaming");
-                        std::process::exit(2);
-                    }
-                });
-            }
-            "--project" => {
-                let Some(path) = input.next() else {
-                    eprintln!("--project requires a directory");
-                    std::process::exit(2);
-                };
-                project = Some(path);
-            }
-            _ if args.is_empty() && project.is_none() && !arg.starts_with('-') => {
-                project = Some(arg)
-            }
-            _ => args.push(arg),
-        }
-    }
-    let _capture = std::env::var_os("CAELUM_LATENCY_TRACE")
-        .filter(|path| !path.is_empty())
-        .and_then(|path| {
-            match caelum_core::diagnostics::Capture::start(std::path::Path::new(&path)) {
-                Ok(capture) => Some(capture),
-                Err(error) => {
-                    eprintln!("Cannot start latency trace: {error}");
-                    None
-                }
-            }
-        });
-    let app = lifecycle::configure(
-        rune::App::new(spec())
-            .compositor(home::art::Compositor::default())
-            .font_smoothing(rune::FontSmoothing::Off)
-            .on_frame_drawn(live::frame_drawn),
-    );
-    let app = if caelum_core::diagnostics::enabled() {
-        app.on_frame_encoded(latency::encoded)
-    } else {
-        app
-    };
-    let handle = app.handle();
-    let notifications = notifications::State::connect(
-        handle.clone(),
-        !fixtures && !evaluation && !design && latency_workload.is_none(),
-    );
-    app.init(move || {
-        let mut state = if let Some(streaming) = latency_workload {
-            latency::workspace(streaming)
-        } else if design {
-            evaluation::design()
-        } else if evaluation {
-            evaluation::workspace()
-        } else if fixtures {
-            Workspace::new()
-        } else {
-            home::workspace(project)
-        };
-        if let Some(live) = &mut state.live {
-            live.notifications = notifications;
-        }
-        state.handle = Some(handle);
-        state
-    })
-    .args(args)
-    .chrome(Chrome {
-        full_size_content: true,
-        traffic_lights: Some((16.0, 17.0)),
-        drag_regions: true,
-    })
-    .run();
+    lifecycle::run();
 }
