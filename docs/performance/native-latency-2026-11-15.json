@@ -1,0 +1,159 @@
+{
+  "schema": 1,
+  "date": "2026-11-15",
+  "native_revision": "2fe56dcbe1fbdfeffe46772cb69878a9caf4184e",
+  "desktop_binary_sha256": "034da715c5d0e0f3b0e0b4b3ba7cc218f1f8f7283094e721b3681b63b0b43cd5",
+  "environment": {
+    "os": "macOS 26.5.1 arm64",
+    "chip": "Apple M5 Pro",
+    "memory_gib": 24,
+    "power": "battery, automatic power mode",
+    "theme": "dark",
+    "display": "built-in Retina",
+    "requested_window_points": [1280, 1000],
+    "display_refresh_hz": null,
+    "simultaneous_builds_or_tests": false
+  },
+  "metric_columns": ["count", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+  "resource_columns": ["cpu_percent_mean", "rss_mib_median", "rss_mib_peak"],
+  "resource_sample_seconds": 15,
+  "native": [
+    {
+      "workload": "small", "repeat": 1,
+      "metrics": {
+        "frame.cpu": [1978, 1.182, 4.0, 5.472, 6.404],
+        "frame.update": [1978, 0.948, 3.816, 5.213, 6.187],
+        "frame.encode": [1978, 0.223, 0.325, 0.376, 0.766],
+        "interaction.navigate.drawn": [80, 10.136, 12.938, 13.585, 13.585],
+        "interaction.navigate.ready": [80, 10.136, 12.938, 13.585, 13.585],
+        "interaction.edit.drawn": [80, 9.206, 11.335, 12.169, 12.169],
+        "startup.first_drawn": [1, 111.439, 111.439, 111.439, 111.439]
+      },
+      "traced_resources": [22.932923, 97.46875, 98.421875],
+      "untraced_resources": [20.861873, 96.796875, 98.96875],
+      "recorded_records": 4363, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 0,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1978, "skipped": 2}
+    },
+    {
+      "workload": "small", "repeat": 2,
+      "metrics": {
+        "frame.cpu": [1975, 1.164, 4.059, 5.823, 7.965],
+        "frame.update": [1975, 0.933, 3.859, 5.55, 7.659],
+        "frame.encode": [1975, 0.226, 0.331, 0.386, 1.085],
+        "interaction.navigate.drawn": [80, 11.071, 13.612, 15.594, 15.594],
+        "interaction.navigate.ready": [80, 11.077, 13.612, 15.595, 15.595],
+        "interaction.edit.drawn": [80, 9.8915, 12.023, 12.753, 12.753],
+        "startup.first_drawn": [1, 103.047, 103.047, 103.047, 103.047]
+      },
+      "traced_resources": [23.501139, 98.671875, 99.71875],
+      "untraced_resources": [23.06123, 97.421875, 98.171875],
+      "recorded_records": 4355, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 0,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1975, "skipped": 1}
+    },
+    {
+      "workload": "small", "repeat": 3,
+      "metrics": {
+        "frame.cpu": [1975, 1.215, 4.076, 5.593, 6.82],
+        "frame.update": [1975, 0.972, 3.87, 5.278, 6.525],
+        "frame.encode": [1975, 0.233, 0.337, 0.398, 0.903],
+        "interaction.navigate.drawn": [80, 10.9585, 12.71, 13.872, 13.872],
+        "interaction.navigate.ready": [80, 10.959, 12.711, 13.873, 13.873],
+        "interaction.edit.drawn": [80, 8.338, 11.381, 13.292, 13.292],
+        "startup.first_drawn": [1, 108.43, 108.43, 108.43, 108.43]
+      },
+      "traced_resources": [23.431362, 97.71875, 98.5625],
+      "untraced_resources": [22.132881, 96.96875, 98.1875],
+      "recorded_records": 4355, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 0,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1975, "skipped": 1}
+    },
+    {
+      "workload": "streaming", "repeat": 1,
+      "metrics": {
+        "frame.cpu": [1848, 0.9035, 11.547, 13.524, 14.652],
+        "frame.update": [1848, 0.702, 11.352, 13.361, 14.544],
+        "frame.encode": [1848, 0.144, 0.422, 0.606, 0.928],
+        "interaction.navigate.drawn": [80, 17.53, 21.188, 22.421, 22.421],
+        "interaction.navigate.ready": [80, 17.53, 21.188, 22.421, 22.421],
+        "interaction.edit.drawn": [80, 14.7565, 17.933, 20.019, 20.019],
+        "startup.first_drawn": [1, 159.968, 159.968, 159.968, 159.968]
+      },
+      "traced_resources": [32.577527, 126.828125, 129.125],
+      "untraced_resources": [32.655937, 127.6875, 129.84375],
+      "recorded_records": 4481, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 2280,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1848, "skipped": 1}
+    },
+    {
+      "workload": "streaming", "repeat": 2,
+      "metrics": {
+        "frame.cpu": [1652, 1.6505, 16.1, 19.101, 21.133],
+        "frame.update": [1652, 1.3435, 15.784, 18.781, 20.895],
+        "frame.encode": [1652, 0.2345, 0.584, 0.876, 1.145],
+        "interaction.navigate.drawn": [80, 19.3765, 25.414, 28.393, 28.393],
+        "interaction.navigate.ready": [80, 19.377, 25.414, 28.393, 28.393],
+        "interaction.edit.drawn": [80, 14.7975, 23.318, 25.217, 25.217],
+        "startup.first_drawn": [1, 123.207, 123.207, 123.207, 123.207]
+      },
+      "traced_resources": [43.198985, 131.09375, 134.40625],
+      "untraced_resources": [39.609119, 131.5625, 135.890625],
+      "recorded_records": 4089, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 2280,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1652, "skipped": 1}
+    },
+    {
+      "workload": "streaming", "repeat": 3,
+      "metrics": {
+        "frame.cpu": [1777, 1.085, 13.67, 17.602, 22.265],
+        "frame.update": [1777, 0.792, 13.503, 17.53, 22.148],
+        "frame.encode": [1777, 0.16, 0.453, 0.642, 0.923],
+        "interaction.navigate.drawn": [80, 19.308, 26.738, 28.898, 28.898],
+        "interaction.navigate.ready": [80, 19.308, 26.739, 28.898, 28.898],
+        "interaction.edit.drawn": [80, 15.763, 22.164, 25.591, 25.591],
+        "startup.first_drawn": [1, 132.112, 132.112, 132.112, 132.112]
+      },
+      "traced_resources": [33.93404, 127.515625, 134.59375],
+      "untraced_resources": [7.618793, 123.890625, 126.203125],
+      "untraced_note": "CPU fell to approximately 1% after four seconds; presentation was not instrumented, so this sample cannot support an overhead estimate.",
+      "recorded_records": 4339, "dropped_records": 0,
+      "complete_workload": true, "stream_events": 2280,
+      "unfinished_requests": 2, "frame_outcomes": {"drawn": 1777, "skipped": 1}
+    }
+  ],
+  "provider": {
+    "source_revision": "600d79192b58406f63c528f4578067d497c2bc7b",
+    "version": "OpenCode 2.2.7",
+    "target": "oldest-open",
+    "projects": 10,
+    "saved_sessions": 41,
+    "archived_sessions": 31,
+    "history_messages": 50,
+    "history_json_bytes": 500922,
+    "history_entries": 166,
+    "runs": [
+      {
+        "repeat": 1, "core_ready_ms": 34.322833,
+        "direct_ms": {"resume": 6.4525, "history": 14.840833, "apply": 0.455125},
+        "history_stages_ms": {"admission": 10.611, "queue": 0.013, "worker": 14.865, "delivery": 0.043, "apply": 0.35},
+        "http_requests": {"info": 5, "forms": 5, "session.metadata": 12, "sessions.active": 13, "session.messages": 2, "models": 1, "sessions.list": 1, "commands": 1, "agents": 1, "session.diff": 6, "providers": 1, "model.default": 1, "session.inbox": 1, "shells": 1},
+        "recorded_records": 209, "dropped_records": 0, "unfinished_requests": 9
+      },
+      {
+        "repeat": 2, "core_ready_ms": 25.109958,
+        "direct_ms": {"resume": 2.690042, "history": 5.027958, "apply": 0.263709},
+        "history_stages_ms": {"admission": 12.163, "queue": 0.028, "worker": 6.819, "delivery": 0.019, "apply": 0.406},
+        "http_requests": {"info": 6, "forms": 5, "session.metadata": 13, "sessions.active": 14, "session.messages": 2, "models": 1, "sessions.list": 1, "commands": 1, "agents": 1, "session.diff": 7, "providers": 1, "model.default": 1, "session.inbox": 1, "shells": 1},
+        "recorded_records": 233, "dropped_records": 0, "unfinished_requests": 9
+      },
+      {
+        "repeat": 3, "core_ready_ms": 30.418958,
+        "direct_ms": {"resume": 5.6885, "history": 8.625083, "apply": 0.398541},
+        "history_stages_ms": {"admission": 8.926, "queue": 0.139, "worker": 12.089, "delivery": 0.033, "apply": 0.335},
+        "http_requests": {"info": 5, "forms": 5, "session.metadata": 12, "sessions.active": 13, "session.messages": 2, "models": 1, "sessions.list": 1, "commands": 1, "agents": 1, "session.diff": 6, "providers": 1, "model.default": 1, "session.inbox": 1, "shells": 1},
+        "recorded_records": 209, "dropped_records": 0, "unfinished_requests": 9
+      }
+    ]
+  }
+}

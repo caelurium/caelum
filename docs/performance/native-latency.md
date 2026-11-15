@@ -1,8 +1,8 @@
 # Native latency baseline
 
 `CAELUM_LATENCY_TRACE` enables content-free JSONL tracing in the desktop. It is
-disabled by default: no writer, clocks, diagnostic timers or payload serialization
-run without an explicit capture. The output must name a **new** file in an existing
+disabled by default: ordinary runs start no recorder writer, clocks, diagnostic
+timers or payload serialization. The output must name a **new** file in an existing
 directory. A bounded, nonblocking queue feeds a background writer. Captures stop
 accepting records after 250,000 attempts; queue overflow and the record limit are
 reported as dropped records in the final summary. Capture errors do not block UI
@@ -121,3 +121,75 @@ an interrupted JSON line is rejected. Native synthetic runs deliberately have no
 HTTP/tool samples. Record counts must also match the footer's attempted/dropped
 totals. Compare repeated runs individually rather than pooling away
 outliers, and measure capture overhead before interpreting very small differences.
+
+## Local baseline, 15 November 2026
+
+[Content-free per-run results](native-latency-2026-11-15.json) retain p50/p95/p99/max,
+frame and sample counts, CPU/RSS and provider request counts. Native measurements
+use release revision `2fe56dc`, on an Apple M5 Pro with 24 GiB, macOS 26.5.1,
+battery power in automatic mode, dark appearance and the built-in Retina display.
+The requested window size was 1280 × 1000 points; actual display refresh was not
+independently recorded. No builds or tests ran during measurement. Other desktop
+activity was not controlled, so these are local observations rather than CI limits.
+
+Three traced repeats and three resource-only repeats per workload used the same
+packaged executable, alternating trace order (on/off, off/on, on/off). The small
+workload has 200 initial entries total; streaming has 12,000 and exactly 2,280
+applied deltas per run. Each traced run completed all 80 selections and 80 edits
+with a matching footer, no dropped records and no abandoned interactions.
+
+| Workload | Measurement | Median per-run p95 | Per-run p95 range |
+| --- | --- | ---: | ---: |
+| Small | Selection → drawn | 12.94 ms | 12.71–13.61 ms |
+| Small | Draft insertion → drawn | 11.38 ms | 11.34–12.02 ms |
+| Small | Frame CPU update + encode | 4.06 ms | 4.00–4.08 ms |
+| Six streams | Selection → drawn | 25.41 ms | 21.19–26.74 ms |
+| Six streams | Draft insertion → drawn | 22.16 ms | 17.93–23.32 ms |
+| Six streams | Frame CPU update + encode | 13.67 ms | 11.55–16.10 ms |
+
+Histories are already loaded, so readiness accompanies the selection frame. The
+worst selection sample was 28.90 ms and the worst edit 25.59 ms. With 80 samples,
+nearest-rank p99 equals the maximum; it is not a well-resolved tail estimate.
+The warm-interaction goal of p95 below 50 ms is met in these fixtures, while the
+streaming frame tail exceeds the 8.3 ms CPU budget for a 120 Hz target. That points
+to native update work worth profiling before claiming consistently smooth 120 Hz.
+Each synthetic trace has two intentionally unexecuted fixture commands (`task`
+and `choices`), reported as unfinished requests; they are not provider timings.
+
+### Observer overhead
+
+For small histories, mean native CPU was 22.93–23.50% with tracing versus
+20.86–23.06% without it (100% is one fully occupied core). Paired differences were
++0.44 to +2.07 percentage points; median RSS differed by +0.67 to +1.25 MiB.
+The resource sampler ran in both modes. This measures the combined recorder/frame
+hook effect plus run-to-run noise, not individual event cost or latency overhead.
+
+Streaming CPU varied substantially: traced runs used 32.58–43.20%, and untraced
+runs used 32.66%, 39.61% and 7.62%. In the last untraced run CPU fell to roughly 1%
+after four seconds. Its presentation was not instrumented, so it is retained in
+the artifact but cannot support an overhead estimate. Streaming observer overhead
+remains inconclusive; the traced interaction counts and timings above are complete.
+
+### Read-only provider baseline
+
+Three separate captures of `session_load … oldest-open 1` used the same copied
+workspace (10 projects, 41 saved OpenCode sessions, 31 archived), a warm registered
+OpenCode 2.2.7 service, and core/example revision `600d791` (unchanged by `2fe56dc`).
+Each history returned 50 messages / 500,922 JSON bytes / 166 transcript entries.
+Core restoration readiness was **30.42 ms median**, range **25.11–34.32 ms**.
+
+Selected-history command stages were admission 8.93–12.16 ms, worker queue wait
+0.013–0.139 ms, worker execution 6.82–14.87 ms, delivery 0.019–0.043 ms and core
+application 0.335–0.406 ms. Admission includes the example's command-drain and
+completion loop; it is not an isolated desktop scheduling measurement.
+
+Whole-process captures recorded 51–55 HTTP attempts, including both the isolated
+direct load and competing restoration reads. They ended after selected-history
+readiness and runtime shutdown, with nine requests not applied to the workspace;
+these counts do not represent a fully settled workspace. All record footers
+matched, with no drops. No real tool/model execution occurred in these captures,
+so tool lifecycle and first-token distributions still need an interactive capture.
+
+Raw native captures remain under ignored
+`apps/desktop/profile-results/native-latency-2026-11-15-fixed/`; provider captures
+are under `apps/desktop/profile-results/native-latency-2026-11-15/provider/`.
