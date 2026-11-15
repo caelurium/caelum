@@ -297,6 +297,7 @@ impl Workspace {
         }
         self.next_request += 1;
         let id = self.next_request;
+        crate::diagnostics::command("created", id, &command);
         self.pending.insert(id, pending);
         self.outgoing.push((id, command));
         id

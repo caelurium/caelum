@@ -143,6 +143,7 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
 }
 
 pub fn changed(s: &mut Workspace, _: &mut Tx) {
+    crate::latency::edit(live(s));
     let l = live_mut(s);
     l.completion.active = 0;
     l.completion.dismissed = None;

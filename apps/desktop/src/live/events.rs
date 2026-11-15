@@ -40,8 +40,17 @@ impl Live {
     pub(crate) fn apply_events(&mut self, events: impl IntoIterator<Item = Event>) -> bool {
         let mut changed = false;
         for event in events {
+            let trace = caelum_core::diagnostics::event(&event).filter(|mark| {
+                self.app.selected.is_some_and(|i| {
+                    mark.owner() != 0
+                        && mark.owner()
+                            == caelum_core::diagnostics::session_owner(&self.app.sessions[i])
+                }) && self.panels.screen == crate::panels::Screen::Conversation
+                    && self.panels.overlay.is_none()
+            });
             let before = (!changed).then(|| self.background_delta(&event)).flatten();
             self.apply(event);
+            self.latency.track(trace, self.app.selected, false);
             changed |= before.is_none_or(|(index, summary)| {
                 self.app
                     .sessions

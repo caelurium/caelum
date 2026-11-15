@@ -28,6 +28,7 @@ use rune::{FileDialogOptions, ScrollPos, TextEdit, Tx, Waker};
 use crate::Workspace;
 
 pub struct Live {
+    pub latency: crate::latency::State,
     pub feed: sidebar::State,
     pub context: crate::context::State,
     pub checkouts: crate::checkouts::State,
@@ -93,6 +94,7 @@ impl Live {
             app.open_project(project);
         }
         Self {
+            latency: Default::default(),
             feed: Default::default(),
             context: Default::default(),
             checkouts: Default::default(),
@@ -330,6 +332,8 @@ impl Live {
     }
 
     pub fn send(&mut self, tx: &mut Tx) {
+        let trace = self.latency.begin("send");
+        self.latency.track(trace, self.app.selected, false);
         self.schedule();
         let Some(index) = self.app.selected else {
             return;
@@ -699,6 +703,7 @@ pub fn presented_focus(rt: &rune::Runtime<Workspace>) -> Option<Option<String>> 
 }
 
 pub fn frame_drawn(rt: &rune::Runtime<Workspace>) {
+    crate::latency::drawn(rt);
     if let Some(focused) = presented_focus(rt)
         && let Some(handle) = &rt.state.handle
     {

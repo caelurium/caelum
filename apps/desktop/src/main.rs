@@ -8,6 +8,7 @@ mod composer;
 mod context;
 mod evaluation;
 mod home;
+mod latency;
 mod lifecycle;
 mod live;
 mod media;
@@ -660,6 +661,7 @@ fn main() {
     let mut evaluation = false;
     let mut design = false;
     let mut project = None;
+    let mut latency_workload = None;
     let mut args = Vec::new();
     let mut input = std::env::args().skip(1);
     while let Some(arg) = input.next() {
@@ -671,6 +673,16 @@ fn main() {
             "--fixtures" => fixtures = true,
             "--evaluation-workload" => evaluation = true,
             "--design-fixture" => design = true,
+            "--latency-workload" => {
+                latency_workload = Some(match input.next().as_deref() {
+                    Some("small") => false,
+                    Some("streaming") => true,
+                    _ => {
+                        eprintln!("--latency-workload requires small or streaming");
+                        std::process::exit(2);
+                    }
+                });
+            }
             "--project" => {
                 let Some(path) = input.next() else {
                     eprintln!("--project requires a directory");
@@ -684,17 +696,37 @@ fn main() {
             _ => args.push(arg),
         }
     }
+    let _capture = std::env::var_os("CAELUM_LATENCY_TRACE")
+        .filter(|path| !path.is_empty())
+        .and_then(|path| {
+            match caelum_core::diagnostics::Capture::start(std::path::Path::new(&path)) {
+                Ok(capture) => Some(capture),
+                Err(error) => {
+                    eprintln!("Cannot start latency trace: {error}");
+                    None
+                }
+            }
+        });
     let app = lifecycle::configure(
         rune::App::new(spec())
             .compositor(home::art::Compositor::default())
             .font_smoothing(rune::FontSmoothing::Off)
             .on_frame_drawn(live::frame_drawn),
     );
+    let app = if caelum_core::diagnostics::enabled() {
+        app.on_frame_encoded(latency::encoded)
+    } else {
+        app
+    };
     let handle = app.handle();
-    let notifications =
-        notifications::State::connect(handle.clone(), !fixtures && !evaluation && !design);
+    let notifications = notifications::State::connect(
+        handle.clone(),
+        !fixtures && !evaluation && !design && latency_workload.is_none(),
+    );
     app.init(move || {
-        let mut state = if design {
+        let mut state = if let Some(streaming) = latency_workload {
+            latency::workspace(streaming)
+        } else if design {
             evaluation::design()
         } else if evaluation {
             evaluation::workspace()

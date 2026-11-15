@@ -5,6 +5,7 @@ pub mod approvals;
 pub mod codex;
 pub mod database;
 pub mod desktop;
+pub mod diagnostics;
 mod executable;
 pub mod files;
 pub mod git;

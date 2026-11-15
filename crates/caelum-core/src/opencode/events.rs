@@ -86,6 +86,10 @@ pub(super) fn spawn_event_listener(
                     return;
                 }
 
+                if let Some(mark) = crate::diagnostics::opencode_event(&event) {
+                    mark.record("received", event.created.unwrap_or(0));
+                }
+
                 if event.event_type == "permission.asked" {
                     request_permission(
                         &server,

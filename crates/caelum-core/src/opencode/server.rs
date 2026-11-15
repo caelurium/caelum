@@ -152,6 +152,7 @@ impl OpenCodeProvider {
         project: &Project,
         alive: Arc<AtomicBool>,
     ) -> Result<Arc<OpenCodeServer>, OpenCodeError> {
+        let _trace = crate::diagnostics::next("connection", "checkout", 0).map(|mark| mark.span());
         if !alive.load(Ordering::Acquire) {
             return Err(OpenCodeError::Closed);
         }
@@ -344,6 +345,7 @@ impl OpenCodeServer {
         query: &[(&str, String)],
         body: Option<Value>,
     ) -> Result<Value, OpenCodeError> {
+        let trace = crate::diagnostics::http(&method, path);
         let url = api_url(&self.base_url, path, query)?;
         let mut request = self.authenticate(self.client.request(method, url));
         if let Some(body) = body {
@@ -356,7 +358,14 @@ impl OpenCodeServer {
         let bytes = response
             .bytes()
             .map_err(|error| OpenCodeError::Request(error.to_string()))?;
-        decode_json_response(status, &bytes)
+        let result = decode_json_response(status, &bytes);
+        if let Some(trace) = trace {
+            trace.finish(
+                if result.is_ok() { "ok" } else { "error" },
+                bytes.len() as u64,
+            );
+        }
+        result
     }
 
     pub(super) fn remember_session(&self, session_id: &str) {
@@ -420,6 +429,7 @@ pub(super) fn discover_service(file: &Path) -> Option<Arc<OpenCodeServer>> {
             .map(str::to_owned),
     )
     .ok()?;
+    let trace = crate::diagnostics::http(&Method::GET, "/api/info");
     let response = server
         .authenticate(
             server
@@ -433,6 +443,9 @@ pub(super) fn discover_service(file: &Path) -> Option<Arc<OpenCodeServer>> {
         return None;
     }
     let info: Value = response.json().ok()?;
+    if let Some(trace) = trace {
+        trace.finish("ok", 0);
+    }
     let version = info.get("version")?.as_str()?;
     if info.get("pid")?.as_u64()? != registration.get("pid")?.as_u64()?
         || !version.starts_with("2.")
