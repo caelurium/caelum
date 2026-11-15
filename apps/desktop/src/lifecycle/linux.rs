@@ -86,6 +86,14 @@ fn start_for_state(
                         if ready.send(Ok(true)).is_ok() {
                             let _ = stopped.await;
                         }
+                        // Dropping the Tokio runtime can abort the connection's
+                        // cleanup before the bus observes it. Finish releasing
+                        // ownership before an immediate relaunch can forward here.
+                        let _ = tokio::time::timeout(
+                            Duration::from_secs(5),
+                            connection.release_name(name.as_str()),
+                        )
+                        .await;
                         drop(connection);
                     }
                     Ok(Ok(None)) => {
@@ -129,20 +137,36 @@ async fn connect(
         .object_server()
         .at(OBJECT, Activation(handle))
         .await?;
-    match connection
-        .request_name_with_flags(name, RequestNameFlags::DO_NOT_QUEUE)
-        .await
-    {
-        Ok(_) => Ok(Some(connection)),
-        Err(zbus::Error::NameTaken) => {
-            let proxy = zbus::Proxy::new(&connection, name, OBJECT, INTERFACE).await?;
-            proxy
-                .call::<_, _, ()>("Activate", &(project.unwrap_or_default(),))
-                .await?;
-            Ok(None)
+    for attempt in 0..3 {
+        match connection
+            .request_name_with_flags(name, RequestNameFlags::DO_NOT_QUEUE)
+            .await
+        {
+            Ok(_) => return Ok(Some(connection)),
+            Err(zbus::Error::NameTaken) => {
+                let proxy = zbus::Proxy::new(&connection, name, OBJECT, INTERFACE).await?;
+                match proxy
+                    .call::<_, _, ()>("Activate", &(project.as_deref().unwrap_or_default(),))
+                    .await
+                {
+                    Ok(()) => return Ok(None),
+                    // The owner can exit between RequestName and Activate. Retry
+                    // ownership, bounded by both attempts and the launch timeout.
+                    Err(zbus::Error::FDO(error))
+                        if attempt < 2
+                            && matches!(
+                                *error,
+                                zbus::fdo::Error::NoReply(_)
+                                    | zbus::fdo::Error::NameHasNoOwner(_)
+                                    | zbus::fdo::Error::ServiceUnknown(_)
+                            ) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Err(error) => return Err(error),
         }
-        Err(error) => Err(error),
     }
+    unreachable!("the last attempt returns its result")
 }
 
 fn instance_name(state: &Path) -> Result<String, String> {

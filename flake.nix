@@ -19,6 +19,16 @@
           pkgs = import nixpkgs { inherit system; };
           linuxLibraries = with pkgs; [
             openssl
+            fontconfig
+            libxkbcommon
+            libX11
+            libXcursor
+            libXfixes
+            libXi
+            libXrandr
+            libxcb
+            vulkan-loader
+            wayland
           ];
         in
         {
@@ -32,7 +42,11 @@
               rust-analyzer
               rustc
               rustfmt
-            ];
+            ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux (with pkgs; [
+              dbus
+              desktop-file-utils
+              xdg-utils
+            ]);
 
             buildInputs = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux linuxLibraries;
 

@@ -71,7 +71,7 @@ static APPEARANCE: Icon = Icon {
 fn quiet_button(glyph: &'static Icon, label: &str) -> IconButton {
     IconButton::new(glyph)
         .variant(IconButtonVariant::GhostMuted)
-        .label(label)
+        .label(ui::shortcut(label))
         .control_size(ControlSize::Regular)
 }
 

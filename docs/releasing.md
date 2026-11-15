@@ -1,6 +1,9 @@
 # Releasing Caelum
 
-Merges to `main` trigger automatic patch releases for Apple Silicon and Intel Macs. A deliberate version change uses that version instead. The release contains two DMGs, two standalone CLI archives, and `SHA256SUMS`.
+Merges to `main` trigger automatic patch releases for Apple Silicon and Intel Macs,
+plus x86_64 and ARM64 Linux desktops. A deliberate version change uses that
+version instead. Releases contain two DMGs, two macOS CLI archives, two Linux
+AppImages and `SHA256SUMS`.
 
 ## Signing without an Apple Developer account
 
@@ -12,10 +15,11 @@ After attempting to open the installed app, macOS may require **System Settings 
 
 1. Prepare an immutable version tag. Ordinary merges create a `chore(release)` version commit updating the Cargo workspace and local lockfile packages. Every crate inherits the workspace version; native bundle metadata is generated from it.
 2. Run shared CI against that exact release commit: Rust formatting, Clippy, core/CLI/native interaction tests, native previews and Python release/profile checks. The architecture-specific release builds run alongside these checks.
-3. Build ad-hoc-signed app bundles/DMGs and CLI archives on native Apple Silicon and Intel runners with locked dependencies.
+3. Build ad-hoc-signed app bundles/DMGs and CLI archives on native Apple Silicon and Intel runners, plus AppImages on native Ubuntu 22.04 x86_64/ARM64 runners, with locked dependencies.
 4. Verify signatures, architectures, app metadata, extracted CLI startup and mounted DMG contents. Exercise packaged CLI cold/warm URLs, hidden-window reopening, draft restoration and graceful quit in an isolated workspace.
-5. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires both CI and both architecture builds to succeed.
-6. When configured, open a separate Homebrew tap update PR.
+5. Run Linux desktop Clippy/tests, audit ELF architectures/glibc requirements and exercise packaged X11/Wayland startup, installation and lifecycle. See [Linux verification](linux.md#build-and-verify).
+6. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires CI and all platform/architecture builds and package smoke checks to succeed.
+7. When configured, open a separate Homebrew tap update PR.
 
 Main release runs are serialized. GitHub retains only the newest pending run when merges arrive faster than releases finish, so overlapping untagged merges can share a release. A superseded preparation run yields to the newer main workflow rather than silently switching its source tree. Once a version commit/tag exists, retries reuse it. Tags are never moved.
 
@@ -42,6 +46,11 @@ gh workflow run release.yml --ref main -f tag=v0.1.5
 Recovery validates the remote tag and workspace/lockfile versions before using it. Unpublished native releases rebuild with the tagged packaging scripts and current CI; publication uses current recovery tooling. A partial draft can have its uploads replaced and verified before publication. Rebuilding an unpublished pre-cutover web-client tag requires that historical release workflow; already published legacy assets remain recoverable without rebuilding.
 
 Already published releases are verified and reused without rebuilding or replacing assets or checksums; recovery can then retry the Homebrew update. An incomplete or checksum-mismatched published release fails visibly. Publish a new version to correct released binaries. Stable releases use GitHub's semantic-version-aware latest selection; prereleases are marked separately. Intermediate build artifacts are retained for 14 days.
+
+The immutable tag's `scripts/release/asset-layout.json` defines its asset contract.
+Tags predating that manifest retain the four macOS assets and skip Linux builds
+during recovery. New tags require both AppImages; missing Linux assets fail
+publication. The publisher never infers an older layout from missing uploads.
 
 ## Homebrew setup
 
@@ -74,7 +83,14 @@ mounts/verifies it and checks extracted CLI startup. Release publication produce
 
 - `Caelum-v<version>-aarch64.dmg` and `Caelum-v<version>-x86_64.dmg`
 - `caelum-cli-v<version>-<target>.tar.gz` for both macOS targets
+- `Caelum-v<version>-aarch64.AppImage` and `Caelum-v<version>-x86_64.AppImage`
 - `SHA256SUMS`
+
+For Linux packaging, run `bash scripts/release/package_linux_assets.sh` on the
+native Ubuntu 22.04 baseline. `TARGET` selects `x86_64-unknown-linux-gnu` or
+`aarch64-unknown-linux-gnu`; `RUNNER_TEMP` selects the output parent. The script
+builds only the desktop, audits/copies its runtime libraries and creates a pinned
+AppImage. GitHub-hosted standard runners for this public repository are free.
 
 ## Install
 
@@ -86,6 +102,8 @@ brew install ch55secake/tap/caelum-cli
 ```
 
 For direct installation, download the matching DMG from the GitHub release and drag **Caelum.app** into **Applications**. Extract the matching CLI archive and place `caelum` on your `PATH`. Use `aarch64` for Apple Silicon (M-series) and `x86_64` for Intel.
+
+On Linux, follow the [AppImage installation instructions](linux.md#install-and-update).
 
 Download `SHA256SUMS` beside the selected asset and verify it with:
 

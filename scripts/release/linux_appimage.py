@@ -142,7 +142,7 @@ def stage(root: Path, app: Path, target: str, tag: str) -> Path:
     audit_elf(binary, arch)
     bundle_libraries(binary, app / "usr/lib", arch)
     assets = root / "apps/desktop/assets"
-    for source, name in [(assets / "linux/AppRun", "AppRun"), (assets / "linux/dev.caelum.desktop.desktop", "dev.caelum.desktop.desktop"), (assets / "icon.png", "dev.caelum.desktop.png")]:
+    for source, name in [(assets / "linux/AppRun", "AppRun"), (assets / "linux/dev.caelum.desktop.desktop", "dev.caelum.desktop.desktop"), (assets / "linux/dev.caelum.desktop.png", "dev.caelum.desktop.png")]:
         shutil.copy2(source, app / name)
     (app / "AppRun").chmod(0o755)
     notices = app / "usr/share/doc/caelum"

@@ -7,7 +7,7 @@ use std::{
 };
 
 const DESKTOP: &str = "dev.caelum.desktop.desktop";
-const ICON: &[u8] = include_bytes!("../../assets/icon.png");
+const ICON: &[u8] = include_bytes!("../../assets/linux/dev.caelum.desktop.png");
 const ENTRY: &str = include_str!("../../assets/linux/dev.caelum.desktop.desktop");
 
 pub(super) fn run() -> Result<(), String> {

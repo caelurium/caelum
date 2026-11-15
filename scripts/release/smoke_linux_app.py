@@ -44,7 +44,6 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
     environment["VK_ICD_FILENAMES"] = str(icds[0])
     command = [str(image), "--appimage-extract-and-run"]
     children = []
-    app = None
     with (output / "desktop.log").open("w") as log:
         try:
             if backend == "wayland":
@@ -75,9 +74,6 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
                 exercise_x11(command, environment, root, output, log)
             print(f"Verified {backend} AppImage startup, native rendering, light/dark views and user installation")
         finally:
-            if app is not None and app.poll() is None:
-                app.terminate()
-                app.wait(timeout=10)
             for child in reversed(children):
                 if child.poll() is None:
                     child.terminate()

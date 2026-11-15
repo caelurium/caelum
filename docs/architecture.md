@@ -6,12 +6,12 @@
   persistence, scoped filesystem access, Git/worktrees and GitHub operations.
 - `crates/caelum-protocol`: serializable values shared by interfaces and adapters.
 - `apps/desktop`: Rune rendering, native editors/focus/dialogs, pane state and
-  macOS lifecycle integration. This is the shipping desktop application.
+  platform lifecycle integration. This is the shipping desktop application.
 - `apps/cli`: clap-based terminal workflows and desktop project launching, using
   the same Rust providers and project validation.
 
 The root Cargo workspace uses Rust 1.95.0 and one lockfile. Rune/rune-kit are pinned
-to `ddf14140253bd1b963993895e3fa025d1ec58537`.
+to `e5e9ea9abacd20ddfa878cf5e5988430e121aba4`.
 
 ## Application runtime
 
@@ -60,8 +60,9 @@ alongside these modules, with embedded fake servers in `tests/fixtures/`.
 ## Desktop modules
 
 - `main.rs`: entry point, shell, keyboard routing and offline render modes.
-- `lifecycle.rs`: standard macOS menus and `caelum://open?path=…` delivery.
-- `notifications.rs`: native macOS notification delivery and app/window activation;
+- `lifecycle.rs` / `lifecycle/`: launch parsing, macOS menus/URL delivery, Linux
+  per-workspace D-Bus activation, close/quit behaviour and explicit AppImage installation.
+- `notifications.rs`: native macOS and Linux notification delivery and app/window activation;
   core notification effects carry stable project/provider/session targets.
 - `live.rs`: editor/application synchronization and runtime wake/drain, with
   sidebar, windowed transcript, composer and session menus in `live/`.
@@ -105,8 +106,9 @@ database. Sources remain available. Explicit state overrides skip migration.
 Legacy appearance/provider preferences can be imported from exported v1 JSON.
 
 `branches.sqlite3` beside the snapshot retains session-specific branch history.
-Conversation history remains provider-owned. Closing the window keeps the
-runtime and state alive; Dock activation or a project URL reopens it. Quitting
+Conversation history remains provider-owned. On macOS, closing the window keeps
+the runtime and state alive; Dock activation or a project URL reopens it. Linux
+closes the process with its last window. Quitting
 stops workers/owned providers before flushing the latest editors and releasing
 the lock. Restored queues and unacknowledged submissions pause for explicit resume.
 

@@ -22,12 +22,17 @@ impl Client {
             .spawn(move || {
                 // Do not connect to desktop services until there is an actual notification.
                 while let Some(first) = receiver.blocking_recv() {
-                    let result = tokio::runtime::Builder::new_current_thread()
+                    let runtime = match tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
-                        .map_err(|error| error.to_string())
-                        .and_then(|runtime| runtime.block_on(run(&handle, &mut receiver, first)));
-                    if let Err(error) = result {
+                    {
+                        Ok(runtime) => runtime,
+                        Err(error) => {
+                            super::complete(&handle, first.0, Err(error.to_string()));
+                            continue;
+                        }
+                    };
+                    if let Err(error) = runtime.block_on(run(&handle, &mut receiver, first)) {
                         eprintln!("Notification: {error}");
                     }
                 }
@@ -141,3 +146,6 @@ fn escape_markup(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
 }
+
+#[cfg(test)]
+mod tests;
