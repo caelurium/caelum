@@ -16,7 +16,7 @@ impl OpenCodeProvider {
     ) -> Result<String, OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         if id.is_empty()
             || !id
                 .bytes()
@@ -78,7 +78,7 @@ impl OpenCodeProvider {
     ) -> Result<Vec<OpenCodeBackgroundShell>, OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(
             Method::GET,
             "/api/shell",

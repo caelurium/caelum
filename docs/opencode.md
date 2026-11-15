@@ -2,6 +2,13 @@
 
 Caelum integrates with the local OpenCode v2 server API and `/api/event` SSE stream. It attaches to a healthy registered background service so sessions running in other OpenCode clients update live. If no healthy service is available, it starts an owned `opencode serve` process per project, bound to `127.0.0.1` on an available local port.
 
+Session operations validate the current session ID and checkout from fresh
+metadata. Activity is fetched separately for history, resume, session lists and
+busy-state checks. Ownership-only operations such as prompts, cancellation,
+session diffs, shell reads and inbox recovery skip the unused active-session map.
+The application bundles resume metadata and the first history page in one worker
+completion; there is no cross-request metadata or activity cache.
+
 Waiting activity uses `/api/shell`, filtering running commands by `metadata.sessionID` after validating session ownership. This works with OpenCode 2.2.1 and does not require the newer experimental job endpoint. The selected session and sessions with known running commands refresh on shell/tool/execution events, focus and every five seconds while the app is visible.
 
 The persistent composer strip offers per-command output and Stop. The adapter checks

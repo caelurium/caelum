@@ -19,7 +19,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(
             Method::POST,
             &format!("/api/session/{session_id}/generate"),

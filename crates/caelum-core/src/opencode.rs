@@ -270,7 +270,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        let session = self.session(&server, &project, session_id)?;
+        let session = self.session_metadata(&server, &project, session_id)?;
         select_model(&server, &project, &session, model, effort)?;
         server.request_json(
             Method::POST,
@@ -306,7 +306,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        let session = self.session(&server, &project, session_id)?;
+        let session = self.session_metadata(&server, &project, session_id)?;
         if session.agent.as_deref() != Some(agent) {
             server.request_json(
                 Method::POST,
@@ -342,7 +342,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        let session = self.session(&server, &project, session_id)?;
+        let session = self.session_metadata(&server, &project, session_id)?;
         select_model(&server, &project, &session, model, effort)?;
         let path = format!("/api/session/{session_id}/prompt");
         let (prompt, images) = crate::application::provider_prompt(prompt);
@@ -369,7 +369,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let (text, images) = crate::application::provider_prompt(prompt);
         let mut body = json!({ "id": message_id, "text": text, "delivery": "queue" });
         if !images.is_empty() {
@@ -394,7 +394,7 @@ impl OpenCodeProvider {
     ) -> Result<Vec<Value>, OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(
             Method::GET,
             &format!("/api/session/{session_id}/inbox"),
@@ -423,7 +423,7 @@ impl OpenCodeProvider {
         }
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         server.request_json(
             Method::DELETE,
             &format!("/api/session/{session_id}/inbox/{message_id}"),
