@@ -359,24 +359,29 @@ impl ProviderRuntime {
                                 agent: None,
                             },
                         })
+                        .map(Reply::Session)
                         .map_err(|e| e.to_string()),
                     Provider::OpenCode => self
                         .opencode
-                        .resume_session(&key.scope.project, &key.id)
-                        .map(|s| Summary {
-                            key: key.clone(),
-                            title: s.session.title.unwrap_or_default(),
-                            updated_at: s.session.updated_at,
-                            working: s.session.is_working,
-                            options: Options {
-                                model: s.session.model,
-                                effort: s.session.effort,
-                                agent: s.session.agent,
-                            },
+                        .resume_with_history(&key.scope.project, &key.id)
+                        .map(|(s, page)| {
+                            Reply::Resumed(
+                                Summary {
+                                    key: key.clone(),
+                                    title: s.session.title.unwrap_or_default(),
+                                    updated_at: s.session.updated_at,
+                                    working: s.session.is_working,
+                                    options: Options {
+                                        model: s.session.model,
+                                        effort: s.session.effort,
+                                        agent: s.session.agent,
+                                    },
+                                },
+                                page,
+                            )
                         })
                         .map_err(|e| e.to_string()),
-                }
-                .map(Reply::Session);
+                };
             }
             Command::History(key, cursor) => {
                 return match key.scope.provider {
@@ -516,6 +521,7 @@ pub enum Reply {
     Project(ProjectInfo),
     Sessions(Vec<Summary>),
     Session(Summary),
+    Resumed(Summary, SessionHistoryPage),
     Choices(ProviderChoices),
     History(SessionHistoryPage),
     Done,

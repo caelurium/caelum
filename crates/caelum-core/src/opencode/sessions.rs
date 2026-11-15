@@ -144,6 +144,26 @@ impl OpenCodeProvider {
         })
     }
 
+    /// Restore metadata and the initial page from one fresh ownership/activity
+    /// read. Both belong to the same application request and history generation.
+    pub(crate) fn resume_with_history(
+        &self,
+        project_path: impl AsRef<Path>,
+        session_id: &str,
+    ) -> Result<(OpenCodeSessionInfo, SessionHistoryPage), OpenCodeError> {
+        let project = Project::open(project_path)?;
+        let server = self.server(&project)?;
+        let session = self.session(&server, &project, session_id)?;
+        let page = history_on(&server, &session, None)?;
+        Ok((
+            OpenCodeSessionInfo {
+                project: project.info(),
+                session,
+            },
+            page,
+        ))
+    }
+
     /// Ask OpenCode's title agent to rename a session using its conversation.
     pub fn regenerate_title(
         &self,
@@ -152,7 +172,7 @@ impl OpenCodeProvider {
     ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         server.request_json(
             Method::PATCH,
             &format!("/api/session/{session_id}"),
@@ -171,29 +191,7 @@ impl OpenCodeProvider {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let session = self.session(&server, &project, session_id)?;
-        let path = format!("/api/session/{session_id}/message");
-        let mut query = vec![("limit", "50".to_owned())];
-        if let Some(cursor) = cursor {
-            query.push(("cursor", cursor.to_owned()));
-        } else {
-            query.push(("order", "desc".to_owned()));
-        }
-        let response = server.request_json(Method::GET, &path, &query, None)?;
-        let messages = response
-            .get("data")
-            .and_then(Value::as_array)
-            .ok_or_else(|| OpenCodeError::Protocol("session history has no data array".into()))?;
-        Ok(SessionHistoryPage {
-            is_working: Some(session.is_working),
-            model: session.model,
-            effort: session.effort,
-            agent: session.agent,
-            data: messages.iter().rev().cloned().collect(),
-            next_cursor: response
-                .pointer("/cursor/next")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-        })
+        history_on(&server, &session, cursor)
     }
 
     pub fn session_details(
@@ -203,7 +201,7 @@ impl OpenCodeProvider {
     ) -> Result<SessionDetails, OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let changes = server
             .request_json(
                 Method::GET,
@@ -300,7 +298,7 @@ impl OpenCodeProvider {
     ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        self.session(&server, &project, session_id)?;
+        self.session_metadata(&server, &project, session_id)?;
         let path = format!("/api/session/{session_id}/interrupt");
         server.request_json(Method::POST, &path, &[], None)?;
         self.inner.questions.clear(
@@ -312,6 +310,18 @@ impl OpenCodeProvider {
     }
 
     pub(super) fn session(
+        &self,
+        server: &OpenCodeServer,
+        project: &Project,
+        session_id: &str,
+    ) -> Result<OpenCodeSession, OpenCodeError> {
+        let mut session = self.session_metadata(server, project, session_id)?;
+        // Only callers consuming activity need the runtime's fresh active map.
+        session.is_working = server.active_sessions()?.contains(&session.id);
+        Ok(session)
+    }
+
+    pub(super) fn session_metadata(
         &self,
         server: &OpenCodeServer,
         project: &Project,
@@ -330,12 +340,46 @@ impl OpenCodeProvider {
         {
             return Err(OpenCodeError::SessionNotInProject);
         }
-        let mut session = session_info(value)
+        let session = session_info(value)
             .ok_or_else(|| OpenCodeError::Protocol("session response has no session ID".into()))?;
-        session.is_working = server.active_sessions()?.contains(&session.id);
+        if session.id != session_id {
+            return Err(OpenCodeError::Protocol(
+                "session response has a different session ID".into(),
+            ));
+        }
         server.remember_session(&session.id);
         Ok(session)
     }
+}
+
+fn history_on(
+    server: &OpenCodeServer,
+    session: &OpenCodeSession,
+    cursor: Option<&str>,
+) -> Result<SessionHistoryPage, OpenCodeError> {
+    let path = format!("/api/session/{}/message", session.id);
+    let mut query = vec![("limit", "50".to_owned())];
+    if let Some(cursor) = cursor {
+        query.push(("cursor", cursor.to_owned()));
+    } else {
+        query.push(("order", "desc".to_owned()));
+    }
+    let response = server.request_json(Method::GET, &path, &query, None)?;
+    let messages = response
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| OpenCodeError::Protocol("session history has no data array".into()))?;
+    Ok(SessionHistoryPage {
+        is_working: Some(session.is_working),
+        model: session.model.clone(),
+        effort: session.effort.clone(),
+        agent: session.agent.clone(),
+        data: messages.iter().rev().cloned().collect(),
+        next_cursor: response
+            .pointer("/cursor/next")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
 }
 
 fn session_info(value: &Value) -> Option<OpenCodeSession> {
