@@ -50,6 +50,17 @@ Reports include the packaged executable's SHA-256, and traced runs fail if any o
 the 80 navigation/draft samples or 2,280 streaming deltas are missing, abandoned
 or dropped.
 
+The runner also samples WindowServer every 0.5 seconds through app exit. After
+one second of launch/tiling warmup, it requires one visible app window with stable
+position/size and the frontmost normal-window position, with observations extending
+past 18 seconds. A failed check preserves the captures but returns an error. Keep
+the benchmark in front and compare the reported `window.bounds_points` across
+builds: a window manager can override the requested size. Saved window observations
+contain only the target's bounds and a front-position flag, not window titles or
+other apps' identifiers. This periodic check does not prove continuous keyboard
+focus or detect every sub-second interruption. Its observer runs in the external
+Python runner in both traced and resource-only captures.
+
 These are **handler-to-native-draw** measurements. The harness does not simulate
 OS pointer/keyboard delivery. Rune's drawn callback observes a submitted/presented
 frame, not physical display scanout. `frame.update` includes runtime update,
@@ -131,6 +142,10 @@ battery power in automatic mode, dark appearance and the built-in Retina display
 The requested window size was 1280 × 1000 points; actual display refresh was not
 independently recorded. No builds or tests ran during measurement. Other desktop
 activity was not controlled, so these are local observations rather than CI limits.
+These initial captures predate the WindowServer observations above; their actual
+window dimensions and foreground consistency were not verified. The
+[system-font follow-up](native-text-layout.md) records the resulting limitation
+and a window-observed comparison.
 
 Three traced repeats and three resource-only repeats per workload used the same
 packaged executable, alternating trace order (on/off, off/on, on/off). The small

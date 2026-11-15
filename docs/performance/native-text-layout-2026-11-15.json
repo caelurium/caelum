@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "date": "2026-11-15",
+  "builds": {
+    "before": {
+      "production_revision": "785caaf3bd38b0fbe784d9a4e889d3b1b63dff62",
+      "desktop_binary_sha256": "5475df7b7f780824d187f8aa6301aca041f8d8663dab7c8a16059694902e3d92",
+      "attribution_binary_sha256": "fa91f94a0dc5288ccca255e62e4f30b308cfc17e9a657caa65675c6d46831a0b"
+    },
+    "after": {
+      "production_revision": "32411063470a2c8eb166b576e82b180a27ffd4b7",
+      "desktop_binary_sha256": "63c9cbedd5428b452695a4d41c1646c76624dae88de1aa82859fa63e17dc2ab6",
+      "attribution_binary_sha256": "67ff8e3c6c360a1b6f2515d7766dbed8fce9d5c2bad8374f25c90f2e36b4508f"
+    }
+  },
+  "window_observer_revision": "e342f4e",
+  "environment": {
+    "os": "macOS 26.5.1 arm64",
+    "chip": "Apple M5 Pro",
+    "memory_gib": 24,
+    "power": "battery, automatic power mode",
+    "theme": "dark",
+    "display": "built-in Retina",
+    "requested_window_points": [1280, 1000],
+    "display_refresh_hz": null,
+    "simultaneous_builds_or_tests": false,
+    "other_desktop_activity_controlled": false
+  },
+  "notes": [
+    "Production revisions identify application code; preserved candidate bundles predate test-only refinements and the production commit.",
+    "Runner revision/dirty fields describe the capture checkout, not preserved bundle provenance; executable hashes are checked separately.",
+    "Each batch attempted five alternating pairs per workload, streaming then small. Every attempt is retained in capture order.",
+    "The initial batch did not observe actual window geometry or front position and cannot establish matched foreground conditions.",
+    "Matched comparisons require both runs of a pair to pass the window check and have identical bounds. No timing-based exclusions or replacement runs.",
+    "Window observations run externally every 0.5 seconds through exit, accepting launch/tiling warmup for one second; this is not continuous keyboard-focus tracking.",
+    "All accepted runs observed stable 800 x 948 point windows on the built-in Retina display, overriding the requested 1280 x 1000 points.",
+    "frame.cpu is elapsed update plus encode, not a thread CPU clock; interactions exclude OS input delivery and physical scanout.",
+    "Resources cover 15 seconds near launch, not the full process lifetime; CPU 100% means one fully occupied core. Tracing overhead was not remeasured.",
+    "Attribution uses symbol-enabled, line-table release builds with sample and phase instrumentation; its elapsed timings do not support release-latency claims."
+  ],
+  "capture_invariants": {
+    "all_40_complete": true,
+    "recorded_equals_attempted": true,
+    "dropped_records": 0,
+    "anomalies": {},
+    "unfinished_per_capture": {"request": 2},
+    "selection_drawn_ready_and_edit_counts": [80, 80, 80],
+    "stream_deltas": {"small": 0, "streaming": 2280},
+    "resource_samples_per_run": 15,
+    "http_requests": 0,
+    "provider_child_webkit_resources": 0
+  },
+  "matched_pairs": {"streaming": [1, 2, 5], "small": [1, 2, 5]},
+  "run_columns": ["pair", "workload", "build", "drawn_frames", "skipped_frames", "records", "frame.cpu", "interaction.navigate.drawn", "interaction.edit.drawn", "native_resources", "window"],
+  "metric_columns": ["p50_ms", "p95_ms", "p99_ms", "max_ms"],
+  "native_resource_columns": ["cpuPercentMean", "rssMiBMedian", "rssMiBPeak"],
+  "window_columns": ["stable_front_window", "samples_after_warmup", "non_front_samples", "different_bounds_samples", "last_sample_seconds", "max_sample_gap_seconds", "width_points", "height_points"],
+  "uncontrolled": [
+    [1, "streaming", "before", 1855, 1, 4495, [0.946, 11.604, 13.577, 14.557], [16.362, 19.419, 20.866, 20.866], [12.5915, 14.913, 16.597, 16.597], [33.321409, 130.828125, 132.75], null],
+    [1, "streaming", "after", 1912, 1, 4609, [1.328, 9.729, 12.377, 13.533], [14.4115, 17.643, 18.547, 18.547], [10.68, 14.188, 14.92, 14.92], [34.68099, 130.109375, 133.015625], null],
+    [1, "small", "before", 2010, 1, 4425, [1.1195, 3.826, 5.174, 6.589], [7.9225, 11.278, 12.707, 12.707], [6.2455, 10.002, 12.485, 12.485], [23.353803, 98.703125, 100.53125], null],
+    [1, "small", "after", 1996, 1, 4397, [1.0945, 3.573, 5.195, 6.668], [11.6345, 13.257, 14.108, 14.108], [10.03, 11.355, 16.972, 16.972], [22.486374, 101.03125, 102.25], null],
+    [2, "streaming", "after", 1693, 1, 4171, [1.908, 13.734, 17.551, 19.362], [20.5115, 24.832, 25.991, 25.991], [15.3905, 20.26, 21.68, 21.68], [43.481615, 131.828125, 135.53125], null],
+    [2, "streaming", "before", 1873, 1, 4531, [1.081, 11.376, 13.636, 15.08], [19.62, 21.292, 21.996, 21.996], [16.0985, 18.63, 19.045, 19.045], [33.644198, 128.34375, 135.390625], null],
+    [2, "small", "after", 2005, 1, 4415, [1.107, 3.584, 4.782, 5.918], [8.2465, 11.905, 12.38, 12.38], [7.4295, 10.557, 11.745, 11.745], [22.15357, 98.625, 99.234375], null],
+    [2, "small", "before", 2007, 1, 4419, [1.1, 3.535, 5.001, 6.1], [6.266, 12.691, 13.77, 13.77], [5.205, 11.423, 13.239, 13.239], [22.362144, 98.5625, 99.5], null],
+    [3, "streaming", "before", 1862, 1, 4509, [0.988, 11.388, 13.801, 15.209], [14.038, 20.201, 22.095, 22.095], [10.939, 15.636, 18.592, 18.592], [33.467017, 130.0, 133.96875], null],
+    [3, "streaming", "after", 1727, 1, 4239, [1.9, 13.626, 17.559, 21.539], [18.2415, 23.246, 26.159, 26.159], [13.204, 17.675, 19.005, 19.005], [43.205426, 131.609375, 136.46875], null],
+    [3, "small", "before", 2016, 1, 4437, [0.853, 3.198, 4.675, 7.155], [10.9405, 12.62, 13.636, 13.636], [9.668, 11.253, 13.706, 13.706], [19.007642, 101.5625, 102.328125], null],
+    [3, "small", "after", 2009, 1, 4423, [1.08, 3.477, 4.987, 6.446], [10.972, 12.945, 13.887, 13.887], [9.9545, 11.849, 12.884, 12.884], [21.719569, 98.609375, 99.515625], null],
+    [4, "streaming", "after", 1800, 1, 4385, [1.6325, 12.367, 17.294, 21.393], [17.878, 24.876, 27.063, 27.063], [13.0115, 19.03, 21.535, 21.535], [36.540618, 130.5, 139.53125], null],
+    [4, "streaming", "before", 1847, 1, 4479, [0.953, 11.493, 13.634, 15.303], [14.485, 16.423, 17.797, 17.797], [11.375, 14.599, 15.294, 15.294], [33.441327, 128.53125, 131.328125], null],
+    [4, "small", "after", 1975, 1, 4355, [1.247, 4.1, 5.891, 6.61], [10.3375, 12.889, 13.442, 13.442], [7.8685, 11.175, 12.634, 12.634], [23.104371, 98.921875, 99.734375], null],
+    [4, "small", "before", 1958, 1, 4321, [1.263, 4.434, 6.205, 7.014], [9.877, 12.09, 12.678, 12.678], [7.57, 10.427, 11.675, 11.675], [23.989484, 98.734375, 99.515625], null],
+    [5, "streaming", "before", 1849, 1, 4483, [0.942, 11.526, 13.571, 15.418], [14.021, 21.817, 22.675, 22.675], [11.573, 19.419, 20.626, 20.626], [33.674787, 129.953125, 133.078125], null],
+    [5, "streaming", "after", 1730, 1, 4245, [1.8485, 14.023, 18.14, 20.703], [18.629, 25.042, 28.03, 28.03], [13.012, 18.587, 20.888, 20.888], [42.540325, 132.140625, 136.40625], null],
+    [5, "small", "before", 1971, 1, 4347, [1.172, 4.171, 6.112, 7.975], [8.6975, 11.995, 12.656, 12.656], [6.805, 10.381, 12.099, 12.099], [23.933093, 98.4375, 99.84375], null],
+    [5, "small", "after", 1998, 1, 4401, [1.0615, 3.631, 4.94, 7.644], [6.623, 12.75, 13.836, 13.836], [5.204, 10.936, 12.793, 12.793], [21.781721, 98.3125, 99.390625], null]
+  ],
+  "window_observed": [
+    [1, "streaming", "before", 1860, 1, 4505, [0.907, 11.576, 13.566, 14.512], [20.1975, 21.942, 22.252, 22.252], [12.952, 19.083, 19.383, 19.383], [33.027425, 129.765625, 133.671875], [true, 36, 0, 0, 18.754993, 0.509492, 800.0, 948.0]],
+    [1, "streaming", "after", 1900, 1, 4585, [1.263, 9.849, 12.3, 13.955], [13.7505, 17.492, 21.255, 21.255], [10.094, 16.335, 18.11, 18.11], [34.016793, 130.0, 134.3125], [true, 36, 0, 0, 18.743821, 0.508878, 800.0, 948.0]],
+    [1, "small", "before", 1981, 1, 4367, [1.141, 3.879, 5.059, 6.648], [11.386, 12.499, 14.604, 14.604], [9.9465, 11.795, 12.022, 12.022], [22.082056, 98.75, 99.484375], [true, 36, 0, 0, 18.721905, 0.508258, 800.0, 948.0]],
+    [1, "small", "after", 1995, 1, 4395, [1.111, 3.606, 4.941, 6.544], [8.113, 11.737, 12.332, 12.332], [7.1385, 10.936, 11.301, 11.301], [21.718355, 98.296875, 99.1875], [true, 36, 0, 0, 18.753474, 0.510005, 800.0, 948.0]],
+    [2, "streaming", "after", 1901, 1, 4587, [1.248, 9.668, 12.394, 13.778], [16.075, 20.214, 20.379, 20.379], [12.977, 17.172, 18.023, 18.023], [33.759699, 129.53125, 134.59375], [true, 36, 0, 0, 18.738735, 0.508863, 800.0, 948.0]],
+    [2, "streaming", "before", 1853, 1, 4491, [0.964, 11.399, 13.508, 14.563], [15.6795, 18.402, 19.357, 19.357], [11.976, 14.014, 16.185, 16.185], [33.24455, 129.25, 132.765625], [true, 36, 0, 0, 18.749775, 0.509741, 800.0, 948.0]],
+    [2, "small", "after", 1998, 1, 4401, [1.089, 3.678, 4.914, 6.224], [10.875, 12.667, 13.401, 13.401], [9.8235, 11.171, 12.945, 12.945], [21.94001, 98.453125, 99.359375], [true, 36, 0, 0, 18.743388, 0.509029, 800.0, 948.0]],
+    [2, "small", "before", 1999, 1, 4403, [1.081, 3.638, 5.009, 6.161], [10.994, 12.985, 13.676, 13.676], [9.7995, 11.405, 12.281, 12.281], [21.859076, 98.71875, 99.578125], [true, 36, 0, 0, 18.740397, 0.510361, 800.0, 948.0]],
+    [3, "streaming", "before", 1848, 1, 4481, [0.9425, 11.483, 13.463, 14.492], [17.7445, 21.358, 21.963, 21.963], [14.527, 17.854, 19.154, 19.154], [33.090493, 129.203125, 132.3125], [true, 36, 0, 0, 18.759155, 0.509874, 800.0, 948.0]],
+    [3, "streaming", "after", 1887, 1, 4559, [1.254, 9.798, 12.573, 16.513], [12.726, 19.38, 20.846, 20.846], [9.3265, 16.792, 17.962, 17.962], [34.076622, 130.78125, 134.65625], [false, 36, 2, 2, 18.765287, 0.509364, 800.0, 948.0]],
+    [3, "small", "before", 1992, 1, 4389, [1.038, 3.684, 5.686, 8.598], [7.033, 10.775, 12.775, 12.775], [5.7835, 8.7, 10.567, 10.567], [21.565946, 99.03125, 100.28125], [false, 36, 31, 0, 18.749791, 0.509215, 800.0, 948.0]],
+    [3, "small", "after", 1991, 1, 4387, [1.017, 3.366, 5.188, 7.932], [10.2805, 12.785, 17.301, 17.301], [8.792, 10.738, 11.661, 11.661], [21.07786, 96.109375, 99.625], [false, 36, 31, 33, 18.768453, 0.510361, 800.0, 948.0]],
+    [4, "streaming", "after", 1730, 1, 4245, [1.927, 13.566, 17.368, 19.811], [17.775, 25.272, 27.107, 27.107], [12.8665, 18.926, 21.973, 21.973], [43.995125, 131.015625, 135.671875], [false, 36, 34, 33, 18.756759, 0.510095, 800.0, 948.0]],
+    [4, "streaming", "before", 1825, 1, 4435, [0.996, 12.267, 16.028, 21.416], [19.493, 21.627, 25.58, 25.58], [16.216, 19.047, 23.788, 23.788], [33.240323, 129.59375, 133.390625], [false, 36, 5, 0, 18.746115, 0.509091, 800.0, 948.0]],
+    [4, "small", "after", 1999, 1, 4403, [1.055, 3.532, 5.49, 8.141], [11.465, 12.982, 13.774, 13.774], [9.3845, 11.503, 12.712, 12.712], [21.718304, 99.390625, 100.546875], [false, 36, 34, 0, 18.744239, 0.510729, 800.0, 948.0]],
+    [4, "small", "before", 1992, 1, 4389, [1.108, 3.732, 5.179, 6.292], [10.2035, 12.476, 13.285, 13.285], [8.787, 11.889, 12.447, 12.447], [21.76662, 98.6875, 99.578125], [true, 36, 0, 0, 18.755612, 0.508909, 800.0, 948.0]],
+    [5, "streaming", "before", 1854, 1, 4493, [0.9215, 11.421, 13.648, 14.801], [20.581, 21.967, 22.722, 22.722], [16.4855, 19.127, 19.654, 19.654], [32.756691, 129.359375, 132.65625], [true, 36, 0, 0, 18.742916, 0.509301, 800.0, 948.0]],
+    [5, "streaming", "after", 1911, 1, 4607, [1.27, 9.691, 12.37, 13.736], [15.822, 19.641, 21.365, 21.365], [12.285, 15.928, 17.019, 17.019], [33.512626, 129.75, 134.59375], [true, 36, 0, 0, 18.744902, 0.509832, 800.0, 948.0]],
+    [5, "small", "before", 1990, 1, 4385, [1.128, 3.823, 5.261, 6.532], [9.17, 12.153, 13.47, 13.47], [7.633, 10.567, 11.635, 11.635], [22.079991, 98.65625, 99.328125], [true, 36, 0, 0, 18.744202, 0.509467, 800.0, 948.0]],
+    [5, "small", "after", 1990, 1, 4385, [1.1, 3.735, 4.936, 6.066], [7.393, 10.689, 11.635, 11.635], [6.3035, 10.131, 11.041, 11.041], [21.626944, 98.75, 99.421875], [true, 36, 0, 0, 18.76657, 0.510712, 800.0, 948.0]]
+  ],
+  "exploratory_window_diagnostics": [
+    {"capture": "window-control-1-before", "build": "before", "requested_sample_interval_seconds": 1, "samples_after_warmup": 18, "non_front_samples": 0, "window_size_points": [800, 948], "frame_p95_ms": 11.487},
+    {"capture": "runner-control-1-before", "build": "before", "requested_sample_interval_seconds": 1, "samples_after_warmup": 18, "non_front_samples": 13, "window_size_points": [800, 948], "frame_p95_ms": 15.999}
+  ],
+  "attribution": {
+    "requested_duration_seconds": 15,
+    "requested_interval_ms": 1,
+    "commit_budget_ms": 0.1,
+    "inclusive_counts_overlap": true,
+    "runs": [
+      {"build": "before", "recorded_records": 2983, "attempted_records": 2983, "dropped_records": 0, "complete_capture": true, "anomalies": {}, "unfinished": {"request": 2}, "workload_events": {"stream": 2280}, "frame_outcomes": {"drawn": 1099, "skipped": 1}, "samples": {"main": 9953, "frame_step": 5360, "commit": 4139, "text_layout": 2643, "initial_shape": 1296, "corrective_shape": 1277, "markdown_render": 119, "transcript_rows": 273}},
+      {"build": "after", "recorded_records": 3233, "attempted_records": 3233, "dropped_records": 0, "complete_capture": true, "anomalies": {}, "unfinished": {"request": 2}, "workload_events": {"stream": 2280}, "frame_outcomes": {"drawn": 1224, "skipped": 1}, "samples": {"main": 9800, "frame_step": 5029, "commit": 3567, "text_layout": 1802, "initial_shape": 1724, "corrective_shape": 0, "markdown_render": 147, "transcript_rows": 341}}
+    ]
+  },
+  "previews": {
+    "points": [800, 620],
+    "at_seconds": 1,
+    "scenes": ["messages", "working", "compact", "inspector", "settings", "tools"],
+    "themes": ["light", "dark"],
+    "scales": [1, 2],
+    "pairs": 24,
+    "all_byte_identical": true,
+    "comparison_sha256": "48bad42cf228dd4ecfe6806a2e3c6fbd78fd532593edcfe2b877e3c8a3563c72"
+  }
+}
