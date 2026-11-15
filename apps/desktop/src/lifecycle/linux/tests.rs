@@ -63,3 +63,52 @@ fn workspace_identity_is_stable_before_and_after_save_and_through_parent_symlink
         original
     );
 }
+
+struct ExitingOwner {
+    connection: Connection,
+    name: String,
+}
+
+#[zbus::interface(name = "dev.caelum.Desktop")]
+impl ExitingOwner {
+    async fn activate(&self, _project: &str) -> zbus::fdo::Result<()> {
+        self.connection
+            .release_name(self.name.as_str())
+            .await
+            .unwrap();
+        Err(zbus::fdo::Error::NoReply(
+            "The previous owner exited".into(),
+        ))
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn launch_takes_ownership_when_the_previous_owner_exits_during_forwarding() {
+    let directory = Directory::new();
+    let name = instance_name(&directory.0.join("workspace.json")).unwrap();
+    let previous = Connection::session().await.unwrap();
+    previous
+        .object_server()
+        .at(
+            OBJECT,
+            ExitingOwner {
+                connection: previous.clone(),
+                name: name.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    previous.request_name(name.as_str()).await.unwrap();
+    let handle = rune::App::new(crate::spec()).handle();
+    let current = tokio::time::timeout(Duration::from_secs(5), connect(handle, &name, None))
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("new primary after owner disappearance");
+    assert!(current.release_name(name.as_str()).await.unwrap());
+    previous
+        .object_server()
+        .remove::<ExitingOwner, _>(OBJECT)
+        .await
+        .unwrap();
+}
