@@ -13,6 +13,13 @@ Release/shutdown closes the slot and its attempt identity; late results cannot
 replace a newer connection or restore questions from a retired attempt. Failed
 attempts and disconnected servers can retry.
 
+OpenCode restoration now returns session metadata and the initial history page in
+one resume completion. It validates ownership and reads activity once, then fetches
+the page on the same worker: three HTTP reads instead of five and no intervening
+history-command handoff. Pagination still validates ownership and activity afresh.
+Shell and inbox recovery follow the bundled completion; queued prompts wait for
+inbox recovery. See [provider read reduction](provider-reads.md) for measurements.
+
 ## Reproduction
 
 Build first, then run without simultaneous builds/tests:

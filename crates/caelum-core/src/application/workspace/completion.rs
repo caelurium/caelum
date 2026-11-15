@@ -1,4 +1,4 @@
-use super::{update_summary, Pending, Session, Workspace};
+use super::{Pending, Session, Workspace};
 use crate::application::{
     Attachment, Command, Provider, QueuedPrompt, Reply, Scope, Task, TaskReply,
 };
@@ -558,72 +558,13 @@ impl Workspace {
                 self.choices.insert(scope, choices);
             }
             (Pending::Resume(index, revision), Reply::Session(summary)) => {
-                let session = &mut self.sessions[index];
-                if session.key().as_ref() != Some(&summary.key) {
-                    session.loading = false;
-                    session.error = Some("Provider returned a different session".into());
-                    return;
-                }
-                if session.revision == revision {
-                    session.conversation.working = summary.working;
-                }
-                update_summary(session, summary, request);
-                let key = session.key().expect("resumed session");
-                if key.scope.provider == Provider::OpenCode {
-                    self.request(
-                        Command::Shells(key.clone()),
-                        Pending::Shells(index, self.sessions[index].shell_revision),
-                    );
-                    self.refresh_inbox(index);
-                }
-                self.request(
-                    Command::History(key, None),
-                    Pending::History(index, revision, false),
-                );
+                self.complete_resume(request, index, revision, summary, None);
+            }
+            (Pending::Resume(index, revision), Reply::Resumed(summary, page)) => {
+                self.complete_resume(request, index, revision, summary, Some(page));
             }
             (Pending::History(index, revision, older), Reply::History(page)) => {
-                let session = &mut self.sessions[index];
-                session.conversation.history(
-                    session.scope.provider,
-                    &page.data,
-                    older || !session.loaded,
-                );
-                if session.scope.provider == Provider::OpenCode {
-                    for message in &page.data {
-                        if message["type"] == "user" {
-                            if let Some(id) = message["id"].as_str() {
-                                session.inbox.settle(id);
-                            }
-                        }
-                    }
-                }
-                if !older && session.revision == revision {
-                    if session.scope.provider == Provider::OpenCode {
-                        session
-                            .conversation
-                            .failure
-                            .history(&page.data, page.is_working.unwrap_or(session.working()));
-                        if session.conversation.failure.notice().is_some() {
-                            session.queue_paused = true;
-                        }
-                    }
-                    if let Some(working) = page.is_working {
-                        session.conversation.working = working;
-                    }
-                    if page.model.is_some() && !session.options_dirty {
-                        session.options.model = page.model;
-                        session.options.effort = page.effort;
-                    }
-                    if page.agent.is_some() && !session.options_dirty {
-                        session.options.agent = page.agent;
-                    }
-                }
-                if older || !session.loaded {
-                    session.next_cursor = page.next_cursor;
-                }
-                session.loaded = true;
-                session.loading = false;
-                session.disconnected = false;
+                self.complete_history(index, revision, older, page);
             }
             (Pending::Start(index, prompt), Reply::Session(summary)) => {
                 let session = &mut self.sessions[index];
