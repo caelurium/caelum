@@ -1,8 +1,10 @@
 //! Diagnostic callbacks observe native frames without requesting additional frames.
+pub(super) mod scroll;
 #[cfg(test)]
 mod tests;
 mod workload;
 
+pub use workload::Scenario;
 pub use workload::workspace;
 
 use crate::{Workspace, live::Live, panels::Screen};
@@ -26,7 +28,7 @@ enum Replay {
     #[default]
     Disabled,
     Pending(workload::Scenario),
-    Running,
+    Running(workload::Scenario),
 }
 
 #[derive(Default)]
@@ -35,6 +37,7 @@ pub struct State {
     navigation: Cell<u64>,
     replay: Cell<Replay>,
     first_frame: Cell<bool>,
+    scroll: scroll::Observation,
 }
 
 impl State {
@@ -132,6 +135,9 @@ pub fn encoded(frame: &rune::FrameEncoded) {
 
 pub fn drawn(rt: &rune::Runtime<Workspace>) {
     let Some(live) = &rt.state.live else { return };
+    if let Replay::Running(Scenario::Scroll { .. }) = live.latency.replay.get() {
+        live.latency.scroll.drawn(live, rt.stats.commits);
+    }
     if diagnostics::enabled() {
         if !live.latency.first_frame.replace(true)
             && let Some(mark) = diagnostics::mark("startup", "first_frame", 0, 0)
@@ -143,7 +149,7 @@ pub fn drawn(rt: &rune::Runtime<Workspace>) {
     if let Replay::Pending(scenario) = live.latency.replay.get()
         && let Some(handle) = &rt.state.handle
     {
-        live.latency.replay.set(Replay::Running);
+        live.latency.replay.set(Replay::Running(scenario));
         workload::run(handle.clone(), scenario);
     }
 }

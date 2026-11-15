@@ -15,13 +15,14 @@ import time
 from latency import read_trace, summarize
 from macos import processes
 from native_windows import WindowObserver, summarize_windows
+from scrollback import complete_workload, summarize_scroll
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--workload", choices=("small", "streaming"), required=True)
+    parser.add_argument("--workload", choices=("small", "streaming", "scroll", "scroll-streaming"), required=True)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--no-trace", action="store_true", help="Resource-only observer-overhead comparison")
     args = parser.parse_args()
@@ -80,18 +81,18 @@ def main():
             if launch.poll() is None:
                 launch.terminate()
                 launch.wait()
-        report = {} if args.no_trace else summarize(read_trace(trace))
+        records = [] if args.no_trace else read_trace(trace)
+        report = {} if args.no_trace else summarize(records)
         if not args.no_trace:
-            names = ("interaction.navigate.drawn", "interaction.navigate.ready", "interaction.edit.drawn")
-            report["complete_workload"] = (report["complete_capture"] and not report["anomalies"]
-                and all(report["metrics"].get(name, {}).get("count") == 80 for name in names)
-                and report["workload_events"].get("stream", 0) == (2280 if args.workload == "streaming" else 0))
+            if args.workload.startswith("scroll"):
+                report["scroll"] = summarize_scroll(records)
+            report["complete_workload"] = complete_workload(report, args.workload)
         report["resources"] = json.loads(resource.read_text())["summary"]
         report["window"] = summarize_windows(observations)
         report["run"] = run
         reports.append(report)
         print(json.dumps({"run": run, "complete_workload": report.get("complete_workload"),
-                           "metrics": report.get("metrics"), "resources": report["resources"],
+                           "metrics": report.get("metrics"), "scroll": report.get("scroll"), "resources": report["resources"],
                            "window": report["window"]}), flush=True)
     result = {
         "workload": args.workload,

@@ -1,6 +1,7 @@
 use super::*;
 
 mod identity;
+mod scroll;
 
 #[test]
 fn user_bubbles_size_to_content_group_images_and_copy_the_original_markdown() {
