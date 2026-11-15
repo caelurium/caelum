@@ -1,0 +1,17 @@
+name: Auto-merge update requested
+
+on:
+  pull_request:
+    branches: [main]
+    types: [auto_merge_enabled, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    if: ${{ github.event.pull_request.auto_merge != null && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      # The privileged workflow runs from main and reads current PR metadata.
+      - run: echo "Requesting an auto-merge branch freshness check."

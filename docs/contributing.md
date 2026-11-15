@@ -33,6 +33,7 @@ make structure
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace -- --test-threads=4
+python3 -m unittest discover -s scripts/ci -p 'test_*.py'
 python3 -m unittest discover -s scripts/release -p 'test_*.py'
 python3 -m unittest discover -s scripts/profile -p 'test_*.py'
 python3 -m unittest discover -s scripts/dev -p 'test_*.py'
@@ -59,3 +60,19 @@ commits and builds release assets; PR bundle checks verify the app, DMG and CLI
 archive when Rust, app or packaging inputs change.
 
 Use Conventional Commits and the repository's pull-request template.
+
+## Auto-merge branch updates
+
+Enabling GitHub auto-merge opts an open, ready, same-repository PR targeting
+`main` into automatic branch updates. Main pushes and PR update requests run
+the maintenance workflow, which checks current GitHub metadata and requests a
+merge from main only when the branch is behind. GitHub checks the expected head
+commit to protect concurrent pushes. Conflicts appear in the workflow summary
+for the author to resolve; API failures fail the maintenance run.
+
+The request workflow carries no app credentials. The maintenance workflow uses
+code from `main` and the existing release GitHub App, with **Contents: write**
+and **Pull requests: write** permission on this repository. App-authenticated
+updates trigger normal PR checks. Approve the app's additional PR permission
+before activating the workflow. A manual run of **Update auto-merge branches**
+can also reconcile the currently opted-in PRs.

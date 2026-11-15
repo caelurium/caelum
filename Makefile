@@ -31,6 +31,7 @@ structure:
 	python3 -m unittest discover -s scripts/structure -p 'test_*.py'
 test:
 	cargo test --locked $(PACKAGES) -- --test-threads=4
+	python3 -m unittest discover -s scripts/ci -p 'test_*.py'
 	python3 -m unittest discover -s scripts/release -p 'test_*.py'
 	python3 -m unittest discover -s scripts/profile -p 'test_*.py'
 	python3 -m unittest discover -s scripts/dev -p 'test_*.py'
