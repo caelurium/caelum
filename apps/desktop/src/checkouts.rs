@@ -78,14 +78,18 @@ pub fn removal(app: &Application, project: &str, path: &str) -> Option<Task> {
 
 pub fn select_project(s: &mut Workspace, path: &str) {
     let l = live_mut(s);
+    let trace = l.latency.begin("project");
     if l.app.select_project(path) {
+        l.latency.track(trace, l.app.selected, true);
         show_selected(l);
     }
 }
 
 pub fn select(s: &mut Workspace, path: &str) {
     let l = live_mut(s);
+    let trace = l.latency.begin("checkout");
     if l.app.select_checkout(path) {
+        l.latency.track(trace, l.app.selected, true);
         show_selected(l);
     }
 }

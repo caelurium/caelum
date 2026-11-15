@@ -19,6 +19,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("usage: session_load SNAPSHOT [selected|oldest-open|oldest-archived] [RUNS]")?;
     let target = args.get(1).map(String::as_str).unwrap_or("selected");
     let runs: usize = args.get(2).map_or(Ok(3), |value| value.parse())?;
+    let _capture = match env::var_os("CAELUM_LATENCY_TRACE") {
+        Some(path) => {
+            if runs != 1 {
+                return Err("Use one run per process when capturing a latency trace".into());
+            }
+            Some(caelum_core::diagnostics::Capture::start(
+                std::path::Path::new(&path),
+            )?)
+        }
+        None => None,
+    };
     let mut snapshot: Snapshot = serde_json::from_slice(&fs::read(path)?)?;
     let index = match target {
         "selected" => snapshot.selected,

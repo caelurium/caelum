@@ -365,6 +365,8 @@ pub(super) fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
 
 pub(super) fn select(s: &mut Workspace, index: usize) {
     let l = live_mut(s);
+    let trace = l.latency.begin("navigate");
+    l.latency.track(trace, Some(index), true);
     let group = l
         .app
         .group_path(&l.app.sessions[index].scope.project)

@@ -85,6 +85,7 @@ pub fn open(s: &mut Workspace) {
 }
 
 pub fn changed(s: &mut Workspace, _: &mut Tx) {
+    crate::latency::edit(live(s));
     let l = live_mut(s);
     l.app.home.draft.text.clone_from(&l.home.editor.text);
     l.app.home.error = None;
@@ -92,12 +93,14 @@ pub fn changed(s: &mut Workspace, _: &mut Tx) {
 
 pub fn send(s: &mut Workspace, tx: &mut Tx) {
     let l = live_mut(s);
+    let trace = l.latency.begin("send_home");
     l.app.home.draft.text.clone_from(&l.home.editor.text);
     if !l.app.home_project_available() {
         l.home.menu = Menu::Projects;
         return;
     }
     if let Some(index) = l.app.send_home() {
+        l.latency.track(trace, Some(index), false);
         l.home.editor.clear();
         l.home.editor.focused = false;
         l.home.position.set(ScrollPos::default());

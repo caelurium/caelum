@@ -4,6 +4,7 @@ use serde_json::Value;
 
 impl Workspace {
     pub fn apply(&mut self, event: Event) {
+        let _trace = crate::diagnostics::event(&event).map(|mark| mark.span());
         match event {
             Event::Branch(update) => self.branch_update(update),
             Event::Checkout(project) => self.checkout_changed(&project),

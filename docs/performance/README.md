@@ -12,6 +12,7 @@ Repeat scenarios and compare medians/ranges rather than enforcing machine-specif
 CI timing thresholds.
 
 Provider and restart-history measurements: [session loading](session-loading.md).
+Opt-in request, tool and native-frame tracing: [native latency baseline](native-latency.md).
 
 ## Synthetic native frame measurement
 

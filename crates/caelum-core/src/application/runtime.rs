@@ -658,7 +658,10 @@ impl Runtime {
                             .recv_timeout(Duration::from_millis(50));
                         match request {
                             Ok((id, command)) => {
+                                let _context = crate::diagnostics::context(id);
+                                crate::diagnostics::command("started", id, &command);
                                 let result = execute(&command);
+                                crate::diagnostics::command("finished", id, &command);
                                 if sender.send(Event::Completed(id, result)).is_err() {
                                     break;
                                 }
@@ -735,8 +738,14 @@ impl Runtime {
         } else {
             &self.requests
         };
+        crate::diagnostics::command("submitted", id, &command);
         queue
             .try_send((id, command))
+            .inspect_err(|_| {
+                if let Some(mark) = crate::diagnostics::mark("request", "rejected", id, 0) {
+                    mark.record("rejected", 0);
+                }
+            })
             .map_err(|_| "Too many pending requests; try again shortly".into())
     }
 
