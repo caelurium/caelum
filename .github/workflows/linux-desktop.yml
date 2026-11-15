@@ -1,0 +1,47 @@
+name: Linux desktop
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: linux-desktop-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libvulkan1 mesa-vulkan-drivers \
+            libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev dbus-x11 xvfb \
+            weston xdotool xclip xdg-desktop-portal xdg-desktop-portal-gtk \
+            desktop-file-utils squashfs-tools patchelf
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-desktop-${{ matrix.arch }}
+      - run: cargo clippy --locked -p caelum-desktop --all-targets -- -D warnings
+      - run: dbus-run-session -- cargo test --locked -p caelum-desktop -- --test-threads=4
