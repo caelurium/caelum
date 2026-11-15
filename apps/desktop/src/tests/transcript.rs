@@ -1,5 +1,7 @@
 use super::*;
 
+mod identity;
+
 #[test]
 fn user_bubbles_size_to_content_group_images_and_copy_the_original_markdown() {
     let mut rt = design_runtime("messages", (1280.0, 1000.0));

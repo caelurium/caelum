@@ -1,4 +1,8 @@
-use std::{collections::HashSet, rc::Rc};
+use std::{
+    collections::{HashSet, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use caelum_core::application::EntryKind;
 use caelum_protocol::ApprovalDecision;
@@ -44,6 +48,11 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             )
             .grow(1.0);
     };
+    // Version the ordered visible identities, not the text or entry count. Rune
+    // can then retain its row keys through streaming/typing commits, while an
+    // equal-length replacement, reorder or visibility change still invalidates.
+    let mut version = DefaultHasher::new();
+    index.hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
         live.app.sessions[index]
             .conversation
@@ -51,7 +60,10 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             .iter()
             .enumerate()
             .filter(|(_, e)| caelum_core::application::presentation::entry_visible(e))
-            .map(|(i, _)| i)
+            .map(|(i, entry)| {
+                entry.id.hash(&mut version);
+                i
+            })
             .collect(),
     );
     let count = visible.len();
@@ -106,6 +118,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                         )
                     },
                 )
+                .virtual_rows_version(version.finish())
                 .on_visible_rows(move |s: &mut Workspace, range| {
                     let positions: Vec<_> = range
                         .filter_map(|row| row.checked_sub(1).and_then(|i| visible.get(i).copied()))

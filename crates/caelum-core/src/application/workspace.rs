@@ -2,6 +2,7 @@ mod archive;
 mod completion;
 mod composer;
 mod events;
+mod history;
 mod home;
 mod notifications;
 mod persistence;

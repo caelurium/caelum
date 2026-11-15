@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "date": "2026-11-15",
+  "before_revision": "2d7d56c20e7267909e6a66723c29e6d83a208c97",
+  "after_revision": "b2d23a11e25e1cd5a877992ad2e94821521d288e",
+  "example": "crates/caelum-core/examples/session_load.rs",
+  "example_changed": false,
+  "binary_sha256": {
+    "before": "5edf8c0fc6aaefe4ded47e4f1fec9799c1954b73fa9ec1d0a11c805a5dc6c8b9",
+    "after": "b75f49b731a3560ca49be28a7d19af4a6966e68e6880ec8b4cf491648f5d666a"
+  },
+  "environment": {
+    "os": "macOS 26.5.1 arm64",
+    "chip": "Apple M5 Pro",
+    "memory_gib": 24,
+    "power": "battery, automatic power mode",
+    "provider": "OpenCode 2.2.7, warm registered service",
+    "simultaneous_builds_or_tests": false
+  },
+  "workload": {
+    "target": "oldest-open",
+    "projects": 10,
+    "sessions": 41,
+    "archived_sessions": 31,
+    "messages": 50,
+    "json_bytes": 500922,
+    "transcript_entries": 166,
+    "frozen_workspace": true,
+    "execution_order": "before-1, after-1, before-2, after-2, before-3, after-3, before-4, after-4, before-5, after-5",
+    "traced_runs_per_process": 1,
+    "readiness_boundary": "selected history applied; persistence completed in memory",
+    "excluded": ["native rendering", "executable startup", "disk persistence", "model and tool execution"]
+  },
+  "columns": [
+    "ready_ms", "direct_resume_ms", "direct_history_ms", "direct_apply_ms",
+    "restore_resume_elapsed_ms", "restore_history_elapsed_ms", "history_admission_ms",
+    "whole_process_http_attempts", "whole_process_activity_reads", "trace_records",
+    "unfinished_requests"
+  ],
+  "before": [
+    [15.192, 6.964, 8.407, 0.259, 2.479, 8.300, 3.975, 48, 12, 197, 9],
+    [31.277, 2.634, 4.246, 0.209, 6.452, 16.546, 7.898, 54, 14, 227, 9],
+    [26.310, 2.570, 5.469, 0.237, 7.062, 12.562, 6.199, 51, 13, 215, 9],
+    [30.003, 2.101, 4.434, 0.213, 8.838, 10.051, 10.706, 58, 15, 245, 9],
+    [30.352, 2.732, 5.537, 0.219, 8.943, 14.455, 6.481, 54, 14, 227, 9]
+  ],
+  "after": [
+    [17.166, 2.856, 3.964, 0.277, 16.423, null, null, 37, 4, 163, 10],
+    [21.959, 2.579, 4.425, 0.367, 21.493, null, null, 37, 4, 169, 10],
+    [23.053, 2.293, 4.455, 0.191, 22.396, null, null, 39, 4, 179, 10],
+    [21.421, 2.614, 4.849, 0.231, 20.990, null, null, 39, 4, 179, 10],
+    [23.303, 2.212, 4.480, 0.211, 22.830, null, null, 39, 4, 179, 10]
+  ],
+  "traced_restore_routes": {
+    "before": {
+      "resume": ["info", "forms", "session.metadata", "sessions.active"],
+      "history": ["session.metadata", "sessions.active", "session.messages"],
+      "details_excluding_connection": ["session.metadata", "sessions.active", "session.diff"]
+    },
+    "after": {
+      "resume": ["info", "forms", "session.metadata", "sessions.active", "session.messages"],
+      "history": [],
+      "details_excluding_connection": ["session.metadata", "session.diff"]
+    }
+  },
+  "all_captures_complete": true,
+  "dropped_records": 0,
+  "trace_anomalies": {},
+  "notes": [
+    "Rows are in repeat order; all timings are rounded to three decimals.",
+    "Null means no separate history command; it is not a zero-duration measurement.",
+    "Restore command elapsed times include worker queueing/provider work, excluding admission/application.",
+    "Whole-process HTTP counts include the unchanged separate-call direct control and partial restoration.",
+    "After-readiness unfinished requests include two unsubmitted shell/inbox follow-ups.",
+    "The first before run was faster than its after pair; ranges overlap. This is not a p95 estimate."
+  ]
+}
