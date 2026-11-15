@@ -70,6 +70,9 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
             subprocess.run([*command, "--install"], env=environment, check=True, timeout=30, stdout=log, stderr=log)
             entry = home / "data/applications/dev.caelum.desktop.desktop"
             subprocess.run(["desktop-file-validate", str(entry)], check=True)
+            handler = subprocess.check_output(["xdg-mime", "query", "default", "x-scheme-handler/caelum"], env=environment, text=True).strip()
+            if handler != entry.name:
+                raise RuntimeError(f"Project URL handler was not registered: {handler!r}")
             if backend == "x11":
                 exercise_x11(command, environment, root, output, log)
             print(f"Verified {backend} AppImage startup, native rendering, light/dark views and user installation")
@@ -119,9 +122,8 @@ def exercise_x11(command, environment, root, output, log):
         key(window, "ctrl+w")
         assert app.wait(timeout=30) == 0, "closing the last window must quit cleanly"
         assert json.loads(state.read_text())["sessions"][0]["draft"] == draft
-        # Exercise the installed desktop entry's actual Exec quoting and URL argument.
-        entry = Path(environment["XDG_DATA_HOME"]) / "applications/dev.caelum.desktop.desktop"
-        subprocess.run(["gio", "launch", str(entry), urls[1]], env={**environment, "APPIMAGE_EXTRACT_AND_RUN": "1"}, check=True, timeout=15, stdout=log, stderr=log)
+        # Exercise URL association lookup and the installed entry's Exec argument.
+        subprocess.run(["xdg-open", urls[1]], env={**environment, "APPIMAGE_EXTRACT_AND_RUN": "1"}, check=True, timeout=15, stdout=log, stderr=log)
         window = subprocess.check_output(["xdotool", "search", "--sync", "--onlyvisible", "--class", "dev.caelum.desktop"], env=environment, text=True, timeout=30).splitlines()[0]
         wait_for(lambda: selected(1), "installed desktop URL")
         key(window, "ctrl+q")
@@ -142,7 +144,16 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="caelum-linux-smoke-", dir=os.environ.get("RUNNER_TEMP")) as temporary:
-        run(args.image.resolve(), args.backend, args.output.resolve(), Path(temporary))
+        root = Path(temporary)
+        try:
+            run(args.image.resolve(), args.backend, args.output.resolve(), root)
+        finally:
+            # The D-Bus-activated document portal outlives this client. Unmount
+            # its private FUSE tree before TemporaryDirectory removes the profile;
+            # dbus-run-session then stops the portal along with the isolated bus.
+            documents = root / "runtime/doc"
+            if documents.is_mount():
+                subprocess.run(["fusermount3", "-u", str(documents)], check=True, timeout=10)
 
 
 if __name__ == "__main__":

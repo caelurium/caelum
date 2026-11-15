@@ -41,7 +41,7 @@ jobs:
             libwayland-dev libfontconfig1-dev libvulkan1 mesa-vulkan-drivers \
             libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev dbus-x11 xvfb \
             weston xdotool xclip xdg-desktop-portal xdg-desktop-portal-gtk \
-            desktop-file-utils squashfs-tools patchelf openbox
+            desktop-file-utils xdg-utils fuse3 squashfs-tools patchelf openbox
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.95.0'
