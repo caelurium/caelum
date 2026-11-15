@@ -54,3 +54,29 @@ cache key/hit, extraction, finalization, query and total job durations from the
 logs. Inspect SARIF query IDs, source coverage, diagnostics and findings in both
 runs. Repeat on source changes before claiming a new p50/p95. The uploaded SARIF
 and run logs make failures and coverage available during the staged migration.
+
+## Hosted result, 15 November 2026
+
+[Run 43760144672](https://github.com/ch55secake/caelum/actions/runs/43760144672)
+analyzed `806c44c` with CodeQL 2.27.4 on standard Ubuntu. Attempt 1 had a cold
+extractor cache; attempt 2 reran the Rust job at the same revision and restored
+`v0-rust-codeql-rust-extractor-2.27.4-Linux-x64-e88ea626-cfc57aa6` as an exact hit.
+
+| Rust phase | Cold cache (seconds) | Warm cache (seconds) |
+| --- | --- | --- |
+| Extraction | 125.23 | 94.05 |
+| Finalization | 37.87 | 39.30 |
+| Queries | 195.99 | 198.17 |
+| Complete job | 397 | 364 |
+
+The warm run reduced extraction time by about **25%**, and complete job time by
+about **8%** in this pair. Query execution remains the largest phase. This is a
+single same-revision comparison, not a new p50/p95 or the two-minute CI target.
+
+Cold and warm SARIF had identical rule IDs, source-file lists, extraction/query
+metrics, findings and warning/error notifications: 26 rule IDs, 222 successfully
+extracted repository files, 60,919 source lines and no extraction errors. Rule IDs
+also matched main's default Rust setup. Actions and Python jobs passed with their
+default suites. An earlier in-checkout cache experiment added generated Rust
+files to warm scans; the external cache location removes that discrepancy without
+adding source exclusions. Both corrected runs retained complete coverage.
