@@ -1,0 +1,22 @@
+{
+  "grid": [
+    300,
+    100
+  ],
+  "reference_size": [
+    2000,
+    1122
+  ],
+  "source_sha256": "43ff1a49f7b7da844490988b12aa91b2fc11fb4d6100c9db838360534bab0a12",
+  "reference_sha256": "03f9156b85168580fb4ea1fe3fdcf69ec182eebd9f730b7a3b0441fde4e6be08",
+  "glyphs": " .:-=+*#%@",
+  "glyph_cell": [
+    16,
+    28
+  ],
+  "font": [
+    "Menlo",
+    "Regular"
+  ],
+  "font_size": 20
+}
