@@ -1,0 +1,413 @@
+{
+  "schema": 1,
+  "date": "2026-11-15",
+  "builds": {
+    "before": {
+      "production_revision": "256026446ee83fe4473da412a03ad97a47cb8603",
+      "desktop_binary_sha256": "0889dfaaa485eadae3ab56c08b54ef72367a8c787ec6ca924ce94361b8b9ebb2",
+      "headless_binary_sha256": "80419419ab783dddda89ac637af8d83ef4cb3c8285c21f008cc045b40be729c5"
+    },
+    "after": {
+      "production_revision": "0554a2dfe3e40c0fc114b7c3897999f0e6d8a9a7",
+      "desktop_binary_sha256": "0b9d353e666ae9f0d3684c436876ccde13f0584c93a7ef4d1616224e06f46ae6",
+      "headless_binary_sha256": "7790f4df66bd7b9133ee674688c5de8ba78fea77c121977d4ebabab6645f9763"
+    }
+  },
+  "environment": {
+    "os": "macOS 26.5.1 arm64",
+    "chip": "Apple M5 Pro",
+    "memory_gib": 24,
+    "power": "battery, automatic power mode",
+    "theme": "dark",
+    "display": "built-in Retina",
+    "requested_window_points": [1280, 1000],
+    "display_refresh_hz": null,
+    "simultaneous_builds_or_tests": false,
+    "other_desktop_activity_controlled": false
+  },
+  "notes": [
+    "Production revisions identify the measured application code; the existing benchmark functions are unchanged.",
+    "The after headless binary predates final test-only assertion adjustments.",
+    "Runs alternate before/after then after/before, with navigation before redraw and small native before streaming native in each repeat.",
+    "Headless timings exclude native drawing, OS input delivery, and provider/storage I/O.",
+    "Native timings are handler-to-draw, excluding OS input delivery and physical display scanout.",
+    "All native captures used tracing; no new observer-overhead comparison was performed."
+  ],
+  "headless_metric_columns": ["p50_ms", "p95_ms", "max_ms"],
+  "navigation_columns": ["streaming", "phase", "nodes", "commits", "frames", "focus"],
+  "redraw_columns": ["workload", "commits", "frames", "typing_frames"],
+  "headless_frames_per_phase": 360,
+  "headless_typing_frames": 60,
+  "navigation_precision_ms": 0.01,
+  "headless": [
+    {
+      "repeat": 1, "build": "before",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.14, 0.16], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.14, 0.18], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.46, 2.3, 2.53], [0.0, 0.0, 0.01]],
+        [true, "idle", 754, 123, [0.18, 1.44, 1.55], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 2.09, 2.24], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.39, 3.2, 3.41], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.122167, 0.131625, 0.179542], null],
+        ["background-typing", 60, [0.122416, 0.6645, 0.879875], [0.65075, 0.752708, 0.879875]],
+        ["foreground", 360, [0.860125, 1.053458, 1.118042], null]
+      ]
+    },
+    {
+      "repeat": 1, "build": "after",
+      "navigation": [
+        [false, "idle", 737, 0, [0.12, 0.15, 0.18], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.12, 0.14, 0.17], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.22, 2.42], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.35, 1.45], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 1.93, 2.09], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [2.01, 3.18, 5.92], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123083, 0.133292, 0.186167], null],
+        ["background-typing", 60, [0.124959, 0.60075, 1.048125], [0.573583, 0.843208, 1.048125]],
+        ["foreground", 360, [0.814458, 0.989084, 1.323917], null]
+      ]
+    },
+    {
+      "repeat": 2, "build": "after",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.15], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.12, 0.13, 0.18], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.32, 2.77], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.45, 3.1], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 1.91, 2.04], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [2.02, 3.6, 5.5], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123833, 0.149084, 0.366875], null],
+        ["background-typing", 60, [0.124333, 0.575625, 0.9445], [0.562541, 0.858416, 0.9445]],
+        ["foreground", 360, [0.767083, 0.992041, 1.188292], null]
+      ]
+    },
+    {
+      "repeat": 2, "build": "before",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.16], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.12, 0.13, 0.18], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.4, 2.82], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.44, 1.57], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 2.02, 2.18], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.39, 3.23, 3.41], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123916, 0.13625, 0.173542], null],
+        ["background-typing", 60, [0.125666, 0.713334, 1.042917], [0.690167, 0.82325, 1.042917]],
+        ["foreground", 360, [0.877208, 1.072084, 2.179666], null]
+      ]
+    },
+    {
+      "repeat": 3, "build": "before",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.16], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.14, 0.21], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.48, 2.44, 2.73], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.17, 1.43, 1.55], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 2.0, 2.14], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.31, 3.16, 3.59], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123417, 0.130375, 0.191167], null],
+        ["background-typing", 60, [0.126, 0.74025, 0.831], [0.713208, 0.808708, 0.831]],
+        ["foreground", 360, [0.87025, 1.184375, 2.284125], null]
+      ]
+    },
+    {
+      "repeat": 3, "build": "after",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.18], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.14, 0.17], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.48, 2.4, 2.86], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.34, 1.67], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.2, 2.02, 3.0], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.63, 3.24, 6.04], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.1235, 0.134333, 0.176333], null],
+        ["background-typing", 60, [0.123791, 0.568083, 0.6595], [0.560292, 0.642708, 0.6595]],
+        ["foreground", 360, [0.780917, 0.960958, 1.2665], null]
+      ]
+    },
+    {
+      "repeat": 4, "build": "after",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.15], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.14, 0.2], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.46, 2.29, 2.85], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.33, 1.41], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 1.92, 2.0], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.21, 3.08, 3.23], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123042, 0.1335, 0.180125], null],
+        ["background-typing", 60, [0.123291, 0.567125, 0.677833], [0.5585, 0.640917, 0.677833]],
+        ["foreground", 360, [0.765709, 1.030375, 1.512833], null]
+      ]
+    },
+    {
+      "repeat": 4, "build": "before",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.15], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.13, 0.16], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.41, 2.67], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.18, 1.43, 1.53], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 2.05, 3.27], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.32, 3.17, 3.3], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.1235, 0.13175, 0.169416], null],
+        ["background-typing", 60, [0.125917, 0.70775, 0.987583], [0.689541, 0.776667, 0.987583]],
+        ["foreground", 360, [0.873042, 1.064834, 1.096625], null]
+      ]
+    },
+    {
+      "repeat": 5, "build": "before",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.16], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.13, 0.19], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.43, 2.79], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.17, 1.43, 1.54], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 2.02, 2.13], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.46, 3.21, 5.01], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123625, 0.1315, 0.186417], null],
+        ["background-typing", 60, [0.126416, 0.737834, 1.1265], [0.708417, 0.835375, 1.1265]],
+        ["foreground", 360, [0.866208, 1.065792, 1.109083], null]
+      ]
+    },
+    {
+      "repeat": 5, "build": "after",
+      "navigation": [
+        [false, "idle", 737, 0, [0.11, 0.12, 0.16], [0.0, 0.0, 0.0]],
+        [false, "hover", 737, 0, [0.13, 0.13, 0.17], [0.0, 0.0, 0.0]],
+        [false, "switch", 737, 120, [0.47, 2.33, 2.62], [0.0, 0.0, 0.0]],
+        [true, "idle", 754, 123, [0.17, 1.34, 1.44], [0.0, 0.0, 0.0]],
+        [true, "hover", 754, 120, [0.19, 1.94, 2.06], [0.0, 0.0, 0.0]],
+        [true, "switch", 754, 240, [1.21, 3.09, 3.27], [0.0, 0.0, 0.0]]
+      ],
+      "redraw": [
+        ["background", 0, [0.123833, 0.137042, 0.183334], null],
+        ["background-typing", 60, [0.124875, 0.5735, 0.690667], [0.560458, 0.634834, 0.690667]],
+        ["foreground", 360, [0.809125, 0.97525, 2.318667], null]
+      ]
+    }
+  ],
+  "native_metric_columns": ["count", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+  "native_resource_columns": ["cpu_percent_mean", "rss_mib_median", "rss_mib_peak"],
+  "native_resource_sample_seconds": 15,
+  "native": [
+    {
+      "repeat": 1, "build": "before", "workload": "small",
+      "metrics": {
+        "frame.cpu": [2000, 1.153, 3.699, 5.785, 7.88],
+        "frame.encode": [2000, 0.207, 0.331, 0.392, 0.836],
+        "frame.update": [2000, 0.932, 3.489, 5.577, 7.554],
+        "interaction.edit.drawn": [80, 6.5265, 9.774, 13.72, 13.72],
+        "interaction.navigate.drawn": [80, 8.0605, 11.177, 12.351, 12.351],
+        "interaction.navigate.ready": [80, 8.0605, 11.177, 12.352, 12.352],
+        "startup.first_drawn": [1, 128.709, 128.709, 128.709, 128.709]
+      },
+      "resources": [22.48015, 99.25, 100.90625],
+      "complete_workload": true,
+      "recorded_records": 4403, "attempted_records": 4403, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 2000}, "workload_events": {}
+    },
+    {
+      "repeat": 1, "build": "after", "workload": "small",
+      "metrics": {
+        "frame.cpu": [2038, 1.122, 3.58, 4.808, 8.159],
+        "frame.encode": [2038, 0.218, 0.327, 0.375, 0.853],
+        "frame.update": [2038, 0.892, 3.406, 4.639, 7.368],
+        "interaction.edit.drawn": [80, 6.1985, 9.781, 11.165, 11.165],
+        "interaction.navigate.drawn": [80, 7.687, 10.482, 11.541, 11.541],
+        "interaction.navigate.ready": [80, 7.687, 10.482, 11.541, 11.541],
+        "startup.first_drawn": [1, 123.487, 123.487, 123.487, 123.487]
+      },
+      "resources": [22.071628, 98.671875, 100.0625],
+      "complete_workload": true,
+      "recorded_records": 4481, "attempted_records": 4481, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 2038, "skipped": 1}, "workload_events": {}
+    },
+    {
+      "repeat": 1, "build": "before", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1856, 0.899, 11.671, 13.535, 15.039],
+        "frame.encode": [1856, 0.14, 0.418, 0.595, 0.817],
+        "frame.update": [1856, 0.704, 11.473, 13.388, 14.841],
+        "interaction.edit.drawn": [80, 14.7435, 18.076, 18.951, 18.951],
+        "interaction.navigate.drawn": [80, 17.816, 20.857, 21.96, 21.96],
+        "interaction.navigate.ready": [80, 17.816, 20.857, 21.96, 21.96],
+        "startup.first_drawn": [1, 126.884, 126.884, 126.884, 126.884]
+      },
+      "resources": [33.27602, 130.28125, 134.015625],
+      "complete_workload": true,
+      "recorded_records": 4497, "attempted_records": 4497, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1856, "skipped": 1}, "workload_events": {"stream": 2280}
+    },
+    {
+      "repeat": 1, "build": "after", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1846, 0.8995, 11.632, 13.5, 14.871],
+        "frame.encode": [1846, 0.143, 0.427, 0.573, 0.838],
+        "frame.update": [1846, 0.705, 11.531, 13.383, 14.736],
+        "interaction.edit.drawn": [80, 15.9815, 18.179, 19.571, 19.571],
+        "interaction.navigate.drawn": [80, 19.4865, 20.616, 22.624, 22.624],
+        "interaction.navigate.ready": [80, 19.4865, 20.616, 22.624, 22.624],
+        "startup.first_drawn": [1, 126.59, 126.59, 126.59, 126.59]
+      },
+      "resources": [33.281832, 128.703125, 132.0],
+      "complete_workload": true,
+      "recorded_records": 4477, "attempted_records": 4477, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1846, "skipped": 1}, "workload_events": {"stream": 2280}
+    },
+    {
+      "repeat": 2, "build": "after", "workload": "small",
+      "metrics": {
+        "frame.cpu": [1992, 1.239, 3.787, 5.051, 6.046],
+        "frame.encode": [1992, 0.234, 0.343, 0.379, 0.978],
+        "frame.update": [1992, 0.989, 3.628, 4.891, 5.74],
+        "interaction.edit.drawn": [80, 7.0125, 10.235, 11.667, 11.667],
+        "interaction.navigate.drawn": [80, 8.2345, 11.489, 12.671, 12.671],
+        "interaction.navigate.ready": [80, 8.2345, 11.49, 12.671, 12.671],
+        "startup.first_drawn": [1, 105.226, 105.226, 105.226, 105.226]
+      },
+      "resources": [23.407294, 97.78125, 98.8125],
+      "complete_workload": true,
+      "recorded_records": 4389, "attempted_records": 4389, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1992, "skipped": 1}, "workload_events": {}
+    },
+    {
+      "repeat": 2, "build": "before", "workload": "small",
+      "metrics": {
+        "frame.cpu": [1990, 1.258, 3.779, 5.161, 6.542],
+        "frame.encode": [1990, 0.231, 0.34, 0.378, 1.086],
+        "frame.update": [1990, 1.0085, 3.594, 4.943, 6.302],
+        "interaction.edit.drawn": [80, 5.296, 10.797, 12.182, 12.182],
+        "interaction.navigate.drawn": [80, 6.36, 11.289, 12.56, 12.56],
+        "interaction.navigate.ready": [80, 6.361, 11.289, 12.56, 12.56],
+        "startup.first_drawn": [1, 107.989, 107.989, 107.989, 107.989]
+      },
+      "resources": [23.852318, 98.0, 99.015625],
+      "complete_workload": true,
+      "recorded_records": 4385, "attempted_records": 4385, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1990, "skipped": 1}, "workload_events": {}
+    },
+    {
+      "repeat": 2, "build": "after", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1853, 0.935, 11.506, 13.695, 14.801],
+        "frame.encode": [1853, 0.146, 0.428, 0.595, 0.984],
+        "frame.update": [1853, 0.72, 11.359, 13.52, 14.631],
+        "interaction.edit.drawn": [80, 10.577, 12.861, 14.837, 14.837],
+        "interaction.navigate.drawn": [80, 14.6195, 16.371, 18.023, 18.023],
+        "interaction.navigate.ready": [80, 14.62, 16.371, 18.023, 18.023],
+        "startup.first_drawn": [1, 130.92, 130.92, 130.92, 130.92]
+      },
+      "resources": [33.717788, 128.796875, 131.53125],
+      "complete_workload": true,
+      "recorded_records": 4491, "attempted_records": 4491, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1853, "skipped": 1}, "workload_events": {"stream": 2280}
+    },
+    {
+      "repeat": 2, "build": "before", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1849, 0.886, 11.403, 13.292, 14.179],
+        "frame.encode": [1849, 0.138, 0.402, 0.6, 0.911],
+        "frame.update": [1849, 0.694, 11.294, 13.17, 14.027],
+        "interaction.edit.drawn": [80, 11.3125, 18.697, 20.264, 20.264],
+        "interaction.navigate.drawn": [80, 13.822, 21.293, 22.059, 22.059],
+        "interaction.navigate.ready": [80, 13.822, 21.293, 22.059, 22.059],
+        "startup.first_drawn": [1, 123.726, 123.726, 123.726, 123.726]
+      },
+      "resources": [33.081281, 130.875, 134.40625],
+      "complete_workload": true,
+      "recorded_records": 4483, "attempted_records": 4483, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1849, "skipped": 1}, "workload_events": {"stream": 2280}
+    },
+    {
+      "repeat": 3, "build": "before", "workload": "small",
+      "metrics": {
+        "frame.cpu": [1994, 1.196, 3.634, 5.073, 6.418],
+        "frame.encode": [1994, 0.233, 0.34, 0.392, 0.801],
+        "frame.update": [1994, 0.944, 3.415, 4.881, 6.048],
+        "interaction.edit.drawn": [80, 6.188, 9.862, 10.139, 10.139],
+        "interaction.navigate.drawn": [80, 7.999, 10.93, 11.426, 11.426],
+        "interaction.navigate.ready": [80, 7.999, 10.93, 11.426, 11.426],
+        "startup.first_drawn": [1, 110.802, 110.802, 110.802, 110.802]
+      },
+      "resources": [23.552025, 97.796875, 99.171875],
+      "complete_workload": true,
+      "recorded_records": 4393, "attempted_records": 4393, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1994, "skipped": 1}, "workload_events": {}
+    },
+    {
+      "repeat": 3, "build": "after", "workload": "small",
+      "metrics": {
+        "frame.cpu": [1994, 1.194, 3.638, 5.089, 6.289],
+        "frame.encode": [1994, 0.23, 0.343, 0.391, 0.913],
+        "frame.update": [1994, 0.951, 3.416, 4.895, 6.095],
+        "interaction.edit.drawn": [80, 7.5295, 10.654, 11.362, 11.362],
+        "interaction.navigate.drawn": [80, 9.0435, 11.464, 12.445, 12.445],
+        "interaction.navigate.ready": [80, 9.0435, 11.464, 12.445, 12.445],
+        "startup.first_drawn": [1, 110.641, 110.641, 110.641, 110.641]
+      },
+      "resources": [23.618942, 97.921875, 99.25],
+      "complete_workload": true,
+      "recorded_records": 4393, "attempted_records": 4393, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1994, "skipped": 1}, "workload_events": {}
+    },
+    {
+      "repeat": 3, "build": "before", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1853, 0.91, 11.571, 13.484, 14.729],
+        "frame.encode": [1853, 0.142, 0.399, 0.581, 0.944],
+        "frame.update": [1853, 0.704, 11.383, 13.334, 14.578],
+        "interaction.edit.drawn": [80, 12.5295, 14.776, 17.484, 17.484],
+        "interaction.navigate.drawn": [80, 16.208, 17.841, 19.382, 19.382],
+        "interaction.navigate.ready": [80, 16.208, 17.841, 19.382, 19.382],
+        "startup.first_drawn": [1, 132.697, 132.697, 132.697, 132.697]
+      },
+      "resources": [33.449731, 130.21875, 133.59375],
+      "complete_workload": true,
+      "recorded_records": 4491, "attempted_records": 4491, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1853, "skipped": 1}, "workload_events": {"stream": 2280}
+    },
+    {
+      "repeat": 3, "build": "after", "workload": "streaming",
+      "metrics": {
+        "frame.cpu": [1855, 0.928, 11.467, 13.457, 14.421],
+        "frame.encode": [1855, 0.146, 0.439, 0.636, 0.929],
+        "frame.update": [1855, 0.726, 11.325, 13.272, 14.267],
+        "interaction.edit.drawn": [80, 12.375, 14.99, 15.938, 15.938],
+        "interaction.navigate.drawn": [80, 16.2145, 17.66, 18.438, 18.438],
+        "interaction.navigate.ready": [80, 16.2145, 17.66, 18.438, 18.438],
+        "startup.first_drawn": [1, 130.279, 130.279, 130.279, 130.279]
+      },
+      "resources": [33.490984, 129.578125, 133.765625],
+      "complete_workload": true,
+      "recorded_records": 4495, "attempted_records": 4495, "dropped_records": 0,
+      "unfinished": {"request": 2}, "anomalies": {},
+      "frame_outcomes": {"drawn": 1855, "skipped": 1}, "workload_events": {"stream": 2280}
+    }
+  ]
+}

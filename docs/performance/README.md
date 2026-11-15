@@ -14,6 +14,7 @@ CI timing thresholds.
 Provider and restart-history measurements: [session loading](session-loading.md).
 Redundant OpenCode HTTP reads: [provider read reduction](provider-reads.md).
 Opt-in request, tool and native-frame tracing: [native latency baseline](native-latency.md).
+Retained transcript row identities: [transcript row-key reuse](transcript-keys.md).
 
 ## Synthetic native frame measurement
 
