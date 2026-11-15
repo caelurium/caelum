@@ -16,7 +16,7 @@ pub(super) struct Client(mpsc::Sender<(u64, Notification)>);
 
 impl Client {
     pub(super) fn new(handle: AppHandle<Workspace>) -> Result<Self, String> {
-        let (sender, mut receiver) = mpsc::channel(LIMIT);
+        let (sender, mut receiver) = mpsc::channel::<(u64, Notification)>(LIMIT);
         thread::Builder::new()
             .name("desktop-notifications".into())
             .spawn(move || {
