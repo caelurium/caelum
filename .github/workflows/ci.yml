@@ -125,10 +125,11 @@ jobs:
       - run: python3 apps/desktop/preview/capture.py
         if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
       - uses: actions/upload-artifact@v7
-        if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
         with:
           name: native-design-previews
           path: apps/desktop/preview-results/
+          if-no-files-found: error
   macos-app:
     name: desktop-bundle-build
     needs: changes
@@ -164,4 +165,5 @@ jobs:
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/profile -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/dev -p 'test_*.py'
+      - run: python3 -m unittest discover -s apps/desktop/preview -p 'test_*.py'
       - run: bash -n scripts/release/package_macos_assets.sh scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh

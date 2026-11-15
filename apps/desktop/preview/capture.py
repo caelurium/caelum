@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Capture the real native views with deterministic design data."""
 from pathlib import Path
+import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 import subprocess
-import sys
+import time
 
 root = Path(__file__).resolve().parents[3]
-output = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / "apps/desktop/preview-results"
-output.mkdir(parents=True, exist_ok=True)
-subprocess.run(["cargo", "build", "--locked", "-p", "caelum-desktop"], check=True, cwd=root)
-binary = root / "target/debug/caelum-desktop"
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
@@ -77,25 +76,91 @@ scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
 scenes += ("home", "home-empty", "home-draft", "home-projects")
-for theme in ("dark", "light"):
-    for compact in (False, True):
-      for label in (*scenes, *interactions):
-        scene, events = interactions.get(label, (label, None))
-        name = f"rune-{theme}" + (f"-{label}" if label else "") + ("-small" if compact else "")
-        script = output / f"{name}-input.json"
+
+
+def capture_plan(binary, output):
+    plan = []
+    for theme in ("dark", "light"):
+        for compact in (False, True):
+            for label in (*scenes, *interactions):
+                scene, events = interactions.get(label, (label, None))
+                name = f"rune-{theme}" + (f"-{label}" if label else "") + ("-small" if compact else "")
+                script = output / f"{name}-input.json"
+                command = [
+                    str(binary), "--design-fixture", "--theme", theme,
+                    "--scale", "1", "--at", "1.8" if label == "patch-expanded" else "1", "--size",
+                    "800x620" if compact or scene in ("compact", "crowded") else "1280x1000",
+                    *(["--scene", scene] if scene else []),
+                    "--snap", str(output / f"{name}.png"),
+                    "--tree", str(output / f"{name}.json"),
+                    *(["--script", str(script)] if events else []),
+                ]
+                plan.append((name, command, events))
+    return plan
+
+
+def capture_one(item, output, timeout):
+    name, command, events = item
+    started = time.perf_counter()
+    log = ""
+    error = None
+    try:
+        # A stale successful artifact must never hide a missing output on a rerun.
+        for suffix in (".png", ".json", ".log", "-input.json"):
+            (output / f"{name}{suffix}").unlink(missing_ok=True)
         if events:
-            script.write_text(json.dumps(events))
-        command = [
-            str(binary), "--design-fixture", "--theme", theme,
-            "--scale", "1", "--at", "1.8" if label == "patch-expanded" else "1", "--size",
-            "800x620" if compact or scene in ("compact", "crowded") else "1280x1000",
-            *(["--scene", scene] if scene else []),
-            "--snap", str(output / f"{name}.png"),
-            "--tree", str(output / f"{name}.json"),
-            *(["--script", str(script)] if events else []),
-        ]
-        result = subprocess.run(command, cwd=root, capture_output=True, text=True)
-        (output / f"{name}.log").write_text(result.stdout + result.stderr)
-        if result.returncode:
-            raise RuntimeError(f"{name}: {result.stdout}{result.stderr}")
-print(f"Captured {(len(scenes) + len(interactions)) * 4} native states in {output}")
+            (output / f"{name}-input.json").write_text(json.dumps(events))
+        result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=timeout)
+        log = result.stdout + result.stderr
+        result.check_returncode()
+        with (output / f"{name}.png").open("rb") as image:
+            if image.read(8) != b"\x89PNG\r\n\x1a\n":
+                raise ValueError("Missing or invalid PNG")
+        json.loads((output / f"{name}.json").read_text())
+    except subprocess.TimeoutExpired as failure:
+        log = (failure.stdout or b"").decode(errors="replace") + (failure.stderr or b"").decode(errors="replace")
+        error = f"Capture exceeded {timeout:g}s"
+    except (OSError, ValueError, subprocess.CalledProcessError) as failure:
+        error = str(failure)
+    (output / f"{name}.log").write_text(log + (f"\n{error}\n" if error else ""))
+    return {"name": name, "elapsed_seconds": time.perf_counter() - started, "error": error}
+
+
+def capture_all(plan, output, workers, timeout=60):
+    if not 1 <= workers <= 4:
+        raise ValueError("workers must be between 1 and 4")
+    names = [item[0] for item in plan]
+    if len(names) != len(set(names)):
+        raise ValueError("Capture names must be unique")
+    output.mkdir(parents=True, exist_ok=True)
+    manifest = output / "manifest.json"
+    manifest.unlink(missing_ok=True)
+    started = time.perf_counter()
+    # Each child has its own input, image, tree and log. map preserves manifest order.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(lambda item: capture_one(item, output, timeout), plan))
+    failed = [result["name"] for result in results if result["error"]]
+    manifest.write_text(json.dumps({
+        "workers": workers,
+        "elapsed_seconds": time.perf_counter() - started,
+        "expected": len(plan),
+        "completed": len(results) - len(failed),
+        "captures": results,
+    }, indent=2) + "\n")
+    if failed:
+        raise RuntimeError(f"{len(failed)} captures failed (see individual logs): {', '.join(failed)}")
+    print(f"Captured {len(results)} native states with {workers} workers in {output}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output", nargs="?", type=Path, default=root / "apps/desktop/preview-results")
+    parser.add_argument("--workers", type=int, choices=range(1, 5), default=min(4, os.cpu_count() or 1))
+    args = parser.parse_args()
+    subprocess.run(["cargo", "build", "--locked", "-p", "caelum-desktop"], check=True, cwd=root)
+    output = args.output.resolve()
+    capture_all(capture_plan(root / "target/debug/caelum-desktop", output), output, args.workers)
+
+
+if __name__ == "__main__":
+    main()

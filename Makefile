@@ -34,6 +34,7 @@ test:
 	python3 -m unittest discover -s scripts/release -p 'test_*.py'
 	python3 -m unittest discover -s scripts/profile -p 'test_*.py'
 	python3 -m unittest discover -s scripts/dev -p 'test_*.py'
+	python3 -m unittest discover -s apps/desktop/preview -p 'test_*.py'
 check: structure format lint test
 previews:
 	python3 apps/desktop/preview/capture.py
