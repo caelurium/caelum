@@ -33,7 +33,10 @@ python3 scripts/profile/native_latency.py \
 
 Use the host target triple. Each isolated app exits after about 19 seconds. The
 small fixture has two sessions with 100 entries each. The streaming fixture uses
-the existing six-session, 2,000-entry-per-session workload and synthetic deltas.
+the existing six-session, 2,000-entry-per-session fixture, with one synthetic delta
+per session every 50 ms for 19 seconds (2,280 deltas). The replay uses fixed
+deadlines rather than the fixture's poll-driven streaming, keeping the amount of
+work independent of rendering speed.
 After the first drawn frame and a two-second warmup, both perform 80 session
 selections and 80 draft insertions, alternating every 100 ms through the native
 application handle. They start no provider and do not load or save a workspace.
@@ -44,12 +47,14 @@ observer-overhead comparison. This disables both the recorder and encoded-frame
 hook while keeping the same workload and CPU/RSS sampler. It does not establish
 the latency cost of tracing; differences below run-to-run noise are inconclusive.
 Reports include the packaged executable's SHA-256, and traced runs fail if any of
-the 80 navigation/draft samples are missing, abandoned or dropped.
+the 80 navigation/draft samples or 2,280 streaming deltas are missing, abandoned
+or dropped.
 
 These are **handler-to-native-draw** measurements. The harness does not simulate
 OS pointer/keyboard delivery. Rune's drawn callback observes a submitted/presented
 frame, not physical display scanout. `frame.update` includes runtime update,
 layout and paint; `frame.encode` measures CPU encoding/submission, not GPU time.
+`frame.cpu` adds update and encode for each matched frame before taking percentiles.
 Do not describe either as hardware input-to-photon latency. Startup begins when
 the recorder is initialized in `main`, excluding executable/LaunchServices startup.
 
@@ -113,5 +118,6 @@ response sizes. Missing pairs never become zero-latency samples. Inspect abandon
 actions, unfinished operations, duplicate stages and dropped records before
 comparing runs. A missing footer or dropped records marks the capture incomplete;
 an interrupted JSON line is rejected. Native synthetic runs deliberately have no
-HTTP/tool samples. Compare repeated runs individually rather than pooling away
+HTTP/tool samples. Record counts must also match the footer's attempted/dropped
+totals. Compare repeated runs individually rather than pooling away
 outliers, and measure capture overhead before interpreting very small differences.

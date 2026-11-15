@@ -21,12 +21,19 @@ struct Pending {
     completion: Completion,
 }
 
+#[derive(Clone, Copy, Default)]
+enum Replay {
+    #[default]
+    Disabled,
+    Pending(workload::Scenario),
+    Running,
+}
+
 #[derive(Default)]
 pub struct State {
     pending: RefCell<Vec<Pending>>,
     navigation: Cell<u64>,
-    pub(super) replay: bool,
-    replay_started: Cell<bool>,
+    replay: Cell<Replay>,
     first_frame: Cell<bool>,
 }
 
@@ -133,10 +140,10 @@ pub fn drawn(rt: &rune::Runtime<Workspace>) {
         }
         live.latency.finish_frame(live, rt.stats.commits);
     }
-    if live.latency.replay
-        && !live.latency.replay_started.replace(true)
+    if let Replay::Pending(scenario) = live.latency.replay.get()
         && let Some(handle) = &rt.state.handle
     {
-        workload::run(handle.clone());
+        live.latency.replay.set(Replay::Running);
+        workload::run(handle.clone(), scenario);
     }
 }

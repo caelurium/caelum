@@ -9,7 +9,8 @@ def row(kind, phase, at, ident=1, label="sample", owner=1, parent=0, value=0):
 
 
 def report(*rows, dropped=0):
-    return summarize([{"schema": 1}, *rows, {"summary": True, "dropped": dropped}])
+    return summarize([{"schema": 1}, *rows,
+                      {"summary": True, "attempted": len(rows) + dropped, "dropped": dropped}])
 
 
 class LatencyTests(unittest.TestCase):
@@ -48,8 +49,11 @@ class LatencyTests(unittest.TestCase):
         self.assertEqual(metrics["model.observed_step_to_first_token"]["p50_ms"], 3)
 
     def test_loss_and_unclean_shutdown_are_explicit(self):
+        self.assertTrue(report()["complete_capture"])
         self.assertFalse(report(dropped=2)["complete_capture"])
         self.assertFalse(summarize([{"schema": 1}])["complete_capture"])
+        self.assertFalse(summarize([{"schema": 1},
+            {"summary": True, "attempted": 1, "dropped": 0}])["complete_capture"])
         with self.assertRaises(ValueError):
             summarize([{"schema": 7}])
 
@@ -59,6 +63,7 @@ class LatencyTests(unittest.TestCase):
                         row("frame", "update", 5000, ident=2, label="skipped"))
         self.assertEqual(result["metrics"]["frame.update"]["p50_ms"], 1)
         self.assertEqual(result["metrics"]["frame.encode"]["p50_ms"], .5)
+        self.assertEqual(result["metrics"]["frame.cpu"]["p50_ms"], 1.5)
         self.assertEqual(result["frame_outcomes"], {"drawn": 1, "skipped": 1})
 
     def test_percentiles_include_outliers_and_single_samples(self):
@@ -66,6 +71,14 @@ class LatencyTests(unittest.TestCase):
         self.assertEqual((values["p50_ms"], values["p95_ms"], values["p99_ms"]), (50.5, 95, 99))
         self.assertEqual(distribution([42])["p99_ms"], 42)
         self.assertIsNone(distribution([]))
+
+    def test_provider_overflow_and_history_not_yet_drawn_are_reported(self):
+        result = report(row("provider", "overflow", 1000),
+                        row("interaction", "begin", 2000, label="navigate"),
+                        row("interaction", "drawn", 4000, label="navigate"))
+        self.assertEqual(result["anomalies"], {"overflow": 1})
+        self.assertEqual(result["unfinished"], {"interaction.ready": 1})
+        self.assertNotIn("interaction.navigate.ready", result["metrics"])
 
 
 if __name__ == "__main__":

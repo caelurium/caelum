@@ -27,11 +27,13 @@ def summarize(records):
     http_counts = Counter()
     http_bytes = Counter()
     outcomes = Counter()
+    workload_events = Counter()
+    frames = defaultdict(dict)
     tools = {}
     last_tool = {}
     steps = {}
     anomalies = Counter()
-    footer = next((r for r in reversed(records) if r.get("summary")), None)
+    footer = records[-1] if records and records[-1].get("summary") else None
     if not records or records[0].get("schema") != 1:
         raise ValueError("Expected latency trace schema 1")
 
@@ -48,6 +50,9 @@ def summarize(records):
         kind, phase, label = row["kind"], row["phase"], row["label"]
         at = row["at_us"]
         key = (kind, row["id"])
+        if kind == "workload":
+            workload_events[label] += row["value"]
+            continue
         if kind == "startup":
             metrics["startup.first_drawn"].append(at / 1000)
             continue
@@ -56,11 +61,14 @@ def summarize(records):
                 outcomes[label] += 1
             if label == "drawn":
                 metrics[f"frame.{phase}"].append(row["value"] / 1000)
+                frames[row["id"]][phase] = row["value"] / 1000
             continue
         if phase in groups[key]:
             anomalies["duplicate_stages"] += 1
             continue
         groups[key][phase] = at
+        if phase in ("abandoned", "overflow"):
+            anomalies[phase] += 1
         if phase == "created" or key not in labels:
             labels[key] = label
         if kind == "http":
@@ -94,6 +102,10 @@ def summarize(records):
             tools = {key: value for key, value in tools.items() if key[0] != owner}
             steps = {key: value for key, value in steps.items() if key[0] != owner}
 
+    for frame in frames.values():
+        if "update" in frame and "encode" in frame:
+            metrics["frame.cpu"].append(frame["update"] + frame["encode"])
+
     unfinished = Counter()
     for key, times in groups.items():
         kind, _ = key
@@ -119,9 +131,9 @@ def summarize(records):
                 elapsed(f"interaction.{label}.{phase}", times.get("begin"), times.get(phase))
             if not any(p in times for p in ("drawn", "abandoned", "overflow")):
                 unfinished[kind] += 1
-            for phase in ("abandoned", "overflow"):
-                if phase in times:
-                    anomalies[phase] += 1
+            if (label in ("navigate", "project", "checkout") and "drawn" in times
+                    and not any(p in times for p in ("ready", "abandoned", "overflow"))):
+                unfinished["interaction.ready"] += 1
         elif kind == "provider":
             for name, start, end in [
                 ("delivery", "received", "begin"),
@@ -130,11 +142,16 @@ def summarize(records):
             ]:
                 elapsed(f"provider.{label}.{name}", times.get(start), times.get(end))
 
+    recorded = sum("at_us" in row for row in records)
+    accounted = footer is not None and footer.get("attempted") == recorded + footer["dropped"]
     return {
-        "complete_capture": footer is not None and footer["dropped"] == 0,
+        "complete_capture": accounted and footer["dropped"] == 0,
+        "recorded_records": recorded,
+        "attempted_records": footer.get("attempted") if footer else None,
         "dropped_records": footer["dropped"] if footer else None,
         "unfinished": dict(unfinished), "anomalies": dict(anomalies),
         "frame_outcomes": dict(outcomes), "http_requests": dict(http_counts),
+        "workload_events": dict(workload_events),
         "http_response_bytes": dict(http_bytes),
         "metrics": {key: distribution(values) for key, values in sorted(metrics.items())},
     }

@@ -67,7 +67,8 @@ def main():
         if not args.no_trace:
             names = ("interaction.navigate.drawn", "interaction.navigate.ready", "interaction.edit.drawn")
             report["complete_workload"] = (report["complete_capture"] and not report["anomalies"]
-                and all(report["metrics"].get(name, {}).get("count") == 80 for name in names))
+                and all(report["metrics"].get(name, {}).get("count") == 80 for name in names)
+                and report["workload_events"].get("stream", 0) == (2280 if args.workload == "streaming" else 0))
         report["resources"] = json.loads(resource.read_text())["summary"]
         report["run"] = run
         reports.append(report)

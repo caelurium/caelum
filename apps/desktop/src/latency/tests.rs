@@ -82,7 +82,13 @@ fn capture_child() {
     assert!(diagnostics::Capture::start(&path).is_err());
     let spec = crate::spec();
     let mut state = workspace(false);
-    state.live.as_mut().unwrap().latency.replay = false;
+    state
+        .live
+        .as_mut()
+        .unwrap()
+        .latency
+        .replay
+        .set(Replay::Disabled);
     let mut rt = rune::Runtime::new(
         state,
         spec.view,
