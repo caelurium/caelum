@@ -590,6 +590,7 @@ name = "caelum-desktop"
 version = "0.1.79"
 dependencies = [
  "block2 0.6.2",
+ "bytemuck",
  "caelum-core",
  "caelum-protocol",
  "objc2 0.6.5",
@@ -599,6 +600,7 @@ dependencies = [
  "rune-kit",
  "serde",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]

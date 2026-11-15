@@ -8,6 +8,7 @@ license = "MIT"
 description = "Caelum's native coding workspace"
 
 [dependencies]
+bytemuck = { version = "1.25", features = ["derive"] }
 # Temporary focus-query fork; track upstream fixes and removal in:
 # https://github.com/ch55secake/caelum/issues/167 (upstream: anomalyco/rune#833).
 rune = { git = "https://github.com/ch55secake/rune", rev = "e5e9ea9abacd20ddfa878cf5e5988430e121aba4", default-features = false, features = ["accessibility", "metal-backend", "native-file-dialog"] }
@@ -16,6 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 caelum-core = { path = "../../crates/caelum-core" }
 caelum-protocol = { path = "../../crates/caelum-protocol" }
+wgpu = { version = "~30.0.1", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6.2"
