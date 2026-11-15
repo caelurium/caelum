@@ -47,3 +47,15 @@ vary by 0.1 s, and session ordering can vary across a wall-clock boundary. These
 differences were inspected alongside native light/dark images; byte-for-byte
 determinism is not claimed. Keep per-run manifests and captures in ignored
 `apps/desktop/profile-results/` when repeating the workload.
+
+## Hosted observation
+
+The preceding sequential
+[CI run 43748407072](https://github.com/ch55secake/caelum/actions/runs/43748407072)
+captured the same 700-state catalogue in a 470 s capture step. The first parallel
+[CI run 43758940877](https://github.com/ch55secake/caelum/actions/runs/43758940877)
+used three workers (the hosted CPU count) and took 318 s, including its 0.85 s
+Cargo build check. Desktop/core Rust source and the catalogue were unchanged
+between these revisions. All CI jobs passed. This single hosted pair observed a
+32% lower capture-step duration; runner variability and queue time still require
+more samples before estimating end-to-end percentiles.
