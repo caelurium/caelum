@@ -69,6 +69,42 @@ layout and paint; `frame.encode` measures CPU encoding/submission, not GPU time.
 Do not describe either as hardware input-to-photon latency. Startup begins when
 the recorder is initialized in `main`, excluding executable/LaunchServices startup.
 
+### Long-session scrollback
+
+Use `--workload scroll` or `--workload scroll-streaming` with the same runner.
+Both load 1,000 completed turns (3,000 entries) in the selected session, mixing
+variable-length Markdown, Unicode, code blocks and tool calls. Every third tool
+has expanded output. Five other sessions each contain 2,000 entries. The streaming
+variant applies five background deltas every 50 ms (1,900 over the 19-second run),
+through the normal event invalidation path.
+
+After two seconds of warmup, 1,920 fixed-deadline scroll requests arrive at 120 Hz:
+eight seconds upwards, then eight seconds back down, 24 points per request. They
+use Rune's instant scroll-offset transaction without requesting a view rebuild.
+Coalesced requests accumulate their distance until a draw; subsequent requests
+use the observed offset so virtual-height corrections retain their anchor.
+This exercises native virtualization, layout and drawing, excluding OS wheel
+delivery, trackpad momentum and nested tool-output scrolling.
+
+Reports split the outward and return passes, checking all requests completed and
+each pass actually moved by at least 10,000 points. They include active-pass frame
+update + encode distributions, counts above 8.33/16.67 ms, view commits, observed
+request steps and draw-callback intervals. Fewer observed steps than requests
+indicates coalescing. Callback intervals describe application drawing cadence;
+they are not physical presentation or hardware dropped-frame counts. Launch and
+settling frames remain in the whole-capture metrics but not active-pass metrics.
+
+The corresponding CPU-only wheel replay is opt-in:
+
+```sh
+nix develop -c cargo test --locked --release -p caelum-desktop \
+  transcript_scrollback_profile -- --ignored --nocapture --test-threads=1
+```
+
+It uses the same content at 800 × 948 points and 2× scale, on a 120 Hz virtual
+clock. It measures wheel dispatch, background event application and runtime frame
+work, excluding native encoding, OS delivery and presentation. Run it alone.
+
 ## Actual workspace and provider timings
 
 Launch the packaged app with a separate state snapshot and trace path, then use

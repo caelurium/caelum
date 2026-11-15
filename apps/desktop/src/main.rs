@@ -674,14 +674,13 @@ fn main() {
             "--evaluation-workload" => evaluation = true,
             "--design-fixture" => design = true,
             "--latency-workload" => {
-                latency_workload = Some(match input.next().as_deref() {
-                    Some("small") => false,
-                    Some("streaming") => true,
-                    _ => {
-                        eprintln!("--latency-workload requires small or streaming");
-                        std::process::exit(2);
-                    }
-                });
+                latency_workload = input.next().as_deref().and_then(latency::Scenario::parse);
+                if latency_workload.is_none() {
+                    eprintln!(
+                        "--latency-workload requires small, streaming, scroll or scroll-streaming"
+                    );
+                    std::process::exit(2);
+                }
             }
             "--project" => {
                 let Some(path) = input.next() else {
@@ -724,8 +723,8 @@ fn main() {
         !fixtures && !evaluation && !design && latency_workload.is_none(),
     );
     app.init(move || {
-        let mut state = if let Some(streaming) = latency_workload {
-            latency::workspace(streaming)
+        let mut state = if let Some(scenario) = latency_workload {
+            latency::workspace(scenario)
         } else if design {
             evaluation::design()
         } else if evaluation {

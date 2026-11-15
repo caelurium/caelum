@@ -126,6 +126,7 @@ fn data<'a>(s: &'a Workspace, project: &str, source: &'a str) -> Option<&'a str>
 }
 pub fn request(s: &mut Workspace, index: usize, positions: &[usize]) -> bool {
     let l = s.live.as_mut().unwrap();
+    let mut changed = false;
     let project = l.app.sessions[index].scope.project.clone();
     let sources: Vec<_> = positions
         .iter()
@@ -147,9 +148,10 @@ pub fn request(s: &mut Workspace, index: usize, positions: &[usize]) -> bool {
             && l.app.services.error(&task).is_none()
         {
             l.app.task(task);
+            changed = true;
         }
     }
-    false
+    changed
 }
 pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
     let Some(data) = data(s, project, &media.source) else {

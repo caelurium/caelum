@@ -3,57 +3,70 @@ use caelum_core::application::{Provider, Scope};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
-pub(super) enum Scenario {
+pub enum Scenario {
     Small,
     Streaming,
+    Scroll { streaming: bool },
 }
 
-pub fn workspace(streaming: bool) -> Workspace {
-    let mut state = if streaming {
-        crate::evaluation::workspace()
-    } else {
-        let mut state = Workspace::live(None);
-        let live = state.live.as_mut().unwrap();
-        live.fixture = true;
-        live.app.projects.push(caelum_protocol::ProjectInfo {
-            name: "Latency workload".into(),
-            path: "/evaluation".into(),
-        });
-        for _ in 0..2 {
-            let index = live.app.new_session(Scope {
-                project: "/evaluation".into(),
-                provider: Provider::Codex,
+impl Scenario {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "small" => Some(Self::Small),
+            "streaming" => Some(Self::Streaming),
+            "scroll" => Some(Self::Scroll { streaming: false }),
+            "scroll-streaming" => Some(Self::Scroll { streaming: true }),
+            _ => None,
+        }
+    }
+}
+
+pub fn workspace(scenario: Scenario) -> Workspace {
+    let mut state = match scenario {
+        Scenario::Streaming => crate::evaluation::workspace(),
+        Scenario::Scroll { .. } => super::scroll::workspace(),
+        Scenario::Small => {
+            let mut state = Workspace::live(None);
+            let live = state.live.as_mut().unwrap();
+            live.fixture = true;
+            live.app.projects.push(caelum_protocol::ProjectInfo {
+                name: "Latency workload".into(),
+                path: "/evaluation".into(),
             });
-            let messages: Vec<_> = (0..50).map(|n| serde_json::json!({
+            for _ in 0..2 {
+                let index = live.app.new_session(Scope {
+                    project: "/evaluation".into(),
+                    provider: Provider::Codex,
+                });
+                let messages: Vec<_> = (0..50).map(|n| serde_json::json!({
                 "id":format!("turn-{n}"),"status":"completed","items":[
                     {"id":format!("user-{n}"),"type":"userMessage","content":[{"text":"Review this synthetic change."}]},
                     {"id":format!("answer-{n}"),"type":"agentMessage","text":"Keep **session ownership** and draft state intact."}
                 ]
             })).collect();
-            live.app.sessions[index]
-                .conversation
-                .history(Provider::Codex, &messages, false);
+                live.app.sessions[index]
+                    .conversation
+                    .history(Provider::Codex, &messages, false);
+            }
+            live.app.select(0);
+            state
         }
-        live.app.select(0);
-        state
     };
     let live = state.live.as_mut().unwrap();
     // Keep the demanding fixture, but drive its deltas from fixed deadlines,
     // independently of the frame/poll rate, so faster rendering cannot add load.
     live.evaluation = false;
     live.fixture = true;
-    live.latency
-        .replay
-        .set(super::Replay::Pending(if streaming {
-            Scenario::Streaming
-        } else {
-            Scenario::Small
-        }));
+    live.latency.replay.set(super::Replay::Pending(scenario));
     live.sync_editors();
     state
 }
 
 pub(super) fn run(handle: rune::AppHandle<Workspace>, scenario: Scenario) {
+    if let Scenario::Scroll { streaming } = scenario {
+        super::scroll::run(handle, streaming);
+        return;
+    }
     std::thread::spawn(move || {
         let start = Instant::now();
         // Native app updates run on the UI thread. This deliberately measures the
