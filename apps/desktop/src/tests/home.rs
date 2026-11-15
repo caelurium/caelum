@@ -174,7 +174,23 @@ fn fresh_launch_restores_home_without_background_results_stealing_navigation() {
 fn home_layout_fits_compact_and_large_windows_and_settles_when_idle() {
     for size in [(800.0, 620.0), (1280.0, 1000.0)] {
         for scene in ["home", "home-empty", "home-draft"] {
-            let mut rt = design_runtime(scene, size);
+            let app = spec();
+            let mut state = crate::evaluation::design();
+            assert!(crate::home::scene(&mut state, scene));
+            let (send, receive) = std::sync::mpsc::channel();
+            live_mut(&mut state).media = crate::media::State::new(std::sync::Arc::new(move || {
+                let _ = send.send(());
+            }));
+            let mut rt = Runtime::new(state, app.view, size, Env::new(true, 1.0));
+            rt.poll = app.poll;
+            advance(&mut rt, 0.4);
+            // Image::wait finishes before the cache's redraw callback. The
+            // virtual frame clock cannot settle those worker notifications.
+            for _ in 0..2 {
+                receive
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .expect("both Home background decoders must notify completion");
+            }
             advance(&mut rt, 1.0);
             for key in [
                 "home-heading",
