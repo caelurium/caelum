@@ -1,9 +1,10 @@
 # CodeQL caching and measurement
 
 The advanced workflow analyzes Actions, Python and Rust on standard Ubuntu
-runners, with the complete default query suites on every PR/main change and a
-weekly schedule. It retains Rust's `none` build mode and default all-features
-extraction, and lets CodeQL use the runner's available threads and memory.
+runners, with the complete default query suites on every PR/main change,
+merge-group commit and a weekly schedule. It retains Rust's `none` build mode and
+default all-features extraction, and lets CodeQL use the runner's available
+threads and memory.
 
 CodeQL's built-in dependency cache currently has no Rust implementation. The
 Rust extractor does support `cargo_target_dir`: its internal build-script and
@@ -39,8 +40,12 @@ gh workflow run codeql.yml --ref main
 Confirm all three languages publish successfully in code scanning before relying
 on the new workflow. The current `main` ruleset requires the Rust, native and
 packaging checks; it has no CodeQL requirement. Keep those gates during the
-cutover. If CodeQL becomes required, use the advanced workflow's published check
-contexts and ensure it also runs on merge-group commits before enabling a queue.
+cutover. If CodeQL becomes required, use the three `CodeQL cached (actions)`,
+`CodeQL cached (python)` and `CodeQL cached (rust)` workflow checks, which run on
+both PRs and merge-group commits. Queue runs retain SARIF artifacts but do not
+publish code-scanning results or databases: GitHub may delete their ephemeral
+refs before an upload finishes. The aggregate code-scanning result is therefore
+not a queue check.
 To roll back, delete `CODEQL_ADVANCED` and re-enable default setup for Actions,
 Python and Rust with the default suite. This PR does not itself change repository
 scan settings.
