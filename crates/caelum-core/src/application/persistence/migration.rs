@@ -1,6 +1,6 @@
 use super::*;
 use crate::database::WorkspaceDatabase;
-use rusqlite::{Connection, DatabaseName, OpenFlags};
+use rusqlite::{backup::NO_PROGRESS, Connection, OpenFlags, MAIN_DB};
 
 impl Store {
     /// Only the production default imports old data. Explicit state paths stay isolated.
@@ -51,7 +51,7 @@ impl Store {
                 .map_err(|e| e.to_string())?;
             // SQLite's backup includes committed WAL data; the original is never migrated or moved.
             let result = source
-                .backup(DatabaseName::Main, &temporary, None)
+                .backup(MAIN_DB, &temporary, NO_PROGRESS)
                 .map_err(|e| e.to_string())
                 .and_then(|()| fs::rename(&temporary, &target).map_err(|e| e.to_string()));
             if result.is_err() {
