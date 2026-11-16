@@ -1,8 +1,8 @@
 # Releasing Caelum
 
-Merges to `main` trigger automatic patch releases for Apple Silicon and Intel Macs,
+Merges to `main` trigger automatic patch releases for Apple Silicon Macs,
 plus x86_64 and ARM64 Linux desktops. A deliberate version change uses that
-version instead. Releases contain two DMGs, two macOS CLI archives, two Linux
+version instead. Releases contain one DMG, one macOS CLI archive, two Linux
 AppImages and `SHA256SUMS`.
 
 ## Signing without an Apple Developer account
@@ -15,7 +15,7 @@ After attempting to open the installed app, macOS may require **System Settings 
 
 1. Prepare an immutable version tag. Ordinary merges create a `chore(release)` version commit updating the Cargo workspace and local lockfile packages. Every crate inherits the workspace version; native bundle metadata is generated from it.
 2. Run shared CI against that exact release commit: Rust formatting, Clippy, core/CLI/native interaction tests, native previews and Python release/profile checks. The architecture-specific release builds run alongside these checks.
-3. Build ad-hoc-signed app bundles/DMGs and CLI archives on native Apple Silicon and Intel runners, plus AppImages on native Ubuntu 22.04 x86_64/ARM64 runners, with locked dependencies.
+3. Build the ad-hoc-signed app bundle/DMG and CLI archive on a native Apple Silicon runner, plus AppImages on native Ubuntu 22.04 x86_64/ARM64 runners, with locked dependencies.
 4. Verify signatures, architectures, app metadata, extracted CLI startup and mounted DMG contents. Exercise packaged CLI cold/warm URLs, hidden-window reopening, draft restoration and graceful quit in an isolated workspace.
 5. Run Linux desktop Clippy/tests, audit ELF architectures/glibc requirements and exercise packaged X11/Wayland startup, installation and lifecycle. See [Linux verification](linux.md#build-and-verify).
 6. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires CI and all platform/architecture builds and package smoke checks to succeed.
@@ -47,10 +47,12 @@ Recovery validates the remote tag and workspace/lockfile versions before using i
 
 Already published releases are verified and reused without rebuilding or replacing assets or checksums; recovery can then retry the Homebrew update. An incomplete or checksum-mismatched published release fails visibly. Publish a new version to correct released binaries. Stable releases use GitHub's semantic-version-aware latest selection; prereleases are marked separately. Intermediate build artifacts are retained for 14 days.
 
-The immutable tag's `scripts/release/asset-layout.json` defines its asset contract.
-Tags predating that manifest retain the four macOS assets and skip Linux builds
-during recovery. New tags require both AppImages; missing Linux assets fail
-publication. The publisher never infers an older layout from missing uploads.
+The immutable tag's `scripts/release/asset-layout.json` records Linux desktop support;
+tags predating it skip Linux during recovery. `scripts/release/macos-architectures.json`
+records Apple Silicon-only releases. Published tags predating it still require all
+four historical macOS assets during verification. Unpublished Intel-era tags are
+retired: publish a new version instead of rebuilding them. New Linux tags require
+both AppImages; the publisher never infers an older layout from missing uploads.
 
 ## Homebrew setup
 
@@ -72,8 +74,7 @@ RUNNER_TEMP=/absolute/path/to/output \
 nix develop -c bash scripts/release/package_macos_assets.sh
 ```
 
-Use the current Cargo version and a pre-created output directory. Intel builds
-use `TARGET=x86_64-apple-darwin ARCH=x86_64` on an Intel host. The app target is
+Use the current Cargo version, an Apple Silicon host and a pre-created output directory. The app target is
 macOS 13; native packaging retains `Caelum.app`, `dev.caelum.desktop`, the icon,
 version/revision metadata and `caelum://open?path=…` URL registration. It rejects
 non-system dynamic libraries after normalizing the known Nix libiconv dependency.
@@ -81,8 +82,8 @@ non-system dynamic libraries after normalizing the known Nix libiconv dependency
 The asset script builds both binaries, signs them, creates a compressed DMG,
 mounts/verifies it and checks extracted CLI startup. Release publication produces:
 
-- `Caelum-v<version>-aarch64.dmg` and `Caelum-v<version>-x86_64.dmg`
-- `caelum-cli-v<version>-<target>.tar.gz` for both macOS targets
+- `Caelum-v<version>-aarch64.dmg`
+- `caelum-cli-v<version>-aarch64-apple-darwin.tar.gz`
 - `Caelum-v<version>-aarch64.AppImage` and `Caelum-v<version>-x86_64.AppImage`
 - `SHA256SUMS`
 
@@ -101,7 +102,7 @@ brew install --cask ch55secake/tap/caelum
 brew install ch55secake/tap/caelum-cli
 ```
 
-For direct installation, download the matching DMG from the GitHub release and drag **Caelum.app** into **Applications**. Extract the matching CLI archive and place `caelum` on your `PATH`. Use `aarch64` for Apple Silicon (M-series) and `x86_64` for Intel.
+For direct installation on Apple Silicon (M-series), download the `aarch64` DMG from the GitHub release and drag **Caelum.app** into **Applications**. Extract the CLI archive and place `caelum` on your `PATH`. Intel Macs can use historical releases, but no new Intel packages are produced.
 
 On Linux, follow the [AppImage installation instructions](linux.md#install-and-update).
 
