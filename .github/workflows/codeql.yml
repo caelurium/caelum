@@ -1,0 +1,70 @@
+name: CodeQL cached analysis
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-cached-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: CodeQL cached (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, python, rust]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        if: ${{ matrix.language == 'rust' }}
+        with:
+          toolchain: '1.95.0'
+      - name: Set persistent Rust extractor output
+        if: ${{ matrix.language == 'rust' }}
+        # Keep generated Rust outside the source root on cold and warm runs.
+        run: echo "CODEQL_EXTRACTOR_RUST_OPTION_CARGO_TARGET_DIR=$RUNNER_TEMP/codeql-cargo-target" >> "$GITHUB_ENV"
+      - uses: github/codeql-action/init@v4
+        id: codeql
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          dependency-caching: true
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ matrix.language == 'rust' }}
+        with:
+          shared-key: codeql-rust-extractor-${{ steps.codeql.outputs.codeql-version }}
+          cache-targets: false
+          cache-directories: ${{ runner.temp }}/codeql-cargo-target
+      - name: Analyze the complete default query suite
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+          output: codeql-results
+          # Default setup remains authoritative until the documented cutover.
+          upload: ${{ vars.CODEQL_ADVANCED == 'enabled' && 'always' || 'never' }}
+          upload-database: ${{ vars.CODEQL_ADVANCED == 'enabled' }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: codeql-${{ matrix.language }}
+          path: codeql-results/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Explain staged activation
+        if: ${{ vars.CODEQL_ADVANCED != 'enabled' }}
+        run: echo 'Default setup still publishes CodeQL results. This run retains complete SARIF for comparison; see docs/performance/codeql.md for cutover.' >> "$GITHUB_STEP_SUMMARY"

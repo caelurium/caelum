@@ -96,6 +96,8 @@ jobs:
           toolchain: '1.95.0'
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-clippy
       - run: cargo clippy --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli --all-targets -- -D warnings
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
@@ -116,6 +118,8 @@ jobs:
         with:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-test
       - run: cargo test --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli -- --test-threads=4
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
@@ -138,16 +142,19 @@ jobs:
           toolchain: '1.95.0'
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-desktop
       - run: cargo clippy --locked --timings -p caelum-desktop --all-targets -- -D warnings
       - run: cargo test --locked --timings -p caelum-desktop -- --test-threads=4
       - run: python3 scripts/dev/macos_app.py --build-only
       - run: python3 apps/desktop/preview/capture.py
         if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
       - uses: actions/upload-artifact@v7
-        if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
         with:
           name: native-design-previews
           path: apps/desktop/preview-results/
+          if-no-files-found: error
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
@@ -169,6 +176,9 @@ jobs:
         with:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Match the release producer, including its existing cache namespace.
+          shared-key: aarch64-apple-darwin-build
       - name: Build and verify native app, DMG and CLI archive
         env:
           TARGET: aarch64-apple-darwin
@@ -199,4 +209,5 @@ jobs:
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/profile -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/dev -p 'test_*.py'
+      - run: python3 -m unittest discover -s apps/desktop/preview -p 'test_*.py'
       - run: bash -n scripts/release/package_macos_assets.sh scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh scripts/release/package_linux_assets.sh apps/desktop/assets/linux/AppRun
