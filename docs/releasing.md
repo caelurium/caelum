@@ -1,6 +1,6 @@
 # Releasing Caelum
 
-Merges to `main` trigger automatic patch releases for Apple Silicon and Intel Macs. A deliberate version change uses that version instead. The release contains two DMGs, two standalone CLI archives, and `SHA256SUMS`.
+Merges to `main` trigger automatic patch releases for Apple Silicon Macs. A deliberate version change uses that version instead. The release contains one DMG, one standalone CLI archive, and `SHA256SUMS`.
 
 ## Signing without an Apple Developer account
 
@@ -12,9 +12,9 @@ After attempting to open the installed app, macOS may require **System Settings 
 
 1. Prepare an immutable version tag. Ordinary merges create a `chore(release)` version commit updating the Cargo workspace and local lockfile packages. Every crate inherits the workspace version; native bundle metadata is generated from it.
 2. Run shared CI against that exact release commit: Rust formatting, Clippy, core/CLI/native interaction tests, native previews and Python release/profile checks. The architecture-specific release builds run alongside these checks.
-3. Build ad-hoc-signed app bundles/DMGs and CLI archives on native Apple Silicon and Intel runners with locked dependencies.
+3. Build the ad-hoc-signed app bundle/DMG and CLI archive on a native Apple Silicon runner with locked dependencies.
 4. Verify signatures, architectures, app metadata, extracted CLI startup and mounted DMG contents. Exercise packaged CLI cold/warm URLs, hidden-window reopening, draft restoration and graceful quit in an isolated workspace.
-5. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires both CI and both architecture builds to succeed.
+5. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires CI and the Apple Silicon build to succeed.
 6. When configured, open a separate Homebrew tap update PR.
 
 Main release runs are serialized. GitHub retains only the newest pending run when merges arrive faster than releases finish, so overlapping untagged merges can share a release. A superseded preparation run yields to the newer main workflow rather than silently switching its source tree. Once a version commit/tag exists, retries reuse it. Tags are never moved.
@@ -43,6 +43,8 @@ Recovery validates the remote tag and workspace/lockfile versions before using i
 
 Already published releases are verified and reused without rebuilding or replacing assets or checksums; recovery can then retry the Homebrew update. An incomplete or checksum-mismatched published release fails visibly. Publish a new version to correct released binaries. Stable releases use GitHub's semantic-version-aware latest selection; prereleases are marked separately. Intermediate build artifacts are retained for 14 days.
 
+The immutable tag's `scripts/release/macos-architectures.json` records Apple Silicon-only releases. Published tags predating it still require all four historical macOS assets during verification. Unpublished Intel-era tags are retired: publish a new version instead of rebuilding them.
+
 ## Homebrew setup
 
 The renderer and templates are already merged in [`ch55secake/homebrew-tap`](https://github.com/ch55secake/homebrew-tap). To enable automated update PRs:
@@ -63,8 +65,7 @@ RUNNER_TEMP=/absolute/path/to/output \
 nix develop -c bash scripts/release/package_macos_assets.sh
 ```
 
-Use the current Cargo version and a pre-created output directory. Intel builds
-use `TARGET=x86_64-apple-darwin ARCH=x86_64` on an Intel host. The app target is
+Use the current Cargo version, an Apple Silicon host and a pre-created output directory. The app target is
 macOS 13; native packaging retains `Caelum.app`, `dev.caelum.desktop`, the icon,
 version/revision metadata and `caelum://open?path=…` URL registration. It rejects
 non-system dynamic libraries after normalizing the known Nix libiconv dependency.
@@ -72,8 +73,8 @@ non-system dynamic libraries after normalizing the known Nix libiconv dependency
 The asset script builds both binaries, signs them, creates a compressed DMG,
 mounts/verifies it and checks extracted CLI startup. Release publication produces:
 
-- `Caelum-v<version>-aarch64.dmg` and `Caelum-v<version>-x86_64.dmg`
-- `caelum-cli-v<version>-<target>.tar.gz` for both macOS targets
+- `Caelum-v<version>-aarch64.dmg`
+- `caelum-cli-v<version>-aarch64-apple-darwin.tar.gz`
 - `SHA256SUMS`
 
 ## Install
@@ -85,7 +86,7 @@ brew install --cask ch55secake/tap/caelum
 brew install ch55secake/tap/caelum-cli
 ```
 
-For direct installation, download the matching DMG from the GitHub release and drag **Caelum.app** into **Applications**. Extract the matching CLI archive and place `caelum` on your `PATH`. Use `aarch64` for Apple Silicon (M-series) and `x86_64` for Intel.
+For direct installation on Apple Silicon (M-series), download the `aarch64` DMG from the GitHub release and drag **Caelum.app** into **Applications**. Extract the CLI archive and place `caelum` on your `PATH`. Intel Macs can use historical releases, but no new Intel packages are produced.
 
 Download `SHA256SUMS` beside the selected asset and verify it with:
 

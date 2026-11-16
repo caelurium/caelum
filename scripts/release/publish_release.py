@@ -13,13 +13,28 @@ import tempfile
 from pathlib import Path
 
 
-def asset_names(tag: str) -> set[str]:
-    return {
+def asset_names(tag: str, *, intel: bool = False) -> set[str]:
+    names = {
         f"Caelum-{tag}-aarch64.dmg",
-        f"Caelum-{tag}-x86_64.dmg",
         f"caelum-cli-{tag}-aarch64-apple-darwin.tar.gz",
-        f"caelum-cli-{tag}-x86_64-apple-darwin.tar.gz",
     }
+    if intel:
+        names.update({f"Caelum-{tag}-x86_64.dmg", f"caelum-cli-{tag}-x86_64-apple-darwin.tar.gz"})
+    return names
+
+
+def release_has_intel(tag: str) -> bool:
+    """Published historical releases retain their immutable asset contract."""
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
+        raise SystemExit(f"Invalid release tag: {tag!r}")
+    path = "scripts/release/macos-architectures.json"
+    present = subprocess.check_output(["git", "ls-tree", "--name-only", tag, "--", path], text=True).strip()
+    if not present:
+        return True
+    architectures = json.loads(subprocess.check_output(["git", "show", f"{tag}:{path}"], text=True))
+    if architectures != ["aarch64"]:
+        raise SystemExit("Unknown macOS release architectures")
+    return False
 
 
 def gh(*args: str) -> str:
@@ -42,15 +57,15 @@ def release_for_tag(repository: str, tag: str) -> dict | None:
     return json.loads(gh("api", f"repos/{repository}/releases/{release['databaseId']}"))
 
 
-def parse_checksums(text: str, tag: str) -> dict[str, str]:
+def parse_checksums(text: str, tag: str, *, intel: bool = False) -> dict[str, str]:
     checksums = {}
     for line in text.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  (?:\./)?([^/]+)", line)
         if not match or match[2] in checksums:
             raise SystemExit(f"Invalid or duplicate release checksum: {line!r}")
         checksums[match[2]] = match[1]
-    if set(checksums) != asset_names(tag):
-        raise SystemExit("Release checksums must contain both architecture DMGs and CLI archives.")
+    if set(checksums) != asset_names(tag, intel=intel):
+        raise SystemExit("Release checksums must contain the complete release asset set.")
     return checksums
 
 
@@ -62,7 +77,7 @@ def checksum(path: Path) -> str:
 def prepare_assets(directory: Path, tag: str) -> dict[str, str]:
     names = asset_names(tag)
     if {path.name for path in directory.iterdir()} - {"SHA256SUMS"} != names:
-        raise SystemExit("Expected exactly two DMGs and two CLI archives for this tag.")
+        raise SystemExit("Expected the Apple Silicon DMG and CLI archive for this tag.")
     if any(not (directory / name).is_file() or (directory / name).stat().st_size == 0 for name in names):
         raise SystemExit("Release assets must be nonempty files.")
     checksums = {name: checksum(directory / name) for name in sorted(names)}
@@ -72,16 +87,16 @@ def prepare_assets(directory: Path, tag: str) -> dict[str, str]:
     return checksums
 
 
-def verify_remote_assets(repository: str, tag: str, release: dict, expected: dict | None = None) -> None:
+def verify_remote_assets(repository: str, tag: str, release: dict, expected: dict | None = None, *, intel: bool = False) -> None:
     assets = {asset["name"]: asset for asset in release["assets"]}
-    if len(assets) != len(release["assets"]) or set(assets) != asset_names(tag) | {"SHA256SUMS"}:
+    if len(assets) != len(release["assets"]) or set(assets) != asset_names(tag, intel=intel) | {"SHA256SUMS"}:
         raise SystemExit("GitHub release has missing, duplicate, or unexpected assets.")
     if any(asset["state"] != "uploaded" or asset["size"] <= 0 for asset in assets.values()):
         raise SystemExit("GitHub release assets are not fully uploaded.")
     with tempfile.TemporaryDirectory() as temp:
         directory = Path(temp)
         gh("release", "download", tag, "--repo", repository, "--pattern", "SHA256SUMS", "--dir", temp)
-        checksums = parse_checksums((directory / "SHA256SUMS").read_text(), tag)
+        checksums = parse_checksums((directory / "SHA256SUMS").read_text(), tag, intel=intel)
         if expected is not None and checksums != expected:
             raise SystemExit("Uploaded checksums do not match the verified build artifacts.")
         for name, digest in checksums.items():
@@ -102,7 +117,6 @@ def installation_notes(repository: str, tag: str) -> str:
 | Mac | Desktop app | Standalone CLI |
 | --- | --- | --- |
 | Apple Silicon (M-series) | [DMG]({base}/Caelum-{tag}-aarch64.dmg) | [CLI archive]({base}/caelum-cli-{tag}-aarch64-apple-darwin.tar.gz) |
-| Intel | [DMG]({base}/Caelum-{tag}-x86_64.dmg) | [CLI archive]({base}/caelum-cli-{tag}-x86_64-apple-darwin.tar.gz) |
 
 Open the DMG and drag **Caelum.app** into **Applications**. For the CLI, extract the archive and put `caelum` in a directory on your `PATH`; run `caelum --version` to check the installation.
 
@@ -123,13 +137,15 @@ Homebrew installation and tap-update availability are described in the [release 
 """
 
 
-def publish(repository: str, tag: str, directory: Path) -> None:
+def publish(repository: str, tag: str, directory: Path, *, intel: bool = False) -> None:
     release = release_for_tag(repository, tag)
     if release is not None and not release["draft"]:
-        verify_remote_assets(repository, tag, release)
+        verify_remote_assets(repository, tag, release, intel=intel)
         print(f"Reusing published release {tag}; its assets and checksums are unchanged.")
         return
 
+    if intel:
+        raise SystemExit("Intel macOS releases are retired; publish a new Apple Silicon-only version.")
     checksums = prepare_assets(directory, tag)
     if release is None:
         with tempfile.TemporaryDirectory() as temp:
@@ -171,15 +187,18 @@ def main() -> None:
     args = parser.parse_args()
     tag = os.environ["RELEASE_TAG"]
     repository = os.environ["GITHUB_REPOSITORY"]
+    intel = release_has_intel(tag)
     if args.check:
         release = release_for_tag(repository, tag)
         published = release is not None and not release["draft"]
         if published:
-            verify_remote_assets(repository, tag, release)
+            verify_remote_assets(repository, tag, release, intel=intel)
+        elif intel:
+            raise SystemExit("Intel macOS releases are retired; publish a new Apple Silicon-only version.")
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
             output.write(f"published={str(published).lower()}\n")
     else:
-        publish(repository, tag, args.assets)
+        publish(repository, tag, args.assets, intel=intel)
 
 
 if __name__ == "__main__":
