@@ -23,11 +23,12 @@ pub(crate) fn run() {
             "--evaluation-workload" => evaluation = true,
             "--design-fixture" => design = true,
             "--latency-workload" => {
-                latency_workload = Some(match input.next().as_deref() {
-                    Some("small") => false,
-                    Some("streaming") => true,
-                    _ => fail("--latency-workload requires small or streaming"),
-                });
+                latency_workload = input.next().as_deref().and_then(latency::Scenario::parse);
+                if latency_workload.is_none() {
+                    fail(
+                        "--latency-workload requires small, streaming, scroll or scroll-streaming",
+                    );
+                }
             }
             "--project" | "--open-url" => {
                 let Some(value) = input.next() else {
@@ -81,8 +82,8 @@ pub(crate) fn run() {
     let restart = crate::updates::RestartSlot::default();
     let restart_slot = restart.clone();
     app.init(move || {
-        let mut state = if let Some(streaming) = latency_workload {
-            latency::workspace(streaming)
+        let mut state = if let Some(scenario) = latency_workload {
+            latency::workspace(scenario)
         } else if design {
             evaluation::design()
         } else if evaluation {

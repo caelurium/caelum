@@ -20,6 +20,8 @@ mod settings;
 mod smoke;
 mod tools;
 mod transcript;
+#[cfg(target_os = "macos")]
+mod typography;
 mod updates;
 mod worktrees;
 

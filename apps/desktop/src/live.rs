@@ -142,6 +142,10 @@ impl Live {
         }
     }
 
+    pub(crate) fn reading_position(&self, index: usize) -> ScrollPos {
+        self.reading[index].get()
+    }
+
     pub(crate) fn sync_editors(&mut self) {
         while self.drafts.len() < self.app.sessions.len() {
             let session = &self.app.sessions[self.drafts.len()];

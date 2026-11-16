@@ -15,6 +15,8 @@ Provider and restart-history measurements: [session loading](session-loading.md)
 Redundant OpenCode HTTP reads: [provider read reduction](provider-reads.md).
 Opt-in request, tool and native-frame tracing: [native latency baseline](native-latency.md).
 Retained transcript row identities: [transcript row-key reuse](transcript-keys.md).
+Native text-shaping attribution and optimization: [system-font layout](native-text-layout.md).
+Long-session scrolling and visible-row invalidation: [scrollback](scrollback.md).
 
 ## Synthetic native frame measurement
 
