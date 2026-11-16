@@ -80,4 +80,30 @@ writer per run. `cargo-timings-*-linux-*` artifacts retain compilation reports
 for 14 days, including reports available when a job fails. Compare their
 timestamped HTML files alongside cache restore logs and job execution times.
 
+## Merge queue
+
+The CI and Linux desktop workflows handle `merge_group: checks_requested` in
+addition to pull requests. Queue runs check out `github.sha`, GitHub's synthetic
+merge-group commit, and compare structure exceptions with the group's `base_sha`.
+Each queue ref has its own concurrency group, so a PR update or another queued
+group cannot cancel its checks. Queue runs execute all required checks, including
+macOS packaging, without PR path filtering. Native preview captures remain a PR
+artifact; Linux tests and AppImage packaging also run on queue commits.
+
+After these workflows land on `main`, a repository administrator can enable
+**Require merge queue** in the existing `main` ruleset under Settings → Rules →
+Rulesets. Keep the existing required checks: `rust-tests`, `rust-lint`,
+`rust-format`, `desktop-bundle-build`, `native-desktop-tests`, `rust-structure` and
+`release-package`. Start with the merge commit method, one concurrent build, a
+maximum merge group size of one and a 60-minute status-check timeout. This bounds
+runner usage while exercising the queue; increase concurrency after observing
+hosted execution times. The queue checks changes against the current base, so
+queued PRs do not need manual branch updates as other PRs merge.
+
+Use **Merge when ready** (or `gh pr merge --auto`) to enqueue a PR once its
+required checks pass. Confirm the first queued PR receives all seven required
+checks on the `gh-readonly-queue/main/…` commit before it merges. Releases continue
+to start only after a commit reaches `main` or a version tag is pushed. Enabling
+the ruleset is a repository setting, separate from merging the workflow changes.
+
 Use Conventional Commits and the repository's pull-request template.

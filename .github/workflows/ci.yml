@@ -2,6 +2,8 @@ name: CI
 on:
   # Main commits are checked by the release workflow's reusable CI run.
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_call:
     inputs:
       revision:
@@ -14,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
 env:
   MACOSX_DEPLOYMENT_TARGET: '13.0'
@@ -30,9 +32,9 @@ jobs:
       preview: ${{ steps.filter.outputs.preview }}
       bundle: ${{ steps.filter.outputs.bundle }}
     steps:
-      - name: Keep reusable CI unfiltered
+      - name: Keep merge groups and reusable CI unfiltered
         if: ${{ github.event_name != 'pull_request' }}
-        run: echo "Running full reusable CI checks."
+        run: echo "Running full merge-group or reusable CI checks."
       - uses: dorny/paths-filter@v4
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
@@ -69,7 +71,7 @@ jobs:
           fetch-depth: 0
       - name: Block new or growing Rust modules over 800 lines
         env:
-          BASE_REVISION: ${{ github.event.pull_request.base.sha || 'HEAD^' }}
+          BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'HEAD^' }}
         run: python3 scripts/structure/check.py --base "$BASE_REVISION"
       - run: python3 -m unittest discover -s scripts/structure -p 'test_*.py'
   rust-format:
