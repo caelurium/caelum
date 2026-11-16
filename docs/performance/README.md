@@ -15,6 +15,8 @@ Provider and restart-history measurements: [session loading](session-loading.md)
 Redundant OpenCode HTTP reads: [provider read reduction](provider-reads.md).
 Opt-in request, tool and native-frame tracing: [native latency baseline](native-latency.md).
 Retained transcript row identities: [transcript row-key reuse](transcript-keys.md).
+Native text-shaping attribution and optimization: [system-font layout](native-text-layout.md).
+Long-session scrolling and visible-row invalidation: [scrollback](scrollback.md).
 
 ## Synthetic native frame measurement
 
@@ -163,7 +165,7 @@ revision. The corresponding current-Rune proposal is in
 is copied into application state.
 
 [Rune #833](https://github.com/anomalyco/rune/issues/833) requests the upstream
-API. [Caelum #167](https://github.com/ch55secake/caelum/issues/167) tracks both
+API. [Caelum #167](https://github.com/caelurium/caelum/issues/167) tracks both
 keeping the temporary fork current with relevant upstream fixes and returning
 both dependencies to an upstream revision once the API is available.
 

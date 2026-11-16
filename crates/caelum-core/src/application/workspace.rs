@@ -8,6 +8,7 @@ mod notifications;
 mod persistence;
 mod projects;
 mod queue;
+mod relocation;
 mod review;
 mod sessions;
 mod submission;
@@ -29,6 +30,7 @@ use super::{
 pub struct Session {
     pub scope: Scope,
     pub remote_id: Option<String>,
+    relocation: Option<relocation::Relocation>,
     pub title: String,
     title_state: titles::TitleState,
     /// Last meaningful activity in Unix milliseconds; selection and token deltas do not bump it.
@@ -57,8 +59,8 @@ pub struct Session {
     pub archived: bool,
     /// Discovery must have started after the last successful local archive change.
     archive_barrier: u64,
-    /// Removed from Caelum because the provider no longer associates it with
-    /// this project. Kept in memory only so pending requests retain stable indices.
+    /// Removed from Caelum after deletion. Kept in memory so pending requests
+    /// retain stable indices.
     pub forgotten: bool,
     pub archiving: bool,
     pub deleting: bool,
@@ -88,6 +90,7 @@ impl Session {
         Self {
             scope,
             remote_id: None,
+            relocation: None,
             title: "New session".into(),
             title_state: Default::default(),
             last_activity: None,
@@ -171,7 +174,8 @@ impl Session {
     }
 
     pub fn can_send(&self) -> bool {
-        !self.working()
+        self.relocation.is_none()
+            && !self.working()
             && self.loaded
             && !self.loading
             && !self.disconnected
@@ -184,7 +188,8 @@ impl Session {
 
     /// Whether a draft may be submitted, including to the queue while working.
     pub fn can_submit(&self) -> bool {
-        !self.archived
+        self.relocation.is_none()
+            && !self.archived
             && !self.forgotten
             && !self.stopping
             && !self.archiving

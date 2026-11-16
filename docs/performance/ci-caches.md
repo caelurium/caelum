@@ -7,7 +7,7 @@ tests and Clippy retain separate, explicit shared keys matching their previous
 job IDs. Main's reusable CI produces those caches for subsequent PRs.
 
 The action still hashes the runner OS/architecture, Rust environment, manifests
-and dependencies. ARM and Intel release artifacts remain separate. Cargo still
+and dependencies. macOS ARM and Linux architecture caches remain separate. Cargo still
 validates restored artifacts; no build or check is bypassed on a cache hit.
 Workflow changes also trigger the PR packaging job.
 
@@ -28,7 +28,7 @@ so application compilation remains. Hosted timing needs repeated runs before
 claiming a new p50/p95 or the overall feedback target.
 
 The first hosted run with this change,
-[43758097786](https://github.com/ch55secake/caelum/actions/runs/43758097786),
+[43758097786](https://github.com/caelurium/caelum/actions/runs/43758097786),
 restored `v0-rust-aarch64-apple-darwin-build-Darwin-arm64-239bdeec-cfc57aa6`
 with `full match: true` from the existing main namespace. Restore took 13 s,
 packaging/verification took 271 s and the complete packaging job took 304 s.

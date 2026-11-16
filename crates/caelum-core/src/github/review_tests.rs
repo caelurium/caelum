@@ -284,3 +284,71 @@ fn partial_graphql_errors_missing_cursors_and_stale_heads_are_not_silent_misses(
         .to_string()
         .contains("head changed"));
 }
+
+#[test]
+fn transferred_files_still_require_the_displayed_head_and_base() {
+    let fixture = Fixture::new("case \"$*\" in *'GET repos/upstream/repo') cat repository.json;; *'/files?'*) printf '[]';; *) cat pr.json;; esac");
+    let canonical = "https://git.example.com/team/renamed/pull/44";
+    fixture.write(
+        "repository.json",
+        json!({"html_url":"https://git.example.com/team/renamed"}),
+    );
+    let mut response = pr();
+    response["html_url"] = json!(canonical);
+    fixture.write("pr.json", response.clone());
+    assert_eq!(fixture.files(1).unwrap().base_oid, BASE);
+    for (field, expected) in [("head", "head changed"), ("base", "base changed")] {
+        let mut changed = response.clone();
+        changed[field]["sha"] = json!("f".repeat(40));
+        fixture.write("pr.json", changed);
+        assert!(fixture.files(1).unwrap_err().to_string().contains(expected));
+    }
+}
+
+#[test]
+fn feedback_follows_verified_transfers_without_accepting_other_repositories_or_heads() {
+    let fixture = Fixture::new("case \"$*\" in *'GET repos/upstream/repo') cat repository.json;; *) cat response.json;; esac");
+    let canonical = "https://git.example.com/team/renamed/pull/44";
+    fixture.write(
+        "repository.json",
+        json!({"html_url":"https://git.example.com/team/renamed"}),
+    );
+    for (kind, name) in [
+        (GitHubFeedbackKind::Discussion, "comments"),
+        (GitHubFeedbackKind::Reviews, "reviews"),
+        (GitHubFeedbackKind::Threads, "reviewThreads"),
+        (GitHubFeedbackKind::Replies, "comments"),
+    ] {
+        let replies = kind == GitHubFeedbackKind::Replies;
+        let mut response = if replies {
+            json!({"data":{"node":{"pullRequest":{"url":canonical,"headRefOid":HEAD},"comments":connection(json!([]),None)}}})
+        } else {
+            let mut response = graphql(name, json!([]), None);
+            response["data"]["repository"]["pullRequest"]["url"] = json!(canonical);
+            response
+        };
+        fixture.write("response.json", response.clone());
+        assert!(fixture.feedback(kind, None, Some("thread")).is_ok());
+        let pointer = if replies {
+            "/data/node/pullRequest"
+        } else {
+            "/data/repository/pullRequest"
+        };
+        response.pointer_mut(pointer).unwrap()["headRefOid"] = json!("f".repeat(40));
+        fixture.write("response.json", response.clone());
+        assert!(fixture
+            .feedback(kind, None, Some("thread"))
+            .unwrap_err()
+            .to_string()
+            .contains("head changed"));
+        let pr = response.pointer_mut(pointer).unwrap();
+        pr["headRefOid"] = json!(HEAD);
+        pr["url"] = json!("https://git.example.com/other/repo/pull/44");
+        fixture.write("response.json", response);
+        assert!(fixture
+            .feedback(kind, None, Some("thread"))
+            .unwrap_err()
+            .to_string()
+            .contains("different pull request"));
+    }
+}

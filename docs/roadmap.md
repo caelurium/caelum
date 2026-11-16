@@ -7,7 +7,7 @@
 - Durable drafts/queues, project/worktree navigation, files and local diffs
 - GitHub discovery, review feedback and head-pinned update/merge operations
 - Native macOS menus, URL opening, legacy-state migration and app/DMG packaging
-- Apple Silicon/Intel release assets, checksums and Homebrew automation
+- Apple Silicon release assets, checksums and Homebrew automation
 
 ## Follow-up
 

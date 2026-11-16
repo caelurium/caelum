@@ -164,6 +164,40 @@ impl OpenCodeProvider {
         ))
     }
 
+    /// Locate an existing session without authorizing any operation in its new
+    /// checkout. The application validates the destination before reconnecting.
+    pub(crate) fn session_location(
+        &self,
+        project_path: &str,
+        session_id: &str,
+    ) -> Result<caelum_protocol::ProjectInfo, OpenCodeError> {
+        if !valid_session_id(session_id) {
+            return Err(OpenCodeError::InvalidSessionId);
+        }
+        let project = Project::open(project_path)?;
+        let server = self.server(&project)?;
+        let response = server.request_json(
+            Method::GET,
+            &format!("/api/session/{session_id}"),
+            &[],
+            None,
+        )?;
+        let value = &response["data"];
+        if value["id"].as_str() != Some(session_id) {
+            return Err(OpenCodeError::Protocol(
+                "session response has a different session ID".into(),
+            ));
+        }
+        let directory = session_directory(value).ok_or_else(|| {
+            OpenCodeError::Protocol("session response has no location directory".into())
+        })?;
+        let destination = Project::open(directory)?;
+        if destination.path() != project.path() {
+            server.forget_session(session_id);
+        }
+        Ok(destination.info())
+    }
+
     /// Ask OpenCode's title agent to rename a session using its conversation.
     pub fn regenerate_title(
         &self,

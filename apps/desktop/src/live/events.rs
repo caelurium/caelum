@@ -40,6 +40,13 @@ impl Live {
     pub(crate) fn apply_events(&mut self, events: impl IntoIterator<Item = Event>) -> bool {
         let mut changed = false;
         for event in events {
+            if let Event::UpdateProgress(id, progress) = event {
+                let updated = self.app.services.updater.progress(id, progress);
+                changed |= updated
+                    && self.panels.overlay == Some(crate::panels::Screen::Settings)
+                    && self.panels.settings_page == crate::settings::Page::About;
+                continue;
+            }
             let trace = caelum_core::diagnostics::event(&event).filter(|mark| {
                 self.app.selected.is_some_and(|i| {
                     mark.owner() != 0

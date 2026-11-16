@@ -3,11 +3,11 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 TARGET="${TARGET:-$(rustc -vV | awk '/^host:/ { print $2 }')}"
 case "$TARGET" in
-  aarch64-apple-darwin|x86_64-apple-darwin) ;;
+  aarch64-apple-darwin) ;;
   *) echo "Unsupported desktop target: $TARGET" >&2; exit 1 ;;
 esac
 export MACOSX_DEPLOYMENT_TARGET=13.0
-cargo build --locked --release -p caelum-desktop --target "$TARGET" --manifest-path "$root/Cargo.toml"
+cargo build --locked --release --timings -p caelum-desktop --target "$TARGET" --manifest-path "$root/Cargo.toml"
 output="${1:-$root/target/$TARGET/release/bundle/macos}"
 mkdir -p "$output"
 output="$(cd "$output" && pwd)"

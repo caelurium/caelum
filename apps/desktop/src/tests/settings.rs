@@ -196,8 +196,8 @@ fn about_update_checks_hide_stale_downloads_and_keep_errors_scoped() {
         current_version: env!("CARGO_PKG_VERSION").into(),
         latest_version: "0.2.0".into(),
         status: UpdateStatus::Available,
-        release_url: "https://github.com/ch55secake/caelum/releases/tag/v0.2.0".into(),
-        download_url: Some("https://github.com/ch55secake/caelum/releases/download/v0.2.0/Caelum-v0.2.0-aarch64.dmg".into()),
+        release_url: "https://github.com/caelurium/caelum/releases/tag/v0.2.0".into(),
+        download_url: Some("https://github.com/caelurium/caelum/releases/download/v0.2.0/Caelum-v0.2.0-aarch64.dmg".into()),
     };
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.apply(Event::Completed(
