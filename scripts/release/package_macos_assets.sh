@@ -65,5 +65,6 @@ mounted=true
 verify_app "$scratch/mount/Caelum.app"
 diff -qr "$app_bundle" "$scratch/mount/Caelum.app"
 python3 scripts/release/smoke_macos_app.py --app "$app_bundle" --cli "$scratch/extracted/caelum"
+python3 scripts/release/smoke_update.py --app "$app_bundle" --package "$dmg"
 
 echo "Verified $ARCH app, DMG, and standalone CLI for $RELEASE_TAG"

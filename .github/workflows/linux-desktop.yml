@@ -63,6 +63,8 @@ jobs:
       - name: Exercise Wayland desktop
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: dbus-run-session -- python3 scripts/release/smoke_linux_app.py --image "$RUNNER_TEMP"/release/*.AppImage --backend wayland --output "$RUNNER_TEMP/linux-smoke/wayland"
+      - name: Replace and relaunch installed AppImage
+        run: xvfb-run -a dbus-run-session -- python3 scripts/release/smoke_update.py --package "$RUNNER_TEMP"/release/*.AppImage
       - uses: actions/upload-artifact@v7
         with:
           name: release-linux-${{ matrix.arch }}

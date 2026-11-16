@@ -20,6 +20,7 @@ mod settings;
 mod smoke;
 mod tools;
 mod transcript;
+mod updates;
 mod worktrees;
 
 fn runtime(size: (f32, f32)) -> Runtime<Workspace> {

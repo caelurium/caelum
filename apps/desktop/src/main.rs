@@ -23,6 +23,7 @@ mod shells;
 mod state;
 mod theme;
 mod ui;
+mod updates;
 mod worktree;
 
 #[cfg(test)]

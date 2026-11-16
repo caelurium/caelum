@@ -2,6 +2,43 @@ use super::*;
 use serde_json::json;
 use std::{io::Write, net::TcpListener, thread};
 
+pub(super) struct Directory(pub std::path::PathBuf);
+impl Directory {
+    pub fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "caelum-update-test-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path.canonicalize().unwrap())
+    }
+}
+impl Drop for Directory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+pub(super) fn available() -> UpdateCheck {
+    let extension = if cfg!(target_os = "macos") {
+        "dmg"
+    } else {
+        "AppImage"
+    };
+    UpdateCheck {
+        current_version: "1.0.0".into(),
+        latest_version: "1.2.0".into(),
+        status: UpdateStatus::Available,
+        release_url: format!("{RELEASES_URL}/tag/v1.2.0"),
+        download_url: Some(format!(
+            "{RELEASES_URL}/download/v1.2.0/Caelum-v1.2.0-{}.{extension}",
+            std::env::consts::ARCH
+        )),
+    }
+}
+
 fn release(tag: &str) -> Value {
     json!({ "tag_name": tag, "draft": false, "prerelease": false, "assets": [] })
 }
