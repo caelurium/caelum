@@ -161,13 +161,6 @@ impl Workspace {
                         self.notices.insert(scope, error);
                     }
                     Pending::Shells(index, _) => self.sessions[index].error = Some(error),
-                    Pending::Archive(index, true, _, _)
-                        if self.sessions[index].scope.provider == Provider::OpenCode
-                            && error
-                                .contains("OpenCode session does not belong to this project") =>
-                    {
-                        self.forget_stale_opencode_session(index);
-                    }
                     Pending::Archive(index, archived, _, _) => {
                         self.sessions[index].archiving = false;
                         self.sessions[index].error = Some(error);
@@ -562,6 +555,9 @@ impl Workspace {
             }
             (Pending::Resume(index, revision), Reply::Resumed(summary, page)) => {
                 self.complete_resume(request, index, revision, summary, Some(page));
+            }
+            (Pending::Resume(index, _), Reply::SessionMoved { from, project }) => {
+                self.relocate_session(request, index, from, project);
             }
             (Pending::History(index, revision, older), Reply::History(page)) => {
                 self.complete_history(index, revision, older, page);

@@ -1,4 +1,4 @@
-use super::{Pending, Session, Workspace};
+use super::{Pending, Workspace};
 use crate::application::Command;
 
 impl Workspace {
@@ -193,36 +193,6 @@ impl Workspace {
                     self.select(index);
                 }
             }
-        }
-    }
-
-    pub(super) fn forget_stale_opencode_session(&mut self, index: usize) {
-        let selected = self.selected == Some(index);
-        let (scope, options, draft, attachments) = {
-            let session = &mut self.sessions[index];
-            session.forgotten = true;
-            session.archiving = false;
-            session.error = None;
-            (
-                session.scope.clone(),
-                session.options.clone(),
-                std::mem::take(&mut session.draft),
-                std::mem::take(&mut session.attachments),
-            )
-        };
-        self.remembered.retain(|_, remembered| *remembered != index);
-        let message = "This OpenCode session no longer belongs to this project. It was removed from Caelum, but was not archived in OpenCode.";
-        if selected {
-            let mut replacement_session = Session::new(scope);
-            replacement_session.options = options;
-            replacement_session.draft = draft;
-            replacement_session.attachments = attachments;
-            replacement_session.error = Some(message.into());
-            let replacement = self.sessions.len();
-            self.sessions.push(replacement_session);
-            self.select(replacement);
-        } else {
-            self.error = Some(message.into());
         }
     }
 }
