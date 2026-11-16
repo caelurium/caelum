@@ -77,6 +77,7 @@ printf 'cold\t%s\n' "$3" >> "$CAELUM_SMOKE_TRACE"
 exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
   --env "HOME=$CAELUM_SMOKE_HOME" --env "CAELUM_STATE=$CAELUM_SMOKE_STATE" \
   --env "CAELUM_SMOKE_CALLBACK_TRACE=$CAELUM_SMOKE_CALLBACK_TRACE" \
+  --env "CAELUM_LATENCY_TRACE=$CAELUM_SMOKE_HOME/latency-$$.jsonl" \
   --env "XDG_STATE_HOME=$CAELUM_SMOKE_HOME/state" --env "PATH=$PATH" \
   --stdout "$CAELUM_SMOKE_LOG" --stderr "$CAELUM_SMOKE_LOG" "$3"
 ''')
@@ -113,6 +114,9 @@ exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
                 "launch_trace": launch_trace.read_text() if launch_trace.exists() else "",
                 "callback_trace": callback_trace.read_text() if callback_trace.exists() else "",
                 "app_log": log.read_text() if log.exists() else "",
+                "requests": [json.loads(line) for trace in home.glob("latency-*.jsonl")
+                             for line in trace.read_text().splitlines()
+                             if '"kind":"request"' in line][-100:],
             }
             raise RuntimeError(f"{error}; diagnostics={json.dumps(diagnostics, ensure_ascii=False)}") from error
         assert [s["draft"] for s in snapshot["sessions"]] == [s["draft"] for s in sessions]

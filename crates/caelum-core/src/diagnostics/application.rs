@@ -33,6 +33,7 @@ pub(crate) fn command(phase: &'static str, id: u64, command: &Command) {
         Command::Start(..) => ("start", None),
         Command::Save(..) => ("save", None),
         Command::Load(..) => ("load", None),
+        Command::Open(..) => ("open", None),
         Command::List(_) => ("list", None),
         Command::ListArchived(_) => ("archived", None),
         Command::Choices(_) => ("choices", None),

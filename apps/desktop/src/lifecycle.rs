@@ -68,6 +68,7 @@ pub fn open_url(s: &mut Workspace, url: &str, _: &mut Tx) {
     // that never reached the app from one whose project-open request stalled.
     if let Some(path) = std::env::var_os("CAELUM_SMOKE_CALLBACK_TRACE") {
         use std::{fs::OpenOptions, io::Write};
+        eprintln!("URL callback: {url}");
         if let Ok(mut trace) = OpenOptions::new().create(true).append(true).open(path) {
             let _ = writeln!(trace, "received");
         }
@@ -83,6 +84,9 @@ pub fn open_url(s: &mut Workspace, url: &str, _: &mut Tx) {
     let live = live::live_mut(s);
     match caelum_core::desktop::project_from_url(url) {
         Ok(path) => {
+            if std::env::var_os("CAELUM_SMOKE_CALLBACK_TRACE").is_some() {
+                eprintln!("Opening project {path:?}; selected={:?}", live.app.selected);
+            }
             live.panels.screen = panels::Screen::Conversation;
             live.panels.overlay = None;
             live.app.open_project(path.to_string_lossy().into_owned());
