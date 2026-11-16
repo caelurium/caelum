@@ -5,14 +5,27 @@ use reqwest::{blocking::Client, StatusCode};
 use semver::Version;
 use serde_json::Value;
 
+mod download;
+mod installation;
+mod state;
+mod worker;
+
+pub use installation::Installed;
+pub use state::Phase;
+pub use state::Progress;
+pub use state::Retry;
+pub use state::State;
+pub(crate) use worker::Backend;
+pub use worker::Job;
+pub use worker::Reply;
+
 pub const REPOSITORY_URL: &str = "https://github.com/caelurium/caelum";
 pub const RELEASES_URL: &str = "https://github.com/caelurium/caelum/releases";
 pub const LICENSE_URL: &str = "https://github.com/caelurium/caelum/blob/main/LICENSE";
 const LATEST_RELEASE_API: &str = "https://api.github.com/repos/caelurium/caelum/releases/latest";
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
-/// Manual, unauthenticated release discovery. Downloads open in the user's
-/// browser; this command neither installs updates nor starts a background poll.
+/// Manual, unauthenticated release discovery; does not start background polling.
 pub fn check_for_updates(current_version: &str) -> Result<UpdateCheck, String> {
     let client = Client::builder()
         .user_agent(concat!("Caelum/", env!("CARGO_PKG_VERSION")))

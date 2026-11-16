@@ -23,8 +23,9 @@ Use `aarch64` on ARM64. `--install` copies the app to
 `${XDG_DATA_HOME:-$HOME/.local/share}/caelum/Caelum.AppImage`, installs its icon and
 application-menu entry, and registers `caelum://` project links for your user.
 It requires `xdg-mime` (the `xdg-utils` package) and `update-desktop-database`
-(`desktop-file-utils`). Re-run it with a newer download to update atomically.
-The Settings update check opens the matching download in your browser.
+(`desktop-file-utils`). Launch the installed app, then use **Settings → About →
+Check for updates** to download, verify, install and restart in-app. You can also
+re-run `--install` with a newer download. See [updates and recovery](updates.md).
 
 The AppImage can also launch directly. If FUSE is unavailable, use:
 
@@ -76,3 +77,7 @@ Evidence artifacts include light/dark Home and Settings captures, native frame
 traces and logs. The X11 smoke exercises cold/warm project links, clipboard paste,
 the real portal folder picker, draft restoration, window close and installed
 desktop-entry relaunch. Hardware-driver behaviour still depends on the host GPU.
+
+The update smoke check also downloads a real AppImage from a local server, verifies
+its checksum, atomically replaces an isolated installation, relaunches the native
+app and checks startup acknowledgment, drafts, attachments and queued prompts.

@@ -12,6 +12,8 @@ An AI coding workspace for Apple Silicon Macs and Linux, with a native Rune desk
 
 [Download a release](https://github.com/caelurium/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
 
+Installed macOS apps and Linux AppImages can [download and install updates](docs/updates.md) from **Settings → About**.
+
 For Linux AppImage installation and runtime requirements, see the [Linux guide](docs/linux.md).
 
 For local development, install Rust 1.95.0 and the [platform prerequisites](docs/development.md), then run:

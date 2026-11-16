@@ -79,6 +79,8 @@ pub(crate) fn run() {
         None
     };
     let notifications = notifications::State::connect(handle.clone(), production);
+    let restart = crate::updates::RestartSlot::default();
+    let restart_slot = restart.clone();
     app.init(move || {
         let mut state = if let Some(scenario) = latency_workload {
             latency::workspace(scenario)
@@ -93,6 +95,7 @@ pub(crate) fn run() {
         };
         if let Some(live) = &mut state.live {
             live.notifications = notifications;
+            live.updates.restart = restart_slot;
         }
         state.handle = Some(handle);
         state
@@ -100,6 +103,9 @@ pub(crate) fn run() {
     .args(args)
     .chrome(super::chrome())
     .run();
+    #[cfg(target_os = "linux")]
+    drop(_instance);
+    crate::updates::relaunch(restart);
 }
 
 fn project_argument(value: &str) -> Result<String, String> {

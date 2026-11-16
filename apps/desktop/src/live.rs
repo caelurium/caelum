@@ -39,6 +39,7 @@ pub struct Live {
     pub models: crate::models::Picker,
     pub notifications: crate::notifications::State,
     pub media: crate::media::State,
+    pub updates: crate::updates::Lifecycle,
     pub app: Application,
     pub drafts: Vec<TextEdit>,
     pub panels: crate::panels::Panels,
@@ -105,6 +106,7 @@ impl Live {
             models: Default::default(),
             notifications: Default::default(),
             media: Default::default(),
+            updates: Default::default(),
             app,
             drafts: Vec::new(),
             panels: Default::default(),
@@ -620,6 +622,7 @@ impl Live {
         {
             tx.wake_after(std::time::Duration::from_secs(1));
         }
+        changed |= crate::updates::poll(self, tx);
         changed
     }
 
@@ -639,6 +642,7 @@ impl Drop for Live {
         }
         drop(self.runtime.take());
         if let Err(error) = self.app.flush() {
+            self.updates.abort_restart();
             eprintln!("{error}");
         }
     }
@@ -708,6 +712,7 @@ pub fn presented_focus(rt: &rune::Runtime<Workspace>) -> Option<Option<String>> 
 
 pub fn frame_drawn(rt: &rune::Runtime<Workspace>) {
     crate::latency::drawn(rt);
+    crate::updates::drawn(rt);
     if let Some(focused) = presented_focus(rt)
         && let Some(handle) = &rt.state.handle
     {

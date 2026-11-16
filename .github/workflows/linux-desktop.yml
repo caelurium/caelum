@@ -113,6 +113,8 @@ jobs:
       - name: Smoke-test AppImage on Wayland
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: dbus-run-session -- python3 scripts/release/smoke_linux_app.py --image "$RUNNER_TEMP"/release/*.AppImage --backend wayland --output "$RUNNER_TEMP/linux-smoke/wayland"
+      - name: Smoke-test AppImage update and relaunch
+        run: xvfb-run -a dbus-run-session -- python3 scripts/release/smoke_update.py --package "$RUNNER_TEMP"/release/*.AppImage
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v7
         with:
