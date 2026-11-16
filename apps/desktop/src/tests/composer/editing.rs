@@ -15,6 +15,10 @@ fn composer_typing_during_streaming_preserves_transcript_reading_position() {
         session.conversation.working = true;
     });
     fill(&mut rt, "live-draft-0", "My next prompt");
+    // Land the initial history before scrolling away from the bottom.
+    // Streaming and typing below still use normal animated frames.
+    rt.settle_all();
+    rt.frame(1.0 / 60.0);
     let (x, y) = rt.find("live-transcript-0").unwrap();
     rt.wheel(x, y, 240.0);
     advance(&mut rt, 0.2);
