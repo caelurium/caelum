@@ -81,7 +81,7 @@ fn capture_child() {
     let capture = diagnostics::Capture::start(&path).unwrap();
     assert!(diagnostics::Capture::start(&path).is_err());
     let spec = crate::spec();
-    let mut state = workspace(false);
+    let mut state = workspace(Scenario::Small);
     state
         .live
         .as_mut()
