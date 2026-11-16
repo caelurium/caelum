@@ -1,6 +1,6 @@
 use super::live;
 use crate::{Workspace, quiet_button, ui};
-use caelum_core::application::presentation::{self, ActivityKind};
+use caelum_core::application::presentation::ActivityKind;
 use rune::{El, col, icon, row, text};
 use rune_kit::{Kit, glyphs};
 
@@ -32,11 +32,14 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             && p.provider == session.scope.provider.as_str()
             && Some(&p.session_id) == session.remote_id.as_ref()
     });
-    let waiting = !session.shells.is_empty()
-        && !session.archiving
+    let activity = crate::activity::session_activity(s, index);
+    let waiting = !session.archiving
         && !session.deleting
-        && presentation::activity(session, pending)
+        && activity
+            .as_ref()
             .is_some_and(|activity| activity.kind == ActivityKind::Background);
+    let subagents =
+        waiting && caelum_core::application::subagents::running(&session.conversation.entries) > 0;
     let status = if pending {
         "Needs input"
     } else if session.archiving {
@@ -46,7 +49,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     } else if session.stopping {
         "Stopping…"
     } else if waiting {
-        "Waiting for background commands"
+        activity.as_ref().unwrap().label.as_str()
     } else if session.working() {
         "Working…"
     } else if error.is_some() {
@@ -86,12 +89,16 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             .as_ref()
             .is_some_and(|key| key.ends_with(&format!("session-actions-{index}")));
     let detail = if waiting {
-        text("Waiting on commands")
-            .key(format!("session-waiting-{index}"))
-            .role("status")
-            .label(status)
-            .help(status)
-            .color(k.c.warning.fg)
+        text(if subagents {
+            status
+        } else {
+            "Waiting on commands"
+        })
+        .key(format!("session-waiting-{index}"))
+        .role("status")
+        .label(status)
+        .help(status)
+        .color(k.c.warning.fg)
     } else {
         text(&branch).color(k.c.text_muted)
     };

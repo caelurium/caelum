@@ -21,6 +21,7 @@ mod select;
 mod settings;
 mod shells;
 mod state;
+mod subagents;
 mod theme;
 mod ui;
 mod updates;

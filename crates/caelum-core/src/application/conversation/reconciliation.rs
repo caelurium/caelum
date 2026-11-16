@@ -44,6 +44,7 @@ pub(super) fn merge(conversation: &mut Conversation, history: Vec<Entry>, older:
     }
     before.extend(after);
     conversation.entries = before;
+    super::subagents::reconcile(&mut conversation.entries);
 }
 
 fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {

@@ -33,6 +33,16 @@ Tool-launched background completions arrive as synthetic messages tagged
 command results with output, Copy, and exit status. An open output reader switches
 to the final transcript output when the running command's cache is retired.
 
+Subagent calls appear as named task cards with their agent, task description,
+running/completed/failed state, and expandable, copyable prompts and results.
+Background launch acknowledgements remain running until the provider's tagged
+completion report arrives. Live reports and restored history finish the original
+task without duplicating its output; older reports cannot finish a newer follow-up.
+The composer and sidebar indicate outstanding subagents while the parent waits.
+**Open session** resumes the child in its captured checkout, preserving the parent
+draft; the child offers **Back to parent session**. Child history is loaded on
+demand through the normal scoped resume path.
+
 ## Setup
 
 1. Install OpenCode and make `opencode` available on `PATH`. Finder launches also discover common Homebrew, Nix, user-local and Node-manager installations, including their runtime PATH.

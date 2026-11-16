@@ -11,6 +11,7 @@ mod queue;
 mod relocation;
 mod review;
 mod sessions;
+mod subagents;
 mod submission;
 mod tasks;
 mod titles;

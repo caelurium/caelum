@@ -18,6 +18,7 @@ mod session_feed;
 mod sessions;
 mod settings;
 mod smoke;
+mod subagents;
 mod tools;
 mod transcript;
 #[cfg(target_os = "macos")]

@@ -12,6 +12,7 @@ mod persistence;
 pub mod presentation;
 mod runtime;
 mod services;
+pub mod subagents;
 mod workspace;
 
 pub(crate) use composer::provider_prompt;
