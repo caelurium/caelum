@@ -20,6 +20,9 @@ mod settings;
 mod smoke;
 mod tools;
 mod transcript;
+#[cfg(target_os = "macos")]
+mod typography;
+mod updates;
 mod worktrees;
 
 fn runtime(size: (f32, f32)) -> Runtime<Workspace> {

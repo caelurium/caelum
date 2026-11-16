@@ -47,7 +47,7 @@ def main():
         parser.error("the native desktop requires macOS")
     root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["cargo", "build", "--locked", "-p", "caelum-desktop", "--message-format=json-render-diagnostics"],
+        ["cargo", "build", "--locked", "--timings", "-p", "caelum-desktop", "--message-format=json-render-diagnostics"],
         cwd=root, text=True, stdout=subprocess.PIPE, check=True,
     )
     artifacts = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]

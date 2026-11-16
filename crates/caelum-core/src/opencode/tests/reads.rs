@@ -301,3 +301,178 @@ fn busy_checks_still_use_fresh_activity_and_fail_closed() {
         ]
     );
 }
+
+fn resume_reply(service: &Service, path: &Path) -> Result<Reply, String> {
+    let mut providers = ProviderRuntime::default();
+    providers.opencode = service.provider.clone();
+    let (wake, wakes) = mpsc::channel();
+    let mut runtime = Runtime::with_providers(providers, move || {
+        let _ = wake.send(());
+    });
+    runtime
+        .submit(
+            1,
+            AppCommand::Resume(SessionKey {
+                scope: Scope {
+                    provider: Provider::OpenCode,
+                    project: path.to_string_lossy().into_owned(),
+                },
+                id: "ses_read".into(),
+            }),
+        )
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(reply) = runtime.drain().into_iter().find_map(|event| match event {
+            Event::Completed(1, reply) => Some(reply),
+            _ => None,
+        }) {
+            let requests = service.requests();
+            assert!(requests.iter().all(|request| request.starts_with("GET ")));
+            assert!(!requests.iter().any(|request| request.ends_with("/message")));
+            return reply;
+        }
+        wakes
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .unwrap();
+    }
+}
+
+fn git(path: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn repository(path: &Path) {
+    git(path, &["init", "--quiet"]);
+    fs::create_dir(path.join("src")).unwrap();
+    fs::write(path.join("src/example.txt"), "fixture\n").unwrap();
+    git(path, &["add", "src/example.txt"]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+    );
+}
+
+#[test]
+fn resume_locates_a_moved_session_only_in_a_verified_linked_checkout() {
+    let service = Service::new();
+    repository(service.path());
+    let destination = TestDirectory::new();
+    git(
+        service.path(),
+        &[
+            "worktree",
+            "add",
+            "--detach",
+            destination.0.to_str().unwrap(),
+        ],
+    );
+    service.configure(json!({"directory": destination.0}));
+    // Mutations and ordinary history still reject the stale checkout.
+    assert!(matches!(
+        service.provider.cancel_turn(service.path(), "ses_read"),
+        Err(OpenCodeError::SessionNotInProject)
+    ));
+    assert!(matches!(
+        service
+            .provider
+            .session_history(service.path(), "ses_read", None),
+        Err(OpenCodeError::SessionNotInProject)
+    ));
+    service.requests();
+    let Reply::SessionMoved { from, project } = resume_reply(&service, service.path()).unwrap()
+    else {
+        panic!("expected a verified relocation, not history under the old checkout")
+    };
+    assert_eq!(from.id, "ses_read");
+    assert_eq!(from.scope.project, service.path().to_string_lossy());
+    assert_eq!(
+        Path::new(&project.path),
+        destination.0.canonicalize().unwrap()
+    );
+}
+
+#[test]
+fn relocation_rejects_unrelated_repositories_wrong_ids_and_missing_locations() {
+    for wrong in ["unrelated", "id", "missing"] {
+        let service = Service::new();
+        repository(service.path());
+        let destination = TestDirectory::new();
+        if wrong == "unrelated" {
+            repository(&destination.0);
+        } else {
+            git(
+                service.path(),
+                &[
+                    "worktree",
+                    "add",
+                    "--detach",
+                    destination.0.to_str().unwrap(),
+                ],
+            );
+        }
+        service.configure(json!({"directory": destination.0}));
+        if wrong == "id" {
+            service.configure(json!({"id":"ses_other"}));
+        }
+        if wrong == "missing" {
+            service.configure(json!({"directory":null}));
+        }
+        assert!(resume_reply(&service, service.path()).is_err(), "{wrong}");
+    }
+}
+
+#[test]
+fn relocation_keeps_repository_subdirectory_scopes() {
+    for same_subpath in [true, false] {
+        let service = Service::new();
+        repository(service.path());
+        let destination = TestDirectory::new();
+        git(
+            service.path(),
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                destination.0.to_str().unwrap(),
+            ],
+        );
+        let source = service.path().join("src");
+        // Install the same fake connection for the scoped source directory.
+        let slot = Arc::new(ServerSlot::default());
+        slot.connect(&service.provider.inner.processes, |_| {
+            Ok(service.server.clone())
+        })
+        .unwrap();
+        service
+            .provider
+            .inner
+            .lock_servers()
+            .insert(source.canonicalize().unwrap(), slot);
+        service.configure(json!({"directory": if same_subpath { destination.0.join("src") } else { destination.0.clone() }}));
+        let result = resume_reply(&service, &source);
+        assert_eq!(
+            matches!(result, Ok(Reply::SessionMoved { .. })),
+            same_subpath
+        );
+    }
+}

@@ -5,14 +5,27 @@ use reqwest::{blocking::Client, StatusCode};
 use semver::Version;
 use serde_json::Value;
 
-pub const REPOSITORY_URL: &str = "https://github.com/ch55secake/caelum";
-pub const RELEASES_URL: &str = "https://github.com/ch55secake/caelum/releases";
-pub const LICENSE_URL: &str = "https://github.com/ch55secake/caelum/blob/main/LICENSE";
-const LATEST_RELEASE_API: &str = "https://api.github.com/repos/ch55secake/caelum/releases/latest";
+mod download;
+mod installation;
+mod state;
+mod worker;
+
+pub use installation::Installed;
+pub use state::Phase;
+pub use state::Progress;
+pub use state::Retry;
+pub use state::State;
+pub(crate) use worker::Backend;
+pub use worker::Job;
+pub use worker::Reply;
+
+pub const REPOSITORY_URL: &str = "https://github.com/caelurium/caelum";
+pub const RELEASES_URL: &str = "https://github.com/caelurium/caelum/releases";
+pub const LICENSE_URL: &str = "https://github.com/caelurium/caelum/blob/main/LICENSE";
+const LATEST_RELEASE_API: &str = "https://api.github.com/repos/caelurium/caelum/releases/latest";
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
-/// Manual, unauthenticated release discovery. Downloads open in the user's
-/// browser; this command neither installs updates nor starts a background poll.
+/// Manual, unauthenticated release discovery; does not start background polling.
 pub fn check_for_updates(current_version: &str) -> Result<UpdateCheck, String> {
     let client = Client::builder()
         .user_agent(concat!("Caelum/", env!("CARGO_PKG_VERSION")))
@@ -86,9 +99,14 @@ fn compare_release(
         Ordering::Equal => UpdateStatus::UpToDate,
         Ordering::Greater => UpdateStatus::Ahead,
     };
-    let download_url = (platform == "macos" && matches!(architecture, "aarch64" | "x86_64"))
+    let extension = match platform {
+        "macos" => Some("dmg"),
+        "linux" => Some("AppImage"),
+        _ => None,
+    };
+    let download_url = (extension.is_some() && matches!(architecture, "aarch64" | "x86_64"))
         .then(|| {
-            let name = format!("Caelum-v{latest}-{architecture}.dmg");
+            let name = format!("Caelum-v{latest}-{architecture}.{}", extension?);
             let url = format!("{RELEASES_URL}/download/{tag}/{name}");
             release["assets"].as_array()?.iter().find(|asset| {
                 asset["name"] == name

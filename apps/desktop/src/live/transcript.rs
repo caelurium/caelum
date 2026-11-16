@@ -129,7 +129,6 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                         .iter()
                         .filter_map(|i| entries.get(*i).map(|e| (index, e.id.clone())))
                         .collect();
-                    let changed = next != l.visible_entries;
                     l.visible_entries = next;
                     if let Some(first) = positions.first().filter(|i| **i < entries.len()) {
                         l.current_prompt = entries[..=*first]
@@ -141,8 +140,10 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                             })
                             .map(|e| e.id.clone());
                     }
-                    crate::media::request(s, index, &positions);
-                    changed
+                    // Visibility and the current prompt are bookkeeping, not
+                    // view inputs. Patch changes redraw from the scheduled poll;
+                    // only newly queued images change the view here (busy state).
+                    crate::media::request(s, index, &positions)
                 }),
         )
 }

@@ -98,7 +98,7 @@ fn merge_checks_methods_and_mutations_retain_the_review_owner() {
             .unwrap();
         let original = (
             "/projects/caelum".to_string(),
-            "https://github.com/ch55secake/caelum/pull/95".to_string(),
+            "https://github.com/caelurium/caelum/pull/95".to_string(),
         );
         match command {
             Command::Task(Task::UpdateBranch { project, url, head }) if update => {

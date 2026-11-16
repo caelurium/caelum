@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn stale_opencode_archive_error_forgets_the_session_locally() {
+fn stale_opencode_archive_error_preserves_the_session_for_reconnection() {
     let mut app = Workspace::default();
     let project = "/project";
     let index = app.new_session(scope(Provider::OpenCode, project));
@@ -20,23 +20,24 @@ fn stale_opencode_archive_error_forgets_the_session_locally() {
         Err("OpenCode session does not belong to this project".into()),
     ));
 
-    assert!(app.sessions[index].forgotten);
+    assert!(!app.sessions[index].forgotten);
+    assert!(!app.sessions[index].archived);
     assert!(!app.sessions[index].archiving);
     assert_eq!(app.last_archived, None, "there is no provider Undo action");
     let selected = app.selected.unwrap();
-    assert_ne!(selected, index);
+    assert_eq!(selected, index);
     assert_eq!(app.sessions[selected].draft, "Keep this draft");
     assert_eq!(app.sessions[selected].attachments[0].content, "snapshot");
     assert!(app.sessions[selected]
         .error
         .as_deref()
-        .is_some_and(|error| error.contains("not archived in OpenCode")));
+        .is_some_and(|error| error.contains("does not belong to this project")));
 
     let snapshot = app.snapshot();
     assert_eq!(snapshot.sessions.len(), 1);
     assert_eq!(snapshot.selected, Some(0));
     assert_eq!(snapshot.sessions[0].draft, "Keep this draft");
-    assert_eq!(snapshot.sessions[0].remote_id, None);
+    assert_eq!(snapshot.sessions[0].remote_id.as_deref(), Some("ses_stale"));
 }
 
 #[test]

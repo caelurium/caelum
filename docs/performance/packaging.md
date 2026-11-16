@@ -8,8 +8,9 @@ reuse or skip-build flag. The desktop-only helper remains available for `make ap
 
 Packaging still checks app metadata, architecture, ad-hoc signatures, allowed
 dynamic libraries, extracted CLI version/help, mounted DMG contents and packaged
-cold/warm URL handling, hidden-window reopening, draft restoration and quit.
-The release workflow uses this same path on native ARM and Intel hosts.
+cold/warm URL handling, hidden-window reopening, draft restoration, quit and
+updater installation/rollback. The release workflow uses this same path on
+native Apple Silicon hosts and retains Cargo build timing reports.
 
 ## Measurement method
 
@@ -25,8 +26,8 @@ script. Include the complete packaging/verification pipeline in elapsed time;
 record Cargo durations separately from signing, DMG creation and smoke checks.
 Retain logs and timing JSON in ignored `apps/desktop/profile-results/`. Stop other
 builds and tests during measurement. Inspect compilation logs to confirm that
-only workspace crates were rebuilt in the matched runs. Native Intel timings
-must be measured on an Intel host rather than inferred from ARM.
+only workspace crates were rebuilt in the matched runs. macOS release packaging
+supports only Apple Silicon; Linux uses its separate asset pipeline.
 
 ## Local result, 15 November 2026
 

@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from publish_release import (
-    asset_names, installation_notes, parse_checksums, prepare_assets, publish,
-    release_for_tag, verify_remote_assets,
+    asset_names, installation_notes, main, parse_checksums, prepare_assets, publish,
+    release_for_tag, release_has_intel, release_has_linux, verify_remote_assets,
 )
 
 
@@ -112,8 +112,8 @@ class PublishingTests(unittest.TestCase):
         self.assertTrue(self.github.release["draft"])
 
     def test_wrong_or_missing_architecture_assets_do_not_create_a_release(self):
-        (self.directory / f"Caelum-{self.tag}-x86_64.dmg").unlink()
-        with self.assertRaisesRegex(SystemExit, "exactly two"):
+        (self.directory / f"Caelum-{self.tag}-aarch64.dmg").unlink()
+        with self.assertRaisesRegex(SystemExit, "complete release asset set"):
             self.publish()
         self.assertIsNone(self.github.release)
 
@@ -124,7 +124,58 @@ class PublishingTests(unittest.TestCase):
             asset.pop("digest")
         self.github.calls.clear()
         verify_remote_assets("example/caelum", self.tag, snapshot)
-        self.assertEqual(len(self.github.calls), 5)
+        self.assertEqual(len(self.github.calls), len(asset_names(self.tag)) + 1)
+
+    def test_missing_linux_architecture_blocks_publication(self):
+        (self.directory / f"Caelum-{self.tag}-aarch64.AppImage").unlink()
+        with self.assertRaisesRegex(SystemExit, "complete release asset set"):
+            self.publish()
+        self.assertIsNone(self.github.release)
+
+    def test_apple_silicon_macos_only_releases_recover_without_adding_assets(self):
+        for path in self.directory.glob("*.AppImage"):
+            path.unlink()
+        publish("example/caelum", self.tag, self.directory, linux=False)
+        original = dict(self.github.files)
+        self.github.calls.clear()
+        publish("example/caelum", self.tag, self.directory / "absent", linux=False)
+        self.assertEqual(self.github.files, original)
+        self.assertTrue(all(call[:2] == ("release", "download") for call in self.github.calls))
+        with self.assertRaisesRegex(SystemExit, "missing"):
+            self.publish()
+
+    def test_published_intel_releases_keep_their_original_assets_and_checksums(self):
+        self.github.release = {"id": 17, "draft": False}
+        self.github.files = {name: name.encode() for name in asset_names(self.tag, linux=False, intel=True)}
+        self.github.files["SHA256SUMS"] = "".join(
+            f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+            for name, data in sorted(self.github.files.items())
+        ).encode()
+        original = dict(self.github.files)
+        publish("example/caelum", self.tag, self.directory / "absent", linux=False, intel=True)
+        self.assertEqual(self.github.files, original)
+        self.assertTrue(all(call[:2] == ("release", "download") for call in self.github.calls))
+        del self.github.files[f"Caelum-{self.tag}-x86_64.dmg"]
+        with self.assertRaisesRegex(SystemExit, "missing"):
+            publish("example/caelum", self.tag, self.directory / "absent", linux=False, intel=True)
+
+    def test_retired_unpublished_tags_stop_before_building_or_publishing(self):
+        with self.assertRaisesRegex(SystemExit, "Intel macOS releases are retired"):
+            publish("example/caelum", self.tag, self.directory, intel=True)
+        with patch("publish_release.release_has_intel", return_value=True), \
+                patch("publish_release.release_has_linux", return_value=False), \
+                patch("sys.argv", ["publish_release.py", "--check"]), \
+                patch.dict("os.environ", {"RELEASE_TAG": self.tag, "GITHUB_REPOSITORY": "example/caelum"}):
+            with self.assertRaisesRegex(SystemExit, "Intel macOS releases are retired"):
+                main()
+        self.assertIsNone(self.github.release)
+        self.assertEqual(self.github.calls, [])
+
+    def test_new_releases_reject_unexpected_intel_assets(self):
+        (self.directory / f"Caelum-{self.tag}-x86_64.dmg").write_text("retired architecture")
+        with self.assertRaisesRegex(SystemExit, "complete release asset set"):
+            self.publish()
+        self.assertIsNone(self.github.release)
 
     def test_prereleases_do_not_become_latest(self):
         previous = self.tag
@@ -139,6 +190,36 @@ class PublishingTests(unittest.TestCase):
 
 
 class AssetTests(unittest.TestCase):
+    def test_macos_architectures_come_from_the_tag_not_the_current_checkout(self):
+        with patch("publish_release.subprocess.check_output", return_value=""):
+            self.assertTrue(release_has_intel("v0.1.84"))
+        with patch("publish_release.subprocess.check_output", side_effect=[
+            "scripts/release/macos-architectures.json\n", '["aarch64"]',
+        ]) as git:
+            self.assertFalse(release_has_intel("v1.2.3"))
+            self.assertIn("v1.2.3:scripts/release/macos-architectures.json", git.call_args.args[0])
+        with patch("publish_release.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, ["git"])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                release_has_intel("v9.9.9")
+        with patch("publish_release.subprocess.check_output", side_effect=["manifest", '["unexpected"]']):
+            with self.assertRaisesRegex(SystemExit, "Unknown macOS release architectures"):
+                release_has_intel("v1.2.3")
+
+    def test_release_layout_comes_from_the_tag_not_the_current_checkout(self):
+        with patch("publish_release.subprocess.check_output", return_value=""):
+            self.assertFalse(release_has_linux("v0.1.84"))
+        with patch("publish_release.subprocess.check_output", side_effect=[
+            "scripts/release/asset-layout.json\n", '{"version": 1, "linux_desktop": true}',
+        ]) as git:
+            self.assertTrue(release_has_linux("v1.2.3"))
+            self.assertIn("v1.2.3:scripts/release/asset-layout.json", git.call_args.args[0])
+        with patch("publish_release.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, ["git"])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                release_has_linux("v9.9.9")
+        with patch("publish_release.subprocess.check_output", side_effect=["manifest", '{"version": 2}']):
+            with self.assertRaisesRegex(SystemExit, "Unknown release asset layout"):
+                release_has_linux("v1.2.3")
+
     def test_checksums_are_repeatable_and_do_not_include_the_manifest_itself(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
@@ -180,6 +261,11 @@ class AssetTests(unittest.TestCase):
         self.assertIn("ad-hoc signed and not notarized", notes)
         self.assertIn("Open Anyway", notes)
         self.assertIn("SHA256SUMS", notes)
+        self.assertIn("--install", notes)
+        self.assertIn("glibc 2.35", notes)
+        self.assertNotIn("AppImage", installation_notes("example/caelum", "v0.1.84", linux=False))
+        self.assertNotIn("x86_64.dmg", notes)
+        self.assertNotIn("x86_64-apple-darwin", notes)
 
 
 if __name__ == "__main__":
