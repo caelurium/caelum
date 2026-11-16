@@ -569,7 +569,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "caelum-cli"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "caelum-core",
  "caelum-protocol",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-core"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "base64 0.23.1",
  "caelum-protocol",
@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-desktop"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "blake3",
  "block2 0.6.2",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-protocol"
-version = "0.1.90"
+version = "0.1.92"
 dependencies = [
  "serde",
  "serde_json",
