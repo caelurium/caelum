@@ -166,7 +166,12 @@ fn merge_missing_metadata(target: &mut serde_json::Value, fallback: &serde_json:
 
 fn merge_entry(mut snapshot: Entry, mut current: Entry) -> Entry {
     snapshot.started_at = snapshot.started_at.or(current.started_at);
-    overlay_metadata(&mut snapshot.metadata, &current.metadata);
+    if snapshot.background && snapshot.complete && !current.complete {
+        // A shell's final exit/timing replaces its running metadata.
+        merge_missing_metadata(&mut snapshot.metadata, &current.metadata);
+    } else {
+        overlay_metadata(&mut snapshot.metadata, &current.metadata);
+    }
     if snapshot.complete {
         if snapshot.kind == EntryKind::Tool && snapshot.output.is_empty() {
             snapshot.output = current.output;

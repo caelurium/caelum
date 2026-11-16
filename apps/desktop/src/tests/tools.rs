@@ -1,5 +1,7 @@
 use super::*;
 
+mod shells;
+
 #[test]
 fn background_previews_are_bounded_and_output_actions_keep_their_session() {
     use caelum_core::application::{Command, Task};

@@ -262,9 +262,10 @@ impl Workspace {
                     }
                 }
             }
-            if method == "session.shell.ended" {
+            if let Some(shell) =
+                crate::application::conversation::shells::completed_id(method, data)
+            {
                 session.shell_revision += 1;
-                let shell = data["shell"]["id"].as_str().unwrap_or_default();
                 let entry_id = format!("opencode-shell-{shell}");
                 if session
                     .conversation

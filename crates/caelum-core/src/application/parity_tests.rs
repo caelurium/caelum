@@ -5,6 +5,7 @@ mod notifications;
 mod provider_errors;
 mod queue;
 mod review;
+mod shells;
 mod tools;
 mod transcript;
 mod worktrees;

@@ -28,6 +28,11 @@ refreshes every two seconds. Stop uses a control worker and retains cached outpu
 its final read fails. Completion/Stop removes live caches; late lists and reads cannot
 restore a finished command. At most 64 output tails are cached per checkout.
 
+Tool-launched background completions arrive as synthetic messages tagged
+`source: shell`. Live events and restored history render these as expandable
+command results with output, Copy, and exit status. An open output reader switches
+to the final transcript output when the running command's cache is retired.
+
 ## Setup
 
 1. Install OpenCode and make `opencode` available on `PATH`. Finder launches also discover common Homebrew, Nix, user-local and Node-manager installations, including their runtime PATH.

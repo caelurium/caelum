@@ -83,6 +83,8 @@ pub(crate) const SCENES: &[Scene] = &[
     ("merge-auto-error", |s| scene(s, "merge-auto-error")),
     ("worktree-create", |s| scene(s, "worktree-create")),
     ("shell-output", |s| scene(s, "shell-output")),
+    ("shell-completed", |s| completed_shell(s, false)),
+    ("shell-output-completed", |s| completed_shell(s, true)),
     ("shells-many", |s| scene(s, "shells-many")),
     ("shells-collapsed", |s| scene(s, "shells-collapsed")),
     ("vercel", |s| scene(s, "vercel")),
@@ -180,6 +182,26 @@ pub(crate) const SCENES: &[Scene] = &[
         }
     }),
 ];
+
+fn completed_shell(state: &mut Workspace, output: bool) {
+    use caelum_core::application::Event;
+    use serde_json::json;
+
+    scene(state, if output { "shell-output" } else { "shells" });
+    let l = state.live.as_mut().unwrap();
+    l.apply(Event::OpenCode(caelum_protocol::OpenCodeEvent {
+        project_path: l.app.sessions[0].scope.project.clone(),
+        event_type: "session.synthetic".into(),
+        id: Some("evt_shell_finished".into()), created: Some(2000), location: None,
+        data: json!({
+            "sessionID": "ses_fixture", "description": "cargo test --workspace",
+            "metadata": {"source": "shell", "shellID": "shell_fixture", "state": "completed", "exit": 0},
+            "text": "<shell id=\"shell_fixture\" state=\"completed\" command=\"cargo test --workspace\">\nCompiling workspace…\nFinished test profile\ntest application::queue_recovery ... ok\ntest application::draft_café ... ok\n\ntest result: ok. 162 passed; 0 failed\n</shell>"
+        }),
+    }));
+    l.expanded
+        .insert((0, "opencode-shell-shell_fixture".into()));
+}
 
 fn provider_failure(s: &mut Workspace, rejected: bool) {
     use caelum_core::application::Provider;
