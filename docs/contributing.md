@@ -89,6 +89,10 @@ Each queue ref has its own concurrency group, so a PR update or another queued
 group cannot cancel its checks. Queue runs execute all required checks, including
 macOS packaging, without PR path filtering. Native preview captures remain a PR
 artifact; Linux tests and AppImage packaging also run on queue commits.
+The cached CodeQL workflow analyzes queue commits and retains SARIF artifacts.
+It publishes code-scanning results only for persistent PR/main refs after
+[advanced setup activation](performance/codeql.md#activation), avoiding upload
+races when GitHub deletes a completed merge-group ref.
 
 After these workflows land on `main`, a repository administrator can enable
 **Require merge queue** in the existing `main` ruleset under Settings → Rules →
