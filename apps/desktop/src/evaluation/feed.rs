@@ -164,7 +164,7 @@ pub(super) fn sidebar_projects(l: &mut Live, project: &str) {
     .map(|(i, title)| caelum_protocol::GitHubPullRequest {
         number: 101 + i as u64,
         title: (*title).into(),
-        url: format!("https://github.com/ch55secake/caelum/pull/{}", 101 + i),
+        url: format!("https://github.com/caelurium/caelum/pull/{}", 101 + i),
         is_draft: false,
         base_ref_name: "main".into(),
     })

@@ -165,7 +165,7 @@ revision. The corresponding current-Rune proposal is in
 is copied into application state.
 
 [Rune #833](https://github.com/anomalyco/rune/issues/833) requests the upstream
-API. [Caelum #167](https://github.com/ch55secake/caelum/issues/167) tracks both
+API. [Caelum #167](https://github.com/caelurium/caelum/issues/167) tracks both
 keeping the temporary fork current with relevant upstream fixes and returning
 both dependencies to an upstream revision once the API is available.
 
