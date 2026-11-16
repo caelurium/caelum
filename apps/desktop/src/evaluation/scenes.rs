@@ -5,6 +5,20 @@ use crate::{Workspace, panels};
 type Scene = (&'static str, fn(&mut Workspace));
 
 pub(crate) const SCENES: &[Scene] = &[
+    ("update-downloading", |s| {
+        crate::updates::scene(s, "downloading")
+    }),
+    ("update-verifying", |s| {
+        crate::updates::scene(s, "verifying")
+    }),
+    ("update-preparing", |s| {
+        crate::updates::scene(s, "preparing")
+    }),
+    ("update-cancelling", |s| {
+        crate::updates::scene(s, "cancelling")
+    }),
+    ("update-failed", |s| crate::updates::scene(s, "failed")),
+    ("update-success", |s| crate::updates::scene(s, "updated")),
     ("home", |s| {
         crate::home::scene(s, "home");
     }),

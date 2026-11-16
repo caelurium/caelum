@@ -253,3 +253,79 @@ fn details_preserve_enabled_disabled_and_older_auto_merge_metadata() {
         .unwrap()
         .contains("autoMergeRequest"));
 }
+
+#[test]
+fn auto_merge_pins_a_verified_transfer_before_mutating_and_confirming() {
+    let canonical = "https://git.example.com/team/renamed/pull/44";
+    for (method, name) in [
+        (Some(GitHubMergeMethod::Squash), Some("SQUASH")),
+        (None, None),
+    ] {
+        let fixture = Fixture::new();
+        fixture.script("case \"$*\" in *'GET repos/upstream/repo') cat repository.json;; *'query=mutation'*) touch mutated; cat mutation.json;; *) cat lookup.json;; esac");
+        fixture.write(
+            "repository.json",
+            json!({"html_url":"https://git.example.com/team/renamed"}),
+        );
+        let lookup = json!({"id":"PR_transferred", "url":canonical, "headRefOid":HEAD, "state":"OPEN", "isDraft":false});
+        fixture.lookup(lookup.clone());
+        let mut confirmation = confirmed(name);
+        confirmation["url"] = json!(canonical);
+        fixture.mutation(method, confirmation.clone());
+        let result = fixture.set(method).unwrap();
+        assert_eq!(result.head_ref_oid, HEAD);
+        assert_eq!(
+            result
+                .auto_merge_request
+                .map(|request| request.merge_method),
+            method
+        );
+        let arguments = fs::read_to_string(fixture.0.join("arguments")).unwrap();
+        assert_eq!(arguments.matches("repos/upstream/repo\n").count(), 1);
+        assert!(
+            arguments.find("repos/upstream/repo\n").unwrap()
+                < arguments.find("id=PR_transferred").unwrap()
+        );
+        fs::remove_file(fixture.0.join("mutated")).unwrap();
+
+        let mut stale = lookup.clone();
+        stale["headRefOid"] = json!("b".repeat(40));
+        fixture.lookup(stale);
+        assert!(fixture
+            .set(method)
+            .unwrap_err()
+            .to_string()
+            .contains("head changed"));
+        assert!(!fixture.0.join("mutated").exists());
+
+        fixture.lookup(lookup);
+        fixture.write(
+            "repository.json",
+            json!({"html_url":"https://git.example.com/upstream/repo"}),
+        );
+        assert!(fixture
+            .set(method)
+            .unwrap_err()
+            .to_string()
+            .contains("different pull request"));
+        assert!(!fixture.0.join("mutated").exists());
+
+        fixture.write(
+            "repository.json",
+            json!({"html_url":"https://git.example.com/team/renamed"}),
+        );
+        for url in [
+            URL,
+            "https://git.example.com/other/repo/pull/44",
+            "https://git.example.com/team/renamed/pull/45",
+        ] {
+            confirmation["url"] = json!(url);
+            fixture.mutation(method, confirmation.clone());
+            assert!(fixture
+                .set(method)
+                .unwrap_err()
+                .to_string()
+                .contains("did not confirm"));
+        }
+    }
+}

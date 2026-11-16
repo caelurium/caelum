@@ -78,7 +78,7 @@ fn auto_merge_uses_the_selected_method_locks_mutations_and_keeps_failures_retrya
         };
         let original = (project, url);
         assert_eq!(original.0, "/projects/caelum");
-        assert_eq!(original.1, "https://github.com/ch55secake/caelum/pull/95");
+        assert_eq!(original.1, "https://github.com/caelurium/caelum/pull/95");
         assert_eq!(head, "a".repeat(40));
         assert_eq!(method, (!enabled).then_some(GitHubMergeMethod::Rebase));
         for control in [

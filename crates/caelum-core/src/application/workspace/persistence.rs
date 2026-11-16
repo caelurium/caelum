@@ -24,6 +24,7 @@ impl Workspace {
                 || matches!(
                     request.1,
                     Command::Load(_)
+                        | Command::Task(Task::Updates | Task::Update(_))
                         | Command::Cancel(_)
                         | Command::Task(
                             Task::Shell { .. }
@@ -75,6 +76,24 @@ impl Workspace {
         if self.store_ready {
             self.persistence_error = None;
         }
+    }
+
+    pub fn restored(&self) -> bool {
+        self.store.is_none() || self.store_ready
+    }
+
+    /// Native restart waits for the exact current editor/queue snapshot.
+    pub fn saved_for_restart(&self) -> bool {
+        self.persistence_error.is_none()
+            && self.restored()
+            && !self.saving
+            && self.home.attaching == 0
+            && self.sessions.iter().all(|session| session.attaching == 0)
+            && (self.store.is_none()
+                || self
+                    .saved
+                    .as_ref()
+                    .is_some_and(|saved| self.matches_snapshot(saved)))
     }
 
     pub fn snapshot(&self) -> Snapshot {

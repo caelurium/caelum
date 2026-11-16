@@ -22,7 +22,7 @@ and TRAP-cache behaviour. No paths, source files or queries are excluded.
 ## Activation
 
 GitHub rejects advanced SARIF uploads while default setup is configured. During
-PR evaluation, leave default setup enabled: it continues to publish required
+PR evaluation, leave default setup enabled: it continues to publish
 security results, while this workflow runs the full analysis and saves its SARIF
 as artifacts. Analysis failures still fail the workflow.
 
@@ -37,9 +37,13 @@ gh workflow run codeql.yml --ref main
 ```
 
 Confirm all three languages publish successfully in code scanning before relying
-on the new workflow. Retain the existing CodeQL ruleset requirement. To roll back,
-delete `CODEQL_ADVANCED` and re-enable default setup for Actions, Python and Rust
-with the default suite. This PR does not itself change repository scan settings.
+on the new workflow. The current `main` ruleset requires the Rust, native and
+packaging checks; it has no CodeQL requirement. Keep those gates during the
+cutover. If CodeQL becomes required, use the advanced workflow's published check
+contexts and ensure it also runs on merge-group commits before enabling a queue.
+To roll back, delete `CODEQL_ADVANCED` and re-enable default setup for Actions,
+Python and Rust with the default suite. This PR does not itself change repository
+scan settings.
 
 ## Measurement
 
@@ -57,7 +61,7 @@ and run logs make failures and coverage available during the staged migration.
 
 ## Hosted result, 15 November 2026
 
-[Run 43760144672](https://github.com/ch55secake/caelum/actions/runs/43760144672)
+[Run 43760144672](https://github.com/caelurium/caelum/actions/runs/43760144672)
 analyzed `806c44c` with CodeQL 2.27.4 on standard Ubuntu. Attempt 1 had a cold
 extractor cache; attempt 2 reran the Rust job at the same revision and restored
 `v0-rust-codeql-rust-extractor-2.27.4-Linux-x64-e88ea626-cfc57aa6` as an exact hit.

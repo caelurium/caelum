@@ -330,7 +330,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                         .on_input_key(on_key),
                 )
                 .child(
-                    text("⌘K")
+                    text(ui::shortcut("⌘K"))
                         .font(k.ty.small)
                         .color(k.c.text_faint)
                         .a11y_hidden(),

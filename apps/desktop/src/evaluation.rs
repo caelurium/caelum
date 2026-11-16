@@ -253,58 +253,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         return true;
     }
     if name == "sidebar-projects" {
-        for (path, name) in [
-            ("/projects/rune", "rune"),
-            ("/projects/website", "website"),
-            ("/projects/tools", "developer-tools"),
-        ] {
-            l.app.projects.push(caelum_protocol::ProjectInfo {
-                path: path.into(),
-                name: name.into(),
-            });
-            let index = l.app.new_session(Scope {
-                project: path.into(),
-                provider: Provider::Codex,
-            });
-            l.app.sessions[index].draft = format!("Independent draft for {name}");
-            l.app.services.checkouts.entry(path.into()).or_default().git = Some(
-                serde_json::from_value(json!({
-                    "projectPath":path,"repositoryRoot":path,"branch":"main","changes":[]
-                }))
-                .unwrap(),
-            );
-        }
-        for n in 0..6 {
-            let index = l.app.new_session(Scope {
-                project: project.into(),
-                provider: Provider::Codex,
-            });
-            l.app.sessions[index].title = format!("Workspace task {}", n + 1);
-        }
-        l.app
-            .services
-            .checkouts
-            .get_mut(project)
-            .unwrap()
-            .pull_requests = [
-            "Give projects and reviews room to breathe",
-            "Restore independent session drafts",
-            "Improve native keyboard navigation",
-            "Polish the compact review workspace",
-            "Keep provider requests scoped",
-            "Refresh the desktop documentation",
-        ]
-        .iter()
-        .enumerate()
-        .map(|(i, title)| caelum_protocol::GitHubPullRequest {
-            number: 101 + i as u64,
-            title: (*title).into(),
-            url: format!("https://github.com/ch55secake/caelum/pull/{}", 101 + i),
-            is_draft: false,
-            base_ref_name: "main".into(),
-        })
-        .collect();
-        l.app.select(0);
+        feed::sidebar_projects(l, project);
         return true;
     }
     if matches!(name, "vercel" | "vercel-settings") {

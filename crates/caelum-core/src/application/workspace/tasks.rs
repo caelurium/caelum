@@ -3,6 +3,9 @@ use crate::application::{Command, Provider, Reply, Scope, Task, TaskReply};
 
 impl Workspace {
     pub fn task(&mut self, task: Task) {
+        if matches!(task, Task::Updates) && !self.services.updater.can_check() {
+            return;
+        }
         if matches!(
             task,
             Task::ReviewFiles { .. }

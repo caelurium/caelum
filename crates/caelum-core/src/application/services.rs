@@ -25,6 +25,7 @@ pub enum Task {
         bytes: Vec<u8>,
     },
     Updates,
+    Update(crate::updates::Job),
     Image {
         project: String,
         source: String,
@@ -139,6 +140,7 @@ pub enum Task {
 pub enum TaskReply {
     Shell(String),
     Updates(UpdateCheck),
+    Update(crate::updates::Reply),
     Image(String),
     Usage(serde_json::Value),
     Stats(OpenCodeStats, Vec<OpenCodeStatsProject>),
@@ -193,7 +195,7 @@ impl Task {
             | Self::Merge { project, .. }
             | Self::SetAutoMerge { project, .. }
             | Self::UpdateBranch { project, .. } => project,
-            Self::ImportSettings { .. } | Self::Updates => "",
+            Self::ImportSettings { .. } | Self::Updates | Self::Update(_) => "",
         }
     }
     pub fn review(&self) -> Option<(&str, Option<&str>)> {
@@ -214,6 +216,7 @@ impl Task {
                 session, id, stop, ..
             } => format!("shell:{session}:{id}:{stop}"),
             Self::Updates => "updates".into(),
+            Self::Update(job) => format!("update-installation:{}", job.id),
             Self::Reveal { path, .. } => format!("reveal:{path}"),
             Self::EncodeImage { .. } => "encode-image".into(),
             Self::Image { source, .. } => format!("image:{source}"),
@@ -315,6 +318,7 @@ impl Task {
                 crate::updates::check_for_updates(env!("CARGO_PKG_VERSION")),
                 Updates
             ),
+            Self::Update(job) => runtime.updates.execute(job).map(TaskReply::Update),
             Self::Usage { project } => reply!(runtime.opencode.usage_limits(project), Usage),
             Self::Stats { project, filter } => Ok(TaskReply::Stats(
                 runtime
@@ -558,6 +562,7 @@ pub struct Services {
     pub revision: u64,
     errors: HashMap<String, String>,
     pub update: Option<UpdateCheck>,
+    pub updater: crate::updates::State,
     pub checkouts: BTreeMap<String, Checkout>,
     pub reviews: BTreeMap<(String, String), Review>,
     latest: HashMap<String, u64>,

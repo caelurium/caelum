@@ -9,6 +9,16 @@ session diffs, shell reads and inbox recovery skip the unused active-session map
 The application bundles resume metadata and the first history page in one worker
 completion; there is no cross-request metadata or activity cache.
 
+If OpenCode moves a session to another linked Git worktree, refreshing or restoring
+it resolves its current directory and verifies that destination against Git's
+worktree list, preserving repository-subdirectory scope. Caelum rebinds the
+existing local session before reconnecting, retaining its draft, attachments,
+history and reading position. In-flight local operations finish with their
+original owner; old-checkout read results are discarded. Desktop-held queued
+prompts remain paused after a move. Moves into unrelated projects require opening
+the destination explicitly. A failed archive request keeps the local session
+available for refresh.
+
 Waiting activity uses `/api/shell`, filtering running commands by `metadata.sessionID` after validating session ownership. This works with OpenCode 2.2.1 and does not require the newer experimental job endpoint. The selected session and sessions with known running commands refresh on shell/tool/execution events, focus and every five seconds while the app is visible.
 
 The persistent composer strip offers per-command output and Stop. The adapter checks

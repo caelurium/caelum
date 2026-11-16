@@ -1,7 +1,10 @@
 # Caelum native desktop
 
-The shipping macOS application, built with Rune and backed by
+The shipping macOS and Linux application, built with Rune and backed by
 `caelum-core::application`. See the [desktop guide](../../docs/desktop.md) for workflows.
+
+See the [Linux guide](../../docs/linux.md) for AppImages, runtime requirements,
+Ctrl shortcuts, per-user installation and Linux development commands.
 
 ## Run and build
 
@@ -90,7 +93,7 @@ CAELUM_RUNE_SMOKE_PROVIDER=opencode \
 cargo test --locked -p caelum-desktop real_provider_discovery_and_history_smoke -- --ignored --nocapture
 
 CAELUM_RUNE_SMOKE_PROJECT=/path/to/caelum \
-CAELUM_RUNE_SMOKE_PR=https://github.com/ch55secake/caelum/pull/95 \
+CAELUM_RUNE_SMOKE_PR=https://github.com/caelurium/caelum/pull/95 \
 cargo test --locked -p caelum-desktop real_workspace_services_smoke -- --ignored --nocapture
 
 # Starts, reads, stops and cleans up an isolated background command, without inference.

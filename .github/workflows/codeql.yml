@@ -67,4 +67,4 @@ jobs:
           retention-days: 7
       - name: Explain staged activation
         if: ${{ vars.CODEQL_ADVANCED != 'enabled' }}
-        run: echo 'Default setup still publishes required CodeQL results. This run retains complete SARIF for comparison; see docs/performance/codeql.md for cutover.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Default setup still publishes CodeQL results. This run retains complete SARIF for comparison; see docs/performance/codeql.md for cutover.' >> "$GITHUB_STEP_SUMMARY"

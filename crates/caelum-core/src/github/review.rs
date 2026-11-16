@@ -70,7 +70,7 @@ fn files(
         "{endpoint}/files?per_page={PAGE_SIZE}&page={page}"
     ))?)?;
     let after = api(&endpoint)?;
-    check_target(&after, url, head_oid, true)?;
+    check_target(executable, project.path(), &after, url, head_oid, true)?;
     if after.pointer("/base/sha").and_then(Value::as_str) != Some(base_oid) {
         return Err(GitHubError::Command(
             "The pull request base changed. Refresh the pull request and try again.".into(),
@@ -171,6 +171,8 @@ fn feedback(
         })
         .ok_or_else(|| GitHubError::Command("Pull request feedback is unavailable".into()))?;
     check_target(
+        executable,
+        project.path(),
         if kind == GitHubFeedbackKind::Replies {
             &node["pullRequest"]
         } else {
@@ -233,16 +235,23 @@ fn next_cursor(connection: &Value) -> Result<Option<String>, GitHubError> {
     }
 }
 
-fn check_target(value: &Value, url: &str, head: &str, rest: bool) -> Result<(), GitHubError> {
-    if value
-        .get(if rest { "html_url" } else { "url" })
-        .and_then(Value::as_str)
-        != Some(url)
-    {
-        return Err(GitHubError::Command(
-            "GitHub returned a different pull request".into(),
-        ));
-    }
+fn check_target(
+    executable: &Path,
+    project: &Path,
+    value: &Value,
+    url: &str,
+    head: &str,
+    rest: bool,
+) -> Result<(), GitHubError> {
+    identity::check(
+        executable,
+        project,
+        url,
+        value
+            .get(if rest { "html_url" } else { "url" })
+            .and_then(Value::as_str),
+        Duration::from_secs(10),
+    )?;
     if value
         .pointer(if rest { "/head/sha" } else { "/headRefOid" })
         .and_then(Value::as_str)
