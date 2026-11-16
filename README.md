@@ -1,6 +1,6 @@
 # Caelum
 
-An AI coding workspace for Apple Silicon Macs, with a native Rune desktop app and standalone Rust CLI. Work with project-scoped **Codex** and **OpenCode** sessions, browse files, review changes and manage GitHub pull requests in one place.
+An AI coding workspace for Apple Silicon Macs and Linux, with a native Rune desktop app and standalone Rust CLI. Work with project-scoped **Codex** and **OpenCode** sessions, browse files, review changes and manage GitHub pull requests in one place.
 
 - Independent session drafts, streamed responses, tool activity and restored history.
 - Project and worktree navigation with remembered sessions and live Git status.
@@ -12,7 +12,11 @@ An AI coding workspace for Apple Silicon Macs, with a native Rune desktop app an
 
 [Download a release](https://github.com/caelurium/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
 
-For local development, install Rust 1.95.0 and Xcode Command Line Tools, then run:
+Installed macOS apps and Linux AppImages can [download and install updates](docs/updates.md) from **Settings → About**.
+
+For Linux AppImage installation and runtime requirements, see the [Linux guide](docs/linux.md).
+
+For local development, install Rust 1.95.0 and the [platform prerequisites](docs/development.md), then run:
 
 ```sh
 make dev

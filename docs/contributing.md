@@ -38,8 +38,9 @@ python3 -m unittest discover -s scripts/profile -p 'test_*.py'
 python3 -m unittest discover -s scripts/dev -p 'test_*.py'
 ```
 
-On Linux, select `-p caelum-core -p caelum-protocol -p caelum-cli` in place of
-`--workspace`. `make check` chooses the packages for the host automatically.
+On Linux, install the [desktop build prerequisites](linux.md) and run desktop
+tests under `dbus-run-session`. `make check` does this automatically. Portable-only
+checks can select `-p caelum-core -p caelum-protocol -p caelum-cli`.
 
 The desktop test modules drive Rune's real runtime with keyboard/pointer
 input and injected application events. It covers draft ownership, focus,
@@ -54,7 +55,9 @@ compact and settings scenes. Native frame measurements are described in
 
 CI uses GitHub-hosted `ubuntu-24.04` runners for structure and portable Rust
 checks and Apple Silicon `macos-15` runners for native desktop tests on every PR.
-It captures previews for desktop UI, assets, fixture or CI workflow changes.
+Both Linux desktop architectures run on Ubuntu 22.04, with X11 and Wayland
+packaging smoke coverage. macOS previews run for desktop UI, assets, fixture or
+CI workflow changes.
 Python release/profile checks run separately. The release workflow checks main
 commits and builds release assets; PR bundle checks verify the app, DMG and CLI
 archive when Rust, app, packaging or CI/release workflow inputs change.

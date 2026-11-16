@@ -199,4 +199,4 @@ jobs:
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/profile -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/dev -p 'test_*.py'
-      - run: bash -n scripts/release/package_macos_assets.sh scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh
+      - run: bash -n scripts/release/package_macos_assets.sh scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh scripts/release/package_linux_assets.sh apps/desktop/assets/linux/AppRun

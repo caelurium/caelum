@@ -1,7 +1,10 @@
 # Caelum native desktop
 
-The shipping macOS application, built with Rune and backed by
+The shipping macOS and Linux application, built with Rune and backed by
 `caelum-core::application`. See the [desktop guide](../../docs/desktop.md) for workflows.
+
+See the [Linux guide](../../docs/linux.md) for AppImages, runtime requirements,
+Ctrl shortcuts, per-user installation and Linux development commands.
 
 ## Run and build
 

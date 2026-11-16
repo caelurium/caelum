@@ -2,6 +2,14 @@
 use rune::{El, Icon, TextStyle, col, icon, row, text};
 use rune_kit::{Kit, ScrollBar, shell::SidebarRow};
 
+pub fn shortcut(label: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_os = "macos") || !label.contains('⌘') {
+        label.into()
+    } else {
+        label.replace('⇧', "Shift+").replace('⌘', "Ctrl+").into()
+    }
+}
+
 /// App-sized controls, including the same keyboard and disabled treatment everywhere.
 pub struct Button(rune_kit::Button, rune_kit::ButtonVariant);
 impl Button {

@@ -5,6 +5,10 @@ use serde_json::json;
 
 #[test]
 fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
+    // Parallel runtimes can change Rune's process-wide measurement fonts.
+    // Keep bubble widths and wrapping in this runtime's native families.
+    let families = spec().families;
+    let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = live_runtime_size((800.0, 620.0));
     rt.update(|s, _| {
         let live = s.live.as_mut().unwrap();
@@ -18,6 +22,10 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     });
     advance(&mut rt, 0.6);
     fill(&mut rt, "live-draft-0", "Keep this café draft");
+    // Land the initial history before selecting a reading position.
+    // Relocation below still runs with motion enabled.
+    rt.settle_all();
+    rt.frame(1.0 / 60.0);
     rt.update(|s, tx| {
         s.live.as_mut().unwrap().drafts[0].set_selection(2, 8);
         tx.scroll_center_in_instant("live-rows-0", "live-entry-0-opencode-prompt-25");
@@ -62,7 +70,11 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     assert_eq!((live.drafts[0].anchor, live.drafts[0].focus), (2, 8));
     // Loading changes the header's height; the visible row, rather than its
     // absolute scroll offset, must remain anchored on screen.
-    assert!((element(&rt, "live-entry-0-opencode-prompt-25").rect[1] - anchor).abs() < 1.0);
+    let current = element(&rt, "live-entry-0-opencode-prompt-25").rect[1];
+    assert!(
+        (current - anchor).abs() < 1.0,
+        "reading anchor moved: {anchor} -> {current}"
+    );
     assert_eq!(rt.scroll_at_bottom("live-transcript-0"), Some(false));
     key(
         &mut rt,

@@ -31,6 +31,7 @@ jobs:
       release_commit: ${{ steps.tag.outputs.release_commit }}
       should_release: ${{ steps.tag.outputs.should_release }}
       published: ${{ steps.release.outputs.published }}
+      linux_desktop: ${{ steps.release.outputs.linux_desktop }}
     steps:
       - uses: actions/create-github-app-token@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -140,10 +141,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  build-linux:
+    name: Build Linux desktop release assets
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_release == 'true' && needs.prepare.outputs.published != 'true' && needs.prepare.outputs.linux_desktop == 'true' }}
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      revision: ${{ needs.prepare.outputs.release_commit }}
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+
   publish:
     name: Publish GitHub release
-    needs: [prepare, checks, build]
-    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || (needs.checks.result == 'success' && needs.build.result == 'success')) }}
+    needs: [prepare, checks, build, build-linux]
+    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || (needs.checks.result == 'success' && needs.build.result == 'success' && (needs.prepare.outputs.linux_desktop != 'true' || needs.build-linux.result == 'success'))) }}
     concurrency:
       group: publish-${{ github.repository }}-${{ needs.prepare.outputs.release_tag }}
       cancel-in-progress: false
