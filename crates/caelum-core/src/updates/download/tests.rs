@@ -70,7 +70,7 @@ fn only_exact_official_platform_release_urls_are_installable() {
         ),
         (
             available().download_url.as_ref().unwrap(),
-            "https://github.com/ch55secake/caelum/releases/tag/v1.2.0/../other",
+            "https://github.com/caelurium/caelum/releases/tag/v1.2.0/../other",
         ),
     ] {
         let mut release = available();

@@ -44,6 +44,20 @@ fn release(tag: &str) -> Value {
 }
 
 #[test]
+fn release_assets_use_the_canonical_owner_after_the_repository_transfer() {
+    let url =
+        "https://github.com/caelurium/caelum/releases/download/v1.2.0/Caelum-v1.2.0-aarch64.dmg";
+    let mut payload = release("v1.2.0");
+    payload["assets"] = json!([{"name":"Caelum-v1.2.0-aarch64.dmg", "state":"uploaded", "browser_download_url":url}]);
+    let update = compare_release(&payload, "1.0.0", "macos", "aarch64").unwrap();
+    assert_eq!(update.download_url.as_deref(), Some(url));
+    assert_eq!(
+        update.release_url,
+        "https://github.com/caelurium/caelum/releases/tag/v1.2.0"
+    );
+}
+
+#[test]
 fn compares_semantic_versions_including_prereleases_and_build_metadata() {
     for (current, tag, expected) in [
         ("0.1.9", "v0.1.10", UpdateStatus::Available),
