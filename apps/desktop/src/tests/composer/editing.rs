@@ -3,6 +3,10 @@ use super::*;
 #[test]
 fn composer_typing_during_streaming_preserves_transcript_reading_position() {
     use caelum_core::application::{Event, Provider};
+    // Parallel runtimes must not change view-side measurements and rewrap
+    // transcript rows while this test checks the reading anchor.
+    let families = spec().families;
+    let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = live_runtime_size((800.0, 620.0));
     rt.update(|s, _| {
         let session = &mut s.live.as_mut().unwrap().app.sessions[0];
