@@ -234,7 +234,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             row = row.lead(rune::el().size(14.0, 14.0).a11y_hidden());
         }
         if let Some(shortcut) = item.shortcut {
-            row = row.shortcut(shortcut);
+            row = row.shortcut(ui::shortcut(shortcut));
         }
         menu = menu.item(row);
     }

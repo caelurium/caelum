@@ -47,7 +47,16 @@ pub fn height(s: &Workspace) -> f32 {
         }
         Page::Worktrees => 236.0,
         Page::Notifications => 316.0,
-        Page::About => 360.0,
+        Page::About => {
+            if matches!(
+                l.app.services.updater.phase,
+                caelum_core::updates::Phase::Idle | caelum_core::updates::Phase::Updated(_)
+            ) {
+                360.0
+            } else {
+                440.0
+            }
+        }
     };
     height
         + if l.app.persistence_error.is_some() {
@@ -662,7 +671,7 @@ fn about(s: &Workspace, k: &Kit) -> El {
                     .key("copy-app-details"),
             ),
     );
-    body = body.child(about_updates(s, k));
+    body = body.child(crate::updates::view(s, k));
     let mut links = row().w_full().gap(8.0);
     for (name, url, key) in [
         ("Source code", updates::REPOSITORY_URL, "about-repository"),
@@ -723,117 +732,4 @@ fn about(s: &Workspace, k: &Kit) -> El {
         body = body.child(ui::caption(error, k).color(k.c.danger.fg).selectable(true));
     }
     body
-}
-
-fn about_updates(s: &Workspace, k: &Kit) -> El {
-    use caelum_protocol::UpdateStatus;
-    let services = &live(s).app.services;
-    let busy = services.busy(&Task::Updates);
-    let error = services.error(&Task::Updates);
-    let update = services.update.as_ref();
-    let (title, detail) = if busy {
-        (
-            "Checking for updates",
-            "Looking for the latest release…".into(),
-        )
-    } else if let Some(error) = error {
-        ("Couldn’t check for updates", error.to_owned())
-    } else if let Some(update) = update {
-        match update.status {
-            UpdateStatus::Available => (
-                "Update available",
-                format!("Version {} is ready to download.", update.latest_version),
-            ),
-            UpdateStatus::UpToDate => (
-                "You’re up to date",
-                "You’re running the latest release.".into(),
-            ),
-            UpdateStatus::Ahead => (
-                "Ahead of the latest release",
-                format!("Latest stable version: {}", update.latest_version),
-            ),
-        }
-    } else {
-        (
-            "Software updates",
-            "Keep Caelum up to date with the latest release.".into(),
-        )
-    };
-    let marker = if !busy && error.is_some() {
-        icon(&glyphs::CIRCLE_X, 16.0).color(k.c.danger.fg)
-    } else if !busy && update.is_some_and(|u| u.status == UpdateStatus::UpToDate) {
-        icon(&glyphs::CHECK, 16.0).color(k.c.success.fg)
-    } else {
-        icon(&ui::REFRESH, 16.0).color(k.c.icon_muted)
-    };
-    let mut actions = row().gap(6.0).center_y();
-    if let Some(update) =
-        update.filter(|u| !busy && error.is_none() && u.status == UpdateStatus::Available)
-    {
-        let (label, url, key) = match &update.download_url {
-            Some(url) => ("Download update", url, "download-update"),
-            None => ("View release", &update.release_url, "view-release"),
-        };
-        let url = url.clone();
-        actions = actions
-            .child(
-                Button::new(label)
-                    .variant(ButtonVariant::Contrast)
-                    .on_press_tx(move |_: &mut Workspace, tx| {
-                        let _ = tx.open_url(&url);
-                    })
-                    .build(k)
-                    .help("Open in browser")
-                    .key(key),
-            )
-            .child(
-                crate::quiet_button(&ui::REFRESH, "Check for updates")
-                    .on_press(|s: &mut Workspace| live_mut(s).app.task(Task::Updates))
-                    .build(k)
-                    .key("check-updates"),
-            );
-    } else {
-        actions = actions.child(
-            Button::new(if busy {
-                "Checking…"
-            } else if error.is_some() {
-                "Try again"
-            } else if update.is_some() {
-                "Check again"
-            } else {
-                "Check for updates"
-            })
-            .variant(ButtonVariant::Outline)
-            .disabled(busy)
-            .on_press(|s: &mut Workspace| live_mut(s).app.task(Task::Updates))
-            .build(k)
-            .key("check-updates"),
-        );
-    }
-    row()
-        .w_full()
-        .min_h(88.0)
-        .padding(14.0)
-        .gap(12.0)
-        .center_y()
-        .radius(8.0)
-        .fill(k.c.bg_base)
-        .border(1.0, k.c.border_muted)
-        .child(marker)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(4.0)
-                .role("status")
-                .label(format!("{title}. {detail}"))
-                .child(if busy {
-                    ui::busy_text(title, k.ty.ui_medium, k)
-                } else {
-                    text(title).font(k.ty.ui_medium).color(k.c.text_base).wrap()
-                })
-                .child(ui::caption(detail, k).selectable(true)),
-        )
-        .child(actions)
-        .key("about-updates")
 }

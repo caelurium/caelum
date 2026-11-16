@@ -318,7 +318,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                             })
                             .build(k)
                             .key(format!("question-submit-{}", prompt.request_id))
-                            .help("Submit answers · ⌘Enter"),
+                            .help(ui::shortcut("Submit answers · ⌘Enter")),
                     ),
             ),
         padding,

@@ -12,6 +12,20 @@ impl Services {
         if self.latest.get(&task.slot()) == Some(&id) {
             self.loading.remove(&task.slot());
         }
+        if let Task::Update(job) = task {
+            self.latest.remove(&task.slot());
+            self.revision += 1;
+            let result = reply.and_then(|reply| match reply {
+                TaskReply::Update(reply) => Ok(reply),
+                _ => Err("Unexpected updater response".into()),
+            });
+            return self
+                .updater
+                .complete(job, result)
+                .map(Task::Update)
+                .into_iter()
+                .collect();
+        }
         if !current {
             return Vec::new();
         }

@@ -2,8 +2,59 @@ use super::*;
 use serde_json::json;
 use std::{io::Write, net::TcpListener, thread};
 
+pub(super) struct Directory(pub std::path::PathBuf);
+impl Directory {
+    pub fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "caelum-update-test-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path.canonicalize().unwrap())
+    }
+}
+impl Drop for Directory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+pub(super) fn available() -> UpdateCheck {
+    let extension = if cfg!(target_os = "macos") {
+        "dmg"
+    } else {
+        "AppImage"
+    };
+    UpdateCheck {
+        current_version: "1.0.0".into(),
+        latest_version: "1.2.0".into(),
+        status: UpdateStatus::Available,
+        release_url: format!("{RELEASES_URL}/tag/v1.2.0"),
+        download_url: Some(format!(
+            "{RELEASES_URL}/download/v1.2.0/Caelum-v1.2.0-{}.{extension}",
+            std::env::consts::ARCH
+        )),
+    }
+}
+
 fn release(tag: &str) -> Value {
     json!({ "tag_name": tag, "draft": false, "prerelease": false, "assets": [] })
+}
+
+#[test]
+fn release_assets_use_the_canonical_owner_after_the_repository_transfer() {
+    let url =
+        "https://github.com/caelurium/caelum/releases/download/v1.2.0/Caelum-v1.2.0-aarch64.dmg";
+    let mut payload = release("v1.2.0");
+    payload["assets"] = json!([{"name":"Caelum-v1.2.0-aarch64.dmg", "state":"uploaded", "browser_download_url":url}]);
+    let update = compare_release(&payload, "1.0.0", "macos", "aarch64").unwrap();
+    assert_eq!(update.download_url.as_deref(), Some(url));
+    assert_eq!(
+        update.release_url,
+        "https://github.com/caelurium/caelum/releases/tag/v1.2.0"
+    );
 }
 
 #[test]
@@ -64,6 +115,41 @@ fn downloads_match_the_native_platform_architecture_and_published_asset() {
             .download_url
             .is_none()
     );
+}
+
+#[test]
+fn linux_downloads_require_the_matching_uploaded_appimage_on_github() {
+    let mut value = release("v1.1.0");
+    value["assets"] = json!(["aarch64", "x86_64"].map(|arch| json!({
+        "name": format!("Caelum-v1.1.0-{arch}.AppImage"), "state": "uploaded",
+        "browser_download_url": format!("{RELEASES_URL}/download/v1.1.0/Caelum-v1.1.0-{arch}.AppImage"),
+    })));
+    for arch in ["aarch64", "x86_64"] {
+        assert!(compare_release(&value, "1.0.0", "linux", arch)
+            .unwrap()
+            .download_url
+            .unwrap()
+            .ends_with(&format!("-{arch}.AppImage")));
+        assert!(compare_release(&value, "1.0.0", "macos", arch)
+            .unwrap()
+            .download_url
+            .is_none());
+    }
+    assert!(compare_release(&value, "1.0.0", "linux", "arm")
+        .unwrap()
+        .download_url
+        .is_none());
+    value["assets"][0]["state"] = json!("new");
+    assert!(compare_release(&value, "1.0.0", "linux", "aarch64")
+        .unwrap()
+        .download_url
+        .is_none());
+    value["assets"][0]["state"] = json!("uploaded");
+    value["assets"][0]["browser_download_url"] = json!("https://example.invalid/other.AppImage");
+    assert!(compare_release(&value, "1.0.0", "linux", "aarch64")
+        .unwrap()
+        .download_url
+        .is_none());
 }
 
 #[test]

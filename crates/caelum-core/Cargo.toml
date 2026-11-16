@@ -12,7 +12,10 @@ notify = "8.2"
 regex = "1"
 reqwest = { workspace = true, features = ["rustls-tls"] }
 rusqlite.workspace = true
+rustix = { version = "1", features = ["fs", "process"] }
 semver = "1"
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
 thiserror.workspace = true
+tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }

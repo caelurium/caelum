@@ -51,9 +51,9 @@ determinism is not claimed. Keep per-run manifests and captures in ignored
 ## Hosted observation
 
 The preceding sequential
-[CI run 43748407072](https://github.com/ch55secake/caelum/actions/runs/43748407072)
+[CI run 43748407072](https://github.com/caelurium/caelum/actions/runs/43748407072)
 captured the same 700-state catalogue in a 470 s capture step. The first parallel
-[CI run 43758940877](https://github.com/ch55secake/caelum/actions/runs/43758940877)
+[CI run 43758940877](https://github.com/caelurium/caelum/actions/runs/43758940877)
 used three workers (the hosted CPU count) and took 318 s, including its 0.85 s
 Cargo build check. Desktop/core Rust source and the catalogue were unchanged
 between these revisions. All CI jobs passed. This single hosted pair observed a

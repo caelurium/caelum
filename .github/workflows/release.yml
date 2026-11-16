@@ -23,7 +23,7 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
@@ -31,6 +31,7 @@ jobs:
       release_commit: ${{ steps.tag.outputs.release_commit }}
       should_release: ${{ steps.tag.outputs.should_release }}
       published: ${{ steps.release.outputs.published }}
+      linux_desktop: ${{ steps.release.outputs.linux_desktop }}
     steps:
       - uses: actions/create-github-app-token@v3
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -85,9 +86,6 @@ jobs:
           - arch: aarch64
             runner: macos-15
             target: aarch64-apple-darwin
-          - arch: x86_64
-            runner: macos-15-intel
-            target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -134,14 +132,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload Cargo build timings
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: cargo-timings-release-${{ matrix.target }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build-linux:
+    name: Build Linux desktop release assets
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_release == 'true' && needs.prepare.outputs.published != 'true' && needs.prepare.outputs.linux_desktop == 'true' }}
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      revision: ${{ needs.prepare.outputs.release_commit }}
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+
   publish:
     name: Publish GitHub release
-    needs: [prepare, checks, build]
-    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || (needs.checks.result == 'success' && needs.build.result == 'success')) }}
+    needs: [prepare, checks, build, build-linux]
+    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || (needs.checks.result == 'success' && needs.build.result == 'success' && (needs.prepare.outputs.linux_desktop != 'true' || needs.build-linux.result == 'success'))) }}
     concurrency:
       group: publish-${{ github.repository }}-${{ needs.prepare.outputs.release_tag }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -167,7 +183,7 @@ jobs:
     name: Open Homebrew tap update
     needs: [prepare, publish]
     if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.publish.result == 'success' && vars.HOMEBREW_TAP_UPDATES == 'enabled' && !contains(needs.prepare.outputs.release_tag, '-') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download release checksums
         env:
@@ -176,7 +192,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release"
           gh release download "$RELEASE_TAG" \
-            --repo ch55secake/caelum \
+            --repo "$GITHUB_REPOSITORY" \
             --pattern SHA256SUMS \
             --dir "$RUNNER_TEMP/release"
 
@@ -211,7 +227,7 @@ jobs:
           body: |
             Update the Caelum CLI formula and desktop cask for the latest release.
 
-            Release: https://github.com/ch55secake/caelum/releases/tag/${{ needs.prepare.outputs.release_tag }}
+            Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.release_tag }}
 
       - name: Close superseded Homebrew update PRs
         env:

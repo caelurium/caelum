@@ -11,8 +11,7 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 dist="$RUNNER_TEMP/release"
 case "$ARCH:$TARGET" in
   aarch64:aarch64-apple-darwin) machine=arm64 ;;
-  x86_64:x86_64-apple-darwin) machine=x86_64 ;;
-  *) echo "Architecture and Rust target do not match" >&2; exit 1 ;;
+  *) echo "macOS releases require ARCH=aarch64 TARGET=aarch64-apple-darwin" >&2; exit 1 ;;
 esac
 scratch="$(mktemp -d "$RUNNER_TEMP/caelum-package.XXXXXX")"
 mounted=false
@@ -43,7 +42,7 @@ app_bundle="target/$TARGET/release/bundle/macos/Caelum.app"
 bash scripts/release/package_macos_app.sh
 verify_app "$app_bundle"
 
-cargo build --locked --release -p caelum-cli --target "$TARGET"
+cargo build --locked --release --timings -p caelum-cli --target "$TARGET"
 cp "target/$TARGET/release/caelum" "$scratch/cli/caelum"
 source scripts/release/macos_libraries.sh
 system_libraries "$scratch/cli/caelum"
@@ -65,5 +64,6 @@ mounted=true
 verify_app "$scratch/mount/Caelum.app"
 diff -qr "$app_bundle" "$scratch/mount/Caelum.app"
 python3 scripts/release/smoke_macos_app.py --app "$app_bundle" --cli "$scratch/extracted/caelum"
+python3 scripts/release/smoke_update.py --app "$app_bundle" --package "$dmg"
 
 echo "Verified $ARCH app, DMG, and standalone CLI for $RELEASE_TAG"
