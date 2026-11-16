@@ -106,18 +106,32 @@ exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
             snapshot = wait_for(lambda: selected(index), f"project {index} URL delivery")
         except RuntimeError as error:
             current_state = json.loads(state.read_text())
+            owned = pids(executable)
+            samples = []
+            for pid in owned:
+                sample = root / f"sample-{pid}.txt"
+                try:
+                    subprocess.run(["/usr/bin/sample", str(pid), "1", "-file", str(sample)],
+                                   timeout=10, check=False, capture_output=True)
+                except (OSError, subprocess.TimeoutExpired) as sample_error:
+                    print(f"Could not sample app: {sample_error}", flush=True)
+                if sample.exists():
+                    samples.append(sample.read_text())
+            records = [json.loads(line) for trace in home.glob("latency-*.jsonl")
+                       for line in trace.read_text().splitlines()]
             diagnostics = {
                 "projects": [str(project) for project in projects],
                 "selected": current_state["selected"],
                 "session_projects": [session["scope"]["project"] for session in current_state["sessions"]],
-                "app_pids": pids(executable),
+                "app_pids": owned,
                 "launch_trace": launch_trace.read_text() if launch_trace.exists() else "",
                 "callback_trace": callback_trace.read_text() if callback_trace.exists() else "",
                 "app_log": log.read_text() if log.exists() else "",
-                "requests": [json.loads(line) for trace in home.glob("latency-*.jsonl")
-                             for line in trace.read_text().splitlines()
-                             if '"kind":"request"' in line][-100:],
+                "requests": [record for record in records if record.get("kind") == "request"][-100:],
+                "trace_tail": records[-40:],
             }
+            for sample in samples:
+                print(sample, flush=True)
             raise RuntimeError(f"{error}; diagnostics={json.dumps(diagnostics, ensure_ascii=False)}") from error
         assert [s["draft"] for s in snapshot["sessions"]] == [s["draft"] for s in sessions]
 

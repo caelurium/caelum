@@ -19,6 +19,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: x86_64-apple-darwin
+          cache-on-failure: true
       - name: Package and exercise native URLs
         env:
           TARGET: x86_64-apple-darwin
