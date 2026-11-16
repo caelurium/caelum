@@ -1,4 +1,6 @@
 //! Native delivery and click routing; notification eligibility remains core-owned.
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -7,7 +9,7 @@ use crate::{
     live::{Live, live_mut},
     panels::Screen,
 };
-use caelum_core::application::{Notification, SessionKey};
+use caelum_core::application::{Event, Notification, Reply, SessionKey};
 use rune::AppHandle;
 
 enum Activation {
@@ -17,6 +19,8 @@ enum Activation {
 
 #[derive(Default)]
 pub struct State {
+    #[cfg(target_os = "linux")]
+    client: Option<linux::Client>,
     #[cfg(target_os = "macos")]
     client: Option<macos::Client>,
     activation: Option<Activation>,
@@ -31,7 +35,12 @@ impl State {
                 Ok(client) => state.client = Some(client),
                 Err(error) => eprintln!("Notification: {error}"),
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
+            match linux::Client::new(handle) {
+                Ok(client) => state.client = Some(client),
+                Err(error) => eprintln!("Notification: {error}"),
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let _ = handle;
         }
         state
@@ -47,12 +56,30 @@ impl State {
             client.send(request, notification);
             Ok(())
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            self.client
+                .as_ref()
+                .ok_or("Native notification service is unavailable")?
+                .send(request, notification)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             let _ = (request, notification);
             Err("Native notifications are unavailable on this platform".into())
         }
     }
+}
+
+fn complete(handle: &AppHandle<Workspace>, id: u64, result: Result<Reply, String>) {
+    if let Err(error) = &result {
+        eprintln!("Notification: {error}");
+    }
+    handle.update(move |s, _| {
+        if let Some(live) = &mut s.live {
+            live.apply(Event::Completed(id, result));
+        }
+    });
 }
 
 fn clicked(s: &mut Workspace, target: Option<SessionKey>) {

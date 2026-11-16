@@ -1,5 +1,5 @@
 use block2::{DynBlock, RcBlock};
-use caelum_core::application::{Event, Notification, Reply, SessionKey};
+use caelum_core::application::{Notification, Reply, SessionKey};
 use objc2::{
     AnyThread, DefinedClass, define_class, msg_send,
     rc::Retained,
@@ -16,6 +16,7 @@ use objc2_user_notifications::{
 };
 use rune::AppHandle;
 
+use super::complete;
 use crate::Workspace;
 
 define_class!(
@@ -135,17 +136,6 @@ fn target(content: &objc2_user_notifications::UNNotificationContent) -> Option<S
 fn error_message(error: *mut NSError) -> Option<String> {
     // The system owns a nullable NSError for the duration of each callback.
     unsafe { error.as_ref() }.map(|error| error.localizedDescription().to_string())
-}
-
-fn complete(handle: &AppHandle<Workspace>, id: u64, result: Result<Reply, String>) {
-    if let Err(error) = &result {
-        eprintln!("Notification: {error}");
-    }
-    handle.update(move |s, _| {
-        if let Some(live) = &mut s.live {
-            live.apply(Event::Completed(id, result));
-        }
-    });
 }
 
 #[cfg(test)]

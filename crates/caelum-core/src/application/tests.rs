@@ -11,6 +11,7 @@ mod runtime;
 mod sessions;
 mod submission;
 mod titles;
+mod updates;
 mod worktrees;
 
 use std::sync::{mpsc, Arc, Mutex};

@@ -8,23 +8,21 @@ use std::{
     time::Duration,
 };
 
-use caelum_protocol::{
-    ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent, ProjectInfo, ProviderChoices,
-    QuestionPrompt, SessionHistoryPage,
-};
-
 use crate::{
     approvals::ApprovalBroker, codex::CodexProvider, opencode::OpenCodeProvider,
     processes::ProcessRegistry, projects::Project, questions::QuestionBroker,
 };
 
-use super::{
-    Notification, Options, Provider, Scope, SessionKey, Snapshot, Store, Summary, Task, TaskReply,
-};
+use super::{Options, Provider, SessionKey, Summary, Task};
 
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
+mod messages;
 mod opencode;
+
+pub use messages::Command;
+pub use messages::Event;
+pub use messages::Reply;
 
 /// Shared by desktop adapters; constructing this does not start a provider.
 #[derive(Clone)]
@@ -37,6 +35,7 @@ pub struct ProviderRuntime {
     pub worktrees: crate::worktrees::WorktreeClient,
     pub branches: Arc<Mutex<crate::session_branches::SessionBranches>>,
     pub(super) review_cache: Arc<Mutex<Option<crate::github::cache::Cache>>>,
+    pub(super) updates: crate::updates::Backend,
 }
 
 impl Default for ProviderRuntime {
@@ -61,12 +60,14 @@ impl Default for ProviderRuntime {
                 None,
             ))),
             review_cache: Arc::default(),
+            updates: Default::default(),
         }
     }
 }
 
 impl ProviderRuntime {
     pub fn shutdown(&self) {
+        self.updates.shutdown();
         self.approvals.shutdown();
         // Close registration first: an in-flight connection cannot leak a child
         // after shutdown, and terminating children unblocks protocol handshakes.
@@ -461,69 +462,6 @@ impl ProviderRuntime {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Command {
-    Inbox(SessionKey),
-    Enqueue(SessionKey, String, String),
-    RemoveQueued(SessionKey, String),
-    Generate(SessionKey, String),
-    RegenerateTitle(SessionKey),
-    Notify(Notification),
-    Sound(u8),
-    Task(Task),
-    Load(Store),
-    Save(Store, Box<Snapshot>),
-    Commands(Scope),
-    Shells(SessionKey),
-    Archive(SessionKey, bool),
-    DeleteSession(SessionKey),
-    Details(SessionKey),
-    Open(String),
-    List(Scope),
-    ListArchived(Scope),
-    Choices(Scope),
-    Start(Scope, Options),
-    Resume(SessionKey),
-    History(SessionKey, Option<String>),
-    Send(SessionKey, String, Options),
-    Cancel(SessionKey),
-    Approve(ApprovalPrompt, ApprovalDecision),
-    Answer(QuestionPrompt, Option<crate::questions::Answer>),
-}
-
-#[derive(Debug)]
-pub enum Reply {
-    Inbox(Vec<serde_json::Value>),
-    Generated(String),
-    Task(TaskReply),
-    Snapshot(Option<Box<Snapshot>>),
-    Commands(Vec<caelum_protocol::OpenCodeCommandInfo>),
-    Shells(Vec<caelum_protocol::OpenCodeBackgroundShell>),
-    Details(caelum_protocol::SessionDetails),
-    Project(ProjectInfo),
-    Sessions(Vec<Summary>),
-    Session(Summary),
-    Resumed(Summary, SessionHistoryPage),
-    SessionMoved {
-        from: SessionKey,
-        project: ProjectInfo,
-    },
-    Choices(ProviderChoices),
-    History(SessionHistoryPage),
-    Done,
-}
-
-#[derive(Debug)]
-pub enum Event {
-    Checkout(String),
-    Completed(u64, Result<Reply, String>),
-    Codex(CodexEvent),
-    OpenCode(OpenCodeEvent),
-    Approvals(Vec<ApprovalPrompt>),
-    Questions(Vec<QuestionPrompt>),
-    Branch(caelum_protocol::SessionBranchUpdate),
-}
-
 type Execute = Arc<dyn Fn(&Command) -> Result<Reply, String> + Send + Sync>;
 
 /// Background I/O with a bounded UI inbox. The UI drains a batch once per frame;
@@ -557,6 +495,9 @@ impl Runtime {
             Arc::new(move |command| backend.execute(command)),
             Arc::new(wake),
         );
+        providers
+            .updates
+            .observe(runtime.sender.clone(), runtime.wake.clone());
         let branches = providers.branches.clone();
         runtime.forward(providers.codex.subscribe(), move |event| {
             let update = branches

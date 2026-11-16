@@ -6,6 +6,9 @@ impl Workspace {
     pub fn apply(&mut self, event: Event) {
         let _trace = crate::diagnostics::event(&event).map(|mark| mark.span());
         match event {
+            Event::UpdateProgress(id, progress) => {
+                self.services.updater.progress(id, progress);
+            }
             Event::Branch(update) => self.branch_update(update),
             Event::Checkout(project) => self.checkout_changed(&project),
             Event::Completed(id, result) => {
