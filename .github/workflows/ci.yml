@@ -96,6 +96,8 @@ jobs:
           toolchain: '1.95.0'
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-clippy
       - run: cargo clippy --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli --all-targets -- -D warnings
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
@@ -116,6 +118,8 @@ jobs:
         with:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-test
       - run: cargo test --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli -- --test-threads=4
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
@@ -138,6 +142,8 @@ jobs:
           toolchain: '1.95.0'
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-desktop
       - run: cargo clippy --locked --timings -p caelum-desktop --all-targets -- -D warnings
       - run: cargo test --locked --timings -p caelum-desktop -- --test-threads=4
       - run: python3 scripts/dev/macos_app.py --build-only
@@ -169,6 +175,9 @@ jobs:
         with:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Match the release producer, including its existing cache namespace.
+          shared-key: aarch64-apple-darwin-build
       - name: Build and verify native app, DMG and CLI archive
         env:
           TARGET: aarch64-apple-darwin
