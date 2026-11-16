@@ -34,6 +34,7 @@ impl Workspace {
                         }
                     }
                     for index in 0..self.sessions.len() {
+                        self.finish_relocation(index);
                         self.advance_queue(index);
                     }
                     self.schedule_details();

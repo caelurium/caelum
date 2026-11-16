@@ -11,8 +11,7 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 dist="$RUNNER_TEMP/release"
 case "$ARCH:$TARGET" in
   aarch64:aarch64-apple-darwin) machine=arm64 ;;
-  x86_64:x86_64-apple-darwin) machine=x86_64 ;;
-  *) echo "Architecture and Rust target do not match" >&2; exit 1 ;;
+  *) echo "macOS releases require ARCH=aarch64 TARGET=aarch64-apple-darwin" >&2; exit 1 ;;
 esac
 scratch="$(mktemp -d "$RUNNER_TEMP/caelum-package.XXXXXX")"
 mounted=false

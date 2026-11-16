@@ -4,6 +4,7 @@ mod controls;
 mod history;
 mod persistence;
 mod projects;
+mod relocation;
 mod resume;
 mod review;
 mod runtime;

@@ -46,11 +46,13 @@ fn set_auto_merge(
     ]);
     let response = graphql(lookup)?;
     let pr = &response["data"]["repository"]["pullRequest"];
-    if pr["url"].as_str() != Some(url) {
-        return Err(GitHubError::Command(
-            "GitHub returned a different pull request".into(),
-        ));
-    }
+    let canonical_url = identity::check(
+        executable,
+        project.path(),
+        url,
+        pr["url"].as_str(),
+        Duration::from_secs(10),
+    )?;
     if pr["headRefOid"].as_str() != Some(head_oid) {
         return Err(GitHubError::Command(
             "The pull request head changed. Refresh the pull request and try again.".into(),
@@ -96,7 +98,7 @@ fn set_auto_merge(
     mutation.args(["-f", &format!("query=mutation({variables}) {{ {operation}(input: {{ {input} }}) {{ pullRequest {{ url headRefOid state autoMergeRequest {{ mergeMethod }} }} }} }}")]);
     let response = graphql(mutation)?;
     let pr = &response["data"][operation]["pullRequest"];
-    if pr["url"].as_str() != Some(url) || pr.get("autoMergeRequest").is_none() {
+    if pr["url"].as_str() != Some(canonical_url) || pr.get("autoMergeRequest").is_none() {
         return Err(GitHubError::Command(
             "GitHub did not confirm the auto-merge change. Refresh the pull request.".into(),
         ));

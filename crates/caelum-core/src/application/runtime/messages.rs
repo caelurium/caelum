@@ -49,6 +49,10 @@ pub enum Reply {
     Sessions(Vec<Summary>),
     Session(Summary),
     Resumed(Summary, SessionHistoryPage),
+    SessionMoved {
+        from: SessionKey,
+        project: ProjectInfo,
+    },
     Choices(ProviderChoices),
     History(SessionHistoryPage),
     Done,

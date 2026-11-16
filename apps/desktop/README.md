@@ -93,7 +93,7 @@ CAELUM_RUNE_SMOKE_PROVIDER=opencode \
 cargo test --locked -p caelum-desktop real_provider_discovery_and_history_smoke -- --ignored --nocapture
 
 CAELUM_RUNE_SMOKE_PROJECT=/path/to/caelum \
-CAELUM_RUNE_SMOKE_PR=https://github.com/ch55secake/caelum/pull/95 \
+CAELUM_RUNE_SMOKE_PR=https://github.com/caelurium/caelum/pull/95 \
 cargo test --locked -p caelum-desktop real_workspace_services_smoke -- --ignored --nocapture
 
 # Starts, reads, stops and cleans up an isolated background command, without inference.
