@@ -52,10 +52,19 @@ For visual changes, run `make previews` and inspect light/dark, inspector,
 compact and settings scenes. Native frame measurements are described in
 [performance](performance/README.md).
 
-CI runs structure and portable Rust checks on Linux and native desktop tests on macOS for
-every PR. It captures previews only for desktop UI, assets or fixture changes.
+CI uses GitHub-hosted `ubuntu-24.04` runners for structure and portable Rust
+checks and Apple Silicon `macos-15` runners for native desktop tests on every PR.
+It captures previews for desktop UI, assets, fixture or CI workflow changes.
 Python release/profile checks run separately. The release workflow checks main
 commits and builds release assets; PR bundle checks verify the app, DMG and CLI
-archive when Rust, app or packaging inputs change.
+archive when Rust, app, packaging or CI/release workflow inputs change.
+
+Rust CI jobs upload `cargo-timings-*` artifacts for 14 days, including reports
+available after a failed build. Open the timestamped HTML files to inspect each
+Cargo invocation's compilation time and concurrency. Packaging and the macOS
+development helper also leave these reports in `target/cargo-timings/` locally.
+Compare matching revisions, runner architectures, profiles and cache-hit states;
+job queue/setup time, test execution, preview capture and packaging smoke checks
+are separate from Cargo's build timings.
 
 Use Conventional Commits and the repository's pull-request template.

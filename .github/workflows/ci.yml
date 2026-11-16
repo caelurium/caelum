@@ -22,7 +22,7 @@ env:
 jobs:
   changes:
     name: Detect changed areas
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
@@ -39,6 +39,7 @@ jobs:
         with:
           filters: |
             preview:
+              - '.github/workflows/ci.yml'
               - 'apps/desktop/src/**'
               - 'apps/desktop/assets/**'
               - 'apps/desktop/preview/**'
@@ -47,6 +48,8 @@ jobs:
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
             bundle:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
               - '**/*.rs'
               - 'Cargo.toml'
               - '**/Cargo.toml'
@@ -58,9 +61,9 @@ jobs:
 
   rust-structure:
     name: rust-structure
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
           fetch-depth: 0
@@ -71,9 +74,9 @@ jobs:
       - run: python3 -m unittest discover -s scripts/structure -p 'test_*.py'
   rust-format:
     name: rust-format
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
       - uses: dtolnay/rust-toolchain@master
@@ -83,33 +86,7 @@ jobs:
       - run: cargo fmt --all -- --check
   rust-clippy:
     name: rust-lint
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    steps:
-      - uses: useblacksmith/checkout@v1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --locked -p caelum-core -p caelum-protocol -p caelum-cli --all-targets -- -D warnings
-  rust-test:
-    name: rust-tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    steps:
-      - uses: useblacksmith/checkout@v1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --locked -p caelum-core -p caelum-protocol -p caelum-cli -- --test-threads=4
-  native-desktop:
-    name: native-desktop-tests
-    needs: changes
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -119,8 +96,50 @@ jobs:
           toolchain: '1.95.0'
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --locked -p caelum-desktop --all-targets -- -D warnings
-      - run: cargo test --locked -p caelum-desktop -- --test-threads=4
+      - run: cargo clippy --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli --all-targets -- -D warnings
+      - name: Upload Cargo build timings
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: cargo-timings-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 14
+  rust-test:
+    name: rust-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --timings -p caelum-core -p caelum-protocol -p caelum-cli -- --test-threads=4
+      - name: Upload Cargo build timings
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: cargo-timings-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 14
+  native-desktop:
+    name: native-desktop-tests
+    needs: changes
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --locked --timings -p caelum-desktop --all-targets -- -D warnings
+      - run: cargo test --locked --timings -p caelum-desktop -- --test-threads=4
       - run: python3 scripts/dev/macos_app.py --build-only
       - run: python3 apps/desktop/preview/capture.py
         if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.preview == 'true' }}
@@ -129,11 +148,19 @@ jobs:
         with:
           name: native-design-previews
           path: apps/desktop/preview-results/
+      - name: Upload Cargo build timings
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: cargo-timings-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 14
   macos-app:
     name: desktop-bundle-build
     needs: changes
     if: ${{ inputs.skip_bundle != true && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -154,11 +181,19 @@ jobs:
         with:
           name: caelum-macos
           path: ${{ runner.temp }}/release/*
+      - name: Upload Cargo build timings
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: cargo-timings-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 14
   release-package:
     name: release-package
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py'

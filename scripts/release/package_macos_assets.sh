@@ -42,7 +42,7 @@ app_bundle="target/$TARGET/release/bundle/macos/Caelum.app"
 bash scripts/release/package_macos_app.sh
 verify_app "$app_bundle"
 
-cargo build --locked --release -p caelum-cli --target "$TARGET"
+cargo build --locked --release --timings -p caelum-cli --target "$TARGET"
 cp "target/$TARGET/release/caelum" "$scratch/cli/caelum"
 source scripts/release/macos_libraries.sh
 system_libraries "$scratch/cli/caelum"
