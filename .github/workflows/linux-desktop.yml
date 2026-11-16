@@ -15,9 +15,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: linux-desktop-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  desktop:
-    name: linux-desktop-${{ matrix.arch }}
+  desktop-tests:
+    name: linux-desktop-tests-${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,26 +54,65 @@ jobs:
         with:
           key: linux-desktop-${{ matrix.arch }}
           cache-on-failure: true
-      - run: cargo clippy --locked -p caelum-desktop --all-targets -- -D warnings
-      - run: dbus-run-session -- cargo test --locked -p caelum-desktop -- --test-threads=4
+      - name: Lint Linux desktop and tests
+        run: cargo clippy --locked -p caelum-desktop --all-targets -- -D warnings
+      - name: Run Linux desktop interaction tests
+        run: dbus-run-session -- cargo test --locked -p caelum-desktop -- --test-threads=4
+
+  appimage:
+    name: linux-appimage-${{ matrix.arch }}
+    needs: desktop-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install AppImage build and smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libfontconfig1-dev libvulkan1 mesa-vulkan-drivers \
+            libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev dbus-x11 xvfb \
+            weston xdotool xclip xdg-desktop-portal xdg-desktop-portal-gtk \
+            desktop-file-utils xdg-utils fuse3 squashfs-tools patchelf openbox
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-desktop-${{ matrix.arch }}
+          cache-on-failure: true
       - name: Package and audit AppImage
         id: package
         env:
           TARGET: ${{ matrix.arch }}-unknown-linux-gnu
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: bash scripts/release/package_linux_assets.sh
-      - name: Exercise X11 desktop and capture previews
+      - name: Smoke-test AppImage on X11 and capture previews
         run: xvfb-run -a dbus-run-session -- python3 scripts/release/smoke_linux_app.py --image "$RUNNER_TEMP"/release/*.AppImage --backend x11 --output "$RUNNER_TEMP/linux-smoke/x11"
-      - name: Exercise Wayland desktop
+      - name: Smoke-test AppImage on Wayland
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: dbus-run-session -- python3 scripts/release/smoke_linux_app.py --image "$RUNNER_TEMP"/release/*.AppImage --backend wayland --output "$RUNNER_TEMP/linux-smoke/wayland"
-      - uses: actions/upload-artifact@v7
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v7
         with:
           name: release-linux-${{ matrix.arch }}
           path: ${{ runner.temp }}/release/*.AppImage
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v7
+      - name: Upload Linux smoke-test evidence
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: linux-desktop-evidence-${{ matrix.arch }}
