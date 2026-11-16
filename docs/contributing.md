@@ -70,4 +70,14 @@ Compare matching revisions, runner architectures, profiles and cache-hit states;
 job queue/setup time, test execution, preview capture and packaging smoke checks
 are separate from Cargo's build timings.
 
+Linux desktop tests and AppImage packaging run concurrently on native
+`ubuntu-22.04` and `ubuntu-22.04-arm` runners. The reusable Linux workflow must
+finish successfully before release publication, so both test and package jobs
+gate shipping. Each architecture has separate development/test and release
+dependency caches, reused by PRs and main through the same workflow. Explicit
+shared keys preserve the previous cache namespaces and give each cache one
+writer per run. `cargo-timings-*-linux-*` artifacts retain compilation reports
+for 14 days, including reports available when a job fails. Compare their
+timestamped HTML files alongside cache restore logs and job execution times.
+
 Use Conventional Commits and the repository's pull-request template.
