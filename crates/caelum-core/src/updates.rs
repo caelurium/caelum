@@ -5,10 +5,10 @@ use reqwest::{blocking::Client, StatusCode};
 use semver::Version;
 use serde_json::Value;
 
-pub const REPOSITORY_URL: &str = "https://github.com/ch55secake/caelum";
-pub const RELEASES_URL: &str = "https://github.com/ch55secake/caelum/releases";
-pub const LICENSE_URL: &str = "https://github.com/ch55secake/caelum/blob/main/LICENSE";
-const LATEST_RELEASE_API: &str = "https://api.github.com/repos/ch55secake/caelum/releases/latest";
+pub const REPOSITORY_URL: &str = "https://github.com/caelurium/caelum";
+pub const RELEASES_URL: &str = "https://github.com/caelurium/caelum/releases";
+pub const LICENSE_URL: &str = "https://github.com/caelurium/caelum/blob/main/LICENSE";
+const LATEST_RELEASE_API: &str = "https://api.github.com/repos/caelurium/caelum/releases/latest";
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
 /// Manual, unauthenticated release discovery. Downloads open in the user's

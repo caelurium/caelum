@@ -10,7 +10,7 @@ An AI coding workspace for Apple Silicon Macs, with a native Rune desktop app an
 
 ## Get started
 
-[Download a release](https://github.com/ch55secake/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
+[Download a release](https://github.com/caelurium/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
 
 For local development, install Rust 1.95.0 and Xcode Command Line Tools, then run:
 

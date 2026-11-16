@@ -173,7 +173,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release"
           gh release download "$RELEASE_TAG" \
-            --repo ch55secake/caelum \
+            --repo "$GITHUB_REPOSITORY" \
             --pattern SHA256SUMS \
             --dir "$RUNNER_TEMP/release"
 
@@ -208,7 +208,7 @@ jobs:
           body: |
             Update the Caelum CLI formula and desktop cask for the latest release.
 
-            Release: https://github.com/ch55secake/caelum/releases/tag/${{ needs.prepare.outputs.release_tag }}
+            Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.release_tag }}
 
       - name: Close superseded Homebrew update PRs
         env:
