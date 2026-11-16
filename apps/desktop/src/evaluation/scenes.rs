@@ -5,6 +5,13 @@ use crate::{Workspace, panels};
 type Scene = (&'static str, fn(&mut Workspace));
 
 pub(crate) const SCENES: &[Scene] = &[
+    ("subagent-running", |s| {
+        crate::subagents::scene(s, "running")
+    }),
+    ("subagent-completed", |s| {
+        crate::subagents::scene(s, "completed")
+    }),
+    ("subagent-failed", |s| crate::subagents::scene(s, "error")),
     ("update-downloading", |s| {
         crate::updates::scene(s, "downloading")
     }),

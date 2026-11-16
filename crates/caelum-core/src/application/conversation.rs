@@ -8,6 +8,7 @@ mod failure;
 mod opencode;
 mod reconciliation;
 pub(super) mod shells;
+mod subagents;
 mod timing;
 #[cfg(test)]
 mod timing_tests;
@@ -211,8 +212,11 @@ impl Conversation {
                     let at = message["time"]["created"].as_u64();
                     opencode_message(message).into_iter().map(move |mut entry| {
                         // A background result's message was created at completion,
-                        // not when its command started.
-                        if !entry.background {
+                        // not when it started. Subagent launches can still fall
+                        // back to their owning assistant message's timestamp.
+                        if !entry.background
+                            || (entry.name == "subagent" && entry.metadata["source"] != "subagent")
+                        {
                             entry.started_at = entry.started_at.or(at);
                         }
                         entry
@@ -691,6 +695,7 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                         } else {
                             display(&state["error"])
                         };
+                        subagents::tool(&mut entry);
                         Some(entry)
                     } else {
                         None
@@ -699,14 +704,16 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                 .collect()
         }
         "shell" => shells::history(message).into_iter().collect(),
-        "synthetic" => vec![shells::synthetic(message).unwrap_or_else(|| {
-            Entry::new(
-                format!("opencode-{id}"),
-                EntryKind::Status,
-                display(&message["text"]),
-                true,
-            )
-        })],
+        "synthetic" => vec![shells::synthetic(message)
+            .or_else(|| subagents::synthetic(message))
+            .unwrap_or_else(|| {
+                Entry::new(
+                    format!("opencode-{id}"),
+                    EntryKind::Status,
+                    display(&message["text"]),
+                    true,
+                )
+            })],
         "compaction" => {
             let mut entry = Entry::new(
                 format!("opencode-{id}"),

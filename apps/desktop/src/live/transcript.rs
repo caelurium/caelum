@@ -160,6 +160,7 @@ pub(super) fn timeline_row(
     let mut content = col().w_full().px(padding).py(12.0).gap(16.0);
     let session = &live.app.sessions[index];
     if row_index == 0 {
+        content = content.children(crate::subagents::parent(s, k, index));
         if let Some(error) = &live.app.error {
             content = content.child(text(error).font(k.ty.ui).color(k.c.text_accent).wrap());
         }

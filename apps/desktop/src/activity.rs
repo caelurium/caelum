@@ -26,7 +26,33 @@ pub fn session_activity(
             && p.provider == session.scope.provider.as_str()
             && Some(&p.session_id) == session.remote_id.as_ref()
     });
-    caelum_core::application::presentation::activity(session, input)
+    let activity = caelum_core::application::presentation::activity(session, input);
+    let running = caelum_core::application::subagents::running(&session.conversation.entries);
+    use caelum_core::application::presentation::{Activity, ActivityKind};
+    if running > 0
+        && !session.submitting
+        && !session.disconnected
+        && activity
+            .as_ref()
+            .is_none_or(|a| matches!(a.kind, ActivityKind::Working | ActivityKind::Background))
+        && !session
+            .conversation
+            .entries
+            .iter()
+            .rev()
+            .take_while(|e| e.kind != EntryKind::User)
+            .any(|e| !e.complete && !e.background)
+    {
+        Some(Activity {
+            kind: ActivityKind::Background,
+            label: format!(
+                "{running} subagent{} running",
+                if running == 1 { "" } else { "s" }
+            ),
+        })
+    } else {
+        activity
+    }
 }
 
 pub fn indicator(
@@ -76,6 +102,9 @@ pub fn shells(s: &Workspace, k: &Kit, index: usize) -> El {
 }
 
 pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
+    if let Some(task) = caelum_core::application::subagents::Subagent::from_entry(entry) {
+        return crate::subagents::view(s, k, index, entry, &task);
+    }
     let presentation = Tool::from_entry(entry, now());
     let id = entry.id.clone();
     let expanded = live(s).expanded.contains(&(index, id.clone()));

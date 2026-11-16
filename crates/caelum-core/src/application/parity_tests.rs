@@ -6,6 +6,7 @@ mod provider_errors;
 mod queue;
 mod review;
 mod shells;
+mod subagents;
 mod tools;
 mod transcript;
 mod worktrees;

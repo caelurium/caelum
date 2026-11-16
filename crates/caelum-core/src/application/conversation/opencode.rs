@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::{
-    agent_name, display, model_id, part_id, set_metadata, shells, string, text_content,
+    agent_name, display, model_id, part_id, set_metadata, shells, string, subagents, text_content,
     Conversation, Entry, EntryKind, Provider,
 };
 use crate::application::presentation;
@@ -103,7 +103,7 @@ impl Conversation {
             return;
         }
         if method == "session.synthetic" {
-            if let Some(entry) = shells::synthetic(data) {
+            if let Some(entry) = shells::synthetic(data).or_else(|| subagents::synthetic(data)) {
                 self.put(entry);
             } else if let Some(id) = data["_event_id"].as_str() {
                 self.put(Entry::new(
@@ -253,6 +253,10 @@ impl Conversation {
                     }
                     entry.metadata["ended"] = ended.into();
                 }
+                subagents::tool(&mut entry);
+                if previous.is_some_and(|old| old.complete) && !entry.complete {
+                    return;
+                }
                 if !complete {
                     self.working = true;
                 }
@@ -262,6 +266,7 @@ impl Conversation {
                 } else {
                     self.entries.push(entry);
                 }
+                subagents::reconcile(&mut self.entries);
             }
         }
         if data["message"]["type"].is_string() {
