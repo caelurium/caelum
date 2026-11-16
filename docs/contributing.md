@@ -53,11 +53,31 @@ For visual changes, run `make previews` and inspect light/dark, inspector,
 compact and settings scenes. Native frame measurements are described in
 [performance](performance/README.md).
 
-CI runs structure and portable Rust checks on Linux and native desktop tests on
-macOS and both Linux architectures for every PR. Linux packages receive X11 and
-Wayland smoke coverage. macOS previews run for desktop UI, assets or fixture changes.
+CI uses GitHub-hosted `ubuntu-24.04` runners for structure and portable Rust
+checks and Apple Silicon `macos-15` runners for native desktop tests on every PR.
+Both Linux desktop architectures run on Ubuntu 22.04, with X11 and Wayland
+packaging smoke coverage. macOS previews run for desktop UI, assets, fixture or
+CI workflow changes.
 Python release/profile checks run separately. The release workflow checks main
 commits and builds release assets; PR bundle checks verify the app, DMG and CLI
-archive when Rust, app or packaging inputs change.
+archive when Rust, app, packaging or CI/release workflow inputs change.
+
+Rust CI jobs upload `cargo-timings-*` artifacts for 14 days, including reports
+available after a failed build. Open the timestamped HTML files to inspect each
+Cargo invocation's compilation time and concurrency. Packaging and the macOS
+development helper also leave these reports in `target/cargo-timings/` locally.
+Compare matching revisions, runner architectures, profiles and cache-hit states;
+job queue/setup time, test execution, preview capture and packaging smoke checks
+are separate from Cargo's build timings.
+
+Linux desktop tests and AppImage packaging run concurrently on native
+`ubuntu-22.04` and `ubuntu-22.04-arm` runners. The reusable Linux workflow must
+finish successfully before release publication, so both test and package jobs
+gate shipping. Each architecture has separate development/test and release
+dependency caches, reused by PRs and main through the same workflow. Explicit
+shared keys preserve the previous cache namespaces and give each cache one
+writer per run. `cargo-timings-*-linux-*` artifacts retain compilation reports
+for 14 days, including reports available when a job fails. Compare their
+timestamped HTML files alongside cache restore logs and job execution times.
 
 Use Conventional Commits and the repository's pull-request template.

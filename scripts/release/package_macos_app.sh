@@ -7,7 +7,7 @@ case "$TARGET" in
   *) echo "Unsupported desktop target: $TARGET" >&2; exit 1 ;;
 esac
 export MACOSX_DEPLOYMENT_TARGET=13.0
-cargo build --locked --release -p caelum-desktop --target "$TARGET" --manifest-path "$root/Cargo.toml"
+cargo build --locked --release --timings -p caelum-desktop --target "$TARGET" --manifest-path "$root/Cargo.toml"
 output="${1:-$root/target/$TARGET/release/bundle/macos}"
 mkdir -p "$output"
 output="$(cd "$output" && pwd)"
