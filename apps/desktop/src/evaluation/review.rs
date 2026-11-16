@@ -74,14 +74,14 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
     }
     let l = state.live.as_mut().unwrap();
     let project = "/projects/caelum";
-    let url = "https://github.com/ch55secake/caelum/pull/95";
+    let url = "https://github.com/caelurium/caelum/pull/95";
     let review = l
         .app
         .services
         .reviews
         .entry((project.into(), url.into()))
         .or_default();
-    review.details=Some(serde_json::from_value(json!({"number":95,"title":"Restore native workspace parity","url":url,"isDraft":false,"body":"Native composer, continuous review and durable session workflows.","state":"OPEN","author":{"login":"ch55secake"},"baseRefName":"feat/rune-design-parity","headRefName":"feat/rune-native-cutover","headRefOid":"a".repeat(40),"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":34,"deletions":8,"changedFiles":3,"reviewDecision":"APPROVED","statusCheckRollup":[{"__typename":"CheckRun","name":"Native interactions","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/ch55secake/caelum/actions","startedAt":"2026-11-07T10:00:00Z","completedAt":"2026-11-07T10:02:43Z"},{"__typename":"StatusContext","context":"Provider adapters","state":"SUCCESS","targetUrl":"https://github.com/ch55secake/caelum/actions"}]})).unwrap());
+    review.details=Some(serde_json::from_value(json!({"number":95,"title":"Restore native workspace parity","url":url,"isDraft":false,"body":"Native composer, continuous review and durable session workflows.","state":"OPEN","author":{"login":"ch55secake"},"baseRefName":"feat/rune-design-parity","headRefName":"feat/rune-native-cutover","headRefOid":"a".repeat(40),"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":34,"deletions":8,"changedFiles":3,"reviewDecision":"APPROVED","statusCheckRollup":[{"__typename":"CheckRun","name":"Native interactions","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/caelurium/caelum/actions","startedAt":"2026-11-07T10:00:00Z","completedAt":"2026-11-07T10:02:43Z"},{"__typename":"StatusContext","context":"Provider adapters","state":"SUCCESS","targetUrl":"https://github.com/caelurium/caelum/actions"}]})).unwrap());
     review.files=vec![
         caelum_protocol::GitHubPullRequestFile {path:"src/workspace.rs".into(),status:"modified".into(),previous_path:None,additions:3,deletions:1,patch:Some("@@ -1,4 +1,6 @@\n pub fn restore(session: &mut Session) {\n-    session.reset();\n+    session.restore_draft();\n+    session.restore_reading_position();\n+    session.focus();\n }\n ".into())},
         caelum_protocol::GitHubPullRequestFile {path:"src/composer.rs".into(),status:"renamed".into(),previous_path:Some("src/input.rs".into()),additions:1,deletions:1,patch:Some("@@ -1 +1 @@\n-const HEIGHT: f32 = 56.0;\n+const MAX_HEIGHT: f32 = 180.0;".into())},
