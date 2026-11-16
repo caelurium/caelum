@@ -5,6 +5,10 @@ use serde_json::json;
 
 #[test]
 fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
+    // Parallel runtimes can change Rune's process-wide measurement fonts.
+    // Keep bubble widths and wrapping in this runtime's native families.
+    let families = spec().families;
+    let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = live_runtime_size((800.0, 620.0));
     rt.update(|s, _| {
         let live = s.live.as_mut().unwrap();
