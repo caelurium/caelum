@@ -1,6 +1,6 @@
 # Caelum
 
-An AI coding workspace for macOS, with a native Rune desktop app and standalone Rust CLI. Work with project-scoped **Codex** and **OpenCode** sessions, browse files, review changes and manage GitHub pull requests in one place.
+An AI coding workspace for Apple Silicon Macs, with a native Rune desktop app and standalone Rust CLI. Work with project-scoped **Codex** and **OpenCode** sessions, browse files, review changes and manage GitHub pull requests in one place.
 
 - Independent session drafts, streamed responses, tool activity and restored history.
 - Project and worktree navigation with remembered sessions and live Git status.
