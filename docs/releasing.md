@@ -27,7 +27,7 @@ Main release runs are serialized. GitHub retains only the newest pending run whe
 
 The `main` ruleset requires pull requests and status checks. A dedicated GitHub App installation token permits the automated version commit:
 
-1. Create a private GitHub App with **Contents: read and write** permission and install it on `ch55secake/caelum`. Webhooks are unnecessary.
+1. Create a private GitHub App owned by `caelurium` with **Contents: read and write** permission and install it on `caelurium/caelum`. Webhooks are unnecessary.
 2. Store its app ID and private key in Actions secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
 3. Add the app to the `main` ruleset bypass list with **Always allow**.
 

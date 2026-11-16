@@ -10,7 +10,7 @@ An AI coding workspace for Apple Silicon Macs and Linux, with a native Rune desk
 
 ## Get started
 
-[Download a release](https://github.com/ch55secake/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
+[Download a release](https://github.com/caelurium/caelum/releases), then configure [Codex](docs/codex.md) or [OpenCode](docs/opencode.md). Open a project and send your first message.
 
 For Linux AppImage installation and runtime requirements, see the [Linux guide](docs/linux.md).
 

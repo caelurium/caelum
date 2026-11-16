@@ -30,7 +30,7 @@ fn separate_projects_and_sessions_scroll_independently_with_compact_rows() {
         click(
             &mut rt,
             &crate::code_view::source_key(
-                "https://github.com/ch55secake/caelum/pull/101",
+                "https://github.com/caelurium/caelum/pull/101",
                 "pull-request",
             ),
         );
@@ -41,7 +41,7 @@ fn separate_projects_and_sessions_scroll_independently_with_compact_rows() {
         let last = element(
             &rt,
             &crate::code_view::source_key(
-                "https://github.com/ch55secake/caelum/pull/106",
+                "https://github.com/caelurium/caelum/pull/106",
                 "pull-request",
             ),
         );
@@ -59,7 +59,7 @@ fn separate_projects_and_sessions_scroll_independently_with_compact_rows() {
                 .as_ref()
                 .unwrap()
                 .1,
-            "https://github.com/ch55secake/caelum/pull/106"
+            "https://github.com/caelurium/caelum/pull/106"
         );
     }
 }

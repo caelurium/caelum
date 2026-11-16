@@ -16,6 +16,7 @@ use crate::projects::{Project, ProjectError};
 
 mod auto_merge;
 pub(crate) mod cache;
+mod identity;
 mod review;
 pub use auto_merge::set_pull_request_auto_merge;
 pub use cache::CachedReview;
@@ -55,12 +56,17 @@ fn query_details(
     let mut command = github_command(executable, project.path());
     command.args(["pr", "view", url, "--json", "number,title,url,isDraft,body,state,author,baseRefName,baseRefOid,headRefName,headRefOid,mergeable,mergeStateStatus,additions,deletions,changedFiles,reviewDecision,statusCheckRollup,autoMergeRequest"]);
     let output = checked_output(command, timeout)?;
-    let details: GitHubPullRequestDetails = serde_json::from_slice(&output.stdout)?;
-    if details.pull_request.url != url {
-        return Err(GitHubError::Command(
-            "GitHub returned a different pull request".into(),
-        ));
-    }
+    let mut details: GitHubPullRequestDetails = serde_json::from_slice(&output.stdout)?;
+    identity::check(
+        executable,
+        project.path(),
+        url,
+        Some(&details.pull_request.url),
+        timeout,
+    )?;
+    // Reviews, persisted associations and file pages are keyed by the requested
+    // URL. Keep that identity after verifying the redirect so caches still join.
+    url.clone_into(&mut details.pull_request.url);
     Ok(details)
 }
 
@@ -363,6 +369,8 @@ pub enum GitHubError {
 
 #[cfg(all(test, unix))]
 mod tests {
+    mod redirects;
+
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 

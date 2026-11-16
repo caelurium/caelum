@@ -22,7 +22,7 @@ env:
 jobs:
   changes:
     name: Detect changed areas
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: read
@@ -58,9 +58,9 @@ jobs:
 
   rust-structure:
     name: rust-structure
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           ref: ${{ inputs.revision || github.sha }}
           fetch-depth: 0
@@ -71,9 +71,9 @@ jobs:
       - run: python3 -m unittest discover -s scripts/structure -p 'test_*.py'
   rust-format:
     name: rust-format
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           ref: ${{ inputs.revision || github.sha }}
       - uses: dtolnay/rust-toolchain@master
@@ -83,9 +83,9 @@ jobs:
       - run: cargo fmt --all -- --check
   rust-clippy:
     name: rust-lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           ref: ${{ inputs.revision || github.sha }}
       - uses: dtolnay/rust-toolchain@master
@@ -96,9 +96,9 @@ jobs:
       - run: cargo clippy --locked -p caelum-core -p caelum-protocol -p caelum-cli --all-targets -- -D warnings
   rust-test:
     name: rust-tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           ref: ${{ inputs.revision || github.sha }}
       - uses: dtolnay/rust-toolchain@master
@@ -109,7 +109,7 @@ jobs:
   native-desktop:
     name: native-desktop-tests
     needs: changes
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -133,7 +133,7 @@ jobs:
     name: desktop-bundle-build
     needs: changes
     if: ${{ inputs.skip_bundle != true && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -156,9 +156,9 @@ jobs:
           path: ${{ runner.temp }}/release/*
   release-package:
     name: release-package
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
         with:
           ref: ${{ inputs.revision || github.sha }}
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py'
