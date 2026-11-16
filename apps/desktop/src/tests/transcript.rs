@@ -2,6 +2,7 @@ use super::*;
 
 mod bookkeeping;
 mod identity;
+mod relocation;
 mod scroll;
 
 #[test]
