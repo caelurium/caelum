@@ -24,6 +24,7 @@ use super::{
 
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
+mod opencode;
 
 /// Shared by desktop adapters; constructing this does not start a provider.
 #[derive(Clone)]
@@ -361,26 +362,7 @@ impl ProviderRuntime {
                         })
                         .map(Reply::Session)
                         .map_err(|e| e.to_string()),
-                    Provider::OpenCode => self
-                        .opencode
-                        .resume_with_history(&key.scope.project, &key.id)
-                        .map(|(s, page)| {
-                            Reply::Resumed(
-                                Summary {
-                                    key: key.clone(),
-                                    title: s.session.title.unwrap_or_default(),
-                                    updated_at: s.session.updated_at,
-                                    working: s.session.is_working,
-                                    options: Options {
-                                        model: s.session.model,
-                                        effort: s.session.effort,
-                                        agent: s.session.agent,
-                                    },
-                                },
-                                page,
-                            )
-                        })
-                        .map_err(|e| e.to_string()),
+                    Provider::OpenCode => self.resume_opencode(key),
                 };
             }
             Command::History(key, cursor) => {
@@ -522,6 +504,10 @@ pub enum Reply {
     Sessions(Vec<Summary>),
     Session(Summary),
     Resumed(Summary, SessionHistoryPage),
+    SessionMoved {
+        from: SessionKey,
+        project: ProjectInfo,
+    },
     Choices(ProviderChoices),
     History(SessionHistoryPage),
     Done,
