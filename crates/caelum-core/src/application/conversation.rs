@@ -7,6 +7,7 @@ use super::Provider;
 mod failure;
 mod opencode;
 mod reconciliation;
+pub(super) mod shells;
 mod timing;
 #[cfg(test)]
 mod timing_tests;
@@ -209,7 +210,11 @@ impl Conversation {
                 .flat_map(|message| {
                     let at = message["time"]["created"].as_u64();
                     opencode_message(message).into_iter().map(move |mut entry| {
-                        entry.started_at = entry.started_at.or(at);
+                        // A background result's message was created at completion,
+                        // not when its command started.
+                        if !entry.background {
+                            entry.started_at = entry.started_at.or(at);
+                        }
                         entry
                     })
                 })
@@ -592,12 +597,18 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
         return Vec::new();
     };
     match string(&message["type"]) {
-        "user" => { let mut entry = Entry::new(
-            format!("opencode-{id}"),
-            EntryKind::User,
-            display(&message["text"]),
-            true,
-        ); entry.media.extend(super::presentation::media(&message["files"])); vec![entry] },
+        "user" => {
+            let mut entry = Entry::new(
+                format!("opencode-{id}"),
+                EntryKind::User,
+                display(&message["text"]),
+                true,
+            );
+            entry
+                .media
+                .extend(super::presentation::media(&message["files"]));
+            vec![entry]
+        }
         "assistant" => {
             let mut text_ordinal = 0;
             let mut reasoning_ordinal = 0;
@@ -649,12 +660,28 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                             ),
                         );
                         entry.name = display(&part["name"]);
-                        entry.status = if !state["error"].is_null() { "failed" } else { state["status"].as_str().unwrap_or(if entry.complete { "completed" } else { "running" }) }.into();
+                        entry.status = if !state["error"].is_null() {
+                            "failed"
+                        } else {
+                            state["status"].as_str().unwrap_or(if entry.complete {
+                                "completed"
+                            } else {
+                                "running"
+                            })
+                        }
+                        .into();
                         entry.error = display(&state["error"]);
                         entry.metadata = state["metadata"].clone();
-                        entry.started_at = state["time"]["start"].as_u64().or(part["time"]["created"].as_u64());
-                        if let Some(ended) = state["time"]["end"].as_u64().or(part["time"]["completed"].as_u64()) {
-                            if !entry.metadata.is_object() { entry.metadata = serde_json::json!({}); }
+                        entry.started_at = state["time"]["start"]
+                            .as_u64()
+                            .or(part["time"]["created"].as_u64());
+                        if let Some(ended) = state["time"]["end"]
+                            .as_u64()
+                            .or(part["time"]["completed"].as_u64())
+                        {
+                            if !entry.metadata.is_object() {
+                                entry.metadata = serde_json::json!({});
+                            }
                             entry.metadata["ended"] = ended.into();
                         }
                         entry.input = display(&state["input"]);
@@ -671,19 +698,24 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                 })
                 .collect()
         }
-        "shell" => shell_entry(&serde_json::json!({"id": message["shellID"].as_str().or(message["id"].as_str()), "command":message["command"], "status":message["status"], "exit":message["exit"], "metadata":message["metadata"]}), &message["output"]).into_iter().collect(),
-        "synthetic" => vec![Entry::new(
-            format!("opencode-{id}"),
-            EntryKind::Status,
-            display(&message["text"]),
-            true,
-        )],
+        "shell" => shells::history(message).into_iter().collect(),
+        "synthetic" => vec![shells::synthetic(message).unwrap_or_else(|| {
+            Entry::new(
+                format!("opencode-{id}"),
+                EntryKind::Status,
+                display(&message["text"]),
+                true,
+            )
+        })],
         "compaction" => {
             let mut entry = Entry::new(
                 format!("opencode-{id}"),
                 EntryKind::Compaction,
                 text_content(&message["summary"]),
-                !matches!(message["status"].as_str(), Some("running" | "pending" | "in_progress")),
+                !matches!(
+                    message["status"].as_str(),
+                    Some("running" | "pending" | "in_progress")
+                ),
             );
             entry.status = message["status"].as_str().unwrap_or("completed").into();
             entry.error = display(message["error"].get("message").unwrap_or(&message["error"]));
@@ -691,39 +723,9 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                 entry.metadata = serde_json::json!({"ended": ended});
             }
             vec![entry]
-        },
+        }
         _ => Vec::new(),
     }
-}
-
-fn shell_entry(shell: &Value, output: &Value) -> Option<Entry> {
-    let id = shell["id"].as_str()?;
-    let complete = shell["status"] != "running";
-    let mut entry = Entry::new(
-        format!("opencode-shell-{id}"),
-        EntryKind::Tool,
-        String::new(),
-        complete,
-    );
-    entry.name = "Background shell".into();
-    entry.background = true;
-    entry.started_at = shell["time"]["started"]
-        .as_u64()
-        .or(shell["started"].as_u64())
-        .or(shell["startedAt"].as_u64());
-    entry.metadata = serde_json::json!({"exit":shell["exit"],"signal":shell["signal"],"ended":shell["time"]["completed"].as_u64().or(shell["ended"].as_u64()),"cwd":shell["cwd"]});
-    entry.input = display(&shell["command"]);
-    entry.output = if output.is_object() {
-        display(&output["output"])
-    } else {
-        display(output)
-    };
-    entry.status = if shell["exit"].as_i64().is_some_and(|code| code != 0) {
-        format!("failed (exit {})", shell["exit"])
-    } else {
-        shell["status"].as_str().unwrap_or("completed").into()
-    };
-    Some(entry)
 }
 
 fn part_id(message: &str, kind: &str, ordinal: u64) -> String {

@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::{
-    agent_name, display, model_id, part_id, set_metadata, shell_entry, string, text_content,
+    agent_name, display, model_id, part_id, set_metadata, shells, string, text_content,
     Conversation, Entry, EntryKind, Provider,
 };
 use crate::application::presentation;
@@ -91,7 +91,7 @@ impl Conversation {
             return;
         }
         if matches!(method, "session.shell.started" | "session.shell.ended") {
-            if let Some(entry) = shell_entry(&data["shell"], &data["output"]) {
+            if let Some(entry) = shells::entry(&data["shell"], &data["output"]) {
                 if !self
                     .entries
                     .iter()
@@ -103,7 +103,9 @@ impl Conversation {
             return;
         }
         if method == "session.synthetic" {
-            if let Some(id) = data["_event_id"].as_str() {
+            if let Some(entry) = shells::synthetic(data) {
+                self.put(entry);
+            } else if let Some(id) = data["_event_id"].as_str() {
                 self.put(Entry::new(
                     format!("opencode-{}", id.replacen("evt_", "msg_", 1)),
                     EntryKind::Status,
