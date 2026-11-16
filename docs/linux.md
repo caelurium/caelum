@@ -9,7 +9,7 @@ such as GTK, GNOME or KDE. Notifications use `org.freedesktop.Notifications`.
 ## Install and update
 
 Download the matching AppImage and `SHA256SUMS` from the
-[GitHub release](https://github.com/ch55secake/caelum/releases). For example,
+[GitHub release](https://github.com/caelurium/caelum/releases). For example,
 substituting the downloaded version:
 
 ```sh
