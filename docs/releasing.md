@@ -79,7 +79,11 @@ macOS 13; native packaging retains `Caelum.app`, `dev.caelum.desktop`, the icon,
 version/revision metadata and `caelum://open?path=…` URL registration. It rejects
 non-system dynamic libraries after normalizing the known Nix libiconv dependency.
 
-The asset script builds both binaries, signs them, creates a compressed DMG,
+The asset script builds both binaries in one Cargo invocation so shared dependency
+features are resolved and compiled together. The app helper's `--with-cli` option
+enables this combined build; `make app` still builds the desktop on its own.
+Both paths ask Cargo to validate the current sources and locked dependencies.
+The asset script signs both binaries, creates a compressed DMG,
 mounts/verifies it and checks extracted CLI startup. Release publication produces:
 
 - `Caelum-v<version>-aarch64.dmg`
