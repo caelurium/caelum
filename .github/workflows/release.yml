@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Version-bump pushes must not replace a queued merge's release run.
+  # Version-bump pushes must not replace the original main release run.
   group: release-${{ github.workflow }}-${{ inputs.tag || (github.event.head_commit.author.name == 'github-actions[bot]' && github.sha) || github.ref }}
   cancel-in-progress: false
 
@@ -64,7 +64,7 @@ jobs:
         run: python3 scripts/release/publish_release.py --check
 
   checks:
-    name: Check release commit
+    name: Verify and package release
     needs: prepare
     if: ${{ needs.prepare.outputs.should_release == 'true' && needs.prepare.outputs.published != 'true' }}
     permissions:
@@ -73,87 +73,13 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       revision: ${{ needs.prepare.outputs.release_commit }}
-      skip_bundle: true
-
-  build:
-    name: Build ${{ matrix.arch }} release assets
-    needs: prepare
-    if: ${{ needs.prepare.outputs.should_release == 'true' && needs.prepare.outputs.published != 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: aarch64
-            runner: macos-15
-            target: aarch64-apple-darwin
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.release_commit }}
-
-      - name: Verify release tag matches project version
-        env:
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-        run: |
-          python3 - <<'PY'
-          import os
-          import tomllib
-          from pathlib import Path
-
-          workspace_version = tomllib.loads(Path("Cargo.toml").read_text())["workspace"]["package"]["version"]
-          tag = os.environ["RELEASE_TAG"]
-
-          if tag != f"v{workspace_version}":
-              raise SystemExit(f"Tag {tag} must match project version v{workspace_version}")
-          PY
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-          targets: ${{ matrix.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ matrix.target }}-build
-
-      - name: Package architecture-specific release assets
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCH: ${{ matrix.arch }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          MACOSX_DEPLOYMENT_TARGET: '13.0'
-        run: bash scripts/release/package_macos_assets.sh
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: release-${{ matrix.arch }}
-          path: ${{ runner.temp }}/release/*
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Cargo build timings
-        uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: cargo-timings-release-${{ matrix.target }}
-          path: target/cargo-timings/*.html
-          if-no-files-found: ignore
-          retention-days: 14
-
-  build-linux:
-    name: Build Linux desktop release assets
-    needs: prepare
-    if: ${{ needs.prepare.outputs.should_release == 'true' && needs.prepare.outputs.published != 'true' && needs.prepare.outputs.linux_desktop == 'true' }}
-    uses: ./.github/workflows/linux-desktop.yml
-    with:
-      revision: ${{ needs.prepare.outputs.release_commit }}
       release_tag: ${{ needs.prepare.outputs.release_tag }}
+      linux_desktop: ${{ needs.prepare.outputs.linux_desktop == 'true' }}
 
   publish:
     name: Publish GitHub release
-    needs: [prepare, checks, build, build-linux]
-    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || (needs.checks.result == 'success' && needs.build.result == 'success' && (needs.prepare.outputs.linux_desktop != 'true' || needs.build-linux.result == 'success'))) }}
+    needs: [prepare, checks]
+    if: ${{ !cancelled() && needs.prepare.outputs.should_release == 'true' && (needs.prepare.outputs.published == 'true' || needs.checks.result == 'success') }}
     concurrency:
       group: publish-${{ github.repository }}-${{ needs.prepare.outputs.release_tag }}
       cancel-in-progress: false

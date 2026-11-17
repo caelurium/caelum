@@ -1,7 +1,7 @@
 # CI build caches
 
-PR packaging and main release builds use the same `Swatinem/rust-cache` shared
-key: `<target>-build`. This preserves the release workflow's existing namespace,
+PR and main release packaging run the same CI job with the `Swatinem/rust-cache`
+shared key `aarch64-apple-darwin-build`. This preserves the existing namespace,
 so the first PR can restore a main-produced cache. Native development, portable
 tests and Clippy retain separate, explicit shared keys matching their previous
 job IDs. Main's reusable CI produces those caches for subsequent PRs.
