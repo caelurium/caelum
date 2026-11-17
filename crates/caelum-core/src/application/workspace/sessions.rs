@@ -153,7 +153,7 @@ impl Workspace {
 
     pub fn refresh(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading || session.submitting || session.relocation.is_some() {
+        if session.loading || session.submitting || session.relocation.pending() {
             return;
         }
         let Some(key) = session.key() else {
@@ -206,7 +206,7 @@ impl Workspace {
                         && !session.forgotten
                         && session.remote_id.as_deref() == Some(&summary.key.id)
                 }) {
-                    self.refresh(index);
+                    self.check_discovered_move(index, &scope.project, request);
                     continue;
                 }
             }

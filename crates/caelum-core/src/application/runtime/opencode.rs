@@ -1,7 +1,36 @@
-use super::{Options, ProviderRuntime, Reply, SessionKey, Summary};
+use super::{OpenCodeMove, Options, Provider, ProviderRuntime, Reply, SessionKey, Summary};
 use crate::opencode::OpenCodeError;
 
 impl ProviderRuntime {
+    pub(super) fn verify_opencode_move(
+        &self,
+        from: &SessionKey,
+        destination: &str,
+    ) -> Result<Reply, String> {
+        if from.scope.provider != Provider::OpenCode {
+            return Err("Invalid OpenCode relocation target".into());
+        }
+        // A list or SSE event is only a hint. Ask the destination for this exact ID;
+        // the old directory may have been renamed or deleted since the last launch.
+        let (project, archived) = self
+            .opencode
+            .session_location(destination, &from.id)
+            .map_err(|e| e.to_string())?;
+        if project.path != destination {
+            return Ok(Reply::Done); // The listing predates another move.
+        }
+        if from.scope.project != destination {
+            self.opencode
+                .forget_previous_location(&from.scope.project, &from.id);
+        }
+        Ok(Reply::SessionMoved(OpenCodeMove {
+            from: from.clone(),
+            project,
+            archived,
+            linked_worktree: false,
+        }))
+    }
+
     pub(super) fn resume_opencode(&self, key: &SessionKey) -> Result<Reply, String> {
         match self
             .opencode
@@ -22,35 +51,33 @@ impl ProviderRuntime {
                 page,
             )),
             Err(OpenCodeError::SessionNotInProject) => {
-                let project = self
+                let (project, archived) = self
                     .opencode
                     .session_location(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string())?;
                 // Git, rather than an ID cached by either client, establishes
                 // that this is another checkout of the same scoped project.
-                let listing = self
+                if project.path == key.scope.project {
+                    return Err("OpenCode session moved during refresh; refresh again".into());
+                }
+                let linked_worktree = self
                     .worktrees
                     .list(&key.scope.project, "")
-                    .map_err(|e| e.to_string())?;
-                if project.path == key.scope.project
-                    || !listing.is_some_and(|listing| {
+                    .map_err(|e| e.to_string())?
+                    .is_some_and(|listing| {
                         listing
                             .worktrees
                             .iter()
                             .any(|tree| tree.available && tree.project.path == project.path)
-                    })
-                {
-                    return Err(format!(
-                        "This OpenCode session is now in '{}'. Open that directory to reconnect.",
-                        project.path
-                    ));
-                }
+                    });
                 // No history or mutation is sent against the stale scope. The
                 // workspace first adopts the new checkout, then resumes there.
-                Ok(Reply::SessionMoved {
+                Ok(Reply::SessionMoved(OpenCodeMove {
                     from: key.clone(),
                     project,
-                })
+                    archived,
+                    linked_worktree,
+                }))
             }
             Err(error) => Err(error.to_string()),
         }
