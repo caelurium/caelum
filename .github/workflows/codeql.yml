@@ -3,8 +3,6 @@ name: CodeQL cached analysis
 on:
   pull_request:
     branches: [main]
-  merge_group:
-    types: [checks_requested]
   push:
     branches: [main]
   schedule:
@@ -16,7 +14,7 @@ permissions:
 
 concurrency:
   group: codeql-cached-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
@@ -58,9 +56,8 @@ jobs:
           category: /language:${{ matrix.language }}
           output: codeql-results
           # Default setup remains authoritative until the documented cutover.
-          # Queue refs are ephemeral; retain their SARIF as artifacts instead.
-          upload: ${{ vars.CODEQL_ADVANCED == 'enabled' && github.event_name != 'merge_group' && 'always' || 'never' }}
-          upload-database: ${{ vars.CODEQL_ADVANCED == 'enabled' && github.event_name != 'merge_group' }}
+          upload: ${{ vars.CODEQL_ADVANCED == 'enabled' && 'always' || 'never' }}
+          upload-database: ${{ vars.CODEQL_ADVANCED == 'enabled' }}
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
