@@ -22,6 +22,7 @@ mod opencode;
 
 pub use messages::Command;
 pub use messages::Event;
+pub use messages::OpenCodeMove;
 pub use messages::Reply;
 
 /// Shared by desktop adapters; constructing this does not start a provider.
@@ -344,6 +345,9 @@ impl ProviderRuntime {
                         .map_err(|e| e.to_string()),
                 }
                 .map(Reply::Session);
+            }
+            Command::VerifyOpenCodeMove { from, destination } => {
+                return self.verify_opencode_move(from, destination)
             }
             Command::Resume(key) => {
                 return match key.scope.provider {

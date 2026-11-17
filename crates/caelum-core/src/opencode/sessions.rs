@@ -170,7 +170,7 @@ impl OpenCodeProvider {
         &self,
         project_path: &str,
         session_id: &str,
-    ) -> Result<caelum_protocol::ProjectInfo, OpenCodeError> {
+    ) -> Result<(caelum_protocol::ProjectInfo, bool), OpenCodeError> {
         if !valid_session_id(session_id) {
             return Err(OpenCodeError::InvalidSessionId);
         }
@@ -191,11 +191,27 @@ impl OpenCodeProvider {
         let directory = session_directory(value).ok_or_else(|| {
             OpenCodeError::Protocol("session response has no location directory".into())
         })?;
+        if !Path::new(directory).is_absolute() {
+            return Err(OpenCodeError::Protocol(
+                "session location is not an absolute directory".into(),
+            ));
+        }
         let destination = Project::open(directory)?;
         if destination.path() != project.path() {
             server.forget_session(session_id);
+        } else {
+            server.remember_session(session_id);
         }
-        Ok(destination.info())
+        let archived = value
+            .pointer("/time/archived")
+            .is_some_and(|v| !v.is_null());
+        Ok((destination.info(), archived))
+    }
+
+    pub(crate) fn forget_previous_location(&self, project: &str, session_id: &str) {
+        if let Some(slot) = self.inner.lock_servers().get(Path::new(project)) {
+            slot.forget_session_if_connected(session_id);
+        }
     }
 
     /// Ask OpenCode's title agent to rename a session using its conversation.

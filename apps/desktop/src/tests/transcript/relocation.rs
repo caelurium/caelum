@@ -1,5 +1,5 @@
 use super::*;
-use caelum_core::application::{Command, Event, Provider, Reply};
+use caelum_core::application::{Command, Event, OpenCodeMove, Provider, Reply};
 use caelum_protocol::ProjectInfo;
 use serde_json::json;
 
@@ -53,13 +53,15 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     rt.update(|s, _| {
         s.live.as_mut().unwrap().apply(Event::Completed(
             request,
-            Ok(Reply::SessionMoved {
+            Ok(Reply::SessionMoved(OpenCodeMove {
                 from,
+                linked_worktree: true,
+                archived: false,
                 project: ProjectInfo {
                     path: "/linked".into(),
                     name: "Linked checkout".into(),
                 },
-            }),
+            })),
         ));
     });
     advance(&mut rt, 0.3);

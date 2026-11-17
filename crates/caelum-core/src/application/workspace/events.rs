@@ -149,6 +149,10 @@ impl Workspace {
     }
 
     fn provider_event(&mut self, path: &str, provider: Provider, method: &str, data: &Value) {
+        if provider == Provider::OpenCode && method == "session.moved" {
+            self.opencode_moved(path, data);
+            return;
+        }
         if method == "filesystem.changed" && self.active_project.as_deref() == Some(path) {
             self.refresh_files();
             return;
