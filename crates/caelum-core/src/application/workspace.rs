@@ -31,7 +31,7 @@ use super::{
 pub struct Session {
     pub scope: Scope,
     pub remote_id: Option<String>,
-    relocation: Option<relocation::Relocation>,
+    relocation: relocation::Relocation,
     pub title: String,
     title_state: titles::TitleState,
     /// Last meaningful activity in Unix milliseconds; selection and token deltas do not bump it.
@@ -91,7 +91,7 @@ impl Session {
         Self {
             scope,
             remote_id: None,
-            relocation: None,
+            relocation: Default::default(),
             title: "New session".into(),
             title_state: Default::default(),
             last_activity: None,
@@ -175,7 +175,7 @@ impl Session {
     }
 
     pub fn can_send(&self) -> bool {
-        self.relocation.is_none()
+        !self.relocation.pending()
             && !self.working()
             && self.loaded
             && !self.loading
@@ -189,7 +189,7 @@ impl Session {
 
     /// Whether a draft may be submitted, including to the queue while working.
     pub fn can_submit(&self) -> bool {
-        self.relocation.is_none()
+        !self.relocation.pending()
             && !self.archived
             && !self.forgotten
             && !self.stopping
@@ -231,6 +231,7 @@ enum Pending {
     List(Scope),
     Choices(Scope),
     Resume(usize, u64),
+    VerifyOpenCodeMove(usize),
     History(usize, u64, bool),
     Start(usize, String),
     Send(usize, String, u64),

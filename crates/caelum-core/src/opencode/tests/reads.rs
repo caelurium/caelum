@@ -303,24 +303,27 @@ fn busy_checks_still_use_fresh_activity_and_fail_closed() {
 }
 
 fn resume_reply(service: &Service, path: &Path) -> Result<Reply, String> {
+    relocation_reply(
+        service,
+        AppCommand::Resume(SessionKey {
+            scope: Scope {
+                provider: Provider::OpenCode,
+                project: path.to_string_lossy().into_owned(),
+            },
+            id: "ses_read".into(),
+        }),
+    )
+}
+
+fn relocation_reply(service: &Service, command: AppCommand) -> Result<Reply, String> {
     let mut providers = ProviderRuntime::default();
     providers.opencode = service.provider.clone();
     let (wake, wakes) = mpsc::channel();
     let mut runtime = Runtime::with_providers(providers, move || {
         let _ = wake.send(());
     });
-    runtime
-        .submit(
-            1,
-            AppCommand::Resume(SessionKey {
-                scope: Scope {
-                    provider: Provider::OpenCode,
-                    project: path.to_string_lossy().into_owned(),
-                },
-                id: "ses_read".into(),
-            }),
-        )
-        .unwrap();
+    let verify = matches!(command, AppCommand::VerifyOpenCodeMove { .. });
+    runtime.submit(1, command).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if let Some(reply) = runtime.drain().into_iter().find_map(|event| match event {
@@ -328,6 +331,9 @@ fn resume_reply(service: &Service, path: &Path) -> Result<Reply, String> {
             _ => None,
         }) {
             let requests = service.requests();
+            if verify {
+                assert_eq!(requests, ["GET /api/session/ses_read"]);
+            }
             assert!(requests.iter().all(|request| request.starts_with("GET ")));
             assert!(!requests.iter().any(|request| request.ends_with("/message")));
             return reply;
@@ -335,6 +341,55 @@ fn resume_reply(service: &Service, path: &Path) -> Result<Reply, String> {
         wakes
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .unwrap();
+    }
+}
+
+#[test]
+fn relocation_from_discovery_verifies_the_id_and_directory_without_accessing_the_old_project() {
+    for case in ["moved", "moved again", "different id", "relative directory"] {
+        let service = Service::new();
+        let destination = service
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let previous = service.path().join("deleted");
+        let id = "ses_read";
+        let from = SessionKey {
+            scope: Scope {
+                provider: Provider::OpenCode,
+                project: previous.to_str().unwrap().into(),
+            },
+            id: id.into(),
+        };
+        let metadata = match case {
+            "moved" => json!({"archived":true, "active_error":true}),
+            "moved again" => json!({"directory": service.path().parent().unwrap()}),
+            "different id" => json!({"id": "ses_other"}),
+            _ => json!({"directory":"."}),
+        };
+        service.configure(metadata);
+        let reply = relocation_reply(
+            &service,
+            AppCommand::VerifyOpenCodeMove {
+                from: from.clone(),
+                destination: destination.clone(),
+            },
+        );
+        match case {
+            "moved" => {
+                let Ok(Reply::SessionMoved(change)) = reply else {
+                    panic!("expected the verified destination")
+                };
+                assert_eq!(change.project.path, destination);
+                assert_eq!(change.from, from);
+                assert!(change.archived);
+                assert!(!change.linked_worktree);
+            }
+            "moved again" => assert!(matches!(reply, Ok(Reply::Done))),
+            _ => assert!(reply.is_err()),
+        }
     }
 }
 
@@ -399,20 +454,20 @@ fn resume_locates_a_moved_session_only_in_a_verified_linked_checkout() {
         Err(OpenCodeError::SessionNotInProject)
     ));
     service.requests();
-    let Reply::SessionMoved { from, project } = resume_reply(&service, service.path()).unwrap()
-    else {
+    let Reply::SessionMoved(change) = resume_reply(&service, service.path()).unwrap() else {
         panic!("expected a verified relocation, not history under the old checkout")
     };
-    assert_eq!(from.id, "ses_read");
-    assert_eq!(from.scope.project, service.path().to_string_lossy());
+    assert!(change.linked_worktree);
+    assert_eq!(change.from.id, "ses_read");
+    assert_eq!(change.from.scope.project, service.path().to_string_lossy());
     assert_eq!(
-        Path::new(&project.path),
+        Path::new(&change.project.path),
         destination.0.canonicalize().unwrap()
     );
 }
 
 #[test]
-fn relocation_rejects_unrelated_repositories_wrong_ids_and_missing_locations() {
+fn cross_project_move_needs_an_open_destination_and_invalid_metadata_is_rejected() {
     for wrong in ["unrelated", "id", "missing"] {
         let service = Service::new();
         repository(service.path());
@@ -437,7 +492,19 @@ fn relocation_rejects_unrelated_repositories_wrong_ids_and_missing_locations() {
         if wrong == "missing" {
             service.configure(json!({"directory":null}));
         }
-        assert!(resume_reply(&service, service.path()).is_err(), "{wrong}");
+        let reply = resume_reply(&service, service.path());
+        if wrong == "unrelated" {
+            let Ok(Reply::SessionMoved(change)) = reply else {
+                panic!("expected an open-project hint, not a linked worktree")
+            };
+            assert!(!change.linked_worktree);
+            assert_eq!(
+                Path::new(&change.project.path),
+                destination.0.canonicalize().unwrap()
+            );
+        } else {
+            assert!(reply.is_err(), "{wrong}");
+        }
     }
 }
 
@@ -469,10 +536,9 @@ fn relocation_keeps_repository_subdirectory_scopes() {
             .lock_servers()
             .insert(source.canonicalize().unwrap(), slot);
         service.configure(json!({"directory": if same_subpath { destination.0.join("src") } else { destination.0.clone() }}));
-        let result = resume_reply(&service, &source);
-        assert_eq!(
-            matches!(result, Ok(Reply::SessionMoved { .. })),
-            same_subpath
-        );
+        let Ok(Reply::SessionMoved(change)) = resume_reply(&service, &source) else {
+            panic!("expected a move")
+        };
+        assert_eq!(change.linked_worktree, same_subpath);
     }
 }

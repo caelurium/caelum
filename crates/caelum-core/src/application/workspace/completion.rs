@@ -14,6 +14,10 @@ impl Workspace {
             self.complete_home(request, pending, result);
             return;
         }
+        if let Pending::VerifyOpenCodeMove(index) = pending {
+            self.finish_move_check(request, index, result);
+            return;
+        }
         if let Pending::RegenerateTitle(index, key) = pending {
             // The provider publishes the new title through session.renamed.
             // A failed request must not disturb chat, drafts or queued work.
@@ -151,6 +155,7 @@ impl Workspace {
                         self.persistence_error = Some(error);
                     }
                     Pending::Home(_)
+                    | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)
                     | Pending::Mention { .. }
                     | Pending::Attachment(..)
@@ -556,8 +561,8 @@ impl Workspace {
             (Pending::Resume(index, revision), Reply::Resumed(summary, page)) => {
                 self.complete_resume(request, index, revision, summary, Some(page));
             }
-            (Pending::Resume(index, _), Reply::SessionMoved { from, project }) => {
-                self.relocate_session(request, index, from, project);
+            (Pending::Resume(index, _), Reply::SessionMoved(change)) => {
+                self.resume_moved(request, index, change);
             }
             (Pending::History(index, revision, older), Reply::History(page)) => {
                 self.complete_history(index, revision, older, page);

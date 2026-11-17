@@ -91,6 +91,13 @@ impl ServerSlot {
         result
     }
 
+    /// Remove the location-less event fallback without opening or waiting for a checkout.
+    pub(super) fn forget_session_if_connected(&self, id: &str) {
+        if let ServerState::Ready(server) = &*self.state.lock().unwrap_or_else(|e| e.into_inner()) {
+            server.forget_session(id);
+        }
+    }
+
     pub(super) fn current(&self) -> Option<Arc<OpenCodeServer>> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         while matches!(*state, ServerState::Connecting(_)) {

@@ -24,7 +24,7 @@ pub use feed::SessionScope;
 pub use inbox::{Inbox, InboxPrompt};
 pub use notifications::Notification;
 pub use persistence::{Preferences, SavedSession, Snapshot, Store, StoreLock};
-pub use runtime::{Command, Event, ProviderRuntime, Reply, Runtime};
+pub use runtime::{Command, Event, OpenCodeMove, ProviderRuntime, Reply, Runtime};
 pub use services::{Checkout, Review, Services, Task, TaskReply};
 pub use workspace::{Home, HomeDraft, Session, Workspace};
 
