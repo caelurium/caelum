@@ -252,9 +252,11 @@ while comments are selected. See
 
 ## Appearance and window lifecycle
 
-The top-toolbar gear or **⌘,** opens Settings. Choose System/Light/Dark, Caelum/Vercel/Catppuccin/Nord/Tokyo Night,
-and six accents or the theme default. Its five pages are Appearance, Providers,
-Worktrees, Notifications and About, with keyboard-navigable sections and compact,
+Open **… → Settings…** in the workspace toolbar, or press **⌘,**. In **Appearance**,
+choose System, Light or Dark and a theme family (Caelum, Vercel, Catppuccin, Nord
+or Tokyo Night). Use the theme’s default accent or choose one of six colours.
+Settings has five pages: Appearance, Providers, Worktrees, Notifications and About,
+with keyboard-navigable sections and compact,
 page-sized panels. Switching sections resets the page's scroll position. Provider
 defaults/favourites, notification visibility and sounds, worktree storage, legacy settings import and persistence
 retry live here. Unread state persists and clears only when the loaded conversation

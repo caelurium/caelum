@@ -51,7 +51,7 @@ fn session_feedback_opens_the_scoped_review_and_pending_input_takes_priority() {
     let link = element(&rt, "session-title-review");
     assert_eq!(link.label.as_deref(), Some("PR #95 · Changes requested"));
     assert!(link.focusable && link.visible[2] >= link.rect[2] - 1.0);
-    assert!(link.rect[0] + link.rect[2] < element(&rt, "nav-settings").rect[0]);
+    assert!(link.rect[0] + link.rect[2] < element(&rt, "workspace-trigger").rect[0]);
     assert!(rt.accessibility_action("session-title-review", rune::accesskit::Action::Focus, None));
     key(&mut rt, Key::Text(" ".into()), Mods::default());
     advance(&mut rt, 0.2);

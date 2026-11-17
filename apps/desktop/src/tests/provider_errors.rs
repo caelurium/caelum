@@ -21,8 +21,8 @@ fn provider_errors_are_readable_copyable_and_dismissible_without_changing_the_dr
         let mut rt = live_runtime_size((800.0, 620.0));
         let clipboard = rune::clipboard::memory();
         rt.use_clipboard(&clipboard);
+        rt.set_system_dark(dark);
         rt.update(|s, _| {
-            s.dark = Some(dark);
             let app = &mut s.live.as_mut().unwrap().app;
             app.sessions[0].scope.provider = Provider::OpenCode;
             app.sessions[0].remote_id = Some("example".into());

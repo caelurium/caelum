@@ -166,8 +166,7 @@ fn source_search_navigation_and_refresh_preserve_the_reading_position() {
 fn native_file_preview_attaches_an_immutable_snapshot_to_the_originating_draft() {
     use caelum_core::application::{Command, Event, Reply, Task, TaskReply};
     let mut rt = live_runtime();
-    click(&mut rt, "workspace-trigger");
-    click(&mut rt, "workspace-item0");
+    choose_workspace_action(&mut rt, "Find a file…");
     advance(&mut rt, 0.5);
     let (directory, command) = rt
         .state
