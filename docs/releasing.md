@@ -14,11 +14,11 @@ After attempting to open the installed app, macOS may require **System Settings 
 ## Release flow
 
 1. Prepare an immutable version tag. Ordinary merges create a `chore(release)` version commit updating the Cargo workspace and local lockfile packages. Every crate inherits the workspace version; native bundle metadata is generated from it.
-2. Run shared CI against that exact release commit: Rust formatting, Clippy, core/CLI/native interaction tests, native previews and Python release/profile checks. The architecture-specific release builds run alongside these checks.
-3. Build the ad-hoc-signed app bundle/DMG and CLI archive on a native Apple Silicon runner, plus AppImages on native Ubuntu 22.04 x86_64/ARM64 runners, with locked dependencies.
+2. Call the same CI workflow used by PRs against that exact release commit: structure, Rust formatting, Clippy, core/CLI/native interaction tests and Python tooling checks. Package jobs run alongside these checks; native macOS preview captures remain PR-only.
+3. Within CI, build the ad-hoc-signed app bundle/DMG and CLI archive on a native Apple Silicon runner, plus AppImages on native Ubuntu 22.04 x86_64/ARM64 runners, with locked dependencies. The macOS package job also verifies that the release tag matches the workspace version.
 4. Verify signatures, architectures, app metadata, extracted CLI startup and mounted DMG contents. Exercise packaged CLI cold/warm URLs, hidden-window reopening, draft restoration and graceful quit in an isolated workspace.
 5. Run Linux desktop Clippy/tests, audit ELF architectures/glibc requirements and exercise packaged X11/Wayland startup, installation and lifecycle. See [Linux verification](linux.md#build-and-verify).
-6. Generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. Publication requires CI and all platform/architecture builds and package smoke checks to succeed.
+6. After the entire CI run succeeds, download its `release-aarch64` and `release-linux-*` artifacts, generate checksums, upload into a **draft** GitHub release, and verify the complete uploaded asset set before publication. CI includes all platform/architecture builds and package smoke checks.
 7. When configured, open a separate Homebrew tap update PR.
 
 Main release runs are serialized. GitHub retains only the newest pending run when merges arrive faster than releases finish, so overlapping untagged merges can share a release. A superseded preparation run yields to the newer main workflow rather than silently switching its source tree. Once a version commit/tag exists, retries reuse it. Tags are never moved.
@@ -31,7 +31,7 @@ The `main` ruleset requires pull requests and status checks. A dedicated GitHub 
 2. Store its app ID and private key in Actions secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
 3. Add the app to the `main` ruleset bypass list with **Always allow**.
 
-The workflow limits the installation token to this repository. It uses the normal Actions token for tags to avoid a second tag-triggered release. The bot's main push runs the usual CI and its duplicate Release run exits without another bump. Manual tag recovery uses the Actions token and does not require the app's credentials.
+The workflow limits the installation token to this repository. It uses the normal Actions token for tags to avoid a second tag-triggered release. The original Release run checks and packages the version commit; the bot's main push starts a duplicate Release run that exits without another bump or build. Manual tag recovery uses the Actions token and does not require the app's credentials.
 
 ## Publish and recover
 
