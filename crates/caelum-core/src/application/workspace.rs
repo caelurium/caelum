@@ -18,6 +18,7 @@ mod titles;
 
 pub use home::Home;
 pub use home::HomeDraft;
+pub use projects::ProjectMove;
 
 use std::collections::{BTreeSet, HashMap};
 
