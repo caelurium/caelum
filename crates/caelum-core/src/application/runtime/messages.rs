@@ -29,11 +29,24 @@ pub enum Command {
     Choices(Scope),
     Start(Scope, Options),
     Resume(SessionKey),
+    VerifyOpenCodeMove {
+        from: SessionKey,
+        destination: String,
+    },
     History(SessionKey, Option<String>),
     Send(SessionKey, String, Options),
     Cancel(SessionKey),
     Approve(ApprovalPrompt, ApprovalDecision),
     Answer(QuestionPrompt, Option<crate::questions::Answer>),
+}
+
+#[derive(Debug)]
+pub struct OpenCodeMove {
+    pub from: SessionKey,
+    pub project: ProjectInfo,
+    pub archived: bool,
+    /// Only a Git-verified sibling checkout may be opened automatically.
+    pub linked_worktree: bool,
 }
 
 #[derive(Debug)]
@@ -49,10 +62,7 @@ pub enum Reply {
     Sessions(Vec<Summary>),
     Session(Summary),
     Resumed(Summary, SessionHistoryPage),
-    SessionMoved {
-        from: SessionKey,
-        project: ProjectInfo,
-    },
+    SessionMoved(OpenCodeMove),
     Choices(ProviderChoices),
     History(SessionHistoryPage),
     Done,

@@ -41,14 +41,55 @@ fn refresh(app: &mut Workspace, index: usize) -> (u64, SessionKey) {
 fn moved(app: &mut Workspace, request: u64, from: SessionKey, path: &str) {
     app.apply(Event::Completed(
         request,
-        Ok(Reply::SessionMoved {
+        Ok(Reply::SessionMoved(OpenCodeMove {
             from,
+            linked_worktree: true,
+            archived: false,
             project: ProjectInfo {
                 path: path.into(),
                 name: "New checkout".into(),
             },
-        }),
+        })),
     ));
+}
+
+fn move_event(app: &mut Workspace, listener: &str, destination: &str) {
+    app.apply(Event::OpenCode(OpenCodeEvent {
+        project_path: listener.into(),
+        event_type: "session.moved".into(),
+        data: json!({"sessionID":"ses_moved", "location":{"directory":destination}}),
+        id: None,
+        created: None,
+        location: None,
+    }));
+}
+
+fn move_check(app: &mut Workspace, path: &str) -> (u64, OpenCodeMove) {
+    let mut checks = app
+        .commands()
+        .into_iter()
+        .filter_map(|(id, command)| match command {
+            Command::VerifyOpenCodeMove { from, destination } => {
+                assert_eq!(destination, path);
+                assert_eq!(from.scope.project, "/old");
+                Some((
+                    id,
+                    OpenCodeMove {
+                        from,
+                        project: ProjectInfo {
+                            path: destination,
+                            name: "Destination".into(),
+                        },
+                        linked_worktree: false,
+                        archived: false,
+                    },
+                ))
+            }
+            _ => None,
+        });
+    let check = checks.next().unwrap();
+    assert!(checks.next().is_none(), "duplicate verification");
+    check
 }
 
 #[test]
@@ -123,19 +164,148 @@ fn reconnect_discards_old_checkout_reads_and_late_lists_cannot_duplicate_the_ses
 fn destination_discovery_reconnects_the_saved_session_instead_of_creating_another() {
     let (mut app, index) = fixture();
     let new_scope = scope(Provider::OpenCode, "/new");
+    app.projects.push(ProjectInfo {
+        path: "/new".into(),
+        name: "Destination".into(),
+    });
+    app.close_project("/project");
+    let selected = app.selected;
+    let count = app.sessions.len();
     let request = discover_session_list(&mut app, &new_scope, false);
     app.apply(Event::Completed(
         request,
         Ok(Reply::Sessions(vec![summary(new_scope, "ses_moved")])),
     ));
-    assert_eq!(app.sessions.len(), 1);
+    assert_eq!(app.sessions.len(), count);
     assert_eq!(
         app.sessions[index].scope.project, "/old",
         "discovery alone does not authorize a move"
     );
-    assert!(app.commands().iter().any(
-        |(_, command)| matches!(command, Command::Resume(key) if key.scope.project == "/old")
+    let (check, change) = move_check(&mut app, "/new");
+    app.apply(Event::Completed(check, Ok(Reply::SessionMoved(change))));
+    assert_eq!(app.sessions.len(), count);
+    assert_eq!(app.sessions[index].scope.project, "/new");
+    assert_eq!(app.group_path("/new"), "/new");
+    assert_eq!(app.selected, selected);
+    assert_eq!(app.sessions[index].draft, "Keep the draft");
+    assert_eq!(app.sessions[index].reading, 120.0);
+    assert!(app.session_feed(Some("/new"), "", false).contains(&index));
+    assert!(app
+        .commands()
+        .iter()
+        .any(|(_, cmd)| matches!(cmd, Command::Resume(key) if key.scope.project == "/new")));
+}
+
+#[test]
+fn an_unopened_destination_is_named_but_not_added_or_resumed() {
+    let (mut app, index) = fixture();
+    let (request, from) = refresh(&mut app, index);
+    app.apply(Event::Completed(
+        request,
+        Ok(Reply::SessionMoved(OpenCodeMove {
+            from,
+            linked_worktree: false,
+            project: ProjectInfo {
+                path: "/elsewhere".into(),
+                name: "Destination".into(),
+            },
+            archived: false,
+        })),
     ));
+    assert_eq!(app.sessions[index].scope.project, "/old");
+    assert!(app.sessions[index]
+        .error
+        .as_deref()
+        .unwrap()
+        .contains("/elsewhere"));
+    assert!(!app.project_is_open("/elsewhere"));
+    assert!(!app
+        .commands()
+        .iter()
+        .any(|(_, cmd)| matches!(cmd, Command::Resume(_))));
+}
+
+#[test]
+fn a_closed_destination_or_superseded_move_cannot_rebind_the_session() {
+    let (mut app, index) = fixture();
+    let mut checks = vec![];
+    for path in ["/first", "/second"] {
+        app.projects.push(ProjectInfo {
+            path: path.into(),
+            name: "Project".into(),
+        });
+        for _ in 0..2 {
+            move_event(&mut app, path, path);
+        }
+        checks.push(move_check(&mut app, path));
+    }
+    app.close_project("/second");
+    for (id, change) in checks.into_iter().rev() {
+        app.apply(Event::Completed(id, Ok(Reply::SessionMoved(change))));
+    }
+    assert_eq!(app.sessions[index].scope.project, "/old");
+    assert!(!app.project_is_open("/second"));
+    assert!(app.commands().is_empty());
+}
+
+#[test]
+fn the_latest_move_supersedes_a_verified_destination_waiting_for_a_mutation() {
+    for last in ["/second", "/old"] {
+        let (mut app, index) = fixture();
+        for path in ["/first", last] {
+            app.projects.push(ProjectInfo {
+                path: path.into(),
+                name: "Checkout".into(),
+            });
+        }
+        app.archive(index, true);
+        let archive = app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::Archive(..)))
+            .unwrap()
+            .0;
+        move_event(&mut app, "/old", "/first");
+        let (first, change) = move_check(&mut app, "/first");
+        app.apply(Event::Completed(first, Ok(Reply::SessionMoved(change))));
+        assert_eq!(app.sessions[index].scope.project, "/old");
+        move_event(&mut app, "/first", last);
+        let (second, change) = move_check(&mut app, last);
+        app.apply(Event::Completed(archive, Err("Stale checkout".into())));
+        assert_eq!(app.sessions[index].scope.project, "/old");
+        assert!(!app.sessions[index].can_submit());
+        assert!(app.commands().is_empty());
+        app.apply(Event::Completed(second, Ok(Reply::SessionMoved(change))));
+        assert_eq!(app.sessions[index].scope.project, last);
+        assert!(app.sessions[index].queue_paused);
+        assert_eq!(app.sessions[index].draft, "Keep the draft");
+        assert!(app
+            .commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::Resume(key) if key.scope.project == last)));
+    }
+}
+
+#[test]
+fn archive_state_comes_from_fresh_destination_metadata_even_if_an_older_list_arrives_late() {
+    let (mut app, index) = fixture();
+    app.projects.push(ProjectInfo {
+        path: "/new".into(),
+        name: "New".into(),
+    });
+    let scope = scope(Provider::OpenCode, "/new");
+    let active = discover_session_list(&mut app, &scope, false);
+    move_event(&mut app, "/old", "/new");
+    let (check, mut change) = move_check(&mut app, "/new");
+    change.archived = true;
+    app.apply(Event::Completed(check, Ok(Reply::SessionMoved(change))));
+    app.apply(Event::Completed(
+        active,
+        Ok(Reply::Sessions(vec![summary(scope, "ses_moved")])),
+    ));
+    assert_eq!(app.sessions[index].scope.project, "/new");
+    assert!(app.sessions[index].archived);
+    assert!(!app.session_feed(Some("/new"), "", false).contains(&index));
 }
 
 #[test]
@@ -217,9 +387,18 @@ fn real_moved_session_reconnection_smoke() {
         name: "Smoke project".into(),
     });
     let index = app.new_session(scope(Provider::OpenCode, &source));
-    app.sessions[index].remote_id = Some(id);
+    app.sessions[index].remote_id = Some(id.clone());
     app.sessions[index].loaded = false;
-    app.refresh(index);
+    let discover = std::env::var_os("CAELUM_SMOKE_DISCOVER_DESTINATION").is_some();
+    if discover {
+        app.projects.push(ProjectInfo {
+            path: destination.clone(),
+            name: "Destination".into(),
+        });
+        app.discover_sessions(scope(Provider::OpenCode, &destination));
+    } else {
+        app.refresh(index);
+    }
     let (wake, wakes) = mpsc::channel();
     let mut runtime = Runtime::new(move || {
         let _ = wake.send(());
@@ -231,7 +410,12 @@ fn real_moved_session_reconnection_smoke() {
         }
         // No persisted workspace, prompts, archive, title, or control commands.
         for (request, command) in app.commands() {
-            if matches!(command, Command::Resume(_)) {
+            if matches!(&command, Command::Resume(key) if key.id == id)
+                || (discover
+                    && matches!(&command, Command::List(scope) if scope.project == destination))
+                || (discover
+                    && matches!(&command, Command::VerifyOpenCodeMove {from, destination: path} if from.id == id && *path == destination))
+            {
                 runtime.submit(request, command).unwrap();
             }
         }
@@ -244,7 +428,13 @@ fn real_moved_session_reconnection_smoke() {
         if session.loaded && !session.loading {
             assert_eq!(session.scope.project, destination);
             assert_eq!(app.selected, Some(index));
-            assert_eq!(app.sessions.len(), 1);
+            assert_eq!(
+                app.sessions
+                    .iter()
+                    .filter(|s| s.remote_id.as_ref() == Some(&id))
+                    .count(),
+                1
+            );
             assert!(!session.conversation.entries.is_empty());
             break;
         }
