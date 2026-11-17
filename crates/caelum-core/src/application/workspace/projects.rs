@@ -1,7 +1,42 @@
 use super::{Pending, Workspace};
 use crate::application::{Command, Provider, Scope, Task};
 
+#[derive(Clone, Copy)]
+pub enum ProjectMove {
+    Up,
+    Down,
+}
+
 impl Workspace {
+    fn project_step(&self, path: &str, direction: ProjectMove) -> Option<(usize, usize)> {
+        let mut roots = self
+            .projects
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| self.group_path(&p.path) == p.path);
+        match direction {
+            ProjectMove::Up => {
+                let (i, _) = roots.rfind(|(_, p)| p.path == path)?;
+                Some((i, roots.next_back()?.0))
+            }
+            ProjectMove::Down => {
+                let (i, _) = roots.find(|(_, p)| p.path == path)?;
+                Some((i, roots.next()?.0))
+            }
+        }
+    }
+
+    pub fn can_move_project(&self, path: &str, direction: ProjectMove) -> bool {
+        self.project_step(path, direction).is_some()
+    }
+
+    /// The visible root order is persisted in `projects`; worktrees are grouped by path.
+    pub fn move_project(&mut self, path: &str, direction: ProjectMove) {
+        if let Some((i, neighbor)) = self.project_step(path, direction) {
+            self.projects.swap(i, neighbor);
+        }
+    }
+
     pub fn open_project(&mut self, path: String) {
         self.notifications.cancel();
         self.opening = true;
