@@ -1,9 +1,11 @@
 //! Native surfaces for local commands; provider requests and results stay in core.
 mod dispatch;
+mod fork;
 mod sessions;
 mod timeline;
 
 pub use dispatch::dispatch;
+pub use fork::fork_key;
 use sessions::sessions;
 pub use sessions::sessions_key;
 use timeline::timeline;
@@ -23,6 +25,7 @@ use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_inp
 use rune_kit::{ButtonVariant, Kit, Markdown, Progress, ScrollBar, glyphs};
 
 pub struct State {
+    fork_selected: Option<caelum_core::application::ForkBoundary>,
     pub owner: Option<usize>,
     pub search: TextEdit,
     pub stats_project: Option<String>,
@@ -40,6 +43,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            fork_selected: None,
             owner: None,
             search: TextEdit::new(""),
             stats_project: None,
@@ -236,6 +240,7 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
         return col();
     };
     match screen {
+        Screen::Fork => fork::view(s, k),
         Screen::Timeline => timeline(s, k, index),
         Screen::Sessions => sessions(s, k, index),
         Screen::Usage => usage(s, k, index),

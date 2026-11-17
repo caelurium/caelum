@@ -22,4 +22,8 @@ Sidebar details use the branch Caelum records at execution start/completion, fal
 
 Archiving uses `thread/archive`; Undo uses `thread/unarchive`. Both validate the thread’s canonical working directory, and active threads cannot be archived. Listings request `archived: false`. The desktop removes archived session caches and saved selection records, invalidates in-flight snapshots, and retains the latest archived draft/settings for Undo.
 
+`/fork` sends `thread/fork` with the selected provider turn's inclusive
+`lastTurnId`. The app checks the server version reported by `initialize` first:
+older CLIs can ignore unknown parameters and copy more history than requested.
+
 The app-server command and protocol can change with Codex CLI releases. Live CLI/auth behavior should be checked with an installed Codex CLI in addition to the fake-server protocol and lifecycle tests.

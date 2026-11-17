@@ -10,6 +10,10 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::Fork(pending) = pending {
+            self.complete_fork(request, pending, result);
+            return;
+        }
         if let Pending::Home(pending) = pending {
             self.complete_home(request, pending, result);
             return;
@@ -155,6 +159,7 @@ impl Workspace {
                         self.persistence_error = Some(error);
                     }
                     Pending::Home(_)
+                    | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)
                     | Pending::Mention { .. }

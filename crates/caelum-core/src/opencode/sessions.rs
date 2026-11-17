@@ -12,6 +12,75 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 impl OpenCodeProvider {
+    pub(crate) fn fork_session(
+        &self,
+        path: &str,
+        source: &str,
+        message: &str,
+        before: bool,
+    ) -> Result<OpenCodeSessionInfo, OpenCodeError> {
+        if !message.starts_with("msg_")
+            || message.len() <= 4
+            || !message
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+        {
+            return Err(OpenCodeError::Protocol(
+                "Invalid OpenCode fork boundary".into(),
+            ));
+        }
+        let project = Project::open(path)?;
+        let server = self.server(&project)?;
+        let parent = self.session(&server, &project, source)?;
+        if parent.is_working || parent.archived {
+            return Err(OpenCodeError::Protocol(
+                "Fork an idle, unarchived session.".into(),
+            ));
+        }
+        let route = format!("/api/session/{source}");
+        let body = if before {
+            json!({"before":message})
+        } else {
+            let latest = server.request_json(
+                Method::GET,
+                &format!("{route}/message"),
+                &[("limit", "1".into()), ("order", "desc".into())],
+                None,
+            )?;
+            if latest.pointer("/data/0/id").and_then(Value::as_str) != Some(message) {
+                return Err(OpenCodeError::Protocol(
+                    "The conversation changed. Reload the fork picker to choose the new endpoint."
+                        .into(),
+                ));
+            }
+            json!({})
+        };
+        let response =
+            server.request_json(Method::POST, &format!("{route}/fork"), &[], Some(body))?;
+        let value = &response["data"];
+        let boundary_type = if before { "before" } else { "through" };
+        if !session_directory(value).is_some_and(|dir| directory_matches(dir, project.path()))
+            || value.pointer("/fork/sessionID").and_then(Value::as_str) != Some(source)
+            || value.pointer("/fork/boundary/type").and_then(Value::as_str) != Some(boundary_type)
+            || value
+                .pointer("/fork/boundary/messageID")
+                .and_then(Value::as_str)
+                != Some(message)
+        {
+            return Err(OpenCodeError::Protocol("OpenCode returned a different fork boundary or checkout. Refresh sessions before retrying.".into()));
+        }
+        let session = session_info(value)
+            .filter(|s| valid_session_id(&s.id) && s.id != source)
+            .ok_or_else(|| {
+                OpenCodeError::Protocol("OpenCode returned an invalid fork identity.".into())
+            })?;
+        server.remember_session(&session.id);
+        Ok(OpenCodeSessionInfo {
+            project: project.info(),
+            session,
+        })
+    }
+
     pub fn list_sessions(
         &self,
         project_path: impl AsRef<Path>,

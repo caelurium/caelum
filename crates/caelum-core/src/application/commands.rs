@@ -3,6 +3,7 @@ use super::Provider;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalCommand {
     New,
+    Fork,
     Sessions,
     Models,
     Variants,
@@ -52,6 +53,11 @@ pub const COMMANDS: &[(&str, &str, LocalCommand)] = &[
         "btw",
         "Ask an independent side question",
         LocalCommand::SideQuestion,
+    ),
+    (
+        "fork",
+        "Branch this conversation at a chosen turn",
+        LocalCommand::Fork,
     ),
 ];
 

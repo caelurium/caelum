@@ -2,6 +2,7 @@ mod archive;
 mod completion;
 mod composer;
 mod events;
+mod fork;
 mod history;
 mod home;
 mod notifications;
@@ -16,6 +17,9 @@ mod submission;
 mod tasks;
 mod titles;
 
+pub use fork::ForkBoundary;
+pub use fork::ForkPicker;
+pub use fork::ForkPoint;
 pub use home::Home;
 pub use home::HomeDraft;
 pub use projects::ProjectMove;
@@ -201,6 +205,7 @@ impl Session {
 }
 
 enum Pending {
+    Fork(fork::Request),
     Home(home::Request),
     Inbox(usize, u64),
     Enqueue(usize, String),
@@ -248,6 +253,7 @@ enum Pending {
 /// first-send creation; every pending request carries its original owner.
 #[derive(Default)]
 pub struct Workspace {
+    fork: Option<ForkPicker>,
     pub home: Home,
     pub window_background: bool,
     pub conversation_hidden: bool,

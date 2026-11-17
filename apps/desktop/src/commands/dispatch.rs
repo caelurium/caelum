@@ -22,6 +22,9 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     };
     let (command, args) = command;
     let l = live_mut(s);
+    if command == LocalCommand::Fork && !l.app.open_fork(index) {
+        return true;
+    }
     if command == LocalCommand::SideQuestion && l.app.sessions[index].remote_id.is_none() {
         l.app.sessions[index].error =
             Some("Open an OpenCode session before asking a side question.".into());
@@ -34,6 +37,20 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     l.commands.search.clear();
     match command {
         LocalCommand::New => l.new_session(),
+        LocalCommand::Fork => {
+            let draft = l
+                .commands
+                .previous_drafts
+                .get(index)
+                .cloned()
+                .unwrap_or_default();
+            l.drafts[index].replace_text(&draft);
+            l.app.sessions[index].draft = draft;
+            l.drafts[index].focused = false;
+            l.commands.search.focused = true;
+            l.commands.fork_selected = None;
+            l.panels.overlay = Some(Screen::Fork);
+        }
         LocalCommand::Sessions => {
             let scope = l.app.sessions[index].scope.clone();
             l.commands.sessions_search.clear();

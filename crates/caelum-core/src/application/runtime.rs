@@ -17,6 +17,7 @@ use super::{Options, Provider, SessionKey, Summary, Task};
 
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
+mod fork;
 mod messages;
 mod opencode;
 
@@ -300,6 +301,7 @@ impl ProviderRuntime {
                 }
                 .map(Reply::Choices);
             }
+            Command::Fork(key, boundary) => return self.fork(key, boundary),
             Command::Start(scope, options) => {
                 return match scope.provider {
                     Provider::Codex => self

@@ -34,6 +34,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Find and reveal an earlier prompt.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
+        Screen::Fork => (
+            "Fork conversation",
+            "Keep the history through the chosen turn in a new session.",
+            crate::commands::view(s, k, screen, &mut menus),
+        ),
         Screen::Sessions => (
             "Sessions",
             "Browse earlier conversations from this provider.",
@@ -71,7 +76,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Worktrees => (560.0, crate::checkouts::manager_height(s)),
         Screen::CreateWorktree => (500.0, 330.0),
         Screen::Timeline => (580.0, 344.0),
-        Screen::Sessions => (580.0, 420.0),
+        Screen::Sessions | Screen::Fork => (580.0, 420.0),
         Screen::Stats => (720.0, 620.0),
         Screen::Image => (760.0, 480.0),
         Screen::Attachment => (760.0, crate::composer::preview_height(s)),
@@ -90,7 +95,10 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .click_outside(false)
         .width(width)
         .fit()
-        .on_close(|s: &mut Workspace| {
+        .on_close(move |s: &mut Workspace| {
+            if screen == Screen::Fork {
+                live_mut(s).app.dismiss_fork();
+            }
             live_mut(s).panels.overlay = None;
             live_mut(s).focus();
         })

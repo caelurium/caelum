@@ -277,14 +277,26 @@ impl Live {
             &event,
             Event::Completed(_, Ok(caelum_core::application::Reply::Snapshot(_)))
         );
+        // A provider-created fork is still discoverable after the picker is replaced,
+        // but its completion must not navigate away from the user's current view.
+        if self.panels.overlay != Some(crate::panels::Screen::Fork) {
+            self.app.dismiss_fork();
+        }
         self.app.apply(event);
+        self.sync_editors();
+        if self.panels.overlay == Some(crate::panels::Screen::Fork)
+            && self.app.fork_picker().is_none()
+        {
+            self.panels.overlay = None;
+            self.commands.search.focused = false;
+            self.focus();
+        }
         if restoring && self.home.editor.text != self.app.home.draft.text {
             self.home.editor.replace_text(&self.app.home.draft.text);
         }
         if questions_changed {
             self.forms.sync(&self.app.questions);
         }
-        self.sync_editors();
         for (index, session) in self.app.sessions.iter_mut().enumerate() {
             if let Some(caret) = session.completion_caret.take() {
                 self.completion.pending = None;
@@ -348,6 +360,7 @@ impl Live {
         };
         if self.app.send(index, self.drafts[index].text.clone()) {
             self.drafts[index].clear();
+            self.commands.previous_drafts[index].clear();
             self.drafts[index].focused = true;
             tx.scroll_to_bottom(format!("live-transcript-{index}"));
         }
