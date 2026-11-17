@@ -2,22 +2,23 @@ name: CI
 on:
   # Main commits are checked by the release workflow's reusable CI run.
   pull_request:
-  merge_group:
-    types: [checks_requested]
   workflow_call:
     inputs:
       revision:
         type: string
         required: true
-      skip_bundle:
+      release_tag:
+        type: string
+        default: ''
+      linux_desktop:
         type: boolean
-        default: false
+        default: true
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   MACOSX_DEPLOYMENT_TARGET: '13.0'
@@ -32,9 +33,6 @@ jobs:
       preview: ${{ steps.filter.outputs.preview }}
       bundle: ${{ steps.filter.outputs.bundle }}
     steps:
-      - name: Keep merge groups and reusable CI unfiltered
-        if: ${{ github.event_name != 'pull_request' }}
-        run: echo "Running full merge-group or reusable CI checks."
       - uses: dorny/paths-filter@v4
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
@@ -71,7 +69,7 @@ jobs:
           fetch-depth: 0
       - name: Block new or growing Rust modules over 800 lines
         env:
-          BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'HEAD^' }}
+          BASE_REVISION: ${{ github.event.pull_request.base.sha || 'HEAD^' }}
         run: python3 scripts/structure/check.py --base "$BASE_REVISION"
       - run: python3 -m unittest discover -s scripts/structure -p 'test_*.py'
   rust-format:
@@ -168,7 +166,7 @@ jobs:
   macos-app:
     name: desktop-bundle-build
     needs: changes
-    if: ${{ inputs.skip_bundle != true && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true' }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -179,20 +177,28 @@ jobs:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
         with:
-          # Match the release producer, including its existing cache namespace.
+          # PR and release packaging use the same dependency cache.
           shared-key: aarch64-apple-darwin-build
       - name: Build and verify native app, DMG and CLI archive
         env:
           TARGET: aarch64-apple-darwin
           ARCH: aarch64
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          RELEASE_TAG="v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+          version_tag="v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+          RELEASE_TAG="${RELEASE_TAG:-$version_tag}"
+          if [[ "$RELEASE_TAG" != "$version_tag" ]]; then
+            echo "Tag $RELEASE_TAG must match project version $version_tag" >&2
+            exit 1
+          fi
           export RELEASE_TAG
           bash scripts/release/package_macos_assets.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: caelum-macos
+          name: release-aarch64
           path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload Cargo build timings
         uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
@@ -201,6 +207,14 @@ jobs:
           path: target/cargo-timings/*.html
           if-no-files-found: ignore
           retention-days: 14
+  linux-desktop:
+    name: Linux desktop
+    # Recovery of historical macOS-only tags omits Linux; every PR includes it.
+    if: ${{ github.event_name == 'pull_request' || inputs.linux_desktop }}
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      revision: ${{ inputs.revision || github.sha }}
+      release_tag: ${{ inputs.release_tag || '' }}
   release-package:
     name: release-package
     runs-on: ubuntu-24.04
@@ -212,4 +226,10 @@ jobs:
       - run: python3 -m unittest discover -s scripts/profile -p 'test_*.py'
       - run: python3 -m unittest discover -s scripts/dev -p 'test_*.py'
       - run: python3 -m unittest discover -s apps/desktop/preview -p 'test_*.py'
-      - run: bash -n scripts/release/package_macos_assets.sh scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh scripts/release/package_linux_assets.sh apps/desktop/assets/linux/AppRun
+      - name: Check packaging shell syntax
+        run: |
+          for script in scripts/release/package_macos_assets.sh \
+            scripts/release/package_macos_app.sh scripts/release/macos_libraries.sh \
+            scripts/release/package_linux_assets.sh apps/desktop/assets/linux/AppRun; do
+            bash -n "$script"
+          done
