@@ -98,6 +98,9 @@ pub(crate) const SCENES: &[Scene] = &[
     ("vercel-settings", |s| scene(s, "vercel-settings")),
     ("sidebar-projects", |s| scene(s, "sidebar-projects")),
     ("session-feed", |s| scene(s, "session-feed")),
+    ("session-review-feedback", |s| {
+        scene(s, "session-review-feedback")
+    }),
     ("session-feed-colours", |s| scene(s, "session-feed-colours")),
     ("session-feed-current", |s| scene(s, "session-feed-current")),
     ("session-feed-empty", |s| scene(s, "session-feed-empty")),

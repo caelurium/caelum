@@ -101,6 +101,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
                 url: format!("https://github.com/example/{name}/pull/42"),
                 is_draft: false,
                 base_ref_name: "main".into(),
+                review_decision: None,
             });
     }
     if name == "session-feed-current" {
@@ -167,6 +168,7 @@ pub(super) fn sidebar_projects(l: &mut Live, project: &str) {
         url: format!("https://github.com/caelurium/caelum/pull/{}", 101 + i),
         is_draft: false,
         base_ref_name: "main".into(),
+        review_decision: None,
     })
     .collect();
     l.app.select(0);

@@ -65,7 +65,7 @@ pub fn view(
     let owner = (project.to_owned(), url.to_owned());
     let open = l.panels.expanded_checks.contains(&owner);
     let summary = CheckSummary::new(details.status_check_rollup.as_deref());
-    let (review, explanation, outcome) = match details.review_decision.as_deref() {
+    let (review, explanation, outcome) = match details.pull_request.review_decision.as_deref() {
         Some("APPROVED") => (
             "Review approved",
             "The latest review decision is approved.",

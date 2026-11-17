@@ -17,15 +17,7 @@ pub fn session_activity(
 ) -> Option<caelum_core::application::presentation::Activity> {
     let app = &live(s).app;
     let session = &app.sessions[index];
-    let input = app.approvals.iter().any(|p| {
-        p.project_path == session.scope.project
-            && p.provider == session.scope.provider.as_str()
-            && (p.session_id.is_none() || p.session_id == session.remote_id)
-    }) || app.questions.iter().any(|p| {
-        p.project_path == session.scope.project
-            && p.provider == session.scope.provider.as_str()
-            && Some(&p.session_id) == session.remote_id.as_ref()
-    });
+    let input = app.needs_input(session);
     let activity = caelum_core::application::presentation::activity(session, input);
     let running = caelum_core::application::subagents::running(&session.conversation.entries);
     use caelum_core::application::presentation::{Activity, ActivityKind};

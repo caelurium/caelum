@@ -106,7 +106,8 @@ fn compact_live_inspector_and_modals_preserve_the_composer_and_focus() {
     let mut rt = live_runtime_size((800.0, 620.0));
     click(&mut rt, "live-draft-0");
     rt.paste("Keep this compact draft");
-    click(&mut rt, "inspector-toggle");
+    click(&mut rt, "workspace-trigger");
+    click(&mut rt, "workspace-item1");
     advance(&mut rt, 0.5);
     for screen in ["nav-files", "nav-changes"] {
         click(&mut rt, screen);

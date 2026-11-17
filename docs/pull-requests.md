@@ -10,6 +10,11 @@ execution and preserves it across restarts and archive/undo. Concurrent sessions
 sharing a checkout do not claim ambiguous branch changes; linked worktrees are
 independent.
 
+Discovery also reads the review decision. A conversation shows **PR #… · Changes
+requested** for an open PR on its recorded branch or branch history, giving the
+current recorded branch priority. Selecting the link opens the same review screen
+as the sidebar. A pending agent question or approval takes precedence in the title.
+
 Select a PR to open the main review screen. **Back to session** opens the session
 associated with the PR's source branch and restores its conversation and draft,
 including sessions in linked worktrees and earlier recorded branches. Among matching

@@ -104,6 +104,8 @@ pub struct GitHubPullRequest {
     pub is_draft: bool,
     #[serde(default)]
     pub base_ref_name: String,
+    #[serde(default)]
+    pub review_decision: Option<String>,
 }
 
 /// On-demand GitHub metadata for a pull request, independent of the checkout.
@@ -124,7 +126,6 @@ pub struct GitHubPullRequestDetails {
     pub additions: u64,
     pub deletions: u64,
     pub changed_files: u64,
-    pub review_decision: Option<String>,
     pub status_check_rollup: Option<Vec<GitHubStatusCheck>>,
     pub auto_merge_request: Option<GitHubAutoMergeRequest>,
 }

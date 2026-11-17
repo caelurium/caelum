@@ -528,6 +528,13 @@ pub fn navigation(_: &Workspace, k: &Kit) -> El {
         .key("nav-worktrees")
 }
 
+pub(crate) fn find_files(s: &mut Workspace, content: bool) {
+    show(s, Screen::Files);
+    let panels = &mut live_mut(s).panels;
+    panels.content_search = content;
+    panels.search.focused = true;
+}
+
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if live(s).panels.overlay.is_some() {
         if live(s).panels.overlay == Some(Screen::Timeline) && matches!(ev.key, Key::Up | Key::Down)
@@ -563,9 +570,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         live_mut(s).panels.searching_sessions = true;
         live_mut(s).panels.sessions.focused = true;
     } else if ev.is_command('p') || (ev.is_command('f') && ev.mods.shift) {
-        show(s, Screen::Files);
-        live_mut(s).panels.content_search = ev.is_command('f');
-        live_mut(s).panels.search.focused = true;
+        find_files(s, ev.is_command('f'));
     } else if ev.is_command(',') {
         show(s, Screen::Settings);
     } else if ev.key == Key::Escape && live(s).panels.finding {

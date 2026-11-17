@@ -108,6 +108,14 @@ excerpts, highlighted search and stable prompt jumps.
 | Dark workspace | ![Reference dark](previews/react-dark.png) | ![Native dark](previews/rune-dark.png) |
 | Light inspector | ![Reference inspector](previews/react-light-inspector.png) | ![Native inspector](previews/rune-light-inspector.png) |
 
+The conversation title reserves room for one attention signal: **Needs input**
+first, otherwise a link to requested PR changes. Local file search and uncommitted
+changes sit in the toolbar’s **…** workspace menu.
+
+| Requested PR changes · compact | Workspace menu · compact |
+| --- | --- |
+| ![Session title with a link to requested changes](previews/rune-dark-session-review-feedback-small.png) | ![File search and local changes in the workspace menu](previews/rune-light-workspace-menu-small.png) |
+
 | Frosted composer · working and queued | Frosted composer · idle |
 | --- | --- |
 | ![Smoky docked composer](previews/rune-dark-composer-queued.png) | ![Milky docked composer](previews/rune-light-composer-empty.png) |
@@ -317,7 +325,7 @@ cargo run --locked -p caelum-desktop -- \
 Pinned Rune's `--native` mode does not dispatch `--script` events. Use the
 headless commands above for scripted input and the running app for OS interaction.
 
-The capture script writes **524 states**: 101 scenes and 30 headless
+The capture script writes **752 states**: 139 scenes and 49 headless
 pointer/keyboard replays, each in light/dark and normal/compact layouts. Coverage
 includes all five Settings pages, models, launcher, session popovers/worktree forms, commands, shells,
 Files/Changes, populated PR discussion/diffs, statistics/timeline, activity states,

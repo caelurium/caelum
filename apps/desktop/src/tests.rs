@@ -2,6 +2,7 @@ use rune::{Env, Key, KeyEvent, Mods, Runtime, runtime::ElementInfo};
 
 use super::{Workspace, spec};
 
+mod attention;
 mod composer;
 mod context;
 mod files;
