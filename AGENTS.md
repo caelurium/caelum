@@ -23,7 +23,7 @@ A native Rust desktop and CLI for Codex and OpenCode sessions. See
   modules. Keep each test file or inline test module under **1,000 lines**.
 - Existing violations are recorded in `scripts/structure/exceptions.txt`.
   Ceilings only decrease. After shrinking a file, run
-  `python3 scripts/structure/check.py --update-exceptions`.
+  `make structure STRUCTURE_ARGS=--update-exceptions`.
 - Before adding behaviour to an over-cap file, extract the area being changed
   into a focused module in a separate structural PR.
 - Split by capability and responsibility. A base `x.rs` or `x/` with two or more
@@ -62,7 +62,7 @@ A native Rust desktop and CLI for Codex and OpenCode sessions. See
 ## Commands and verification
 
 - `nix develop -c make check`: structure, formatting, Clippy, Rust and Python tests.
-- `make structure`: file/folder limits and structure-checker regression tests.
+- `make structure`: shared Rust file/folder structure guardrails.
 - `make dev PROJECT=.`: run the desktop. `make cli`: build the standalone CLI.
 - `make previews`: native light/dark references for visual changes.
 - Use the most relevant existing checks while iterating and complete `make check`

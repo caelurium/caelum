@@ -11,18 +11,20 @@ state-machine and UI performance conventions. Aim for 800 non-test lines per
 Rust file; 1,500 is the hard cap. Test files and inline test modules have a
 1,000-line cap. Split by capability, with tests alongside the feature they cover.
 
-`make structure` checks both `apps/` and `crates/`, including new non-ignored
-Rust files. It excludes inline `#[cfg(test)]` items from production counts and
-measures tests separately. Folder checks encourage capability modules: related
-prefixed siblings belong together, and folders warn above 40 source files and
-fail above 60. Test folders and standalone program directories are excluded.
+`make structure` runs the shared
+[rust-structure action](https://github.com/caelurium/rust-structure) against
+`apps/` and `crates/`, including new non-ignored Rust files. It excludes inline
+`#[cfg(test)]` items from production counts and measures tests separately. Folder
+checks encourage capability modules: related prefixed siblings belong together,
+and folders warn above 40 source files and fail above 60. Test folders and
+standalone program directories are excluded.
 
 Existing oversized files have explicit ceilings in
 `scripts/structure/exceptions.txt`. New exceptions and increases fail against
 the PR's base revision. Extract the area being changed before adding behaviour
 to an over-cap file, in a separate structural PR. After reducing a violation,
-run `python3 scripts/structure/check.py --update-exceptions` to lower its ceiling
-or remove it. The checker verifies these reductions too.
+run `make structure STRUCTURE_ARGS=--update-exceptions` to lower its ceiling or
+remove it. The checker verifies these reductions too.
 
 ## Checks
 
