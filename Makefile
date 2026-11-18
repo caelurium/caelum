@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := help
 PROJECT ?= .
+STRUCTURE_ARGS ?=
 PACKAGES := --workspace
 HOST := $(shell uname -s)
 TEST_SESSION := $(if $(filter Linux,$(HOST)),dbus-run-session --,)
@@ -35,8 +36,7 @@ format:
 lint:
 	cargo clippy --locked $(PACKAGES) --all-targets -- -D warnings
 structure:
-	python3 scripts/structure/check.py
-	python3 -m unittest discover -s scripts/structure -p 'test_*.py'
+	nix run github:caelurium/rust-structure/v1.0.0 -- --root . --base HEAD --config .github/rust-structure.json $(STRUCTURE_ARGS)
 test:
 	$(TEST_SESSION) cargo test --locked $(PACKAGES) -- --test-threads=4
 	python3 -m unittest discover -s scripts/release -p 'test_*.py'
