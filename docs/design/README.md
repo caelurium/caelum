@@ -21,7 +21,7 @@ composer controls occupy separate rows; borderless, text-only model, effort and
 agent choices wrap in narrow panes. Their popouts show titles, readable
 choices and default options; the provider is chosen in Settings. The controls sit
 beside a labelled Send/Queue action and a separate Stop control; narrow panes put
-actions on their own row. Settings lives in the top toolbar, archive
+actions on their own row. Settings lives in the toolbar’s **…** workspace menu, archive
 filtering sits beside Sessions, and session actions belong to the clicked row.
 Archive Undo is a temporary bottom-centred notice above the composer, pausing on
 hover or keyboard focus. Files attach through mentions, the inspector or drops;
@@ -107,6 +107,14 @@ excerpts, highlighted search and stable prompt jumps.
 | --- | --- | --- |
 | Dark workspace | ![Reference dark](previews/react-dark.png) | ![Native dark](previews/rune-dark.png) |
 | Light inspector | ![Reference inspector](previews/react-light-inspector.png) | ![Native inspector](previews/rune-light-inspector.png) |
+
+The conversation title reserves room for one attention signal: **Needs input**
+first, otherwise a link to requested PR changes. The toolbar’s only trailing control
+is the **…** workspace menu. Open **Settings → Appearance** there to change colour mode.
+
+| Requested PR changes · compact | Workspace menu · compact |
+| --- | --- |
+| ![Session title with a link to requested changes](previews/rune-dark-session-review-feedback-small.png) | ![File search and local changes in the workspace menu](previews/rune-light-workspace-menu-small.png) |
 
 | Frosted composer · working and queued | Frosted composer · idle |
 | --- | --- |
@@ -317,7 +325,7 @@ cargo run --locked -p caelum-desktop -- \
 Pinned Rune's `--native` mode does not dispatch `--script` events. Use the
 headless commands above for scripted input and the running app for OS interaction.
 
-The capture script writes **524 states**: 101 scenes and 30 headless
+The capture script writes **752 states**: 139 scenes and 49 headless
 pointer/keyboard replays, each in light/dark and normal/compact layouts. Coverage
 includes all five Settings pages, models, launcher, session popovers/worktree forms, commands, shells,
 Files/Changes, populated PR discussion/diffs, statistics/timeline, activity states,
@@ -337,7 +345,8 @@ replace the replay's `--at 9 --snap …` with `--video /path/to/replay.mp4 --dur
 Rune's `--help` lists tooling options.
 
 `--fixtures` supports editing/sending simulated replies, background streaming,
-pane resizing, stopping and light/dark switching. `--evaluation-workload` adds
+pane resizing and stopping. Use `--theme light` or `--theme dark` to preview
+either appearance. `--evaluation-workload` adds
 large histories, concurrent streams and a large PR. All fixture modes are isolated
 from providers and saved data.
 

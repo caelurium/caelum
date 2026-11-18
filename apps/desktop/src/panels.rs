@@ -52,6 +52,7 @@ pub enum Screen {
     Settings,
     Session,
     Sessions,
+    Fork,
     Timeline,
     Usage,
     Stats,
@@ -440,6 +441,7 @@ pub fn show(s: &mut Workspace, screen: Screen) {
         | Screen::Worktrees
         | Screen::Session
         | Screen::Sessions
+        | Screen::Fork
         | Screen::Timeline
         | Screen::Usage
         | Screen::Stats => live.panels.overlay = Some(screen),
@@ -528,8 +530,18 @@ pub fn navigation(_: &Workspace, k: &Kit) -> El {
         .key("nav-worktrees")
 }
 
+pub(crate) fn find_files(s: &mut Workspace, content: bool) {
+    show(s, Screen::Files);
+    let panels = &mut live_mut(s).panels;
+    panels.content_search = content;
+    panels.search.focused = true;
+}
+
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if live(s).panels.overlay.is_some() {
+        if live(s).panels.overlay == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
+            return crate::commands::fork_key(s, ev, tx);
+        }
         if live(s).panels.overlay == Some(Screen::Timeline) && matches!(ev.key, Key::Up | Key::Down)
         {
             return crate::commands::timeline_key(s, ev, tx);
@@ -540,6 +552,9 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return crate::commands::sessions_key(s, ev, tx);
         }
         if ev.key == Key::Escape {
+            if live(s).panels.overlay == Some(Screen::Fork) {
+                live_mut(s).app.dismiss_fork();
+            }
             live_mut(s).panels.overlay = None;
             live_mut(s).focus();
         }
@@ -563,9 +578,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         live_mut(s).panels.searching_sessions = true;
         live_mut(s).panels.sessions.focused = true;
     } else if ev.is_command('p') || (ev.is_command('f') && ev.mods.shift) {
-        show(s, Screen::Files);
-        live_mut(s).panels.content_search = ev.is_command('f');
-        live_mut(s).panels.search.focused = true;
+        find_files(s, ev.is_command('f'));
     } else if ev.is_command(',') {
         show(s, Screen::Settings);
     } else if ev.key == Key::Escape && live(s).panels.finding {

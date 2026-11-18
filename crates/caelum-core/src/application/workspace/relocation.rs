@@ -320,6 +320,7 @@ impl Pending {
 
     fn blocks_relocation(&self, index: usize, key: &SessionKey) -> bool {
         match self {
+            Self::Fork(super::fork::Request::Create { index: i, .. }) => *i == index,
             Self::Enqueue(i, _)
             | Self::RemoveQueued(i, _)
             | Self::Control(i, _)

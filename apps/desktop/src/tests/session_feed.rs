@@ -290,7 +290,7 @@ fn feed_filters_and_scope_keep_session_identity_drafts_and_saved_preferences() {
         key(&mut rt, Key::Escape, Mods::default());
         advance(&mut rt, 0.2);
         assert!(rt.find("live-session-0").is_some());
-        click(&mut rt, "nav-settings");
+        choose_workspace_action(&mut rt, "Settings…");
         rt.update(|_, tx| tx.scroll_into_view("session-scope-current"));
         advance(&mut rt, 0.4);
         click(&mut rt, "session-scope-current");

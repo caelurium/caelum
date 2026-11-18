@@ -62,6 +62,28 @@ impl Drop for Service {
 }
 
 #[test]
+fn fork_respects_the_exact_message_boundary_and_rejects_a_changed_tip() {
+    let service = Service::new();
+    let fork = |message: &str, before| {
+        service.provider.fork_session(
+            service.path().to_str().unwrap(),
+            "ses_read",
+            message,
+            before,
+        )
+    };
+    assert!(fork("msg_older_tip", false).is_err());
+    service.configure(json!({"active":true}));
+    assert!(fork("msg_next", true).is_err());
+    assert!(service.requests().iter().all(|r| r.starts_with("GET ")));
+    service.configure(json!({"active":false}));
+    assert_eq!(fork("msg_next", true).unwrap().session.id, "ses_child");
+    assert_eq!(fork("msg_tip", false).unwrap().session.id, "ses_child");
+    service.configure(json!({"actual_boundary":"msg_wrong"}));
+    assert!(fork("msg_next", true).is_err());
+}
+
+#[test]
 fn runtime_resume_returns_metadata_and_history_with_three_reads() {
     let service = Service::new();
     service.configure(json!({"active": true}));

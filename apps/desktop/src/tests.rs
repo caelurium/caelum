@@ -2,6 +2,7 @@ use rune::{Env, Key, KeyEvent, Mods, Runtime, runtime::ElementInfo};
 
 use super::{Workspace, spec};
 
+mod attention;
 mod composer;
 mod context;
 mod files;
@@ -99,15 +100,25 @@ fn secondary(rt: &mut Runtime<Workspace>, target: &str) {
 }
 
 fn context_item(rt: &Runtime<Workspace>, label: &str) -> ElementInfo {
+    menu_item(rt, "context-menu", label)
+}
+
+fn menu_item(rt: &Runtime<Workspace>, menu: &str, label: &str) -> ElementInfo {
     rt.elements()
         .into_iter()
         .find(|e| {
             !e.exiting
                 && e.role == "menuitem"
-                && e.path.contains("context-menu")
+                && e.path.contains(menu)
                 && e.label.as_deref() == Some(label)
         })
-        .unwrap_or_else(|| panic!("missing context action {label}"))
+        .unwrap_or_else(|| panic!("missing {label} in {menu}"))
+}
+
+fn choose_workspace_action(rt: &mut Runtime<Workspace>, label: &str) {
+    click(rt, "workspace-trigger");
+    let key = menu_item(rt, "workspace-menu", label).key.unwrap();
+    click(rt, &key);
 }
 
 fn choose_context(rt: &mut Runtime<Workspace>, label: &str) {

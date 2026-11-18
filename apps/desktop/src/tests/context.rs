@@ -1,6 +1,38 @@
 use super::*;
 
 #[test]
+fn moving_a_background_project_keeps_focus_on_its_row_and_preserves_the_active_draft() {
+    let mut rt = design_runtime("sidebar-projects", (1280.0, 1000.0));
+    let root = crate::code_view::source_key("/projects/caelum", "project");
+    let other = crate::code_view::source_key("/projects/rune", "project");
+    let selected = rt.state.live.as_ref().unwrap().app.selected.unwrap();
+    fill(
+        &mut rt,
+        &format!("live-draft-{selected}"),
+        "Keep this draft",
+    );
+    secondary(&mut rt, &other);
+    choose_context(&mut rt, "Move project up");
+    assert!(element(&rt, &other).rect[1] < element(&rt, &root).rect[1]);
+    assert!(element(&rt, &other).focused);
+    key(
+        &mut rt,
+        Key::Function(10),
+        Mods {
+            shift: true,
+            ..Default::default()
+        },
+    );
+    advance(&mut rt, 0.2);
+    assert!(!context_item(&rt, "Move project up").focusable);
+    choose_context(&mut rt, "Move project down");
+    assert!(element(&rt, &root).rect[1] < element(&rt, &other).rect[1]);
+    let l = rt.state.live.as_ref().unwrap();
+    assert_eq!(l.app.selected, Some(selected));
+    assert_eq!(l.drafts[selected].text, "Keep this draft");
+}
+
+#[test]
 fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
     let mut rt = live_runtime_size((800.0, 620.0));
     let clipboard = rune::clipboard::memory();
@@ -113,7 +145,7 @@ fn context_editor_preserves_unicode_selection_undo_and_paste_ownership() {
 fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
     for dark in [false, true] {
         let mut rt = design_runtime("models", (800.0, 620.0));
-        rt.update(|s, _| s.dark = Some(dark));
+        rt.set_system_dark(dark);
         fill(&mut rt, "model-search", "model");
         secondary(&mut rt, "model-search");
         let menu = element(&rt, "context-menu");
@@ -141,7 +173,7 @@ fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
         let menu = element(&rt, "context-menu");
         assert!(menu.rect[0] >= 0.0 && menu.rect[1] >= 0.0);
         assert!(menu.rect[0] + menu.rect[2] <= 800.0 && menu.rect[1] + menu.rect[3] <= 620.0);
-        click(&mut rt, "nav-settings");
+        click(&mut rt, "workspace-trigger");
         assert!(!crate::context::is_open(&rt.state));
         assert!(
             rt.state.live.as_ref().unwrap().panels.overlay.is_none(),

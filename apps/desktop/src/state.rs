@@ -72,7 +72,6 @@ pub struct Workspace {
     pub sidebar: PaneState,
     pub inspector: PaneState,
     pub diff: DiffState,
-    pub dark: Option<bool>,
 }
 
 impl Workspace {
@@ -100,7 +99,6 @@ impl Workspace {
             sidebar: PaneState::new(238.0).range(200.0, 360.0),
             inspector: PaneState::new(460.0).range(280.0, 560.0).collapsed(),
             diff,
-            dark: None,
         }
     }
 

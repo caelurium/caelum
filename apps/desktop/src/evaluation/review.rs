@@ -75,6 +75,44 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
     let l = state.live.as_mut().unwrap();
     let project = "/projects/caelum";
     let url = "https://github.com/caelurium/caelum/pull/95";
+    if name == "session-review-feedback" {
+        use caelum_core::application::{Command, Event, Reply, Task, TaskReply};
+        let branch = "feat/session-navigation";
+        l.app.sessions[0].remote_id = Some("fixture".into());
+        l.app.sessions[0].details = Some(caelum_protocol::SessionDetails {
+            branch: Some(branch.into()),
+            branches: vec![],
+            branch_is_current: false,
+            changes: None,
+        });
+        l.app.task(Task::Discover {
+            project: project.into(),
+            branch: branch.into(),
+        });
+        let (request, _) = l
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| {
+                matches!(c,
+            Command::Task(Task::Discover { branch: b, .. }) if b == branch)
+            })
+            .unwrap();
+        l.apply(Event::Completed(
+            request,
+            Ok(Reply::Task(TaskReply::Discovered(Some(
+                caelum_protocol::GitHubPullRequest {
+                    number: 95,
+                    title: "Refine session navigation".into(),
+                    url: "https://github.com/example/caelum/pull/95".into(),
+                    is_draft: false,
+                    base_ref_name: "main".into(),
+                    review_decision: Some("CHANGES_REQUESTED".into()),
+                },
+            )))),
+        ));
+        return;
+    }
     let review = l
         .app
         .services
@@ -130,7 +168,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         }
         if name == "overview-blocked" {
             details.merge_state_status = "BLOCKED".into();
-            details.review_decision = Some("CHANGES_REQUESTED".into());
+            details.pull_request.review_decision = Some("CHANGES_REQUESTED".into());
             details.status_check_rollup = Some(serde_json::from_value(json!([
                 {"__typename":"CheckRun","name":"Build native desktop / aarch64-apple-darwin","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":url,"startedAt":"2026-11-07T10:00:00Z","completedAt":"2026-11-07T10:02:43Z"},
                 {"__typename":"CheckRun","name":"Core regression tests","status":"IN_PROGRESS","conclusion":null,"detailsUrl":url},
@@ -145,7 +183,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         match name {
             "merge-blocked" | "merge-auto-enabled" | "merge-auto-error" => {
                 details.merge_state_status = "BLOCKED".into();
-                details.review_decision = Some("REVIEW_REQUIRED".into());
+                details.pull_request.review_decision = Some("REVIEW_REQUIRED".into());
                 if name == "merge-auto-enabled" {
                     details.auto_merge_request = Some(caelum_protocol::GitHubAutoMergeRequest {
                         merge_method: caelum_protocol::GitHubMergeMethod::Squash,

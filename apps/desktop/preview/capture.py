@@ -24,7 +24,8 @@ interactions = {
     "auto-merge-enabling": ("merge-blocked", [{"t": 0.25, "key": "set-auto-merge"}]),
     "auto-merge-disabling": ("merge-auto-enabled", [{"t": 0.25, "key": "set-auto-merge"}]),
     "overview-long-checks": ("overview-long", [{"t": 0.25, "key": "review-checks-toggle"}]),
-    "overview-inspector": ("overview", [{"t": 0.25, "key": "inspector-toggle"}]),
+    "workspace-menu": ("", [{"t": 0.25, "key": "workspace-trigger"}]),
+    "overview-inspector": ("overview", [{"t": 0.25, "key": "workspace-trigger"}, {"t": 0.5, "key": "workspace-item0"}]),
     "provider-dropdown": ("providers", [{"t": 0.25, "key": "Default effort-trigger"}]),
     "model-hover": ("models", [{"t": 0.25, "type": "move", "key": "model-favorite-1"}]),
     "model-focus": ("models", [{"t": 0.25, "type": "key", "name": "Tab"}]),
@@ -68,7 +69,7 @@ scenes += ("provider-timeout", "provider-rejection")
 scenes += ("shells-collapsed", "vercel", "vercel-settings", "sidebar-projects")
 scenes += ("shell-completed", "shell-output-completed")
 scenes += ("subagent-running", "subagent-completed", "subagent-failed")
-scenes += ("session-feed", "session-feed-current", "session-feed-empty", "session-feed-many", "session-feed-colours")
+scenes += ("session-feed", "session-feed-current", "session-feed-empty", "session-feed-many", "session-feed-colours", "session-review-feedback")
 scenes += ("sidebar-worktrees", "sidebar-worktrees-many", "sidebar-worktrees-projects", "sidebar-worktrees-vercel", "worktrees-empty")
 scenes += ("patch-short", "patch-long", "patch-multi", "vercel-patch-short", "vercel-patch-long", "vercel-patch-multi")
 scenes += ("about-checking", "about-current", "about-update", "about-release", "about-ahead", "about-error", "vercel-about", "vercel-about-update")
@@ -77,6 +78,7 @@ scenes += ("tool-output-long", "vercel-tool-output-long", "tool-search", "vercel
 scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-queue-error", "composer-attachments")
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
+scenes += ("fork",)
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

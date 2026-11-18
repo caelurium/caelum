@@ -275,8 +275,8 @@ fn panes_theme_tools_and_diff_preserve_the_conversation_and_draft() {
     );
     click(&mut rt, "tool-0");
     assert!(rt.state.active().turns[0].expanded);
-    click(&mut rt, "theme");
-    assert_eq!(rt.state.dark, Some(false));
+    rt.set_system_dark(false);
+    advance(&mut rt, 0.1);
     click(&mut rt, "inspector-toggle");
     advance(&mut rt, 0.5);
     assert!(rt.state.inspector.is_open());

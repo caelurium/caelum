@@ -1,5 +1,6 @@
 use crate::application::{
-    Notification, Options, Scope, SessionKey, Snapshot, Store, Summary, Task, TaskReply,
+    ForkBoundary, Notification, Options, Scope, SessionKey, Snapshot, Store, Summary, Task,
+    TaskReply,
 };
 use caelum_protocol::{
     ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent, ProjectInfo, ProviderChoices,
@@ -28,6 +29,7 @@ pub enum Command {
     ListArchived(Scope),
     Choices(Scope),
     Start(Scope, Options),
+    Fork(SessionKey, ForkBoundary),
     Resume(SessionKey),
     VerifyOpenCodeMove {
         from: SessionKey,
@@ -61,6 +63,7 @@ pub enum Reply {
     Project(ProjectInfo),
     Sessions(Vec<Summary>),
     Session(Summary),
+    Forked { source: SessionKey, child: Summary },
     Resumed(Summary, SessionHistoryPage),
     SessionMoved(OpenCodeMove),
     Choices(ProviderChoices),

@@ -1,4 +1,9 @@
 //! App-owned context menus. Actions and editor selections belong to the clicked object.
+mod workspace;
+
+pub(crate) use workspace::button as workspace_button;
+pub(crate) use workspace::workspace;
+
 use std::rc::Rc;
 
 use crate::{
@@ -10,6 +15,9 @@ use caelum_core::application::{Attachment, Task};
 use rune::{El, Icon, Key, KeyEvent, PointerPress, TextEdit, Tx};
 use rune_kit::{Kit, MenuItem, glyphs};
 
+mod project;
+pub(crate) use project::project;
+
 type Choose = Box<dyn FnOnce(&mut Workspace, &str, &mut Tx)>;
 
 #[derive(Default)]
@@ -20,7 +28,8 @@ pub struct State {
 }
 
 struct Opened {
-    point: PointerPress,
+    /// A secondary press anchors at the pointer; the workspace menu anchors to its button.
+    point: Option<PointerPress>,
     origin: String,
     scope: Scope,
     menu: Menu,
@@ -120,7 +129,7 @@ impl Menu {
 
 fn show(
     s: &mut Workspace,
-    point: PointerPress,
+    point: impl Into<Option<PointerPress>>,
     origin: String,
     menu: Menu,
     choose: impl FnOnce(&mut Workspace, &str, &mut Tx) + 'static,
@@ -129,7 +138,7 @@ fn show(
     l.context.revision += 1;
     l.context.paste = None;
     l.context.opened = Some(Opened {
-        point,
+        point: point.into(),
         origin,
         scope: Scope::of(l),
         menu,
@@ -208,10 +217,17 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             .on_press(close)
             .on_secondary_press(|s: &mut Workspace, _, _| close(s)),
     );
-    let mut menu = rune_kit::Menu::new("context")
-        .open(true)
-        .at(opened.point.x, opened.point.y)
-        .min_width(232.0);
+    let (mut menu, label) = match opened.point {
+        Some(at) => (
+            rune_kit::Menu::new("context").at(at.x, at.y),
+            "Context menu",
+        ),
+        None => (
+            rune_kit::Menu::new("workspace").placement(rune_kit::Placement::BottomEnd),
+            "Workspace menu",
+        ),
+    };
+    menu = menu.open(true).min_width(232.0);
     for entry in &opened.menu.0 {
         let Some(item) = entry else {
             menu = menu.separator();
@@ -244,7 +260,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let surface = layers
         .pop()
         .unwrap()
-        .label("Context menu")
+        .label(label)
         .modal(true, close)
         .on_key(|s: &mut Workspace, event, _| key(s, event))
         .focus_return(&opened.origin);
@@ -354,39 +370,6 @@ pub fn file(
                 project: project.clone(),
                 path: path.clone(),
             }),
-            _ => {}
-        });
-    })
-}
-
-pub fn project(el: El, project: String) -> El {
-    el.on_secondary_press(move |s: &mut Workspace, at, _| {
-        let project = project.clone();
-        let origin = crate::code_view::source_key(&project, "project");
-        let menu = Menu::new()
-            .item(Item::new("new", "New session").icon(&crate::PLUS))
-            .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
-            .separator()
-            .item(Item::new("copy", "Copy project path").icon(&glyphs::COPY))
-            .item(Item::new("reveal", "Reveal in Finder").icon(&ui::FOLDER))
-            .separator()
-            .item(Item::new("close", "Close project").icon(&glyphs::CLOSE));
-        show(s, at, origin, menu, move |s, pick, tx| match pick {
-            "copy" => tx.copy(project.clone()),
-            "close" => live_mut(s).close_project(&project),
-            "reveal" => live_mut(s).app.task(Task::Reveal {
-                project: project.clone(),
-                path: ".".into(),
-            }),
-            "new" => {
-                let l = live_mut(s);
-                l.app.select_project(&project);
-                l.new_session();
-            }
-            "worktree" => {
-                let provider = live(s).app.preferences.default_provider;
-                crate::worktree::open(s, project.clone(), provider);
-            }
             _ => {}
         });
     })
@@ -636,49 +619,6 @@ pub fn session(el: El, index: usize) -> El {
             },
         );
     })
-}
-
-pub fn workspace(s: &mut Workspace, at: PointerPress, tx: &mut Tx) {
-    if s.live.is_none() {
-        return;
-    }
-    let selected = tx
-        .text_selection()
-        .map(|selection| selection.text().to_owned());
-    let origin = live(s)
-        .focus_key
-        .clone()
-        .unwrap_or_else(|| "new-session".into());
-    let mut menu = Menu::new();
-    if selected.is_some() {
-        menu = menu
-            .item(Item::new("copy", "Copy selection").icon(&glyphs::COPY))
-            .separator();
-    }
-    menu = menu
-        .item(
-            Item::new("new", "New session")
-                .icon(&crate::PLUS)
-                .shortcut("⌘N"),
-        )
-        .item(
-            Item::new("open", "Open project…")
-                .icon(&ui::FOLDER)
-                .shortcut("⌘O"),
-        )
-        .separator()
-        .item(
-            Item::new("settings", "Settings…")
-                .icon(&ui::SETTINGS)
-                .shortcut("⌘,"),
-        );
-    show(s, at, origin, menu, move |s, pick, tx| match pick {
-        "copy" => tx.copy(selected.unwrap_or_default()),
-        "new" => s.new_session(),
-        "open" => crate::live::open_project(s, tx),
-        "settings" => panels::show(s, panels::Screen::Settings),
-        _ => {}
-    });
 }
 
 /// Wire the model and its menu together so editing from a menu uses the same

@@ -25,6 +25,12 @@ in the destination’s OpenCode **`/sessions`** picker. Discovery requests the 1
 most recent active and 100 most recent archived sessions for that exact directory.
 A failed archive request keeps the local session available for refresh.
 
+`/fork` uses OpenCode's native session fork. For an earlier turn, the boundary
+is **before the following user message**, retaining the selected exchange. For
+the newest turn, Caelum checks that the end of history still matches the picker.
+The new session is opened only after checking the returned checkout, source and
+message boundary. If history has changed, reload the picker before retrying.
+
 Waiting activity uses `/api/shell`, filtering running commands by `metadata.sessionID` after validating session ownership. This works with OpenCode 2.2.1 and does not require the newer experimental job endpoint. The selected session and sessions with known running commands refresh on shell/tool/execution events, focus and every five seconds while the app is visible.
 
 The persistent composer strip offers per-command output and Stop. The adapter checks

@@ -1,4 +1,4 @@
-use super::{Pending, Workspace};
+use super::{Pending, Session, Workspace};
 use crate::application::{Command, Provider, QueuedPrompt};
 use caelum_protocol::{ApprovalDecision, ApprovalPrompt, QuestionPrompt};
 
@@ -106,6 +106,18 @@ impl Workspace {
         accepted
     }
 
+    pub fn needs_input(&self, session: &Session) -> bool {
+        self.approvals.iter().any(|p| {
+            p.project_path == session.scope.project
+                && p.provider == session.scope.provider.as_str()
+                && (p.session_id.is_none() || p.session_id == session.remote_id)
+        }) || self.questions.iter().any(|p| {
+            p.project_path == session.scope.project
+                && p.provider == session.scope.provider.as_str()
+                && Some(&p.session_id) == session.remote_id.as_ref()
+        })
+    }
+
     pub fn review_blocker(&self, index: usize, project: &str) -> Option<&'static str> {
         let session = self.sessions.get(index)?;
         if session.scope.project != project {
@@ -114,15 +126,7 @@ impl Workspace {
         if session.working() {
             return Some("Wait for the current turn to finish");
         }
-        if self.approvals.iter().any(|p| {
-            p.project_path == session.scope.project
-                && p.provider == session.scope.provider.as_str()
-                && (p.session_id.is_none() || p.session_id == session.remote_id)
-        }) || self.questions.iter().any(|p| {
-            p.project_path == session.scope.project
-                && p.provider == session.scope.provider.as_str()
-                && Some(&p.session_id) == session.remote_id.as_ref()
-        }) {
+        if self.needs_input(session) {
             return Some("Answer the session’s pending request first");
         }
         if !session.can_send() || session.remote_id.is_none() {
