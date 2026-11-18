@@ -569,7 +569,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "caelum-cli"
-version = "0.1.106"
+version = "0.1.107"
 dependencies = [
  "caelum-core",
  "caelum-protocol",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-core"
-version = "0.1.106"
+version = "0.1.107"
 dependencies = [
  "base64 0.23.1",
  "caelum-protocol",
@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-desktop"
-version = "0.1.106"
+version = "0.1.107"
 dependencies = [
  "blake3",
  "block2 0.6.2",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "caelum-protocol"
-version = "0.1.106"
+version = "0.1.107"
 dependencies = [
  "serde",
  "serde_json",
@@ -3285,9 +3285,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4edff0039f148731aee2fd80f76dbfeb12d204ab3d1c544838d34e02151049b"
+checksum = "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
