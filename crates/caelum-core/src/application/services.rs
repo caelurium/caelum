@@ -488,7 +488,8 @@ pub struct Checkout {
 #[derive(Default, PartialEq, Eq)]
 enum ReviewSource {
     #[default]
-    GitHub,
+    Unloaded,
+    GitHub(u64),
     Cache,
 }
 
@@ -556,6 +557,11 @@ impl Review {
     }
 }
 
+struct Discovered {
+    url: String,
+    request: u64,
+}
+
 #[derive(Default)]
 pub struct Services {
     pub images: BTreeMap<(String, String), String>,
@@ -567,13 +573,46 @@ pub struct Services {
     pub reviews: BTreeMap<(String, String), Review>,
     latest: HashMap<String, u64>,
     loading: HashSet<String>,
-    discovered: HashMap<(String, String), Option<String>>,
+    discovered: HashMap<(String, String), Option<Discovered>>,
     merged_pull_requests: HashSet<String>,
     review_owners: HashMap<String, (String, String)>,
     generations: HashMap<u64, u64>,
 }
 
 impl Services {
+    pub(super) fn requested_changes(
+        &self,
+        project: &str,
+        branch: &str,
+    ) -> Option<&GitHubPullRequest> {
+        let found = self
+            .discovered
+            .get(&(project.into(), branch.into()))?
+            .as_ref()?;
+        // Discovery owns the branch association. A newer successful live review can
+        // update its decision (or close it); a disk cache or late reply cannot.
+        let discovered = self
+            .checkouts
+            .get(project)?
+            .pull_requests
+            .iter()
+            .find(|pr| pr.url == found.url)?;
+        let current = self
+            .reviews
+            .get(&(project.into(), found.url.clone()))
+            .filter(|r| matches!(r.source, ReviewSource::GitHub(id) if id > found.request));
+        let pr = if let Some(review) = current {
+            let details = review.details.as_ref()?;
+            if details.state != "OPEN" || details.head_ref_name != branch {
+                return None;
+            }
+            &details.pull_request
+        } else {
+            discovered
+        };
+        (pr.review_decision.as_deref() == Some("CHANGES_REQUESTED")).then_some(pr)
+    }
+
     pub(super) fn pull_request_branches<'a>(
         &'a self,
         project: &'a str,

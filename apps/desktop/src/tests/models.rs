@@ -147,7 +147,7 @@ fn grouped_settings_picker_fits_and_keeps_session_and_provider_defaults_separate
             let mut rt = grouped_runtime(size);
             key(&mut rt, Key::Escape, Mods::default());
             rt.update(|s, _| s.live.as_mut().unwrap().app.preferences.theme = theme.into());
-            click(&mut rt, "nav-settings");
+            choose_workspace_action(&mut rt, "Settings…");
             click(&mut rt, "settings-providers");
             click(&mut rt, "settings-provider-opencode");
             click(&mut rt, "settings-model-trigger");
@@ -595,7 +595,7 @@ fn settings_provider_and_composer_choices_apply_to_first_send() {
         );
     });
     fill(&mut rt, "live-draft-0", "Keep this Codex draft");
-    click(&mut rt, "nav-settings");
+    choose_workspace_action(&mut rt, "Settings…");
     click(&mut rt, "settings-providers");
     click(&mut rt, "default-provider-opencode");
     key(&mut rt, Key::Escape, Mods::default());

@@ -15,10 +15,7 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
     for (mode, name) in [("system", "System"), ("dark", "Dark"), ("light", "Light")] {
         themes = themes.child(
             ui::tab(name, preferences.theme == mode, k)
-                .on_press(move |s: &mut Workspace| {
-                    live_mut(s).app.preferences.theme = mode.into();
-                    s.dark = None;
-                })
+                .on_press(move |s: &mut Workspace| live_mut(s).app.preferences.theme = mode.into())
                 .key(format!("theme-{mode}"))
                 .grow(1.0),
         );
