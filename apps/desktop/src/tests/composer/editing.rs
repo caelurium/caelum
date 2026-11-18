@@ -78,10 +78,8 @@ fn composer_content_stays_docked_and_bounded_in_both_themes() {
             "composer-attachments",
         ] {
             let mut rt = design_runtime(scene, (800.0, 620.0));
-            rt.update(|s, _| {
-                s.dark = Some(dark);
-                s.inspector.set_open(true);
-            });
+            rt.set_system_dark(dark);
+            rt.update(|s, _| s.inspector.set_open(true));
             advance(&mut rt, 0.4);
             if scene == "composer-queued" {
                 click(&mut rt, "toggle-queued-messages");
@@ -147,7 +145,7 @@ fn long_drafts_and_crowded_sidebar_keep_controls_in_bounds() {
         "live-draft-0",
         &"A long Unicode draft café ☁️\n".repeat(30),
     );
-    for name in ["nav-settings", "undo-archive", "send", "model-trigger"] {
+    for name in ["workspace-trigger", "undo-archive", "send", "model-trigger"] {
         let e = element(&rt, name);
         assert!(
             e.visible[2] > 0.0 && e.visible[3] > 0.0,
@@ -172,7 +170,7 @@ fn long_drafts_and_crowded_sidebar_keep_controls_in_bounds() {
             .text
             .ends_with("café ☁️\n")
     );
-    click(&mut rt, "nav-settings");
+    choose_workspace_action(&mut rt, "Settings…");
     advance(&mut rt, 0.2);
     for page in [
         "providers",

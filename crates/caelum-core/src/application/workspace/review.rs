@@ -1,6 +1,21 @@
-use super::Workspace;
+use super::{Session, Workspace};
+use caelum_protocol::GitHubPullRequest;
 
 impl Workspace {
+    /// Only surface feedback on branches attributed to this session, never on a
+    /// PR found just because another session or a stack ancestor shares its checkout.
+    pub fn requested_changes(&self, session: &Session) -> Option<&GitHubPullRequest> {
+        let details = session.details.as_ref()?;
+        details
+            .branch
+            .iter()
+            .chain(details.branches.iter().rev())
+            .find_map(|branch| {
+                self.services
+                    .requested_changes(&session.scope.project, branch)
+            })
+    }
+
     /// Restore the last overview/diff while GitHub refreshes current metadata.
     pub fn open_review(&mut self, project: String, url: String) {
         if self

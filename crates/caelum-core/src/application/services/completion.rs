@@ -176,17 +176,20 @@ impl Services {
             }),
             (Task::Discover { project, branch }, TaskReply::Discovered(pr)) => {
                 let pr = pr.filter(|pr| !self.merged_pull_requests.contains(&pr.url));
-                let url = pr.as_ref().map(|pr| pr.url.clone());
+                let found = pr.as_ref().map(|pr| Discovered {
+                    url: pr.url.clone(),
+                    request: id,
+                });
                 if let Some(Some(previous)) = self
                     .discovered
-                    .insert((project.clone(), branch.clone()), url.clone())
+                    .insert((project.clone(), branch.clone()), found)
                 {
-                    if Some(&previous) != url.as_ref()
-                        && !self.discovered.iter().any(|((path, _), url)| {
-                            path == project && url.as_ref() == Some(&previous)
+                    if pr.as_ref().is_none_or(|pr| pr.url != previous.url)
+                        && !self.discovered.iter().any(|((path, _), found)| {
+                            path == project && found.as_ref().is_some_and(|f| f.url == previous.url)
                         })
                     {
-                        checkout.pull_requests.retain(|pr| pr.url != previous);
+                        checkout.pull_requests.retain(|pr| pr.url != previous.url);
                     }
                 }
                 if let Some(pr) = pr {
@@ -259,7 +262,7 @@ impl Services {
                 let head = details.head_ref_oid.clone();
                 let base = details.base_ref_oid.clone();
                 review.details = Some(*details);
-                review.source = ReviewSource::GitHub;
+                review.source = ReviewSource::GitHub(id);
                 if !review.files_loaded {
                     next.push(Task::ReviewFiles {
                         project: project.clone(),

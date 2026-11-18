@@ -145,7 +145,7 @@ fn context_editor_preserves_unicode_selection_undo_and_paste_ownership() {
 fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
     for dark in [false, true] {
         let mut rt = design_runtime("models", (800.0, 620.0));
-        rt.update(|s, _| s.dark = Some(dark));
+        rt.set_system_dark(dark);
         fill(&mut rt, "model-search", "model");
         secondary(&mut rt, "model-search");
         let menu = element(&rt, "context-menu");
@@ -173,7 +173,7 @@ fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
         let menu = element(&rt, "context-menu");
         assert!(menu.rect[0] >= 0.0 && menu.rect[1] >= 0.0);
         assert!(menu.rect[0] + menu.rect[2] <= 800.0 && menu.rect[1] + menu.rect[3] <= 620.0);
-        click(&mut rt, "nav-settings");
+        click(&mut rt, "workspace-trigger");
         assert!(!crate::context::is_open(&rt.state));
         assert!(
             rt.state.live.as_ref().unwrap().panels.overlay.is_none(),

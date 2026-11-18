@@ -1,6 +1,7 @@
 //! Rune adapter: editors and disclosure state stay here; application requests,
 //! provider activity and history reconciliation live in caelum-core.
 
+mod attention;
 mod composer;
 mod events;
 mod menus;
@@ -10,6 +11,7 @@ mod polling_tests;
 mod sidebar;
 mod transcript;
 
+pub(crate) use attention::session_attention;
 pub use composer::composer;
 pub use composer::open_effort;
 pub(crate) use menus::archive_disabled;

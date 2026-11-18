@@ -23,15 +23,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     let branch = app
         .session_worktree(session)
         .map_or_else(|| branch.to_owned(), |tree| format!("{tree} · {branch}"));
-    let pending = app.approvals.iter().any(|p| {
-        p.project_path == session.scope.project
-            && p.provider == session.scope.provider.as_str()
-            && (p.session_id.is_none() || p.session_id == session.remote_id)
-    }) || app.questions.iter().any(|p| {
-        p.project_path == session.scope.project
-            && p.provider == session.scope.provider.as_str()
-            && Some(&p.session_id) == session.remote_id.as_ref()
-    });
+    let pending = app.needs_input(session);
     let activity = crate::activity::session_activity(s, index);
     let waiting = !session.archiving
         && !session.deleting
@@ -88,13 +80,17 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         || l.focus_key
             .as_ref()
             .is_some_and(|key| key.ends_with(&format!("session-actions-{index}")));
-    let detail = if waiting {
-        text(if subagents {
+    let detail = if pending || waiting {
+        text(if pending || subagents {
             status
         } else {
             "Waiting on commands"
         })
-        .key(format!("session-waiting-{index}"))
+        .key(if pending {
+            format!("session-input-{index}")
+        } else {
+            format!("session-waiting-{index}")
+        })
         .role("status")
         .label(status)
         .help(status)
@@ -107,7 +103,17 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         .gap(4.0)
         .center_y()
         .child(
-            icon(if waiting { &ui::CLOCK } else { &ui::BRANCH }, 11.0).color(if waiting {
+            icon(
+                if pending {
+                    &ui::BELL
+                } else if waiting {
+                    &ui::CLOCK
+                } else {
+                    &ui::BRANCH
+                },
+                11.0,
+            )
+            .color(if pending || waiting {
                 k.c.warning.icon
             } else {
                 k.c.icon_muted

@@ -36,6 +36,12 @@ Search text filters sessions only. Active session rows and branch searches follo
 the current Git branch of each session's checkout, including external switches.
 Archived rows use their recorded session branch.
 
+**Needs input** appears on a session row when its agent has a question or approval
+waiting. In the open conversation, the same label appears beside the session title.
+When there is no pending input, **PR #… · Changes requested** links directly to
+review feedback on a branch that session worked on. Use **Back to session** to
+return to the conversation and its draft.
+
 **⇧⌘N** opens the project/provider launcher; **⌘N** reuses that project's
 draft for the default provider chosen in Settings. Each session retains an
 independent draft and reading position. Hover a
@@ -192,8 +198,11 @@ date-range and project filters.
 
 ## Files, changes and worktrees
 
-**Files** and **Changes** share the resizable side inspector. **⌘P** opens file
-search; choose filename or content search. Directories and results are paged,
+The toolbar’s **…** workspace menu offers **Find a file…** (**⌘P**) and
+**View local changes** (`/changes`). Both open the resizable side inspector for
+the active checkout. Use **Files** to search by filename or content and attach
+context; use **Changes** for edits not yet committed. For PR feedback, open the
+pull request in the main review screen. Directories and results are paged,
 previews are read-only with syntax highlighting, virtualized lines and **⌘F**
 source search. Filename tabs use an active underline and reveal their close button
 on hover or keyboard focus. Arrow keys switch tabs; Tab reaches the focused tab's
@@ -246,9 +255,11 @@ while comments are selected. See
 
 ## Appearance and window lifecycle
 
-The top-toolbar gear or **⌘,** opens Settings. Choose System/Light/Dark, Caelum/Vercel/Catppuccin/Nord/Tokyo Night,
-and six accents or the theme default. Its five pages are Appearance, Providers,
-Worktrees, Notifications and About, with keyboard-navigable sections and compact,
+Open **… → Settings…** in the workspace toolbar, or press **⌘,**. In **Appearance**,
+choose System, Light or Dark and a theme family (Caelum, Vercel, Catppuccin, Nord
+or Tokyo Night). Use the theme’s default accent or choose one of six colours.
+Settings has five pages: Appearance, Providers, Worktrees, Notifications and About,
+with keyboard-navigable sections and compact,
 page-sized panels. Switching sections resets the page's scroll position. Provider
 defaults/favourites, notification visibility and sounds, worktree storage, legacy settings import and persistence
 retry live here. Unread state persists and clears only when the loaded conversation

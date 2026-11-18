@@ -392,16 +392,11 @@ fn inspector(s: &Workspace, k: &Kit) -> El {
 }
 
 fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
-    let dark = s
-        .live
-        .as_ref()
-        .map(|live| match live.app.preferences.theme.as_str() {
-            "dark" => true,
-            "light" => false,
-            _ => cx.system_dark(),
-        })
-        .or(s.dark)
-        .unwrap_or(cx.system_dark());
+    let dark = match s.live.as_ref().map(|l| l.app.preferences.theme.as_str()) {
+        Some("dark") => true,
+        Some("light") => false,
+        _ => cx.system_dark(),
+    };
     let k = s.live.as_ref().map_or_else(
         || theme::kit(dark),
         |live| {
@@ -490,6 +485,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             row()
                 .gap(10.0)
                 .min_w(0.0)
+                .shrink()
                 .center_y()
                 .child(
                     text(
@@ -502,7 +498,11 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                             .unwrap_or("caelum"),
                     )
                     .font(k.ty.ui)
-                    .color(k.c.text_muted),
+                    .color(k.c.text_muted)
+                    .max_w(160.0)
+                    .min_w(0.0)
+                    .truncate()
+                    .shrink(),
                 )
                 .child(text("/").font(k.ty.ui).color(k.c.text_faint))
                 .child(
@@ -510,59 +510,27 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                         .font(k.ty.ui_medium)
                         .color(k.c.text_base)
                         .truncate()
+                        .min_w(0.0)
                         .shrink(),
-                ),
+                )
+                .children(live::session_attention(s, &k)),
         )
-        .trailing(
-            quiet_button(&ui::SETTINGS, "Settings · ⌘,")
-                .on_press(|s: &mut Workspace| {
-                    if s.live.is_some() {
-                        panels::show(s, panels::Screen::Settings);
-                    }
-                })
-                .build(&k)
-                .key("nav-settings"),
-        )
-        .trailing(
-            quiet_button(
-                &APPEARANCE,
-                if dark {
-                    "Use light theme"
-                } else {
-                    "Use dark theme"
-                },
-            )
-            .on_press(move |s: &mut Workspace| {
-                s.dark = Some(!dark);
-                if let Some(live) = &mut s.live {
-                    live.app.preferences.theme = if dark { "light" } else { "dark" }.into();
-                }
-            })
-            .build(&k)
-            .key("theme"),
-        )
-        .trailing(
+        .trailing(if s.live.is_some() {
+            context::workspace_button(s, &k)
+        } else {
             quiet_button(
                 &shell::INSPECTOR,
-                if s.live.is_some() {
-                    "Files and changes"
-                } else if s.inspector.is_open() {
+                if s.inspector.is_open() {
                     "Hide changes"
                 } else {
                     "Show changes"
                 },
             )
             .expanded(s.inspector.is_open())
-            .on_press(|s: &mut Workspace| {
-                if s.live.is_some() && !s.inspector.is_open() {
-                    panels::show(s, panels::Screen::Files);
-                } else {
-                    s.inspector.toggle();
-                }
-            })
+            .on_press(|s: &mut Workspace| s.inspector.toggle())
             .build(&k)
-            .key("inspector-toggle"),
-        );
+            .key("inspector-toggle")
+        });
     // SplitView's card styling is theme-driven. Keep the shell flush while
     // retaining rounded controls and composer surfaces inside the panes.
     let mut shell_kit = k.clone();

@@ -1,3 +1,4 @@
+mod attention;
 mod auto_merge;
 mod cache;
 
@@ -74,6 +75,7 @@ fn merged_pull_requests_leave_session_associations_and_stale_discovery_cannot_re
         url: "https://github.com/example/repo/pull/42".into(),
         is_draft: false,
         base_ref_name: String::new(),
+        review_decision: None,
     };
     for project in ["/a", "/b"] {
         discover_pull_request(&mut app, project, "feature", &pr);
@@ -123,6 +125,7 @@ fn refreshed_merged_pull_request_is_removed_from_session_associations() {
         url: "https://github.com/example/repo/pull/43".into(),
         is_draft: false,
         base_ref_name: String::new(),
+        review_decision: None,
     };
     discover_pull_request(&mut app, "/a", "feature", &pr);
     app.task(Task::Details {
@@ -219,6 +222,7 @@ fn discovery_refresh_replaces_and_removes_only_its_branch_and_preserves_cache_on
         url: "https://github.com/example/alpha/pull/42".into(),
         is_draft: false,
         base_ref_name: String::new(),
+        review_decision: None,
     };
     let other = caelum_protocol::GitHubPullRequest {
         url: "https://github.com/example/beta/pull/42".into(),

@@ -368,6 +368,7 @@ fn pull_request_refreshes_include_linked_checkouts_coalesce_and_keep_late_result
                     url: format!("https://github.com/example{project}/pull/42"),
                     is_draft: false,
                     base_ref_name: String::new(),
+                    review_decision: None,
                 }))
             }
             _ => panic!("unexpected refresh command"),

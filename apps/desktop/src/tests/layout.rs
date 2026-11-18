@@ -106,7 +106,7 @@ fn compact_live_inspector_and_modals_preserve_the_composer_and_focus() {
     let mut rt = live_runtime_size((800.0, 620.0));
     click(&mut rt, "live-draft-0");
     rt.paste("Keep this compact draft");
-    click(&mut rt, "inspector-toggle");
+    choose_workspace_action(&mut rt, "View local changes");
     advance(&mut rt, 0.5);
     for screen in ["nav-files", "nav-changes"] {
         click(&mut rt, screen);
@@ -126,8 +126,12 @@ fn compact_live_inspector_and_modals_preserve_the_composer_and_focus() {
     }
     click(&mut rt, "close-inspector");
     advance(&mut rt, 0.5);
-    for screen in ["nav-worktrees", "nav-settings", "session-actions-0"] {
-        click(&mut rt, screen);
+    for screen in ["nav-worktrees", "Settings…", "session-actions-0"] {
+        if screen == "Settings…" {
+            choose_workspace_action(&mut rt, screen);
+        } else {
+            click(&mut rt, screen);
+        }
         let dialog = element(
             &rt,
             if screen == "session-actions-0" {
