@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - &linux-dependencies
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - *linux-dependencies
