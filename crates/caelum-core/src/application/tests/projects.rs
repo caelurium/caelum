@@ -105,6 +105,10 @@ fn project_navigation_keeps_unsent_worktree_context_across_restart() {
     assert_eq!(app.selected, Some(linked));
     app.select(other);
 
+    app.move_project("/other", ProjectMove::Up);
+    assert!(!app.can_move_project("/other", ProjectMove::Up));
+    assert!(!app.can_move_project("/linked", ProjectMove::Down));
+    assert_eq!(app.selected, Some(other));
     let snapshot: Snapshot =
         serde_json::from_value(serde_json::to_value(app.snapshot()).unwrap()).unwrap();
     let mut restored = Workspace::default();
@@ -114,6 +118,8 @@ fn project_navigation_keeps_unsent_worktree_context_across_restart() {
         load,
         Ok(Reply::Snapshot(Some(Box::new(snapshot)))),
     ));
+    assert_eq!(restored.projects[0].path, "/other");
+    assert_eq!(restored.group_path("/linked"), "/main");
     restored.select_project("/main");
     assert_eq!(restored.selected, Some(linked));
     assert_eq!(restored.sessions.len(), 3);

@@ -5,7 +5,10 @@
 Open a project with **⌘O**, the **+** beside **Projects**, or
 `caelum /path/to/project`. The sidebar keeps separate, independently scrollable
 **Projects** and **Sessions** sections. Compact project rows hold project and
-worktree navigation, creation and management. Use a project's **×** or
+worktree navigation, creation and management. Right-click a project (or focus it
+and press **⇧F10**) and choose **Move project up** or **Move project down**.
+The order is saved across restarts, with each worktree under its own project.
+Use a project's **×** or
 right-click → **Close project** to close its checkout group. Sessions, drafts,
 attachments, queues and running work are retained; reopening the folder returns to
 the remembered session. Closing the final project returns to the welcome screen.
