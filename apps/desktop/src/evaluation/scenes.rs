@@ -157,6 +157,7 @@ pub(crate) const SCENES: &[Scene] = &[
     }),
     ("launcher", |s| scene(s, "launcher")),
     ("session", |s| scene(s, "session")),
+    ("fork", fork),
     ("timeline", |s| scene(s, "timeline")),
     ("usage", |s| scene(s, "usage")),
     ("stats", |s| scene(s, "stats")),
@@ -192,6 +193,51 @@ pub(crate) const SCENES: &[Scene] = &[
         }
     }),
 ];
+
+fn fork(state: &mut Workspace) {
+    use caelum_core::application::{Command, Event, Provider, Reply, Scope};
+    use serde_json::json;
+    let l = state.live.as_mut().unwrap();
+    let path = l.app.projects.first().unwrap().path.clone();
+    let index = l.app.new_session(Scope {
+        project: path,
+        provider: Provider::OpenCode,
+    });
+    l.app.sessions[index].remote_id = Some("ses_fork_preview".into());
+    l.sync_editors();
+    if !l.app.open_fork(index) {
+        return;
+    }
+    let id = l
+        .app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c,Command::History(k,None) if k.id=="ses_fork_preview"))
+        .unwrap()
+        .0;
+    l.app.apply(Event::Completed(
+        id,
+        Ok(Reply::History(caelum_protocol::SessionHistoryPage {
+            data: [
+                "Sketch the project sidebar",
+                "Keep worktrees grouped with their project",
+                "Show how to recover a moved conversation",
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, text)| json!({"id":format!("msg_preview_{i}"),"type":"user","text":text}))
+            .collect(),
+            next_cursor: Some("older".into()),
+            is_working: Some(false),
+            model: None,
+            effort: None,
+            agent: None,
+        })),
+    ));
+    l.commands.owner = Some(index);
+    l.commands.search.focused = true;
+    l.panels.overlay = Some(panels::Screen::Fork);
+}
 
 fn completed_shell(state: &mut Workspace, output: bool) {
     use caelum_core::application::Event;

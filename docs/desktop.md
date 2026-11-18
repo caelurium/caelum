@@ -189,6 +189,14 @@ directly, and `/effort default` restores the model default. OpenCode also suppor
 `/usage`, `/stats`, provider-discovered commands and `/btw question` (`/ask` is an alias).
 `/sessions` searches the current project's Codex or OpenCode history, including archived
 sessions; choose a result to load that conversation.
+
+Type `/fork` in an idle conversation to branch its history into a new session in
+the same checkout. Press Enter for the newest turn, or use ↑/↓, search, and
+**Earlier turns** to choose a different endpoint. The fork includes the chosen
+turn's reply, starts with its own empty draft, and does not change project files.
+The original keeps its draft and attachments. Resolve queued prompts and pending
+input requests before forking. Codex requires CLI 0.143.0 or newer.
+
 Side questions have a separate editor, context, retry and answer-copy actions;
 they preserve the main draft and do not add a conversation turn. Timeline groups
 prompts by date, shows excerpts and highlights search matches. Use ↑/↓ and Enter to

@@ -52,6 +52,7 @@ pub enum Screen {
     Settings,
     Session,
     Sessions,
+    Fork,
     Timeline,
     Usage,
     Stats,
@@ -440,6 +441,7 @@ pub fn show(s: &mut Workspace, screen: Screen) {
         | Screen::Worktrees
         | Screen::Session
         | Screen::Sessions
+        | Screen::Fork
         | Screen::Timeline
         | Screen::Usage
         | Screen::Stats => live.panels.overlay = Some(screen),
@@ -537,6 +539,9 @@ pub(crate) fn find_files(s: &mut Workspace, content: bool) {
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if live(s).panels.overlay.is_some() {
+        if live(s).panels.overlay == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
+            return crate::commands::fork_key(s, ev, tx);
+        }
         if live(s).panels.overlay == Some(Screen::Timeline) && matches!(ev.key, Key::Up | Key::Down)
         {
             return crate::commands::timeline_key(s, ev, tx);
@@ -547,6 +552,9 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return crate::commands::sessions_key(s, ev, tx);
         }
         if ev.key == Key::Escape {
+            if live(s).panels.overlay == Some(Screen::Fork) {
+                live_mut(s).app.dismiss_fork();
+            }
             live_mut(s).panels.overlay = None;
             live_mut(s).focus();
         }

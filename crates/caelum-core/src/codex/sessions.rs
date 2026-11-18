@@ -8,6 +8,71 @@ use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
 
 impl CodexProvider {
+    pub(crate) fn fork_session(
+        &self,
+        path: &str,
+        source: &str,
+        turn: &str,
+    ) -> Result<CodexSessionInfo, CodexError> {
+        let project = Project::open(path)?;
+        let connection = self.connection(&project)?;
+        if !connection
+            .bounded_fork
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(CodexError::Protocol(
+                "Forking at a chosen turn requires Codex CLI 0.143.0 or newer.".into(),
+            ));
+        }
+        if source.trim().is_empty() || turn.trim().is_empty() {
+            return Err(CodexError::InvalidThreadId);
+        }
+        let current = connection.request("thread/read", json!({"threadId":source}))?;
+        let owned = |thread: &Value| {
+            thread["cwd"]
+                .as_str()
+                .and_then(|s| Path::new(s).canonicalize().ok())
+                .as_deref()
+                == Some(project.path())
+        };
+        let parent = &current["thread"];
+        if parent["id"].as_str() != Some(source) || !owned(parent) {
+            return Err(CodexError::ThreadNotInProject);
+        }
+        if !matches!(
+            parent.pointer("/status/type").and_then(Value::as_str),
+            Some("idle" | "notLoaded" | "systemError")
+        ) {
+            return Err(CodexError::Protocol(
+                "Wait for the source thread to be idle before forking.".into(),
+            ));
+        }
+        let result = connection.request(
+            "thread/fork",
+            json!({"threadId":source,"lastTurnId":turn,"excludeTurns":true,"cwd":project.path()}),
+        )?;
+        let child = &result["thread"];
+        let thread = thread_info(child)
+            .filter(|t| {
+                !t.id.is_empty()
+                    && t.id != source
+                    && owned(child)
+                    && child["forkedFromId"].as_str() == Some(source)
+            })
+            .ok_or_else(|| {
+                CodexError::Protocol(
+                    "Codex returned an unexpected fork identity or checkout.".into(),
+                )
+            })?;
+        connection.remember_thread(&thread.id);
+        Ok(CodexSessionInfo {
+            project: project.info(),
+            thread,
+            effort: result["reasoningEffort"].as_str().map(str::to_owned),
+            model: result["model"].as_str().map(str::to_owned),
+        })
+    }
+
     /// Return recent Codex threads whose working directory is this project.
     pub fn list_sessions(
         &self,

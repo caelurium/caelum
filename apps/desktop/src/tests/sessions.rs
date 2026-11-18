@@ -1,6 +1,67 @@
 use super::*;
 
 #[test]
+fn fork_slash_command_uses_the_chosen_turn_and_preserves_the_parent_editor() {
+    use caelum_core::application::{Command, Event, ForkBoundary, Reply, Summary};
+    let mut rt = live_runtime_size((800.0, 620.0));
+    rt.update(|s, _| s.live.as_mut().unwrap().app.sessions[0].remote_id = Some("parent".into()));
+    fill(&mut rt, "live-draft-0", "Unsent café draft");
+    fill(&mut rt, "live-draft-0", "/fork");
+    key(&mut rt, Key::Enter, Mods::default());
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.overlay,
+        Some(crate::panels::Screen::Fork)
+    );
+    rt.update(|s,_| {
+        let live=s.live.as_mut().unwrap();
+        assert_eq!(live.drafts[0].text,"Unsent café draft");
+        let request=live.app.commands().into_iter().find(|(_,c)| matches!(c,Command::History(key,None) if key.id=="parent")).unwrap().0;
+        let turns=["older","newer"].map(|id| serde_json::json!({"id":id,"status":"completed","items":[{"type":"userMessage","content":[{"type":"text","text":id}]}]}));
+        live.apply(Event::Completed(request,Ok(Reply::History(caelum_protocol::SessionHistoryPage {data:turns.into(),next_cursor:None,is_working:Some(false),model:None,effort:None,agent:None}))));
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.find("fork-turn-older").is_some());
+    key(&mut rt, Key::Down, Mods::default());
+    key(&mut rt, Key::Enter, Mods::default());
+    rt.update(|s, _| {
+        let live = s.live.as_mut().unwrap();
+        let (id, source) = live
+            .app
+            .commands()
+            .into_iter()
+            .find_map(|(id, c)| match c {
+                Command::Fork(key, ForkBoundary::CodexTurn(turn)) if turn == "older" => {
+                    Some((id, key))
+                }
+                _ => None,
+            })
+            .expect("fork the older turn with the keyboard");
+        let mut key = source.clone();
+        key.id = "child".into();
+        live.apply(Event::Completed(
+            id,
+            Ok(Reply::Forked {
+                source,
+                child: Summary {
+                    key,
+                    title: "Fork".into(),
+                    options: Default::default(),
+                    updated_at: None,
+                    working: false,
+                },
+            }),
+        ));
+    });
+    advance(&mut rt, 0.2);
+    let l = rt.state.live.as_ref().unwrap();
+    assert_eq!(l.panels.overlay, None);
+    assert_eq!(l.app.selected, Some(2));
+    assert_eq!(l.drafts[0].text, "Unsent café draft");
+    assert!(l.drafts[2].text.is_empty());
+}
+
+#[test]
 fn session_popover_roves_without_selecting_its_background_owner() {
     let mut rt = live_runtime_size((800.0, 620.0));
     rt.update(|s, _| {

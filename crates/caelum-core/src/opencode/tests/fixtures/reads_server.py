@@ -66,6 +66,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply({'data': session})
         elif path == '/api/session/ses_read/message':
             query = parse_qs(url.query)
+            if query == {'order':['desc'],'limit':['1']}:
+                self.reply({'data':[{'id': 'msg_tip'}]}); return
             assert query in [
                 {'limit': ['50'], 'order': ['desc']},
                 {'limit': ['50'], 'cursor': ['opaque/+?=']},
@@ -77,6 +79,9 @@ class Handler(BaseHTTPRequestHandler):
                     'data': [{'id': name, 'type': 'user', 'text': name} for name in ['newer', 'older']],
                     'cursor': {'next': 'opaque/+?=' if 'order' in query else None},
                 })
+        elif path == '/api/session/ses_read/fork':
+            assert body in [{}, {'before':'msg_next'}]
+            self.reply({'data': {**session, 'id':'ses_child', 'fork': {'sessionID':'ses_read', 'boundary': {'type':'before' if body else 'through', 'messageID':state.get('actual_boundary', body.get('before','msg_tip'))}}}})
         elif path in ['/api/form', '/api/shell', '/api/session/ses_read/inbox', '/api/session/ses_read/diff']:
             self.reply({'data': []})
         elif path == '/api/shell/sh_read':

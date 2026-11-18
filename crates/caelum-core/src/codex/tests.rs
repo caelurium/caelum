@@ -51,6 +51,37 @@ impl Drop for TestDirectory {
 const PYTHON_FAKE_SERVER: &str = include_str!("tests/fixtures/server.py");
 
 #[test]
+fn bounded_fork_rejects_older_servers_and_revalidates_the_thread_checkout_and_activity() {
+    for old in [true, false] {
+        let dir = TestDirectory::new();
+        let root = dir.project().canonicalize().unwrap();
+        if old {
+            fs::write(root.join("old-codex"), "").unwrap();
+        }
+        let provider = CodexProvider::with_executable(
+            Arc::new(ProcessRegistry::default()),
+            ApprovalBroker::default(),
+            QuestionBroker::default(),
+            dir.fake_codex(true),
+        );
+        let fork = |id: &str| provider.fork_session(root.to_str().unwrap(), id, "turn-a");
+        assert!(fork("foreign-thread").is_err());
+        fs::write(root.join("active-thread"), "").unwrap();
+        assert!(fork("thread-existing").is_err());
+        fs::remove_file(root.join("active-thread")).unwrap();
+        assert!(!root.join("fork-request").exists());
+        if old {
+            assert!(fork("thread-existing").is_err());
+            assert!(!root.join("fork-request").exists());
+        } else {
+            let child = fork("thread-existing").unwrap();
+            assert_eq!(child.thread.id, "thread-child");
+            assert_eq!(child.model.as_deref(), Some("saved-model"));
+        }
+    }
+}
+
+#[test]
 fn session_archiving_is_reversible_scoped_and_keeps_recorded_branch_details() {
     let directory = TestDirectory::new();
     let project_path = directory.project();

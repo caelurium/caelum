@@ -19,12 +19,17 @@ for raw in sys.stdin:
         continue
     if method == 'initialize':
         assert params['capabilities']['experimentalApi'] is True
-        result = {'userAgent': 'fake-codex'}
+        version = '0.142.0' if os.path.exists('old-codex') else '0.143.0'
+        result = {'userAgent': 'caelum/' + version + ' (test)'}
     elif method == 'thread/list':
         present = ('thread-existing' in archived) == params['archived'] and 'thread-existing' not in deleted
         result = {'data': [{'id': 'thread-existing', 'name': 'Existing', 'preview': 'Earlier work', 'updatedAt': 123, 'status': {'type': 'active' if os.path.exists('active-thread') else 'idle'}}] if present else [], 'nextCursor': None}
     elif method == 'thread/read':
         result = {'thread': {'id': params['threadId'], 'cwd': os.path.dirname(os.getcwd()) if params['threadId'] == 'foreign-thread' else os.getcwd(), 'gitInfo': {'branch': 'feature/sidebar'}, 'status': {'type': 'active' if os.path.exists('active-thread') else 'idle'}}}
+    elif method == 'thread/fork':
+        assert params == {'threadId':'thread-existing','lastTurnId':'turn-a','excludeTurns':True,'cwd':os.getcwd()}
+        with open('fork-request', 'w') as f: f.write(params['lastTurnId'])
+        result = {'thread': {'id':'thread-child','forkedFromId':'thread-existing','cwd':os.getcwd()}, 'model':'saved-model'}
     elif method in ['thread/archive', 'thread/unarchive']:
         if os.path.exists('archive-error'):
             print(json.dumps({'id': request_id, 'error': {'code': -32000, 'message': 'archive unavailable'}}), flush=True)

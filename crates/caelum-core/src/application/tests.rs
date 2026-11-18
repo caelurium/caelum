@@ -1,6 +1,7 @@
 mod archive;
 mod checkouts;
 mod controls;
+mod fork;
 mod history;
 mod persistence;
 mod projects;
