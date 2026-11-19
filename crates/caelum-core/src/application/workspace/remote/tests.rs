@@ -249,6 +249,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             lines: vec![Line {
                 key: None,
                 tool_detail: None,
+                tool_source: None,
                 speaker: Speaker::Codex,
                 text: "Part".into(),
                 partial: true,
@@ -286,6 +287,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                     lines: vec![Line {
                         key: None,
                         tool_detail: None,
+                        tool_source: None,
                         speaker: Speaker::Codex,
                         text: "Full reply".into(),
                         partial: false,

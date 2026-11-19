@@ -27,7 +27,7 @@ fn owned(target: &Target, run: &PromptRun, id: &str, conv: Option<&str>) -> bool
             .is_none_or(|c| valid_id(c) && conv.is_none_or(|v| c == v))
 }
 
-fn position(event: &SandboxEvent) -> Option<String> {
+pub(super) fn position(event: &SandboxEvent) -> Option<String> {
     Some(URL_SAFE_NO_PAD.encode(format!("{}:{}", event.timestamp?, event.id.as_ref()?)))
 }
 
@@ -49,8 +49,8 @@ fn checkpoint(
     // a new (timestamp, id). At the live tail, overlap just this keyed event.
     if !done
         && !more
-        && last.id.as_deref().is_some_and(valid_id)
-        && super::events::response(last, run).is_some()
+        && last.id.as_deref().is_some_and(super::events::event_id)
+        && super::events::response(last, &run.conversation, &run.prompt).is_some()
     {
         match earlier.last() {
             None => return Ok(cursor.map(str::to_owned)),
@@ -268,7 +268,7 @@ impl Harness for Boat {
             _ => RunStatus::Running,
         };
         Ok(Page {
-            lines: super::events::lines(events.events, run, &target.repository),
+            lines: super::events::lines(events.events, run, &target.repository, cursor),
             cursor: next,
             more,
             status,

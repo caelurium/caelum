@@ -11,6 +11,7 @@ mod stats;
 #[cfg(test)]
 mod tests;
 mod threads;
+mod tools;
 use crate::{
     application::{Command, Reply},
     remote::{Connection, Credential, Operation, Outcome},
@@ -26,6 +27,7 @@ pub(super) enum Lane {
     Checkout(String),
     Delete(String, crate::remote::MachineId),
     Feed(String),
+    Tool,
     Git(String),
     Stats(String),
     Lifetime(String),
@@ -80,6 +82,7 @@ impl Workspace {
                 self.complete_handoff_confirmation(request, plan.0, plan.1, result)
             }
             Lane::Feed(id) => self.complete_feed(&id, request, result),
+            Lane::Tool => self.complete_vm_tool(request, result),
             Lane::Git(id) => self.complete_git(&id, request, result),
             Lane::Stats(id) => self.complete_stats(&id, request, result),
             Lane::Lifetime(id) => self.complete_lifetime(&id, request, result),
@@ -89,6 +92,15 @@ impl Workspace {
             {
                 self.remote.connection = match result {
                     Ok(Outcome::Inventory(mut inventory)) => {
+                        if self.remote.tool.as_ref().is_some_and(|p| {
+                            self.remote
+                                .saved
+                                .checkouts
+                                .get(&p.checkout)
+                                .is_none_or(|c| c.source.account != inventory.account)
+                        }) {
+                            self.remote.tool = None;
+                        }
                         inventory
                             .machines
                             .retain(|m| !self.remote.deleted_during_inventory.contains(&m.key));
@@ -102,6 +114,7 @@ impl Workspace {
                     }
                     Ok(Outcome::Disconnected) => {
                         self.remote.inventory = None;
+                        self.remote.tool = None;
                         Connection::Idle
                     }
                     Err(error) => Connection::Failed(error),

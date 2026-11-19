@@ -75,6 +75,12 @@ impl Backend {
                 .follow(target, run, cursor.as_deref())
                 .await
                 .map(Outcome::Page),
+            Operation::InspectTool(key, source) => self
+                .connected()
+                .await?
+                .tool_output(key, source)
+                .await
+                .map(Outcome::ToolOutput),
             Operation::Interrupt(target, run) => self
                 .connected()
                 .await?

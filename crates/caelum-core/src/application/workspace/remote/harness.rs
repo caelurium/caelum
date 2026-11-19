@@ -235,6 +235,7 @@ impl Workspace {
                         .feeds
                         .insert(id.into(), Job::Wait(Instant::now() + delay));
                 }
+                self.refresh_open_vm_tool(id);
             }
             other => {
                 self.remote.feeds.insert(

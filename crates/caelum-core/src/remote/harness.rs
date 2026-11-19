@@ -140,6 +140,8 @@ pub struct Line {
     /// A checkout-relative file or executable name, never the command arguments or result body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_source: Option<Box<super::ToolSource>>,
     pub speaker: Speaker,
     pub text: String,
     pub partial: bool,
@@ -150,6 +152,7 @@ impl Line {
         Self {
             key: None,
             tool_detail: None,
+            tool_source: None,
             speaker,
             text: text.into(),
             partial: false,
@@ -240,7 +243,10 @@ impl Thread {
                 || matches!(
                     old.speaker,
                     Speaker::Tool(ToolState::Complete | ToolState::Failed)
-                ) && line.speaker == Speaker::Tool(ToolState::Running)
+                ) && matches!(
+                    line.speaker,
+                    Speaker::Tool(ToolState::Running | ToolState::Reported)
+                )
             {
                 return;
             }
@@ -250,8 +256,14 @@ impl Thread {
             if matches!(line.speaker, Speaker::Tool(_)) && line.tool_detail.is_none() {
                 line.tool_detail.clone_from(&old.tool_detail);
             }
+            if matches!(line.speaker, Speaker::Tool(_)) && line.text.is_empty() {
+                line.text.clone_from(&old.text);
+            }
             *old = line;
         } else {
+            if matches!(line.speaker, Speaker::Tool(_)) && line.text.is_empty() {
+                line.text = "Tool".into();
+            }
             line.key
                 .get_or_insert_with(|| uuid::Uuid::new_v4().to_string());
             self.lines.push(line);
@@ -265,7 +277,8 @@ impl Thread {
             .take_while(|l| {
                 bytes += l.text.len()
                     + l.key.as_ref().map_or(0, String::len)
-                    + l.tool_detail.as_ref().map_or(0, String::len);
+                    + l.tool_detail.as_ref().map_or(0, String::len)
+                    + l.tool_source.as_deref().map_or(0, super::ToolSource::bytes);
                 bytes <= 512 * 1024
             })
             .count();

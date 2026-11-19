@@ -122,6 +122,9 @@ impl Workspace {
         }
         self.remote.jobs.remove(id);
         self.remote.feeds.remove(id);
+        if self.remote.tool.as_ref().is_some_and(|p| p.checkout == id) {
+            self.remote.tool = None;
+        }
         self.remote.interrupts.remove(id);
         self.remote.changes.remove(id);
         self.remote.lifetimes.remove(id);

@@ -9,6 +9,7 @@ mod lifetime;
 mod models;
 mod runtime;
 mod stats;
+mod tools;
 
 pub use chat::Chat;
 pub use chat::Continuation;
@@ -24,6 +25,11 @@ pub use models::ModelCatalogue;
 pub use models::ModelLists;
 pub(crate) use runtime::Backend;
 pub use stats::{Activity, Monitor, Process, Sample};
+pub use tools::ToolCall;
+pub use tools::ToolInspection;
+pub use tools::ToolLoad;
+pub use tools::ToolOutput;
+pub use tools::ToolSource;
 
 use crate::application::Provider;
 use serde::{Deserialize, Serialize};
@@ -99,6 +105,7 @@ pub enum Operation {
     Lifetime(MachineId, Lifetime),
     Prompt(Target, Prompt),
     Follow(Target, Run, Option<String>),
+    InspectTool(MachineId, ToolSource),
     Interrupt(Target, Run),
     Recover(Target, Provider, Option<String>, String),
     Git(Target, GitAction),
@@ -119,6 +126,7 @@ pub enum Outcome {
     Accepted(Run),
     Rejected(String),
     Page(Page),
+    ToolOutput(ToolOutput),
     Interrupted,
     Review(Review),
     Stats(Sample),
@@ -136,6 +144,7 @@ pub struct State {
     pub interrupts: std::collections::HashMap<String, u64>,
     pub changes: std::collections::HashMap<String, Changes>,
     pub monitor: Monitor,
+    pub tool: Option<ToolInspection>,
     pub lifetimes: std::collections::HashMap<String, Job>,
     pub delete_errors: std::collections::HashMap<String, String>,
     pub removed: Vec<String>,

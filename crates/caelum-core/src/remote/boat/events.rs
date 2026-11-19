@@ -1,13 +1,23 @@
-use crate::remote::{Line, Run, Speaker, ToolState};
+use super::tools::{Call, MAX_CURSOR};
+use crate::remote::{Line, Run, Speaker, ToolSource};
 use boat_sdk::agents::models::SandboxEvent;
 use serde_json::{Map, Value};
 
-pub(super) fn response<'a>(e: &'a SandboxEvent, run: &Run) -> Option<&'a Map<String, Value>> {
+// Unlike a conversation filter, an event/call ID is an opaque equality key.
+pub(super) fn event_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 256 && !id.chars().any(|c| c.is_control() || c.is_whitespace())
+}
+
+pub(super) fn response<'a>(
+    e: &'a SandboxEvent,
+    chat: &str,
+    prompt: &str,
+) -> Option<&'a Map<String, Value>> {
     let task = e.task_id.as_deref();
     let conversation = e.conversation_id.as_deref();
     if e.kind != "response"
-        || task.is_some_and(|id| id != run.prompt)
-        || conversation.is_some_and(|id| id != run.conversation)
+        || task.is_some_and(|id| id != prompt)
+        || conversation.is_some_and(|id| id != chat)
         || (conversation.is_none() && task.is_none())
     {
         return None;
@@ -19,71 +29,71 @@ pub(super) fn response<'a>(e: &'a SandboxEvent, run: &Run) -> Option<&'a Map<Str
 
 /// Boat sends snapshots: the tool result is paired with its `use`, not another
 /// chat message. Keep call identity and outcome without copying raw inputs or output.
-pub(super) fn lines(events: Vec<SandboxEvent>, run: &Run, repository: &str) -> Vec<Line> {
+pub(super) fn lines(
+    events: Vec<SandboxEvent>,
+    run: &Run,
+    repository: &str,
+    cursor: Option<&str>,
+) -> Vec<Line> {
     let mut lines = Vec::new();
-    for e in events {
-        let Some(data) = response(&e, run) else {
+    for (idx, e) in events.iter().enumerate() {
+        let Some(data) = response(e, &run.conversation, &run.prompt) else {
             continue;
         };
-        let event = e.id.as_deref().filter(|id| super::harness::valid_id(id));
+        let event = e.id.as_deref().filter(|id| event_id(id));
         if let Some(text) = data
             .get("content")
-            .and_then(|v| v.as_str())
+            .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
         {
+            let end =
+                text.floor_char_boundary(text.len().min(crate::remote::Thread::MAX_MESSAGE_BYTES));
             lines.push(Line {
                 key: event.map(|id| format!("{}:response:{id}", run.id)),
                 partial: data
                     .get("is_streaming")
-                    .and_then(|v| v.as_bool())
+                    .and_then(Value::as_bool)
                     .unwrap_or(false),
-                ..Line::new(
-                    run.provider.into(),
-                    &text[..text.floor_char_boundary(
-                        crate::remote::Thread::MAX_MESSAGE_BYTES.min(text.len()),
-                    )],
-                )
+                ..Line::new(run.provider.into(), &text[..end])
             });
         }
-        for (i, tool) in data
-            .get("tools")
-            .and_then(|v| v.as_array())
-            .into_iter()
-            .flatten()
-            .enumerate()
-        {
-            let call = tool.get("use").unwrap_or(tool);
-            let Some(name) = call
-                .get("name")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.trim().is_empty())
-            else {
+        let Some(tools) = data.get("tools").and_then(Value::as_array) else {
+            continue;
+        };
+        let previous = idx
+            .checked_sub(1)
+            .and_then(|i| super::harness::position(&events[i]));
+        let before = previous.as_deref().or(cursor);
+        for (i, tool) in tools.iter().take(200).enumerate() {
+            let Some(call) = Call::read(tool) else {
                 continue;
             };
             let key = call
-                .get("id")
-                .and_then(|v| v.as_str())
-                .filter(|id| super::harness::valid_id(id))
+                .id
                 .map(|id| format!("{}:tool:{id}", run.id))
                 .or_else(|| event.map(|id| format!("{}:event-tool:{id}:{i}", run.id)));
-            let state = match tool.get("result").filter(|r| !r.is_null()) {
-                Some(r) if r.get("is_error").and_then(|v| v.as_bool()) == Some(true) => {
-                    ToolState::Failed
-                }
-                Some(_) => ToolState::Complete,
-                None if tool.get("use").is_some() => ToolState::Running,
-                None => ToolState::Reported,
-            };
+            let name = call
+                .name
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(80)
+                .collect::<String>();
+            let source = event
+                .filter(|_| before.is_none_or(|s| s.len() <= MAX_CURSOR))
+                .and_then(|event| {
+                    Some(Box::new(ToolSource {
+                        conversation: run.conversation.clone(),
+                        prompt: run.prompt.clone(),
+                        event: event.into(),
+                        before: before.map(str::to_owned),
+                        call: call.identity(i)?,
+                    }))
+                });
             lines.push(Line {
                 key,
-                tool_detail: call.get("input").and_then(|v| detail(name, v, repository)),
-                ..Line::new(
-                    Speaker::Tool(state),
-                    name.chars()
-                        .filter(|c| !c.is_control())
-                        .take(80)
-                        .collect::<String>(),
-                )
+                tool_detail: call.input.and_then(|v| detail(&name, v, repository)),
+                tool_source: source,
+                ..Line::new(Speaker::Tool(call.state), name)
             });
         }
     }
@@ -92,8 +102,13 @@ pub(super) fn lines(events: Vec<SandboxEvent>, run: &Run, repository: &str) -> V
 
 fn detail(name: &str, input: &serde_json::Value, repository: &str) -> Option<String> {
     match name.to_ascii_lowercase().as_str() {
-        "bash" | "shell" => {
-            let word = input.get("command")?.as_str()?.split_whitespace().next()?;
+        "bash" | "shell" | "exec_command" | "commandexecution" => {
+            let word = input
+                .get("command")
+                .or_else(|| input.get("cmd"))?
+                .as_str()?
+                .split_whitespace()
+                .next()?;
             if !word
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"/._-+".contains(&b))
@@ -103,7 +118,7 @@ fn detail(name: &str, input: &serde_json::Value, repository: &str) -> Option<Str
             let program = word.rsplit('/').next()?;
             (!program.is_empty() && program.len() <= 40).then(|| program.to_owned())
         }
-        "read" | "edit" | "write" => {
+        "read" | "read_file" | "edit" | "write" | "grep" | "glob" => {
             let path = ["filePath", "file_path", "path"]
                 .iter()
                 .find_map(|p| input.get(p)?.as_str())?;

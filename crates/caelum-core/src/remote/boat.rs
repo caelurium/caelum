@@ -4,6 +4,7 @@ mod git;
 mod harness;
 mod setup_error;
 mod stats;
+mod tools;
 
 use super::{
     Host, Inventory, Lifetime, Machine, MachineId, Machines, Outcome, Plan, Source, Target,
