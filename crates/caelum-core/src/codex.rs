@@ -55,7 +55,7 @@ struct ProviderInner {
 
 struct CodexConnection {
     process_id: ProcessId,
-    bounded_fork: AtomicBool,
+    version: std::sync::OnceLock<semver::Version>,
     writer: Arc<Mutex<std::process::ChildStdin>>,
     pending: PendingRequests,
     next_id: AtomicU64,
@@ -236,7 +236,7 @@ impl CodexProvider {
         let process_id = self.inner.processes.register(child)?;
         let connection = Arc::new(CodexConnection {
             process_id,
-            bounded_fork: AtomicBool::new(false),
+            version: Default::default(),
             writer: Arc::new(Mutex::new(stdin)),
             pending: Arc::new(Mutex::new(HashMap::new())),
             next_id: AtomicU64::new(1),
@@ -274,14 +274,14 @@ impl CodexProvider {
                 }),
             )
             .and_then(|info| {
-                // Older servers silently ignore lastTurnId and would fork the whole thread.
-                let supported = info["userAgent"]
+                if let Some(version) = info["userAgent"]
                     .as_str()
                     .and_then(|s| s.split_whitespace().next())
                     .and_then(|s| s.rsplit_once('/'))
                     .and_then(|(_, v)| semver::Version::parse(v).ok())
-                    .is_some_and(|v| v >= semver::Version::new(0, 143, 0));
-                connection.bounded_fork.store(supported, Ordering::Release);
+                {
+                    let _ = connection.version.set(version);
+                }
                 connection.notify("initialized", json!({}))?;
                 Ok(Value::Null)
             });

@@ -1,5 +1,5 @@
 use super::{CodexConnection, CodexError, CodexProvider, PROVIDER_NAME};
-use crate::projects::Project;
+use crate::{application::HistoryAction, projects::Project};
 use caelum_protocol::{
     CodexSessionInfo, CodexSessionList, CodexThreadInfo, LineChanges, ProviderChoice,
     ProviderChoices, ProviderModelChoice, SessionDetails, SessionHistoryPage,
@@ -13,50 +13,31 @@ impl CodexProvider {
         path: &str,
         source: &str,
         turn: &str,
+        before: bool,
     ) -> Result<CodexSessionInfo, CodexError> {
         let project = Project::open(path)?;
         let connection = self.connection(&project)?;
-        if !connection
-            .bounded_fork
-            .load(std::sync::atomic::Ordering::Acquire)
-        {
-            return Err(CodexError::Protocol(
-                "Forking at a chosen turn requires Codex CLI 0.143.0 or newer.".into(),
-            ));
-        }
+        // Older servers silently ignore unrecognised fork boundaries.
+        connection.require_action(if before {
+            HistoryAction::Edit
+        } else {
+            HistoryAction::Fork
+        })?;
         if source.trim().is_empty() || turn.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let current = connection.request("thread/read", json!({"threadId":source}))?;
-        let owned = |thread: &Value| {
-            thread["cwd"]
-                .as_str()
-                .and_then(|s| Path::new(s).canonicalize().ok())
-                .as_deref()
-                == Some(project.path())
-        };
-        let parent = &current["thread"];
-        if parent["id"].as_str() != Some(source) || !owned(parent) {
-            return Err(CodexError::ThreadNotInProject);
-        }
-        if !matches!(
-            parent.pointer("/status/type").and_then(Value::as_str),
-            Some("idle" | "notLoaded" | "systemError")
-        ) {
-            return Err(CodexError::Protocol(
-                "Wait for the source thread to be idle before forking.".into(),
-            ));
-        }
+        connection.owned_thread(&project, source, true)?;
+        let boundary = if before { "beforeTurnId" } else { "lastTurnId" };
         let result = connection.request(
             "thread/fork",
-            json!({"threadId":source,"lastTurnId":turn,"excludeTurns":true,"cwd":project.path()}),
+            json!({"threadId":source,(boundary):turn,"excludeTurns":true,"cwd":project.path()}),
         )?;
         let child = &result["thread"];
         let thread = thread_info(child)
             .filter(|t| {
                 !t.id.is_empty()
                     && t.id != source
-                    && owned(child)
+                    && in_checkout(child, &project)
                     && child["forkedFromId"].as_str() == Some(source)
             })
             .ok_or_else(|| {
@@ -71,6 +52,73 @@ impl CodexProvider {
             effort: result["reasoningEffort"].as_str().map(str::to_owned),
             model: result["model"].as_str().map(str::to_owned),
         })
+    }
+
+    pub(crate) fn rename(&self, path: &str, id: &str, title: &str) -> Result<(), CodexError> {
+        let project = Project::open(path)?;
+        let connection = self.connection(&project)?;
+        connection.owned_thread(&project, id, false)?;
+        connection.request("thread/name/set", json!({"threadId":id,"name":title}))?;
+        Ok(())
+    }
+
+    pub(crate) fn rewind(
+        &self,
+        path: &str,
+        id: &str,
+        before: &str,
+        tip: &str,
+    ) -> Result<(), CodexError> {
+        let project = Project::open(path)?;
+        let connection = self.connection(&project)?;
+        connection.require_action(HistoryAction::Rewind)?;
+        connection.owned_thread(&project, id, true)?;
+        let latest = connection.request(
+            "thread/turns/list",
+            json!({"threadId":id,"limit":1,"sortDirection":"desc","itemsView":"full"}),
+        )?;
+        if latest.pointer("/data/0/id").and_then(Value::as_str) != Some(tip) {
+            return Err(CodexError::Protocol(
+                "History changed. Reopen /rewind to review the new boundary.".into(),
+            ));
+        }
+        let response = connection.request(
+            "thread/revert",
+            json!({"threadId":id,"beforeTurnId":before}),
+        )?;
+        if response["thread"]["id"].as_str() != Some(id)
+            || !in_checkout(&response["thread"], &project)
+        {
+            return Err(CodexError::ThreadNotInProject);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn verify_export_owner(&self, path: &str, id: &str) -> Result<(), CodexError> {
+        let project = Project::open(path)?;
+        self.connection(&project)?
+            .owned_thread(&project, id, true)
+            .map(drop)
+    }
+
+    pub(crate) fn check_history_action(
+        &self,
+        path: &str,
+        id: &str,
+        action: crate::application::HistoryAction,
+    ) -> Result<(), CodexError> {
+        let project = Project::open(path)?;
+        let connection = self.connection(&project)?;
+        connection.require_action(action)?;
+        let thread = connection.owned_thread(&project, id, true)?;
+        if action == HistoryAction::Rewind
+            && thread["historyMode"]
+                .as_str()
+                .is_some_and(|mode| mode != "paginated")
+        {
+            return Err(CodexError::Protocol("This Codex thread does not use paginated history. Use /fork to keep an earlier conversation instead.".into()));
+        }
+        Ok(())
     }
 
     /// Return recent Codex threads whose working directory is this project.
@@ -236,16 +284,21 @@ impl CodexProvider {
     ) -> Result<CodexSessionInfo, CodexError> {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
-        let response = connection.request(
-            "thread/start",
-            json!({
-                "cwd": project.path().to_string_lossy(),
-                "approvalPolicy": "unlessTrusted",
-                "sandbox": "workspaceWrite",
-                "serviceName": "caelum",
-                "model": model
-            }),
-        )?;
+        let mut params = json!({
+            "cwd": project.path().to_string_lossy(),
+            "approvalPolicy": "unlessTrusted",
+            "sandbox": "workspaceWrite",
+            "serviceName": "caelum",
+            "model": model
+        });
+        if connection
+            .version
+            .get()
+            .is_some_and(|v| *v >= semver::Version::new(0, 148, 0))
+        {
+            params["historyMode"] = "paginated".into();
+        }
+        let response = connection.request("thread/start", params)?;
         let thread = response
             .get("thread")
             .and_then(thread_info)
@@ -327,10 +380,9 @@ impl CodexProvider {
                 })
             }),
             data: data.iter().rev().cloned().collect(),
-            next_cursor: response
-                .get("nextCursor")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
+            next_cursor: serde_json::from_value(response["nextCursor"].clone()).map_err(|_| {
+                CodexError::Protocol("thread/turns/list returned an invalid cursor".into())
+            })?,
         })
     }
 
@@ -570,6 +622,54 @@ fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
             .to_owned(),
         updated_at: value.get("updatedAt").and_then(Value::as_u64),
     })
+}
+
+fn in_checkout(thread: &Value, project: &Project) -> bool {
+    thread["cwd"]
+        .as_str()
+        .and_then(|s| Path::new(s).canonicalize().ok())
+        .as_deref()
+        == Some(project.path())
+}
+
+impl CodexConnection {
+    fn require_action(&self, action: HistoryAction) -> Result<(), CodexError> {
+        let (minor, operation) = match action {
+            HistoryAction::Fork => (143, "Forking at a chosen turn"),
+            HistoryAction::Edit => (145, "Edit in a branch"),
+            HistoryAction::Rewind => (148, "Rewinding to a turn"),
+        };
+        let minimum = semver::Version::new(0, minor, 0);
+        if self.version.get().is_some_and(|v| v >= &minimum) {
+            Ok(())
+        } else {
+            Err(CodexError::Protocol(format!(
+                "{operation} requires Codex CLI {minimum} or newer."
+            )))
+        }
+    }
+
+    fn owned_thread(&self, project: &Project, id: &str, idle: bool) -> Result<Value, CodexError> {
+        let mut value = self.request("thread/read", json!({"threadId":id}))?;
+        let thread = value
+            .get_mut("thread")
+            .map(Value::take)
+            .ok_or(CodexError::ThreadNotInProject)?;
+        if id.is_empty() || thread["id"].as_str() != Some(id) || !in_checkout(&thread, project) {
+            return Err(CodexError::ThreadNotInProject);
+        }
+        if idle
+            && !matches!(
+                thread.pointer("/status/type").and_then(Value::as_str),
+                Some("idle" | "notLoaded" | "systemError")
+            )
+        {
+            return Err(CodexError::Protocol(
+                "Wait for the source thread to be idle.".into(),
+            ));
+        }
+        Ok(thread)
+    }
 }
 
 pub(super) fn file_change_lines(change: &Value) -> LineChanges {
