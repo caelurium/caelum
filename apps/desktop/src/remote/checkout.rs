@@ -49,6 +49,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.app.remote.saved.selected = None;
     }
     changed |= super::provider::sync(l);
+    changed |= l.app.dismiss_other_vm_tool();
     let now = Instant::now();
     super::stats::sync(l, tx, now);
     if let Some(at) = l.app.feed_deadline(now) {

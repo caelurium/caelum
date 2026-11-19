@@ -1,7 +1,7 @@
 use super::{agent_target, fixture};
 use crate::{
     application::Provider,
-    remote::{boat::events, Run, Thread, ToolState},
+    remote::{boat::events, Run, Speaker, Thread, ToolState},
 };
 use serde_json::{json, Value};
 use wiremock::{
@@ -16,6 +16,38 @@ fn run() -> Run {
         prompt: "p".into(),
         id: "r".into(),
     }
+}
+
+#[test]
+fn typed_public_summaries_update_independently_of_text_and_never_fall_back_to_private_content() {
+    let mut thread = Thread::default();
+    for running in [true, false] {
+        let item = json!({"type":"reasoning","id":"rs.1","status":if running {"in_progress"} else {"completed"},
+            "summary":[{"type":"summary_text","text":if running {"Inspecting the tests."} else {"Checked the tests."}},{"type":"reasoning_text","text":"private content"}],
+            "content":[{"type":"reasoning_text","text":"private content"}],"encrypted_content":"private content"});
+        let content = json!([item, {"type":"thinking","thinking":"private content"}, {"type":"text","id":"first","text":"First reply"}, {"type":"output_text","id":"second","text":"Second reply"}]);
+        let page = json!([
+            {"type":"response","id":"old","conversationId":"other","data":{"content":content}},
+            {"type":"response","id":"ours.1","taskId":"p","data":{"content":content,"is_streaming":running}},
+            {"type":"response","id":"undone","taskId":"p","data":{"content":content,"is_reverted":true}}]);
+        for l in events::lines(
+            serde_json::from_value(page).unwrap(),
+            &run(),
+            "example/project",
+            None,
+        ) {
+            thread.append(l);
+        }
+        assert_eq!(thread.lines.len(), 3);
+        assert_eq!(thread.lines[0].speaker, Speaker::ReasoningSummary);
+        assert_eq!(thread.lines[0].partial, running);
+    }
+    assert_eq!(thread.lines[0].text, "Checked the tests.");
+    assert_eq!(thread.lines[1].text, "First reply");
+    assert_eq!(thread.lines[2].text, "Second reply");
+    assert!(!serde_json::to_string(&thread)
+        .unwrap()
+        .contains("private content"));
 }
 
 #[tokio::test]

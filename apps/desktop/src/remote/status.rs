@@ -6,6 +6,7 @@ use rune_kit::Kit;
 enum Tone {
     Ready,
     Busy,
+    Thinking,
     Quiet,
     Attention,
     Error,
@@ -27,7 +28,7 @@ impl Status {
     pub fn view(&self, k: &Kit) -> El {
         let color = match self.tone {
             Tone::Ready => k.c.success.fg,
-            Tone::Busy => k.c.text_accent,
+            Tone::Busy | Tone::Thinking => k.c.text_accent,
             Tone::Quiet => k.c.text_faint,
             Tone::Attention => k.c.warning.fg,
             Tone::Error => k.c.danger.fg,
@@ -40,8 +41,12 @@ impl Status {
             .role("status")
             .label(&self.label)
             .help(&self.label)
-            .child(dot(color))
-            .child(if self.tone == Tone::Busy {
+            .child(if self.tone == Tone::Thinking {
+                rune::icon(&crate::ui::BRAIN, 14.).color(color)
+            } else {
+                dot(color)
+            })
+            .child(if matches!(self.tone, Tone::Busy | Tone::Thinking) {
                 crate::ui::busy_text(&self.label, k.ty.small_medium, k)
                     .min_w(0.0)
                     .clip_rounded(0.0)
@@ -147,6 +152,9 @@ pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
                 }
                 if l.speaker.is_assistant() && l.partial {
                     return Status::new(Busy, "Responding…");
+                }
+                if l.speaker == Speaker::ReasoningSummary && l.partial {
+                    return Status::new(Thinking, "Thinking…");
                 }
             }
             Status::new(Busy, format!("{} is working…", run.provider.name()))

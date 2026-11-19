@@ -1,5 +1,6 @@
 mod handoff;
 mod models;
+mod transcript;
 mod workspace;
 
 use super::*;

@@ -1,3 +1,4 @@
+mod content;
 use super::tools::{Call, MAX_CURSOR};
 use crate::remote::{Line, Run, Speaker, ToolSource};
 use boat_sdk::agents::models::SandboxEvent;
@@ -41,22 +42,7 @@ pub(super) fn lines(
             continue;
         };
         let event = e.id.as_deref().filter(|id| event_id(id));
-        if let Some(text) = data
-            .get("content")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-        {
-            let end =
-                text.floor_char_boundary(text.len().min(crate::remote::Thread::MAX_MESSAGE_BYTES));
-            lines.push(Line {
-                key: event.map(|id| format!("{}:response:{id}", run.id)),
-                partial: data
-                    .get("is_streaming")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                ..Line::new(run.provider.into(), &text[..end])
-            });
-        }
+        content::append(&mut lines, data, event, run);
         let Some(tools) = data.get("tools").and_then(Value::as_array) else {
             continue;
         };

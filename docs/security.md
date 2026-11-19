@@ -40,3 +40,6 @@ Keychain or Linux Secret Service. Disconnect removes it. The adapter exposes
 account-scoped machine metadata and process names, not desktop access URLs,
 environment secrets or process arguments. On a remote checkout, Boat hosts
 Codex and OpenCode and controls their in-VM credentials and tool permissions.
+Expanding a VM tool call reads its published event for that machine and
+conversation. The selected call’s command and text output stay in memory;
+the workspace saves only the summary and a reference for reopening it.

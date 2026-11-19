@@ -11,6 +11,7 @@ pub(crate) const SCENES: &[Scene] = &[
     ("remote-working", |s| {
         crate::remote::scene(s, "remote-working")
     }),
+    ("remote-trace", |s| crate::remote::scene(s, "remote-trace")),
     ("remote-setup-failed", |s| {
         crate::remote::scene(s, "remote-setup-failed")
     }),

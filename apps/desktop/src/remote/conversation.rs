@@ -16,6 +16,7 @@ pub(super) struct Editors {
     recovery: TextEdit,
     pub(super) reading: Rc<Cell<ScrollPos>>,
     draft_scroll: Rc<Cell<ScrollPos>>,
+    pub(super) summary: Option<String>,
 }
 
 pub(crate) fn focus(l: &mut Live) {

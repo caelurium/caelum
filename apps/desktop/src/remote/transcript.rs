@@ -1,7 +1,7 @@
 use crate::{Workspace, live::live, quiet_button, theme, ui};
 use caelum_core::application::presentation::Outcome;
 use caelum_core::remote::{
-    Checkout, Job, Line, Message, Phase, Speaker, Thread, ToolState, TurnEnd,
+    Checkout, Job, Line, Message, Phase, Speaker, Thread, ToolState, Turn, TurnEnd,
 };
 use rune::{El, ScrollSpec, col, icon, row, text};
 use rune_kit::{Kit, Markdown, ScrollBar, glyphs};
@@ -59,6 +59,26 @@ pub(super) fn view(
             live(s).app.remote.feeds.get(id),
             Some(Job::Busy(_) | Job::Wait(_))
         );
+    let pending = following
+        .then(|| match &c.thread.turn {
+            Turn::Queued(_) => Some("Queued on Boat…"),
+            Turn::Stopping(_) => Some("Stopping turn…"),
+            Turn::Finishing(_) => Some("Receiving final updates…"),
+            Turn::Following(_)
+                if !c
+                    .thread
+                    .lines
+                    .iter()
+                    .rev()
+                    .take_while(|l| l.speaker != Speaker::You)
+                    .any(|l| l.speaker == Speaker::Tool(ToolState::Running) || l.partial) =>
+            {
+                Some("Working on VM…")
+            }
+            _ => None,
+        })
+        .flatten();
+    pending.is_some().hash(&mut identities);
     let viewport = col()
         .key(format!("remote-transcript-{owner}"))
         .role("region")
@@ -68,7 +88,7 @@ pub(super) fn view(
         .min_h(0.0)
         .items_center()
         .scroll(ScrollSpec { stick_bottom: true });
-    if count == 0 {
+    if count == 0 && pending.is_none() {
         if super::setup::Dock::for_checkout(c) == super::setup::Dock::Setup {
             return viewport;
         }
@@ -114,9 +134,12 @@ pub(super) fn view(
                 .max_w(840.0)
                 .growth(rune::GrowthSpec::default())
                 .virtual_rows(
-                    count,
+                    count + usize::from(pending.is_some()),
                     92.0,
                     move |s: &Workspace, i| {
+                        if i == count {
+                            return format!("remote-progress-{thread}").into();
+                        }
                         if let Some(c) = live(s).app.remote.saved.checkouts.get(&keys)
                             && c.thread.editor_key(&keys) == thread
                             && let Some(Entry::Line(line)) = entry(&c.thread, i)
@@ -137,6 +160,20 @@ pub(super) fn view(
                         else {
                             return col();
                         };
+                        if i == count
+                            && let Some(label) = pending
+                        {
+                            return row()
+                                .w_full()
+                                .px(padding)
+                                .py(9.)
+                                .gap(7.)
+                                .center_y()
+                                .role("status")
+                                .label(label)
+                                .child(icon(&ui::CLOCK, 14.).color(kit.c.icon_muted))
+                                .child(ui::busy_text(label, kit.ty.small_medium, &kit));
+                        }
                         let Some(e) = entry(&c.thread, i) else {
                             return col();
                         };
@@ -157,7 +194,18 @@ pub(super) fn view(
                                 Speaker::You => user(&l.text, &kit),
                                 Speaker::Codex => answer(l, "Codex"),
                                 Speaker::OpenCode => answer(l, "OpenCode"),
-                                Speaker::Tool(state) => tool(l, state, following, &kit),
+                                Speaker::Tool(state) => activity::tool(
+                                    s,
+                                    &kit,
+                                    &builders,
+                                    &rows_owner,
+                                    l,
+                                    state,
+                                    following,
+                                ),
+                                Speaker::ReasoningSummary => {
+                                    activity::summary(s, &kit, &builders, &rows_owner, l, following)
+                                }
                                 Speaker::Outcome(end) => row()
                                     .w_full()
                                     .center_y()
@@ -222,45 +270,4 @@ fn reply(message: &str, who: &str, partial: bool, reduced: bool, k: &Kit) -> El 
         )
 }
 
-fn tool(line: &Line, state: ToolState, following: bool, k: &Kit) -> El {
-    let name = line.text.as_str();
-    let (outcome, label) = match state {
-        ToolState::Running if !following => (Outcome::Neutral, "Last seen running"),
-        ToolState::Running => (Outcome::Running, "Running"),
-        ToolState::Complete => (Outcome::Success, "Completed"),
-        ToolState::Failed => (Outcome::Failure, "Failed"),
-        ToolState::Reported => (Outcome::Neutral, "Tool call"),
-    };
-    let glyph = match name.to_ascii_lowercase().as_str() {
-        "bash" | "shell" => &ui::TERMINAL,
-        "read" => &ui::FILE,
-        "edit" | "write" | "apply_patch" => &ui::EDIT,
-        "grep" | "glob" => &glyphs::SEARCH,
-        _ => &ui::TOOL,
-    };
-    row()
-        .w_full()
-        .center_y()
-        .gap(8.0)
-        .px(10.0)
-        .py(6.0)
-        .radius(7.0)
-        .fill(k.c.layer_01)
-        .label(format!("{name} · {label}"))
-        .child(icon(glyph, 14.0).color(k.c.icon_muted))
-        .child(
-            text(name)
-                .font(k.ty.ui_medium)
-                .color(k.c.text_base)
-                .min_w(0.0)
-                .truncate(),
-        )
-        .child(
-            ui::caption(line.tool_detail.as_deref().unwrap_or(""), k)
-                .min_w(0.0)
-                .grow(1.0)
-                .truncate(),
-        )
-        .child(ui::caption(label, k))
-        .child(ui::outcome(outcome, k))
-}
+mod activity;

@@ -68,6 +68,14 @@ survive a restart. A lost prompt acknowledgement requires reconciliation;
 reopening never resends it. Turn interruption always supplies the conversation
 ID, whereas stopping the machine is a distinct lifecycle operation.
 
+At the live edge the feed rereads the latest identified response snapshot;
+terminal and intermediate pages advance their cursor. VM tool rows save a
+bounded reference to the Boat conversation, prompt, event and call. Expansion
+rereads its event page and keeps only the selected call’s bounded text in
+memory. Commands and result bodies aren’t written to the workspace. Structured
+reasoning items render their public `summary_text` blocks when supplied;
+generic running state is shown as working, not inferred reasoning.
+
 Remote **Changes** runs Git through the sandbox commands API. A temporary VM
 index captures tracked edits and non-ignored new files as one reviewable Git
 tree. Commit pins that tree and checks the branch, HEAD and original index;

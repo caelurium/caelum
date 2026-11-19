@@ -103,6 +103,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         },
     };
     match name {
+        "remote-trace" => trace::setup(&mut c),
         "remote-model-draft" => {
             use caelum_core::application::Provider;
             use caelum_protocol::{ProviderChoice, ProviderModelChoice};
@@ -228,6 +229,9 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     conversation::sync_editor(l);
     checkout::enter(s);
     let l = live_mut(s);
+    if name == "remote-trace" {
+        trace::open(l, &id);
+    }
     if name == "remote-machine" {
         super::popup::inspect_remote(l, &id);
     }
@@ -238,3 +242,4 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         s.inspector.set_open(true);
     }
 }
+mod trace;

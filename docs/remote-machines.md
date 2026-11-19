@@ -127,8 +127,26 @@ Your draft stays in the editor, and earlier replies keep their original provider
 
 ![Choosing Codex or OpenCode for the next message in a VM chat](design/previews/rune-light-remote-provider-small.png)
 
-The composer shows queued turns, streaming replies and tool activity from the
-selected Boat conversation. If you used the earlier direct-OpenCode preview,
+### See what the agent is doing
+
+Look in the VM transcript while a turn runs. **Working on VM…** means the turn
+is active but hasn’t reported a more specific action. Tool calls show their
+name, status and, when available, the file or executable. Click a tool row to
+see its command and text result or error. An open call updates when its result
+arrives. You can reopen it after restarting Caelum as long as Boat retains the
+event. Older saved rows without an event reference show their summary only.
+
+![An expanded VM tool call with its command and test output](design/previews/rune-light-vm-tool-output-small.png)
+
+Boat’s [managed event feed](https://docs.boat.dev/api/reference/agent/list-sandbox-events.md)
+publishes replies and tool calls. It doesn’t guarantee a separate thinking
+stream. If a response includes a public reasoning-summary item, Caelum shows
+**Thinking…** while it’s active; click the row to read the summary. A high
+effort setting alone doesn’t mean a summary is available.
+
+### Resume or manage the machine
+
+If you used the earlier direct-OpenCode preview,
 its VM transcript and draft stay available for reference. Your next explicit
 send starts a managed conversation; opening the checkout does not replay a turn.
 Caelum no longer contacts the preview service. If one is still running on an

@@ -11,6 +11,8 @@ import time
 root = Path(__file__).resolve().parents[3]
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
+    "vm-tool-output": ("remote-trace", []),
+    "vm-reasoning-summary": ("remote-trace", [{"t": 0.2, "key": "vm-tool-checkout-example-test-call"}, {"t": 0.45, "key": "vm-summary-checkout-example-summary"}]),
     "vm-first-effort": ("remote-model-draft", [{"t": 0.1, "key": "vm-provider-trigger"}, {"t": 0.22, "key": "option0"}, {"t": 0.34, "key": "vm-model-trigger"}, {"t": 0.46, "key": "vm-model-item-example/reasoner"}, {"t": 0.58, "key": "vm-effort-trigger"}, {"t": 0.7, "key": "option3"}, {"t": 0.82, "key": "vm-effort-trigger"}]),
     "vm-first-model": ("remote-model-draft", [{"t": 0.2, "key": "vm-model-trigger"}, {"t": 0.4, "key": "vm-model-item-example/fast"}, {"t": 0.65, "key": "vm-model-trigger"}]),
     "vm-session-launcher": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True, "shift": True}, {"t": 0.5, "key": "launch-provider-codex"}]),

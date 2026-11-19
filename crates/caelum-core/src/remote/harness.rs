@@ -87,6 +87,7 @@ pub enum Speaker {
     Codex,
     OpenCode,
     Activity,
+    ReasoningSummary,
     Tool(ToolState),
     Outcome(TurnEnd),
 }
@@ -227,8 +228,7 @@ impl Thread {
             .as_ref()
             .and_then(|key| current.iter().position(|l| l.key.as_ref() == Some(key)))
             .or_else(|| {
-                line.speaker
-                    .is_assistant()
+                (line.speaker.is_assistant() && (!line.partial || line.key.is_none()))
                     .then(|| {
                         current
                             .iter()
@@ -239,7 +239,9 @@ impl Thread {
         if let Some(i) = update {
             let old = &mut current[i];
             // A repeated snapshot must not reopen an already finished tool.
-            if old.speaker.is_assistant() && !old.partial && line.partial
+            if (old.speaker.is_assistant() || old.speaker == Speaker::ReasoningSummary)
+                && !old.partial
+                && line.partial
                 || matches!(
                     old.speaker,
                     Speaker::Tool(ToolState::Complete | ToolState::Failed)
@@ -256,7 +258,9 @@ impl Thread {
             if matches!(line.speaker, Speaker::Tool(_)) && line.tool_detail.is_none() {
                 line.tool_detail.clone_from(&old.tool_detail);
             }
-            if matches!(line.speaker, Speaker::Tool(_)) && line.text.is_empty() {
+            if matches!(line.speaker, Speaker::Tool(_) | Speaker::ReasoningSummary)
+                && line.text.is_empty()
+            {
                 line.text.clone_from(&old.text);
             }
             *old = line;
