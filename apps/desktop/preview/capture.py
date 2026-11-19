@@ -79,7 +79,7 @@ scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
 scenes += ("fork",)
-scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings")
+scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create")
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

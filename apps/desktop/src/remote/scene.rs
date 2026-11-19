@@ -37,9 +37,13 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         l.panels.overlay = Some(Screen::Settings);
         return;
     }
-    if name == "remote-picker" {
+    if matches!(name, "remote-picker" | "remote-create") {
         l.app.remote.picker = Some(Picker::Ready(source));
-        l.panels.overlay = Some(Screen::RemotePicker);
+        l.panels.overlay = Some(if name == "remote-create" {
+            Screen::CreateVm
+        } else {
+            Screen::RemotePicker
+        });
         return;
     }
     let id = "checkout-example".to_owned();

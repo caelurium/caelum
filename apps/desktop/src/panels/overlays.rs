@@ -14,6 +14,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let mut menus = Vec::new();
     let (title, description, body) = match screen {
         Screen::Settings => ("Settings", "", crate::settings::view(s, k, &mut menus)),
+        Screen::CreateVm => (
+            "Create VM",
+            "Start a new Boat machine for OpenCode.",
+            crate::remote::create_view(s, k),
+        ),
         Screen::RemotePicker => (
             "Open on remote machine",
             "OpenCode will work in the checkout on Boat.",

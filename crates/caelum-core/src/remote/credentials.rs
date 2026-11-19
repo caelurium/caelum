@@ -2,7 +2,7 @@ use super::Credential;
 
 const SERVICE: &str = "dev.caelum.desktop.boat";
 const ACCOUNT: &str = "api-key";
-const MISSING: &str = "Connect Boat with an API key in Settings → Remote machines.";
+const MISSING: &str = "No saved Boat API key. Use Connect Boat to continue.";
 
 pub(super) async fn read() -> Result<Credential, String> {
     platform::read().await.and_then(|bytes| {

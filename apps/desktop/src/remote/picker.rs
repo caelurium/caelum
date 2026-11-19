@@ -54,7 +54,9 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                     )
                     .child(
                         ui::Button::new("Retry")
-                            .on_press(move |s: &mut Workspace| open(s, project.clone()))
+                            .on_press(move |s: &mut Workspace| {
+                                live_mut(s).app.remote_picker(project.clone())
+                            })
                             .build(k),
                     ),
             );
@@ -82,9 +84,9 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                 .key("remote-base")
                 .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.base),
         )
-        .child(ui::caption("New branch on machine", k))
+        .child(ui::caption("New branch on VM", k))
         .child(
-            ui::field(&form.branch, "New branch", "feat/my-change", k)
+            ui::field(&form.branch, "New branch", "Enter a branch name", k)
                 .key("remote-branch")
                 .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.branch),
         );
@@ -107,32 +109,44 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                 .on_press(move |s: &mut Workspace| live_mut(s).remote.form.minutes = minutes),
         );
     }
+    let hint = if form.branch.text.is_empty() {
+        Some("Enter a new branch name, such as feat/my-change.")
+    } else if !valid_branch(base) {
+        Some("Choose a valid published base branch.")
+    } else if !valid_branch(&form.branch.text) || form.branch.text == *base {
+        Some("Choose a valid new branch name different from the base.")
+    } else {
+        None
+    };
     let base = base.clone();
-    body = body
-        .child(sizes)
-        .child(ttl)
-        .child(
-            ui::Button::new("Create and open")
-                .disabled(
-                    !valid_branch(&form.branch.text)
-                        || !valid_branch(&base)
-                        || form.branch.text == base,
-                )
-                .on_press(move |s: &mut Workspace| {
-                    let l = live_mut(s);
-                    let f = &l.remote.form;
-                    if l.app
-                        .create_remote(&base, &f.branch.text, f.size, f.minutes)
-                        .is_some()
-                    {
-                        super::checkout::enter(s);
-                    }
-                })
-                .build(k)
-                .key("create-remote"),
-        )
-        .child(ui::caption("Existing machines", k));
-    if let Some(inventory) = &l.app.remote.inventory {
+    body = body.child(sizes).child(ttl).child(
+        row()
+            .w_full()
+            .gap(10.0)
+            .center_y()
+            .child(
+                ui::Button::new("Create VM")
+                    .variant(rune_kit::ButtonVariant::Contrast)
+                    .disabled(hint.is_some())
+                    .on_press(move |s: &mut Workspace| {
+                        let l = live_mut(s);
+                        let f = &l.remote.form;
+                        if l.app
+                            .create_remote(&base, &f.branch.text, f.size, f.minutes)
+                            .is_some()
+                        {
+                            super::checkout::enter(s);
+                        }
+                    })
+                    .build(k)
+                    .key("create-remote"),
+            )
+            .children(hint.map(|text| ui::caption(text, k).grow(1.0).min_w(0.0).wrap())),
+    );
+    if l.panels.overlay != Some(Screen::CreateVm)
+        && let Some(inventory) = &l.app.remote.inventory
+    {
+        body = body.child(ui::caption("Existing machines", k));
         for m in inventory
             .machines
             .iter()

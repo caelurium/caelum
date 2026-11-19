@@ -284,6 +284,12 @@ impl Live {
         if self.panels.overlay != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
         }
+        if !matches!(
+            self.panels.overlay,
+            Some(crate::panels::Screen::CreateVm | crate::panels::Screen::RemotePicker)
+        ) {
+            self.app.remote.picker = None;
+        }
         self.app.apply(event);
         self.sync_editors();
         if self.panels.overlay == Some(crate::panels::Screen::Fork)

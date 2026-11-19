@@ -36,6 +36,44 @@ fn machine(id: &str) -> Machine {
 }
 
 #[test]
+fn the_vm_folder_chooser_discovers_only_the_current_validated_project_without_starting_a_local_session(
+) {
+    use caelum_protocol::ProjectInfo;
+    let mut app = Workspace::default();
+    let choose = |app: &mut Workspace, path: &str| {
+        app.remote_picker(path.into());
+        app.commands()
+            .into_iter()
+            .find_map(|(id, c)| matches!(c,Command::Open(p) if p==path).then_some(id))
+            .unwrap()
+    };
+    let old = choose(&mut app, "/alias/old");
+    let new = choose(&mut app, "/alias/new");
+    let resolved = |req, path: &str| {
+        Event::Completed(
+            req,
+            Ok(Reply::Project(ProjectInfo {
+                name: "project".into(),
+                path: path.into(),
+            })),
+        )
+    };
+    app.apply(resolved(old, "/projects/old"));
+    assert!(app.projects.is_empty() && app.commands().is_empty());
+    app.apply(resolved(new, "/projects/new"));
+    assert_eq!(app.projects.len(), 1);
+    assert_eq!(app.projects[0].path, "/projects/new");
+    assert!(
+        matches!(app.commands().as_slice(),[(_,Command::Remote(Operation::Discover(p)))] if p=="/projects/new")
+    );
+    assert!(
+        app.active_project.is_none()
+            && app.sessions.is_empty()
+            && app.remote.saved.checkouts.is_empty()
+    );
+}
+
+#[test]
 fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_owner() {
     let mut app = Workspace::default();
     let (id, req, plan) = created(&mut app);

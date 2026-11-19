@@ -4,16 +4,16 @@
    [Boat account](https://docs.boat.dev/integrated-agents/keys.md). In Caelum,
    open **Settings → Remote machines**, enter your Boat API key and click
    **Connect Boat**. The key is stored in Keychain or Linux Secret Service.
-2. Right-click a project with a GitHub `origin` and choose **Open on remote
-   machine…**. The new-session picker also has a **Run on remote machine**
-   action on each project row.
+2. Click **Create VM…** in **Settings → Remote machines** or **New session**.
+   Use the current project, choose another, or open a project folder with a GitHub `origin`.
 3. Choose a published base (defaults to the origin default branch, or `main`),
-   type a **new branch** name, choose size and auto-stop, and click **Create and
-   open**. Caelum provisions the repository using a compatible single-repo
+   type a **new branch** name, choose size and auto-stop, and click **Create VM**.
+   Caelum provisions the repository using a compatible single-repo
    environment or creates a dedicated one. Unpublished commits, staged changes
    and files on your laptop stay there.
 
-To attach instead, choose an existing machine in the picker. It must have a
+To attach instead, right-click a project, choose **Open on remote machine…**,
+and select an existing machine. It must have a
 current single-repo environment for the project's GitHub origin. **Resume** a
 stopped machine to use its saved disk; attaching keeps its current branch.
 If setup fails, **Refresh checkout** retries that checkout on the same machine.

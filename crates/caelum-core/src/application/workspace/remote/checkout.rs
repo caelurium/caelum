@@ -1,15 +1,68 @@
 use super::{Lane, Pending, Workspace};
-use crate::{application::Command, remote::*};
+use crate::{
+    application::{Command, Reply},
+    remote::*,
+};
 use std::time::{Duration, Instant};
 
 impl Workspace {
     pub fn remote_picker(&mut self, project: String) {
+        let project = self.group_path(&project).to_owned();
+        if self.projects.iter().any(|p| p.path == project) {
+            self.discover_remote_source(project);
+        } else {
+            // A folder selected in the VM dialog goes through the normal project
+            // validation worker without opening a conversation on the laptop.
+            let request = self.request(
+                Command::Open(project.clone()),
+                Pending::Remote(Lane::OpenProject),
+            );
+            self.remote.picker = Some(Picker::Loading { request, project });
+        }
+        self.list_machines();
+    }
+
+    pub(super) fn complete_remote_project(&mut self, request: u64, result: Result<Reply, String>) {
+        let Some(Picker::Loading {
+            request: active,
+            project: requested,
+        }) = &self.remote.picker
+        else {
+            return;
+        };
+        if request != *active {
+            return;
+        }
+        match result {
+            Ok(Reply::Project(project)) if !self.closed_since(&project.path, request) => {
+                let path = self.group_path(&project.path).to_owned();
+                if path != project.path {
+                    // A newly resolved folder can be an alias for a remembered worktree.
+                    self.remote_picker(path);
+                    return;
+                }
+                if !self.projects.iter().any(|p| p.path == project.path) {
+                    self.projects.push(project);
+                }
+                self.discover_remote_source(path);
+            }
+            other => {
+                self.remote.picker = Some(Picker::Failed {
+                    project: requested.clone(),
+                    error: other
+                        .err()
+                        .unwrap_or_else(|| "The selected project is no longer available".into()),
+                })
+            }
+        }
+    }
+
+    fn discover_remote_source(&mut self, project: String) {
         let request = self.request(
             Command::Remote(Operation::Discover(project.clone())),
             Pending::Remote(Lane::Picker),
         );
         self.remote.picker = Some(Picker::Loading { request, project });
-        self.list_machines();
     }
 
     pub(super) fn complete_remote_picker(&mut self, request: u64, result: Result<Outcome, String>) {

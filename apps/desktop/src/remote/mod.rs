@@ -1,12 +1,15 @@
 mod changes;
 mod checkout;
 mod conversation;
+mod create;
 mod picker;
 mod scene;
 mod stats;
 
 pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::{screen, select, sync};
+pub(crate) use create::button as create_button;
+pub(crate) use create::view as create_view;
 pub(crate) use picker::{open, picker};
 pub(crate) use scene::scene;
 
@@ -24,6 +27,7 @@ use rune_kit::Kit;
 pub(crate) struct State {
     key: TextEdit,
     form: picker::Form,
+    folders: create::Folders,
     restored: bool,
     editors: std::collections::HashMap<String, conversation::Editors>,
     details: bool,
@@ -32,17 +36,43 @@ pub(crate) struct State {
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
+    let mut view = col()
+        .w_full()
+        .gap(12.0)
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(12.0)
+                .child(
+                    heading("Remote machines", "Create and manage your Boat VMs.", k)
+                        .grow(1.0)
+                        .min_w(0.0),
+                )
+                .child(create_button(k)),
+        )
+        .child(connection(s, k));
+    if let Some(list) = &live(s).app.remote.inventory {
+        if list.machines.is_empty() {
+            view = view.child(ui::caption("Connected · No machines yet", k));
+        }
+        for machine in &list.machines {
+            view = view.child(ui::caption(
+                format!("{} · {}", machine.name, machine.state),
+                k,
+            ));
+        }
+    }
+    view
+}
+
+fn connection(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
     let remote = &l.app.remote;
     let busy = matches!(remote.connection, Connection::Loading(_));
     let mut view = col()
         .w_full()
         .gap(8.0)
-        .child(heading(
-            "Remote machines",
-            "Connect Boat to use your remote machines.",
-            k,
-        ))
         .child(
             ui::field(&l.remote.key, "Boat API key", "Boat API key", k)
                 .secure()
@@ -61,7 +91,8 @@ pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
                             l.app.connect_boat(std::mem::take(&mut editor.text));
                             l.schedule();
                         })
-                        .build(k),
+                        .build(k)
+                        .key("connect-boat"),
                 )
                 .child(
                     ui::Button::new("Refresh")
@@ -89,17 +120,6 @@ pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
     }
     if let Connection::Failed(error) = &remote.connection {
         view = view.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
-    }
-    if let Some(list) = &remote.inventory {
-        if list.machines.is_empty() {
-            view = view.child(ui::caption("Connected · No machines yet", k));
-        }
-        for machine in &list.machines {
-            view = view.child(ui::caption(
-                format!("{} · {}", machine.name, machine.state),
-                k,
-            ));
-        }
     }
     view
 }

@@ -12,6 +12,7 @@ use crate::{
 
 pub(super) enum Lane {
     Connection,
+    OpenProject,
     Picker,
     Checkout(String),
     Feed(String),
@@ -47,6 +48,10 @@ impl Workspace {
         lane: Lane,
         result: Result<Reply, String>,
     ) {
+        if let Lane::OpenProject = lane {
+            self.complete_remote_project(request, result);
+            return;
+        }
         let result = result.and_then(|reply| match reply {
             Reply::Remote(value) => Ok(value),
             _ => Err("Unexpected remote machine response".into()),

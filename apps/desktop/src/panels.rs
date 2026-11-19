@@ -50,6 +50,7 @@ pub enum Screen {
     Shells,
     Review,
     Remote,
+    CreateVm,
     RemotePicker,
     Settings,
     Session,

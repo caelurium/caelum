@@ -180,11 +180,16 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
     )
     .child(ui::divider(k))
     .child(
-        row().gap(8.0).child(
-            Button::new("Open folder…")
-                .on_press_tx(crate::live::open_project)
-                .build(k),
-        ),
+        row()
+            .w_full()
+            .gap(8.0)
+            .child(
+                Button::new("Open folder…")
+                    .on_press_tx(crate::live::open_project)
+                    .build(k),
+            )
+            .child(rune::el().grow(1.0))
+            .child(crate::remote::create_button(k)),
     )
 }
 
