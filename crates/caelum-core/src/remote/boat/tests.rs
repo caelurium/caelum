@@ -1,5 +1,6 @@
 use super::*;
 mod checkout;
+mod feed;
 use crate::application::Provider;
 use crate::remote::{Prompt, Size};
 use serde_json::{json, Value};

@@ -1,26 +1,30 @@
 use crate::remote::{Line, Run, Speaker, ToolState};
 use boat_sdk::agents::models::SandboxEvent;
+use serde_json::{Map, Value};
+
+pub(super) fn response<'a>(e: &'a SandboxEvent, run: &Run) -> Option<&'a Map<String, Value>> {
+    let task = e.task_id.as_deref();
+    let conversation = e.conversation_id.as_deref();
+    if e.kind != "response"
+        || task.is_some_and(|id| id != run.prompt)
+        || conversation.is_some_and(|id| id != run.conversation)
+        || (conversation.is_none() && task.is_none())
+    {
+        return None;
+    }
+    e.data
+        .as_ref()
+        .filter(|d| d.get("is_reverted").and_then(Value::as_bool) != Some(true))
+}
 
 /// Boat sends snapshots: the tool result is paired with its `use`, not another
 /// chat message. Keep call identity and outcome without copying raw inputs or output.
 pub(super) fn lines(events: Vec<SandboxEvent>, run: &Run, repository: &str) -> Vec<Line> {
     let mut lines = Vec::new();
     for e in events {
-        // Older response events can carry only taskId (the Boat prompt ID).
-        // Never render an unowned event or an earlier prompt from this conversation.
-        let task = e.task_id.as_deref();
-        let conversation = e.conversation_id.as_deref();
-        if e.kind != "response"
-            || task.is_some_and(|id| id != run.prompt)
-            || conversation.is_some_and(|id| id != run.conversation)
-            || (conversation.is_none() && task.is_none())
-        {
+        let Some(data) = response(&e, run) else {
             continue;
-        }
-        let Some(data) = e.data else { continue };
-        if data.get("is_reverted").and_then(|v| v.as_bool()) == Some(true) {
-            continue;
-        }
+        };
         let event = e.id.as_deref().filter(|id| super::harness::valid_id(id));
         if let Some(text) = data
             .get("content")

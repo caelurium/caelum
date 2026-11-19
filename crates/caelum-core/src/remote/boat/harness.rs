@@ -2,7 +2,10 @@ use super::{api, Boat};
 use crate::application::Provider;
 use crate::remote::{harness::Harness, Outcome, Page, Prompt, Run, RunStatus, Target, TurnEnd};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use boat_sdk::agents::{models::PromptRun, EventOrder, EventQuery, PromptRequest};
+use boat_sdk::agents::{
+    models::{EventsResponse, PromptRun, SandboxEvent},
+    EventOrder, EventQuery, PromptRequest,
+};
 
 // In particular disallow commas: the events API interprets these as multiple conversations.
 pub(super) fn valid_id(value: &str) -> bool {
@@ -22,6 +25,49 @@ fn owned(target: &Target, run: &PromptRun, id: &str, conv: Option<&str>) -> bool
             .conversation_id
             .as_deref()
             .is_none_or(|c| valid_id(c) && conv.is_none_or(|v| c == v))
+}
+
+fn position(event: &SandboxEvent) -> Option<String> {
+    Some(URL_SAFE_NO_PAD.encode(format!("{}:{}", event.timestamp?, event.id.as_ref()?)))
+}
+
+fn checkpoint(
+    page: &EventsResponse,
+    run: &Run,
+    cursor: Option<&str>,
+    more: bool,
+    done: bool,
+) -> Result<Option<String>, String> {
+    let Some((last, earlier)) = page.events.split_last() else {
+        return if more {
+            Err("Boat returned an empty intermediate event page".into())
+        } else {
+            Ok(cursor.map(str::to_owned))
+        };
+    };
+    // The latest response is a snapshot. Content or tools can change without
+    // a new (timestamp, id). At the live tail, overlap just this keyed event.
+    if !done
+        && !more
+        && last.id.as_deref().is_some_and(valid_id)
+        && super::events::response(last, run).is_some()
+    {
+        match earlier.last() {
+            None => return Ok(cursor.map(str::to_owned)),
+            Some(prev) => {
+                if let Some(before) = position(prev) {
+                    return Ok(Some(before));
+                }
+            }
+        }
+    }
+    page.page_info
+        .as_ref()
+        .and_then(|p| p.next_cursor.clone())
+        .or_else(|| position(last))
+        .filter(|next| !next.is_empty() && Some(next.as_str()) != cursor)
+        .map(Some)
+        .ok_or_else(|| "Invalid Boat event cursor".into())
 }
 
 impl Boat {
@@ -205,25 +251,7 @@ impl Harness for Boat {
             return Err("Boat returned events for a different machine".into());
         }
         let more = events.page_info.as_ref().is_some_and(|p| p.has_more);
-        let next = if let Some(last) = events.events.last() {
-            let next = events
-                .page_info
-                .and_then(|p| p.next_cursor)
-                .or_else(|| {
-                    Some(URL_SAFE_NO_PAD.encode(format!(
-                        "{}:{}",
-                        last.timestamp?,
-                        last.id.as_ref()?
-                    )))
-                })
-                .filter(|c| !c.is_empty() && Some(c.as_str()) != cursor)
-                .ok_or("Invalid Boat event cursor")?;
-            Some(next)
-        } else if more {
-            return Err("Boat returned an empty intermediate event page".into());
-        } else {
-            cursor.map(str::to_owned)
-        };
+        let next = checkpoint(&events, run, cursor, more, status.prompt_run.done)?;
         let status = match (
             status.prompt_run.done,
             more,
