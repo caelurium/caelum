@@ -35,6 +35,7 @@ impl Workspace {
             },
         );
         c.thread.append(Line::new(Speaker::You, text));
+        c.thread.record_activity();
         c.thread.turn = Turn::Submitting;
         c.thread.draft.clear();
         self.feed_request(id, op);
@@ -197,6 +198,7 @@ impl Workspace {
                 }
                 c.thread.cursor = page.cursor;
                 if let RunStatus::Ended(status) = page.status {
+                    c.thread.record_activity();
                     for line in c
                         .thread
                         .lines

@@ -20,6 +20,7 @@ pub use composer::{
     split_context, Attachment, AttachmentKind, Completion, CompletionKind, QueuedPrompt,
 };
 pub use conversation::{Conversation, Entry, EntryKind};
+pub use feed::FeedSession;
 pub use feed::SessionScope;
 pub use inbox::{Inbox, InboxPrompt};
 pub use notifications::Notification;

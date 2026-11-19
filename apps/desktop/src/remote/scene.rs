@@ -92,6 +92,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         other_threads: vec![],
         thread: Thread {
             conversation: Some("thread-example".into()),
+            last_activity: Some(l.feed.now - 120_000),
             lines: vec![
                 Line::new(Speaker::You, "Add a health check and show me the changes."),
                 Line::new(

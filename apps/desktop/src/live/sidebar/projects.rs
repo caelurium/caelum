@@ -13,13 +13,9 @@ pub(super) fn filter(s: &Workspace) -> Select {
         caelum_core::application::SessionScope::AllProjects => "All projects".to_owned(),
         caelum_core::application::SessionScope::CurrentProject => l
             .app
-            .active_project
-            .as_ref()
+            .feed_project(None)
             .map_or("Current project".into(), |p| {
-                format!(
-                    "Current · {}",
-                    crate::checkouts::project_name(&l.app, l.app.group_path(p))
-                )
+                format!("Current · {}", crate::checkouts::project_name(&l.app, p))
             }),
     };
     let choices = std::iter::once(Choice::new("", default))

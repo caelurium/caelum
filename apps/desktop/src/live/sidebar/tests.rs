@@ -68,7 +68,7 @@ fn recency_polling_changes_only_visible_labels_and_hidden_feeds_stop_scheduling(
     let now = caelum_core::application::presentation::now();
     app.sessions[index].last_activity = Some(now - 90_000);
     state.now = now - 60_000;
-    state.visible = vec![index];
+    state.visible = vec![caelum_core::application::FeedSession::Local(index)];
     assert!(state.poll(&mut app, "", false, &mut tx, true));
     assert!(!state.poll(&mut app, "", false, &mut tx, true));
     assert!(state.deadline.is_some());

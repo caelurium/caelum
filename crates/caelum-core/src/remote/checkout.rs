@@ -71,11 +71,16 @@ pub struct Checkout {
 }
 
 impl Checkout {
-    pub(crate) fn open_thread(&mut self, thread: super::Thread) {
+    pub(crate) fn open_thread(&mut self, mut thread: super::Thread) {
+        thread.record_activity();
         let prior = std::mem::replace(&mut self.thread, thread);
-        if prior != super::Thread::default() {
+        if !prior.is_placeholder() {
             self.other_threads.push(prior);
         }
+    }
+
+    pub(crate) fn threads(&self) -> impl Iterator<Item = &super::Thread> {
+        std::iter::once(&self.thread).chain(&self.other_threads)
     }
 
     pub fn machine(&self) -> Option<&Machine> {
@@ -86,6 +91,13 @@ impl Checkout {
     }
     pub fn title(&self) -> &str {
         self.machine().map_or("VM setup", |m| &m.name)
+    }
+    pub fn branch(&self) -> Option<&str> {
+        match &self.phase {
+            Phase::Create(p) => Some(&p.branch),
+            Phase::Prepare { new_branch, .. } => new_branch.as_deref(),
+            Phase::Ready { branch, .. } => Some(branch),
+        }
     }
     pub fn target(&self) -> Option<Target> {
         Some(Target {
@@ -124,10 +136,20 @@ fn valid_tip(tip: &str) -> bool {
     matches!(tip.len(), 40 | 64) && tip.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VmLink {
     pub checkout: String,
     pub thread: String,
+}
+
+impl VmLink {
+    pub fn resolve<'a>(&self, saved: &'a Saved) -> Option<(&'a Checkout, &'a super::Thread)> {
+        let c = saved.checkouts.get(&self.checkout)?;
+        let t = c
+            .threads()
+            .find(|t| t.editor_key(&self.checkout) == self.thread)?;
+        Some((c, t))
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]

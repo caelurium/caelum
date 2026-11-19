@@ -44,6 +44,9 @@ impl Workspace {
         let c = self.remote.saved.checkouts.get_mut(id).unwrap();
         if c.thread.is_blank() {
             c.thread.provider = provider;
+            if c.thread.last_activity.is_none() {
+                c.thread.record_activity();
+            }
         } else {
             c.open_thread(Thread {
                 local_id: Some(uuid::Uuid::new_v4().to_string()),

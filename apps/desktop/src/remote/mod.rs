@@ -16,7 +16,8 @@ mod threads;
 mod transcript;
 
 pub(crate) use changes::{inspector, open as open_changes};
-pub(crate) use checkout::enter;
+pub(crate) use checkout::enter_new;
+pub(crate) use checkout::open_session_row;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
 pub(crate) use create::button as create_button;

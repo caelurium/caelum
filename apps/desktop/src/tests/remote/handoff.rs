@@ -145,9 +145,14 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     advance(&mut rt, 0.2);
     let l = live(&rt.state);
     let id = l.app.remote.saved.selected.as_ref().unwrap();
-    let thread = &l.app.remote.saved.checkouts[id].thread;
+    let checkout = &l.app.remote.saved.checkouts[id];
+    assert!(checkout.other_threads.is_empty());
+    let thread = &checkout.thread;
     assert_eq!(thread.draft, "Edit this on the VM");
     assert_eq!(l.drafts[0].text, thread.draft);
+    let handoff_row = format!("vm-session-{id}/{}", thread.editor_key(id));
+    assert!(element(&rt, &handoff_row).item_selected);
+    assert!(!element(&rt, "live-session-0").item_selected);
     assert!(
         rt.find(&format!("remote-draft-{}", thread.editor_key(id)))
             .is_some()

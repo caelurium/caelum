@@ -110,9 +110,12 @@ If Boat may have accepted a prompt but the acknowledgement was lost, check
 Boat and reconnect using the prompt ID.
 
 When the VM is ready and its turn has finished, choose **Conversations… →
-New session on this VM**, or right-click the VM in the sidebar. The previous chat and its
-unsent draft stay in **Conversations…**. The new session shares the VM’s files
-and branch, but starts with an empty chat. Only **Send** creates its Boat conversation.
+New session on this VM**, or right-click the VM in the sidebar. **Sessions**
+immediately selects the new chat and keeps the previous chat in the list.
+Click either row to return to its draft. Both use the same VM files and branch.
+Only **Send** starts the new Boat conversation.
+
+![Sessions showing the selected new VM chat above the previous chat on the same machine](design/previews/rune-light-vm-session-sidebar-small.png)
 
 You can also open **New session** (**⇧⌘N**), choose a provider, and select a
 checkout under the project’s **Remote VMs**. Search by VM name, repository or

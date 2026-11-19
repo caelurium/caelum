@@ -16,6 +16,7 @@ interactions = {
     "vm-first-effort": ("remote-model-draft", [{"t": 0.1, "key": "vm-provider-trigger"}, {"t": 0.22, "key": "option0"}, {"t": 0.34, "key": "vm-model-trigger"}, {"t": 0.46, "key": "vm-model-item-example/reasoner"}, {"t": 0.58, "key": "vm-effort-trigger"}, {"t": 0.7, "key": "option3"}, {"t": 0.82, "key": "vm-effort-trigger"}]),
     "vm-first-model": ("remote-model-draft", [{"t": 0.2, "key": "vm-model-trigger"}, {"t": 0.4, "key": "vm-model-item-example/fast"}, {"t": 0.65, "key": "vm-model-trigger"}]),
     "vm-session-launcher": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True, "shift": True}, {"t": 0.5, "key": "launch-provider-codex"}]),
+    "vm-session-sidebar": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True}]),
     "remote-provider": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.35, "key": "vm-provider-trigger"}]),
     "remote-sessions": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.25, "key": "vm-threads"}, {"t": 0.45, "key": "new-vm-session"}, {"t": 0.7, "key": "vm-threads"}]),
     "remote-create-ready": ("remote-create", [{"t": 0.25, "key": "remote-branch"}, {"t": 0.4, "paste": "feat/health-check"}]),

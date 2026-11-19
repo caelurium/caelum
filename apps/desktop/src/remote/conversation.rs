@@ -20,6 +20,10 @@ pub(super) struct Editors {
 }
 
 pub(crate) fn focus(l: &mut Live) {
+    set_focus(l, true);
+}
+
+pub(super) fn set_focus(l: &mut Live, focused: bool) {
     if let Some((id, c)) = l
         .app
         .remote
@@ -29,7 +33,7 @@ pub(crate) fn focus(l: &mut Live) {
         .and_then(|id| l.app.remote.saved.checkouts.get_key_value(id))
         && let Some(e) = l.remote.editors.get_mut(c.thread.editor_key(id))
     {
-        e.draft.focused = true;
+        e.draft.focused = focused;
     }
 }
 

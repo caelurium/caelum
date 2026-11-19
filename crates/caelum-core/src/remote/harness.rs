@@ -24,6 +24,9 @@ pub struct Thread {
     /// An advertised reasoning level for this exact provider/model pair.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Feed recency, in Unix milliseconds. Older snapshots have no timestamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_activity: Option<u64>,
     pub conversation: Option<String>,
     pub cursor: Option<String>,
     pub turn: Turn,
@@ -39,6 +42,7 @@ impl Default for Thread {
             provider: opencode(),
             model: None,
             effort: None,
+            last_activity: None,
             conversation: None,
             cursor: None,
             turn: Turn::Idle,
@@ -164,6 +168,18 @@ impl Line {
 impl Thread {
     pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 
+    pub(crate) fn for_checkout() -> Self {
+        Self {
+            last_activity: Some(crate::application::presentation::now()),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn record_activity(&mut self) {
+        let now = crate::application::presentation::now();
+        self.last_activity = Some(now.max(self.last_activity.unwrap_or_default()));
+    }
+
     pub fn editor_key<'a>(&'a self, checkout: &'a str) -> &'a str {
         self.local_id
             .as_deref()
@@ -174,6 +190,7 @@ impl Thread {
     pub(crate) fn is_blank(&self) -> bool {
         self.continued.is_none()
             && self.model.is_none()
+            && self.effort.is_none()
             && self.conversation.is_none()
             && self.cursor.is_none()
             && self.turn == Turn::Idle
@@ -181,10 +198,19 @@ impl Thread {
             && self.draft.is_empty()
     }
 
+    /// A handoff replaces the checkout's initial empty editor without parking a phantom row.
+    pub(super) fn is_placeholder(&self) -> bool {
+        self.local_id.is_none() && self.provider == opencode() && self.is_blank()
+    }
+
     pub fn title(&self) -> &str {
         self.heading()
-            .or_else(|| self.draft.lines().next())
-            .unwrap_or("VM conversation")
+            .or_else(|| Self::title_line(&self.draft))
+            .unwrap_or(if self.conversation.is_none() {
+                "New VM session"
+            } else {
+                "VM conversation"
+            })
     }
 
     pub fn heading(&self) -> Option<&str> {
@@ -197,7 +223,12 @@ impl Thread {
                     .find(|l| l.speaker == Speaker::You)
                     .map(|l| l.text.as_str())
             })
-            .and_then(|s| s.lines().next())
+            .and_then(Self::title_line)
+    }
+
+    fn title_line(s: &str) -> Option<&str> {
+        s.lines()
+            .next()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(|s| &s[..s.floor_char_boundary(120.min(s.len()))])

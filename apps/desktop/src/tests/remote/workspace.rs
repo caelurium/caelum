@@ -6,6 +6,84 @@ use crate::{
 use caelum_core::remote::{Job, Line, Page, RunStatus, Speaker, ToolState, TurnEnd};
 
 #[test]
+fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
+    advance(&mut rt, 0.2);
+    let id = "checkout-example";
+    let original = format!("vm-session-{id}/{id}");
+    let count = |rt: &Runtime<Workspace>| -> usize {
+        rt.elements()
+            .into_iter()
+            .find(|e| {
+                !e.exiting
+                    && e.path.contains("sessions-heading")
+                    && e.key.as_deref() == Some("count")
+            })
+            .unwrap()
+            .text
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    key(&mut rt, Key::Escape, Mods::default());
+    let before = count(&rt);
+    assert!(element(&rt, &original).item_selected);
+    fill(
+        &mut rt,
+        &format!("remote-draft-{id}"),
+        "Keep the earlier draft",
+    );
+    fill(&mut rt, "session-search", "No such session");
+    click(&mut rt, "toggle-archived");
+    click(&mut rt, "new-session");
+
+    let c = &live(&rt.state).app.remote.saved.checkouts[id];
+    assert!(c.thread.conversation.is_none());
+    let editor = c.thread.editor_key(id).to_owned();
+    let fresh = format!("vm-session-{id}/{editor}");
+    assert_eq!(count(&rt), before + 1);
+    let new_row = element(&rt, &fresh);
+    assert_eq!(new_row.label.as_deref(), Some("New VM session"));
+    assert!(new_row.item_selected && new_row.visible[3] > 0.);
+    assert!(!element(&rt, &original).item_selected);
+
+    click(&mut rt, "new-session");
+    assert_eq!(count(&rt), before + 1);
+    assert!(element(&rt, &fresh).item_selected);
+    fill(
+        &mut rt,
+        &format!("remote-draft-{editor}"),
+        "A separate task",
+    );
+    assert_eq!(
+        element(&rt, &fresh).label.as_deref(),
+        Some("A separate task")
+    );
+    reveal(&mut rt, &original);
+    click(&mut rt, &original);
+    let c = &live(&rt.state).app.remote.saved.checkouts[id];
+    assert_eq!(c.thread.draft, "Keep the earlier draft");
+    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert!(element(&rt, &original).item_selected);
+    assert!(!element(&rt, &fresh).item_selected);
+
+    key(&mut rt, Key::Up, Mods::default());
+    advance(&mut rt, 0.2);
+    assert!(element(&rt, &fresh).item_selected);
+    let app = &mut live_mut(&mut rt.state).app;
+    let c = &app.remote.saved.checkouts[id];
+    assert_eq!(c.thread.editor_key(id), editor);
+    assert_eq!(c.thread.draft, "A separate task");
+    assert!(c.thread.conversation.is_none());
+    assert!(
+        app.commands()
+            .iter()
+            .all(|(_, op)| !matches!(op, Command::Remote(Operation::Prompt(..))))
+    );
+}
+
+#[test]
 fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
     let mut rt = design_runtime("", (800., 620.));
     let id = "checkout-example";

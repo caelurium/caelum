@@ -167,10 +167,7 @@ impl Live {
 
     pub fn new_session(&mut self) {
         self.schedule();
-        self.feed.project = None;
-        self.feed.close();
-        self.panels.sessions.clear();
-        self.panels.archived = false;
+        self.reveal_new_session();
         let Some(project) = self.app.active_project.clone() else {
             self.panels.overlay = Some(crate::panels::Screen::Launcher);
             return;

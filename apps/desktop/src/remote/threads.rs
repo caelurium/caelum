@@ -26,7 +26,7 @@ pub(crate) fn start(s: &mut Workspace, id: &str) {
         c.thread.provider
     };
     if l.app.new_vm_session(id, provider) {
-        super::checkout::enter(s);
+        super::checkout::enter_new(s);
     }
 }
 

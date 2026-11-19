@@ -4,20 +4,37 @@ use crate::{
     panels::Screen,
     ui,
 };
+use caelum_core::remote::VmLink;
 use rune::{El, Tx};
 use rune_kit::Kit;
 use std::time::Instant;
 
 pub(crate) fn enter(s: &mut Workspace) {
+    show(s, true);
+}
+
+pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
+    if live_mut(s).app.open_vm_thread(link) {
+        // The Sessions list keeps keyboard focus so the next arrow selects the next row.
+        show(s, false);
+    }
+}
+
+fn show(s: &mut Workspace, focus_draft: bool) {
     let l = live_mut(s);
     l.panels.overlay = None;
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
     l.remote.inspection = None;
     super::conversation::sync_editor(l);
-    super::conversation::focus(l);
+    super::conversation::set_focus(l, focus_draft);
     l.schedule();
     s.inspector.set_open(false);
+}
+
+pub(crate) fn enter_new(s: &mut Workspace) {
+    live_mut(s).reveal_new_session();
+    enter(s);
 }
 
 pub(crate) fn select(s: &mut Workspace, id: &str) {

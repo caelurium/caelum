@@ -178,9 +178,5 @@ pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
 }
 
 pub(super) fn branch(c: &Checkout) -> Option<&str> {
-    match &c.phase {
-        Phase::Create(p) => Some(&p.branch),
-        Phase::Prepare { new_branch, .. } => new_branch.as_deref(),
-        Phase::Ready { branch, .. } => Some(branch),
-    }
+    c.branch()
 }

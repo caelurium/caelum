@@ -139,7 +139,7 @@ impl Workspace {
             Checkout {
                 source,
                 phase: Phase::Create(plan),
-                thread: Thread::default(),
+                thread: Thread::for_checkout(),
                 other_threads: Vec::new(),
                 pinned_stats: false,
             },
@@ -212,7 +212,7 @@ impl Workspace {
                 id.clone(),
                 Checkout {
                     source,
-                    thread: Thread::default(),
+                    thread: Thread::for_checkout(),
                     other_threads: Vec::new(),
                     pinned_stats: false,
                     phase: Phase::Prepare {

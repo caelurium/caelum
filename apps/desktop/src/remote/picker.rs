@@ -247,7 +247,7 @@ fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
         )
         .is_some()
     {
-        super::checkout::enter(s);
+        super::checkout::enter_new(s);
     }
 }
 
@@ -410,7 +410,11 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
                         .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
                     l.schedule();
                 } else if l.app.attach_remote(owner.clone(), new_session).is_some() {
-                    super::checkout::enter(s);
+                    if new_session.is_some() {
+                        super::checkout::enter_new(s);
+                    } else {
+                        super::checkout::enter(s);
+                    }
                 }
             }),
         );

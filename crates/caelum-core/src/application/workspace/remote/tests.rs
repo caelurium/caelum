@@ -45,6 +45,71 @@ fn machine(id: &str) -> Machine {
 }
 
 #[test]
+fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_switch() {
+    use crate::application::{FeedSession, Provider, Scope, SessionScope};
+
+    let mut app = Workspace::default();
+    for path in ["/root", "/other"] {
+        app.projects.push(caelum_protocol::ProjectInfo {
+            name: path.into(),
+            path: path.into(),
+        });
+        let i = app.new_session(Scope {
+            project: path.into(),
+            provider: Provider::Codex,
+        });
+        app.sessions[i].last_activity = Some(100);
+    }
+    app.project_roots.insert(source().project, "/root".into());
+    let (id, req, _) = created(&mut app);
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Prepared(
+            machine("vm"),
+            "feat/boat".into(),
+        ))),
+    ));
+    let prior = app.selected_feed_session().unwrap();
+    let c = app.remote.saved.checkouts.get_mut(&id).unwrap();
+    c.thread.draft = "Réviser le plan".into();
+    c.thread.last_activity = None; // A checkout restored from an older snapshot.
+    assert!(app.new_vm_session(&id, Provider::Codex));
+    let fresh = app.selected_feed_session().unwrap();
+
+    app.preferences.session_scope = SessionScope::CurrentProject;
+    let expected = [fresh.clone(), FeedSession::Local(0), prior.clone()];
+    assert_eq!(app.sidebar_sessions(None, "", false), expected);
+    assert_eq!(
+        app.sidebar_sessions(None, "feat/boat", false),
+        [fresh.clone(), prior.clone()]
+    );
+    assert_eq!(
+        app.sidebar_sessions(None, "RÉVISER", false),
+        std::slice::from_ref(&prior)
+    );
+    assert_eq!(
+        app.sidebar_sessions(Some("/other"), "", false),
+        [FeedSession::Local(1)]
+    );
+    assert!(app.sidebar_sessions(None, "", true).is_empty());
+
+    let FeedSession::Vm(link) = &prior else {
+        panic!()
+    };
+    assert!(app.open_vm_thread(link));
+    assert_eq!(app.selected_feed_session().as_ref(), Some(&prior));
+    assert_eq!(app.sidebar_sessions(None, "", false), expected);
+    app.preferences.session_scope = SessionScope::AllProjects;
+    assert_eq!(app.sidebar_sessions(None, "", false).len(), 4);
+    app.close_project("/root");
+    assert_eq!(
+        app.sidebar_sessions(None, "", false),
+        [FeedSession::Local(1)]
+    );
+    assert!(link.resolve(&app.remote.saved).is_some());
+}
+
+#[test]
 fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout() {
     use crate::application::Provider;
     let mut app = Workspace::default();

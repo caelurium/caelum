@@ -244,7 +244,7 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
         if live.panels.overlay == Some(crate::panels::Screen::VmHandoff)
             && live.app.enter_confirmed_vm()
         {
-            crate::remote::enter(s);
+            crate::remote::enter_new(s);
             return true;
         }
         return crate::context::sync(live, tx) || changed;
