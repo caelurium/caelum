@@ -67,43 +67,48 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             .grow(1.0)
             .px(20.0)
             .scroll(ScrollSpec { stick_bottom: true })
-            .scroll_bar(k)
-            .child(col().w_full().virtual_rows(
-                c.thread.lines.len(),
-                80.0,
-                move |_: &Workspace, i| format!("remote-line-{key}-{i}").into(),
-                move |s: &Workspace, i| {
-                    let Some(line) = live(s)
-                        .app
-                        .remote
-                        .saved
-                        .checkouts
-                        .get(&owner)
-                        .and_then(|c| c.thread.lines.get(i))
-                    else {
-                        return col();
-                    };
-                    col()
-                        .w_full()
-                        .py(6.0)
-                        .gap(4.0)
-                        .child(ui::caption(
-                            match line.speaker {
-                                Speaker::You => "You",
-                                Speaker::OpenCode => "OpenCode",
-                                Speaker::Activity => "Activity",
-                            },
-                            &kit,
-                        ))
-                        .child(
-                            text(&line.text)
-                                .font(kit.ty.ui)
-                                .color(kit.c.text_base)
-                                .selectable(true)
-                                .wrap(),
-                        )
-                },
-            )),
+            .child(
+                col()
+                    .w_full()
+                    .growth(rune::GrowthSpec::default())
+                    .virtual_rows(
+                        c.thread.lines.len(),
+                        80.0,
+                        move |_: &Workspace, i| format!("remote-line-{key}-{i}").into(),
+                        move |s: &Workspace, i| {
+                            let Some(line) = live(s)
+                                .app
+                                .remote
+                                .saved
+                                .checkouts
+                                .get(&owner)
+                                .and_then(|c| c.thread.lines.get(i))
+                            else {
+                                return col();
+                            };
+                            col()
+                                .w_full()
+                                .py(6.0)
+                                .gap(4.0)
+                                .child(ui::caption(
+                                    match line.speaker {
+                                        Speaker::You => "You",
+                                        Speaker::OpenCode => "OpenCode",
+                                        Speaker::Activity => "Activity",
+                                    },
+                                    &kit,
+                                ))
+                                .child(
+                                    text(&line.text)
+                                        .font(kit.ty.ui)
+                                        .color(kit.c.text_base)
+                                        .selectable(true)
+                                        .wrap(),
+                                )
+                        },
+                    ),
+            )
+            .scroll_bar(k),
     );
     let Some(editors) = l.remote.editors.get(id) else {
         return body;

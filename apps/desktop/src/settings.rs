@@ -94,7 +94,7 @@ pub(crate) fn setting_row(title: &str, detail: &str, control: El, k: &Kit) -> El
 pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let page = live(s).panels.settings_page;
     let mut nav = col()
-        .w(128.0)
+        .w(146.0)
         .h_full()
         .gap(4.0)
         .pr(8.0)
