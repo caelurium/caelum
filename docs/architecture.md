@@ -52,11 +52,12 @@ same machine. A one-repository environment puts the agent and remote Git in
 `/home/user/<repository>`. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
-The remote composer sends the thread’s selected provider (`codex` or `opencode`)
-and optional Boat model ID on explicit Send. With **Boat default** it omits `model`;
-reasoning settings stay with Boat. Opening the model picker reads the public
-SDK catalogue on demand, independently of credentials, machine and conversation ID.
-Switching providers clears the model override and keeps the conversation ID and event cursor;
+On explicit Send, the remote composer captures the thread’s provider (`codex`
+or `opencode`), optional Boat model ID and optional `reasoningEffort`.
+The pickers share the public SDK catalogue; only a concrete model’s advertised
+levels are selectable. Each default omits its request field. The public harness
+default does not identify the account’s configured model. Changing models
+clears effort; switching providers clears both overrides but keeps the conversation ID and event cursor;
 the accepted run records which provider authored its replies. Caelum does not
 install a VM bridge or connect to a native OpenCode session in the checkout.
 Each send explicitly targets a new conversation or its saved Boat conversation ID.

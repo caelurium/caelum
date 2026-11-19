@@ -350,6 +350,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     let i = local(&mut app);
     app.sessions[i].scope.provider = Provider::Codex;
     app.sessions[i].options.model = Some("local-model".into());
+    app.sessions[i].options.effort = Some("local-effort".into());
     let req = reading(&mut app, i);
     ready(&mut app, req);
     app.sessions[i].draft = "New laptop draft".into();
@@ -399,20 +400,28 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         "Next step"
     );
     let thread = &reopened.remote.saved.checkouts[&id].thread;
-    assert!(thread.model.is_none());
+    assert!(thread.model.is_none() && thread.effort.is_none());
     let editor = thread.editor_key(&id).to_owned();
     reopened.remote.models = ModelCatalogue::Ready(
         [(
             Provider::Codex,
-            [caelum_protocol::ProviderChoice {
+            [caelum_protocol::ProviderModelChoice {
                 id: "remote-model".into(),
                 name: "Remote model".into(),
+                provider: None,
+                context_window: None,
+                efforts: vec![caelum_protocol::ProviderChoice {
+                    id: "high".into(),
+                    name: "High".into(),
+                }],
+                default_effort: None,
             }]
             .into(),
         )]
         .into(),
     );
     assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, Some("remote-model")));
+    assert!(reopened.set_vm_effort(&id, &editor, Provider::Codex, "remote-model", Some("high")));
     assert!(reopened.commands().is_empty());
     for reject in [true, false] {
         assert!(reopened.send_remote(&id, "Edited next step"));
@@ -424,6 +433,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         assert_eq!(target.machine.id, "vm");
         assert_eq!(turn.provider, Provider::Codex);
         assert_eq!(turn.model.as_deref(), Some("remote-model"));
+        assert_eq!(turn.effort.as_deref(), Some("high"));
         assert!(turn.conversation.is_none());
         let prompt = turn.text;
         assert!(
@@ -456,6 +466,13 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                 reopened.remote.saved.checkouts[&id].thread.model.as_deref(),
                 Some("remote-model")
             );
+            assert_eq!(
+                reopened.remote.saved.checkouts[&id]
+                    .thread
+                    .effort
+                    .as_deref(),
+                Some("high")
+            );
             assert!(!reopened.send_remote(&id, "duplicate"));
             reopened.recover_remote(&id, "p");
             let (req, Command::Remote(Operation::Recover(_, Provider::Codex, None, _))) =
@@ -487,7 +504,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
             assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, None));
             assert!(reopened.send_remote(&id, "Again"));
             assert!(
-                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, p)))] if p.provider == Provider::Codex && p.model.is_none() && p.conversation.as_deref() == Some("boat-thread") && p.text == "Again")
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, p)))] if p.provider == Provider::Codex && p.model.is_none() && p.effort.is_none() && p.conversation.as_deref() == Some("boat-thread") && p.text == "Again")
             );
         }
     }
@@ -559,6 +576,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
                 provider: Provider::Codex,
                 conversation: None,
                 model: None,
+                effort: None,
                 text: prompt,
             },
         )),

@@ -105,7 +105,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     match name {
         "remote-model-draft" => {
             use caelum_core::application::Provider;
-            use caelum_protocol::ProviderChoice;
+            use caelum_protocol::{ProviderChoice, ProviderModelChoice};
             c.thread = Thread {
                 draft: "Review the changes on this branch.".into(),
                 ..Default::default()
@@ -115,12 +115,34 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
                 ("example/code", "Example Code"),
                 ("example/reasoning", "Example Reasoning"),
             ]
-            .map(|(id, name)| ProviderChoice {
+            .map(|(id, name)| ProviderModelChoice {
                 id: id.into(),
                 name: name.into(),
+                provider: None,
+                context_window: None,
+                efforts: vec![],
+                default_effort: None,
             });
-            l.app.remote.models =
-                ModelCatalogue::Ready([(Provider::OpenCode, models.into())].into());
+            let reasoner = ProviderModelChoice {
+                id: "example/reasoner".into(),
+                name: "Example Reasoner".into(),
+                provider: None,
+                context_window: None,
+                efforts: ["low", "medium", "high", "xhigh"]
+                    .map(|id| ProviderChoice {
+                        id: id.into(),
+                        name: id.into(),
+                    })
+                    .into(),
+                default_effort: Some("medium".into()),
+            };
+            l.app.remote.models = ModelCatalogue::Ready(
+                [
+                    (Provider::OpenCode, models.into()),
+                    (Provider::Codex, [reasoner].into()),
+                ]
+                .into(),
+            );
         }
         "remote-working" => {
             l.app.remote.feeds.insert(

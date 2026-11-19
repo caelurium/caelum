@@ -116,6 +116,7 @@ impl Harness for Boat {
         let request = PromptRequest {
             provider: Some(provider.as_str().into()),
             model: prompt.model.clone(),
+            reasoning_effort: prompt.effort.clone(),
             new_conversation: conversation.is_none().then_some(true),
             conversation_id: conversation.map(str::to_owned),
             ..PromptRequest::new(&prompt.text)

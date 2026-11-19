@@ -7,7 +7,7 @@ use crate::{
     ui,
 };
 use caelum_core::remote::ModelCatalogue;
-use caelum_protocol::ProviderChoice;
+use caelum_protocol::ProviderModelChoice;
 use rune::{El, ScrollSpec, TextEdit, col, row, text};
 use rune_kit::{Kit, Placement, ScrollBar};
 use std::{
@@ -18,14 +18,9 @@ use std::{
 const TRIGGER: &str = "vm-model-trigger";
 const ROW_HEIGHT: f32 = 54.;
 
-pub(super) fn choice(
-    s: &Workspace,
-    k: &Kit,
-    owner: &Owner,
-    current: Option<&str>,
-    layers: &mut Vec<El>,
-) -> El {
+pub(super) fn choice(s: &Workspace, k: &Kit, owner: &Owner, layers: &mut Vec<El>) -> El {
     let l = live(s);
+    let current = owner.model.as_deref();
     let label = current.map_or("Boat default", |id| {
         l.app
             .remote
@@ -97,7 +92,7 @@ fn choose(s: &mut Workspace, owner: &Owner, model: Option<&str>) {
     }
 }
 
-fn matches_query(model: &ProviderChoice, needle: &str) -> bool {
+fn matches_query(model: &ProviderModelChoice, needle: &str) -> bool {
     needle.is_empty()
         || model.name.to_lowercase().contains(needle)
         || model.id.to_lowercase().contains(needle)

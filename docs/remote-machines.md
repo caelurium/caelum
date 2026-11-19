@@ -92,6 +92,19 @@ Each VM chat remembers its choice. Between turns you can pick another model in
 the same conversation. Changing providers resets the model to **Boat default**.
 That option uses your Boat settings and works even when the catalogue can’t load.
 
+To change reasoning depth, choose a specific model, then open **Effort** beside
+it. The menu lists only the levels Boat advertises for that provider and model.
+For example, you can choose **High** before the first Send, then choose a lower
+level for a follow-up without leaving the conversation.
+
+![Choosing High reasoning effort in a Codex VM draft](design/previews/rune-light-vm-first-effort-small.png)
+
+**Boat default** in the effort menu lets Boat choose the level. **None**, when
+listed, explicitly requests no extra reasoning. Changing model or provider
+resets effort; switching away from a chat and back keeps its choice. The model
+setting **Boat default** leaves both decisions to your account. Models that
+list no effort levels have no effort picker.
+
 Reopen Caelum or select the machine’s sidebar row to continue the same thread.
 If Boat may have accepted a prompt but the acknowledgement was lost, check
 Boat and reconnect using the prompt ID.

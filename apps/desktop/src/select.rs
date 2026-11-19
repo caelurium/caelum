@@ -12,6 +12,24 @@ pub struct Choice {
     detail: Option<String>,
 }
 
+pub(crate) fn choice_label(choice: &caelum_protocol::ProviderChoice) -> &str {
+    if choice.name != choice.id {
+        return &choice.name;
+    }
+    match choice.name.as_str() {
+        "none" => "None",
+        "minimal" => "Minimal",
+        "low" => "Low",
+        "medium" => "Medium",
+        "high" => "High",
+        "xhigh" => "Extra high",
+        "max" => "Maximum",
+        "build" => "Build",
+        "plan" => "Plan",
+        _ => &choice.name,
+    }
+}
+
 impl Choice {
     pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
         Self {

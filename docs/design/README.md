@@ -3,7 +3,8 @@
 Caelum uses flush conversation surfaces, quiet sidebar selection, system-font
 typography and a rounded composer. Rune supplies native text editing, animated
 split panes, Markdown and windowed diffs. Local sessions have model, effort and
-agent controls; the [remote composer](../remote-machines.md) shows its Boat destination.
+agent controls; the [remote composer](../remote-machines.md) shows its Boat
+destination, provider, model and any supported reasoning effort.
 Files and changes share the side inspector. Settings and worktree
 creation use focus-scoped dialogs; session actions use row-anchored popovers.
 PR review occupies the main screen.

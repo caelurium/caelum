@@ -250,6 +250,7 @@ fn default_prompt(provider: Provider, conversation: Option<&str>, text: &str) ->
     Prompt {
         provider,
         model: None,
+        effort: None,
         conversation: conversation.map(str::to_owned),
         text: text.into(),
     }
@@ -263,14 +264,21 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
     let target = agent_target();
     let run = json!({"id":"r","promptId":"p","sandboxId":"vm-1","conversationId":"c","status":"finished","done":true});
     Mock::given(method("POST")).and(path("/sandboxes/vm-1/commands"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"command","success":true,"exitCode":0,"stdout":"git@github.com:example/project.git\n","stderr":"","timedOut":false}))).expect(2).mount(&server).await;
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"command","success":true,"exitCode":0,"stdout":"git@github.com:example/project.git\n","stderr":"","timedOut":false}))).expect(3).mount(&server).await;
     for (scope, message, provider, prompt, id) in [
         (
-            json!({"new":true,"model":"boat-model-b"}),
+            json!({"new":true,"model":"boat-model-b","reasoningEffort":"high"}),
             "Start",
             "codex",
             "p",
             "r",
+        ),
+        (
+            json!({"conversationId":"c","model":"boat-model-b","reasoningEffort":"none"}),
+            "Quick follow-up",
+            "codex",
+            "p-effort",
+            "r-effort",
         ),
         (
             json!({"conversationId":"c","model":"example:vendor/next"}),
@@ -294,6 +302,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
             &target,
             &Prompt {
                 model: Some("boat-model-b".into()),
+                effort: Some("high".into()),
                 ..default_prompt(Provider::Codex, None, "Start")
             },
         )
@@ -343,12 +352,31 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
         page.status,
         crate::remote::RunStatus::Ended(crate::remote::TurnEnd::Finished)
     );
+    let Outcome::Accepted(changed) = boat
+        .send(
+            &target,
+            &Prompt {
+                model: Some("boat-model-b".into()),
+                effort: Some("none".into()),
+                ..default_prompt(
+                    Provider::Codex,
+                    Some(&first.conversation),
+                    "Quick follow-up",
+                )
+            },
+        )
+        .await
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(changed.conversation, first.conversation);
     let Outcome::Accepted(next) = boat
         .send(
             &target,
             &Prompt {
                 model: Some("example:vendor/next".into()),
-                ..default_prompt(Provider::OpenCode, Some(&first.conversation), "Continue")
+                ..default_prompt(Provider::OpenCode, Some(&changed.conversation), "Continue")
             },
         )
         .await

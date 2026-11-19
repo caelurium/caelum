@@ -1,15 +1,21 @@
+mod effort;
+
 use super::*;
 use crate::live::{live, live_mut};
 use caelum_core::remote::{ModelCatalogue, ModelLists};
-use caelum_protocol::ProviderChoice;
+use caelum_protocol::{ProviderChoice, ProviderModelChoice};
 
 const VM: &str = "checkout-example";
 const DRAFT: &str = "First message, still unsent.";
 
 fn catalogue() -> ModelLists {
-    let model = |id: &str, name: &str| ProviderChoice {
+    let model = |id: &str, name: &str| ProviderModelChoice {
         id: id.into(),
         name: name.into(),
+        provider: None,
+        context_window: None,
+        efforts: vec![],
+        default_effort: None,
     };
     let mut open = vec![model("route:a", "Example quick")];
     open.extend((0..70).map(|i| model(&format!("other:{i}"), "Other model")));
@@ -18,7 +24,20 @@ fn catalogue() -> ModelLists {
         (Provider::OpenCode, open.into()),
         (
             Provider::Codex,
-            [model("codex-only", "Example Codex")].into(),
+            [
+                ProviderModelChoice {
+                    efforts: ["none", "low", "high", "xhigh"]
+                        .map(|id| ProviderChoice {
+                            id: id.into(),
+                            name: id.into(),
+                        })
+                        .into(),
+                    default_effort: Some("low".into()),
+                    ..model("codex-only", "Example Codex")
+                },
+                model("codex-basic", "Basic model"),
+            ]
+            .into(),
         ),
     ]
     .into()
@@ -104,6 +123,7 @@ fn choosing_a_then_b_only_submits_the_last_model_on_the_first_send() {
         assert_eq!(target.machine.id, "vm-example");
         assert_eq!(prompt.provider, Provider::OpenCode);
         assert_eq!(prompt.model.as_deref(), expected);
+        assert!(prompt.effort.is_none());
         assert!(prompt.conversation.is_none());
         assert_eq!(prompt.text, DRAFT);
         assert!(!element(&rt, "vm-model-trigger").focusable);
@@ -135,17 +155,20 @@ fn a_late_catalogue_does_not_change_a_draft_and_parked_models_stay_with_their_th
     assert!(!app.set_vm_model(VM, &owner, Provider::OpenCode, Some("route:b")));
     assert!(!app.set_vm_model(VM, &owner, Provider::Codex, Some("route:b")));
     click(&mut rt, "vm-model-item-codex-only");
+    click(&mut rt, "vm-effort-trigger");
+    click(&mut rt, "option3");
     assert_eq!(
         live(&rt.state).app.remote.saved.checkouts[VM].thread.draft,
         DRAFT
     );
-    // A model choice alone is enough to keep the unsent session when parking it.
+    // An unsent session keeps its choices even if it has no text.
     fill(&mut rt, &format!("remote-draft-{owner}"), "");
     click(&mut rt, "vm-threads");
     click(&mut rt, "new-vm-session");
     let app = &mut live_mut(&mut rt.state).app;
     assert!(app.remote.saved.checkouts[VM].thread.model.is_none());
     assert!(!app.set_vm_model(VM, &owner, Provider::Codex, None));
+    assert!(!app.set_vm_effort(VM, &owner, Provider::Codex, "codex-only", None));
     click(&mut rt, "vm-threads");
     click(&mut rt, &format!("vm-thread-{owner}"));
     let t = &live(&rt.state).app.remote.saved.checkouts[VM].thread;
@@ -153,13 +176,10 @@ fn a_late_catalogue_does_not_change_a_draft_and_parked_models_stay_with_their_th
         (t.draft.as_str(), t.model.as_deref()),
         ("", Some("codex-only"))
     );
+    assert_eq!(t.effort.as_deref(), Some("high"));
     click(&mut rt, "vm-provider-trigger");
     click(&mut rt, "option1");
-    assert!(
-        live(&rt.state).app.remote.saved.checkouts[VM]
-            .thread
-            .model
-            .is_none()
-    );
+    let thread = &live(&rt.state).app.remote.saved.checkouts[VM].thread;
+    assert!(thread.model.is_none() && thread.effort.is_none());
     assert!(live_mut(&mut rt.state).app.commands().is_empty());
 }

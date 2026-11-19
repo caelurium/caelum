@@ -1,3 +1,4 @@
+mod effort;
 mod model;
 
 use crate::{
@@ -15,6 +16,7 @@ struct Owner {
     checkout: String,
     thread: String,
     provider: Provider,
+    model: Option<String>,
 }
 
 impl Owner {
@@ -31,6 +33,7 @@ impl Owner {
                 .is_some_and(|c| {
                     c.thread.editor_key(&self.checkout) == self.thread
                         && c.thread.provider == self.provider
+                        && c.thread.model == self.model
                 })
     }
 }
@@ -43,6 +46,7 @@ pub(super) struct Menu {
 enum Kind {
     Provider,
     Model(Box<TextEdit>),
+    Effort,
 }
 
 pub(super) fn sync(l: &mut Live) -> bool {
@@ -69,6 +73,7 @@ pub(super) fn controls(
         checkout: id.into(),
         thread: thread.editor_key(id).into(),
         provider: thread.provider,
+        model: thread.model.clone(),
     };
     let open = matches!(&l.remote.menu, Some(Menu {owner: o, kind: Kind::Provider}) if o == &owner);
     let toggle = owner.clone();
@@ -111,8 +116,16 @@ pub(super) fn controls(
     .build(k, layers);
     row()
         .min_w(0.0)
+        .flex_wrap()
         .center_y()
         .gap(2.0)
         .child(provider)
-        .child(model::choice(s, k, &owner, thread.model.as_deref(), layers))
+        .child(model::choice(s, k, &owner, layers))
+        .children(effort::choice(
+            s,
+            k,
+            &owner,
+            thread.effort.as_deref(),
+            layers,
+        ))
 }

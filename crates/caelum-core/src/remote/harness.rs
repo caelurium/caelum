@@ -21,6 +21,9 @@ pub struct Thread {
     /// Explicit Boat model ID; `None` delegates to this harness's Boat settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// An advertised reasoning level for this exact provider/model pair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     pub conversation: Option<String>,
     pub cursor: Option<String>,
     pub turn: Turn,
@@ -35,6 +38,7 @@ impl Default for Thread {
             continued: None,
             provider: opencode(),
             model: None,
+            effort: None,
             conversation: None,
             cursor: None,
             turn: Turn::Idle,
@@ -291,6 +295,7 @@ pub struct Page {
 pub struct Prompt {
     pub provider: Provider,
     pub model: Option<String>,
+    pub effort: Option<String>,
     pub conversation: Option<String>,
     pub text: String,
 }

@@ -2,7 +2,7 @@ use rune::{El, TextStyle, col, row, text_input};
 use rune_kit::{ButtonVariant, Kit, Placement};
 
 use crate::context::EditMenu;
-use crate::select::{Choice, Select};
+use crate::select::{Choice, Select, choice_label};
 use crate::ui::Button;
 use crate::{SEND, STOP, Workspace, on_key, ui};
 
@@ -304,24 +304,6 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         }
     }
     content
-}
-
-fn choice_label(choice: &caelum_protocol::ProviderChoice) -> &str {
-    if choice.name != choice.id {
-        return &choice.name;
-    }
-    match choice.name.as_str() {
-        "none" => "None",
-        "minimal" => "Minimal",
-        "low" => "Low",
-        "medium" => "Medium",
-        "high" => "High",
-        "xhigh" => "Extra high",
-        "max" => "Maximum",
-        "build" => "Build",
-        "plan" => "Plan",
-        _ => &choice.name,
-    }
 }
 
 fn effort_choice(effort: &caelum_protocol::ProviderChoice) -> Choice {

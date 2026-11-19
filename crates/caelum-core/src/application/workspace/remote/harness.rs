@@ -24,6 +24,12 @@ impl Workspace {
             Prompt {
                 provider: c.thread.provider,
                 model: c.thread.model.clone(),
+                effort: c
+                    .thread
+                    .model
+                    .as_ref()
+                    .and(c.thread.effort.as_ref())
+                    .cloned(),
                 conversation: c.thread.conversation.clone(),
                 text: c.thread.prompt(text),
             },
