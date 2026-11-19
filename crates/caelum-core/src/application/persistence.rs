@@ -180,6 +180,8 @@ pub struct SavedSession {
 pub struct Snapshot {
     pub version: u32,
     #[serde(default)]
+    pub remote: crate::remote::Saved,
+    #[serde(default)]
     pub home: super::HomeDraft,
     pub projects: Vec<ProjectInfo>,
     pub sessions: Vec<SavedSession>,

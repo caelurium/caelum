@@ -1,8 +1,11 @@
 //! Machine identities and operations are independent of local project paths and coding providers.
 mod boat;
+mod checkout;
 mod credentials;
 mod runtime;
 
+pub(crate) use checkout::github_slug;
+pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub(crate) use runtime::Backend;
 
 use serde::{Deserialize, Serialize};
@@ -36,7 +39,7 @@ pub struct MachineId {
     pub id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Machine {
     pub key: MachineId,
     pub name: String,
@@ -51,6 +54,14 @@ pub struct Inventory {
 
 trait Machines {
     async fn inventory(&self) -> Result<Inventory, String>;
+    async fn create(&self, source: &Source, plan: &Plan) -> Result<Machine, String>;
+    async fn power(&self, machine: &MachineId, resume: bool) -> Result<Machine, String>;
+    async fn prepare(
+        &self,
+        target: &Target,
+        base: &str,
+        branch: Option<&str>,
+    ) -> Result<Outcome, String>;
 }
 
 #[derive(Clone, Debug)]
@@ -58,18 +69,29 @@ pub enum Operation {
     Connect(Credential),
     Inventory,
     Disconnect,
+    Discover(String),
+    Create(Source, Plan),
+    Prepare(Target, String, Option<String>),
+    Power(MachineId, bool),
 }
 
 #[derive(Debug)]
 pub enum Outcome {
     Inventory(Inventory),
     Disconnected,
+    Source(Source),
+    Machine(Machine),
+    Waiting(Machine),
+    Prepared(Machine, String),
 }
 
 #[derive(Debug, Default)]
 pub struct State {
     pub inventory: Option<Inventory>,
     pub connection: Connection,
+    pub saved: Saved,
+    pub picker: Option<Picker>,
+    pub jobs: std::collections::HashMap<String, Job>,
 }
 
 #[derive(Debug, Default)]

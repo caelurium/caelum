@@ -14,6 +14,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let mut menus = Vec::new();
     let (title, description, body) = match screen {
         Screen::Settings => ("Settings", "", crate::settings::view(s, k, &mut menus)),
+        Screen::RemotePicker => (
+            "Open on remote machine",
+            "OpenCode will work in the checkout on Boat.",
+            crate::remote::picker(s, k),
+        ),
         Screen::Worktrees => (
             "Caelum worktrees",
             "Created in Caelum for this project.",

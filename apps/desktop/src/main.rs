@@ -437,7 +437,13 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     }
     let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
-    let main = if home::is_home(s) {
+    let remote = s
+        .live
+        .as_ref()
+        .is_some_and(|l| l.panels.screen == panels::Screen::Remote);
+    let main = if remote {
+        remote::screen(s, &k)
+    } else if home::is_home(s) {
         home::view(s, &k, cx.is_reduced_motion(), &mut layers)
     } else {
         col()
@@ -457,7 +463,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let main = if s.live.as_ref().is_some_and(|live| {
         matches!(
             live.panels.screen,
-            panels::Screen::Home | panels::Screen::Review
+            panels::Screen::Home | panels::Screen::Review | panels::Screen::Remote
         )
     }) {
         main

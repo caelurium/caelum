@@ -49,6 +49,8 @@ pub enum Screen {
     CreateWorktree,
     Shells,
     Review,
+    Remote,
+    RemotePicker,
     Settings,
     Session,
     Sessions,

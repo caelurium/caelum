@@ -43,6 +43,30 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Discover(project) => self
+                .connected()
+                .await?
+                .discover(project)
+                .await
+                .map(Outcome::Source),
+            Operation::Create(source, plan) => self
+                .connected()
+                .await?
+                .create(source, plan)
+                .await
+                .map(Outcome::Machine),
+            Operation::Prepare(target, base, branch) => {
+                self.connected()
+                    .await?
+                    .prepare(target, base, branch.as_deref())
+                    .await
+            }
+            Operation::Power(key, resume) => self
+                .connected()
+                .await?
+                .power(key, *resume)
+                .await
+                .map(Outcome::Machine),
             Operation::Connect(key) => {
                 let mut slot = self.connection.lock().await;
                 let boat = Self::authenticate(key).await?;

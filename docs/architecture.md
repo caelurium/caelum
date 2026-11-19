@@ -43,6 +43,15 @@ cannot occupy their capacity.
 The shared `ProviderRuntime` owns providers, brokers, process registration and
 session-branch attribution.
 
+Remote checkouts live in `caelum-core::remote`, outside the local project and
+filesystem registries. Settings owns the Boat connection; a checkout captures
+its account, machine ID, GitHub repository and branch. The local project path
+only groups the sidebar row. A saved creation attempt carries its idempotency
+key through provisioning; once Boat returns a machine, retries prepare that
+same machine. A one-repository environment puts the agent and remote Git in
+`/home/user/<repository>`. Caelum can create a dedicated environment and never
+adds a repository to an existing shared environment.
+
 Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery

@@ -325,6 +325,7 @@ impl Workspace {
                     let snapshot = *snapshot;
                     self.saved = Some(snapshot.clone());
                     self.home.restore(snapshot.home);
+                    self.remote.saved = snapshot.remote;
                     self.managed_worktrees = snapshot.managed_worktrees;
                     self.preferences = snapshot.preferences;
                     for (project, saved) in &self.preferences.files {

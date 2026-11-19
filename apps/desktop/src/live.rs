@@ -471,6 +471,7 @@ impl Live {
         }
         let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
         changed |= self.apply_events(events);
+        changed |= crate::remote::sync(self, tx);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
         if self.last_selected != self.app.selected

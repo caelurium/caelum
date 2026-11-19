@@ -141,6 +141,7 @@ impl Workspace {
             .collect();
         Snapshot {
             version: 1,
+            remote: self.remote.saved.clone(),
             home: self.home.draft.clone(),
             projects: self.projects.clone(),
             selected: self

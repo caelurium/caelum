@@ -16,6 +16,7 @@ pub(crate) fn project(el: El, project: String) -> El {
         let menu = Menu::new()
             .item(Item::new("new", "New session").icon(&crate::PLUS))
             .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
+            .item(Item::new("remote", "Open on remote machine…").icon(&crate::ORBIT))
             .separator()
             .item(
                 Item::new("up", "Move project up")
@@ -43,6 +44,7 @@ pub(crate) fn project(el: El, project: String) -> El {
                 tx.scroll_into_view(&origin);
             }
             "copy" => tx.copy(project.clone()),
+            "remote" => crate::remote::open(s, project.clone()),
             "close" => live_mut(s).close_project(&project),
             "reveal" => live_mut(s).app.task(Task::Reveal {
                 project: project.clone(),

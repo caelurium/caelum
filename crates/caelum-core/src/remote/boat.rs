@@ -1,5 +1,14 @@
-use super::{Host, Inventory, Machine, MachineId, Machines};
-use boat_sdk::{sandbox::SandboxListQuery, Client};
+mod checkout;
+
+use super::{Host, Inventory, Machine, MachineId, Machines, Outcome, Plan, Source, Target};
+use boat_sdk::{
+    sandbox::{
+        requests::{ResumeRequest, StopRequest},
+        resources::Sandbox,
+        SandboxListQuery,
+    },
+    Client,
+};
 
 #[cfg(test)]
 mod tests;
@@ -11,6 +20,24 @@ pub(super) struct Boat {
 }
 
 impl Boat {
+    fn machine(&self, s: Sandbox) -> Machine {
+        Machine {
+            key: MachineId {
+                host: Host::Boat,
+                account: self.account.clone(),
+                id: s.id,
+            },
+            name: s.name,
+            state: s.state,
+        }
+    }
+    fn owns(&self, key: &MachineId) -> Result<(), String> {
+        if key.account == self.account && key.host == Host::Boat {
+            Ok(())
+        } else {
+            Err("Connect the Boat account that owns this machine".into())
+        }
+    }
     pub(super) async fn authenticate(client: Client) -> Result<Self, String> {
         let account = client
             .me()
@@ -33,15 +60,7 @@ impl Machines for Boat {
         };
         loop {
             let page = self.client.list_sandboxes(&query).await.map_err(api)?;
-            machines.extend(page.sandboxes.into_iter().map(|s| Machine {
-                key: MachineId {
-                    host: Host::Boat,
-                    account: self.account.clone(),
-                    id: s.id,
-                },
-                name: s.name,
-                state: s.state,
-            }));
+            machines.extend(page.sandboxes.into_iter().map(|s| self.machine(s)));
             let Some(info) = page.page_info.filter(|p| p.has_more) else {
                 break;
             };
@@ -55,6 +74,35 @@ impl Machines for Boat {
             account: self.account.clone(),
             machines,
         })
+    }
+
+    async fn create(&self, source: &Source, plan: &Plan) -> Result<Machine, String> {
+        self.create_checkout(source, plan).await
+    }
+    async fn power(&self, machine: &MachineId, resume: bool) -> Result<Machine, String> {
+        self.owns(machine)?;
+        let response = if resume {
+            self.client
+                .resume_sandbox(&machine.id, &ResumeRequest::default())
+                .await
+        } else {
+            self.client
+                .stop_sandbox(&machine.id, &StopRequest::default())
+                .await
+        }
+        .map_err(api)?;
+        if response.id != machine.id {
+            return Err("Boat returned a different machine".into());
+        }
+        self.inspect(machine).await.map(|s| self.machine(s))
+    }
+    async fn prepare(
+        &self,
+        target: &Target,
+        base: &str,
+        branch: Option<&str>,
+    ) -> Result<Outcome, String> {
+        self.prepare_checkout(target, base, branch).await
     }
 }
 

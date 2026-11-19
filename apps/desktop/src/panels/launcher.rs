@@ -75,6 +75,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
         let path = project.path.clone();
         let tree_project = path.clone();
         let manage_project = path.clone();
+        let remote_project = path.clone();
         let mut group = col()
             .w_full()
             .gap(2.0)
@@ -98,6 +99,14 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
                         .grow(1.0)
                         .min_w(0.0)
                         .key(crate::code_view::source_key(&project.path, "launch")),
+                    )
+                    .child(
+                        quiet_button(&crate::ORBIT, "Run on remote machine…")
+                            .on_press(move |s: &mut Workspace| {
+                                crate::remote::open(s, remote_project.clone())
+                            })
+                            .build(k)
+                            .key(crate::code_view::source_key(&project.path, "launch-remote")),
                     )
                     .child(
                         quiet_button(&ui::BRANCH, "Create worktree for this project")

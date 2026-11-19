@@ -12,6 +12,7 @@ impl Workspace {
         // Exhaustive patterns keep additions to the storage contract visible here.
         let Snapshot {
             version,
+            remote,
             home,
             projects,
             sessions,
@@ -44,6 +45,7 @@ impl Workspace {
                     && projected.all(|(key, index)| saved.get(key) == Some(&index))
             };
         *version == 1
+            && self.remote.saved == *remote
             && self.home.draft == *home
             && self.projects == *projects
             && retained().count() == sessions.len()

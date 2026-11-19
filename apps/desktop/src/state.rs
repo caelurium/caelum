@@ -113,6 +113,16 @@ impl Workspace {
             if live.panels.screen == crate::panels::Screen::Home {
                 return "Home";
             }
+            if live.panels.screen == crate::panels::Screen::Remote {
+                return live
+                    .app
+                    .remote
+                    .saved
+                    .selected
+                    .as_ref()
+                    .and_then(|id| live.app.remote.saved.checkouts.get(id))
+                    .map_or("Remote checkout", |c| c.title());
+            }
             live.app
                 .selected
                 .map(|i| live.app.sessions[i].title.as_str())
