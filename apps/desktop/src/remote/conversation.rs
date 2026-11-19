@@ -157,10 +157,7 @@ pub(super) fn view(
                             |b| format!("{} · {b}", c.source.repository),
                         )),
                 )
-                .children(
-                    (dock == Dock::Draft && !c.other_threads.is_empty())
-                        .then(|| super::threads::button(k)),
-                )
+                .children((dock == Dock::Draft).then(|| super::threads::button(k)))
                 .children((dock == Dock::Draft).then(|| {
                     crate::quiet_button(&ui::FILE, "View remote changes")
                         .on_press(super::open_changes)

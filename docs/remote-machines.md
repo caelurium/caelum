@@ -83,6 +83,11 @@ Send a message from the remote composer. Reopen Caelum or select the machine’s
 sidebar row to continue the same thread. If Boat may have accepted a prompt but the
 acknowledgement was lost, check Boat and reconnect using the prompt ID.
 
+To start fresh on the same checkout, choose **Conversations… → New session on
+this VM**, or right-click the VM in the sidebar. The previous chat and its
+unsent draft stay in **Conversations…**. The new session shares the VM’s files
+and branch, but starts with an empty chat. Only **Send** creates its Boat conversation.
+
 The composer shows queued turns, streaming replies and tool activity from the
 selected Boat conversation. If you used the earlier direct-OpenCode preview,
 its VM transcript and draft stay available for reference. Your next explicit

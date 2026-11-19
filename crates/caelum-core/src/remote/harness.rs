@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 /// advanced atomically with its visible messages in the workspace snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
+    /// A fresh session needs an editor identity before Boat assigns a conversation ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continued: Option<Continuation>,
     pub conversation: Option<String>,
@@ -109,7 +112,19 @@ impl Thread {
     pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 
     pub fn editor_key<'a>(&'a self, checkout: &'a str) -> &'a str {
-        self.continued.as_ref().map_or(checkout, |c| &c.id)
+        self.local_id
+            .as_deref()
+            .or_else(|| self.continued.as_ref().map(|c| c.id.as_str()))
+            .unwrap_or(checkout)
+    }
+
+    pub(crate) fn is_blank(&self) -> bool {
+        self.continued.is_none()
+            && self.conversation.is_none()
+            && self.cursor.is_none()
+            && self.turn == Turn::Idle
+            && self.lines.is_empty()
+            && self.draft.is_empty()
     }
 
     pub fn title(&self) -> &str {

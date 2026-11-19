@@ -135,6 +135,15 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::CreateVm | Screen::RemotePicker => (556.0, crate::remote::create_height(s)),
         Screen::Timeline => (580.0, 344.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),
+        Screen::VmThreads => {
+            let saved = &live(s).app.remote.saved;
+            let parked = saved
+                .selected
+                .as_ref()
+                .and_then(|id| saved.checkouts.get(id))
+                .map_or(0, |c| c.other_threads.len());
+            (460.0, 100.0 + 48.0 * parked.min(6) as f32)
+        }
         Screen::Stats => (720.0, 620.0),
         Screen::Image => (760.0, 480.0),
         Screen::Attachment => (760.0, crate::composer::preview_height(s)),
@@ -142,7 +151,10 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     };
     let available =
         rune::memo::window_layout("shell").map_or(height, |r| (r[3] - 170.0).max(220.0));
-    let width = if matches!(screen, Screen::CreateVm | Screen::RemotePicker) {
+    let width = if matches!(
+        screen,
+        Screen::CreateVm | Screen::RemotePicker | Screen::VmThreads
+    ) {
         rune::memo::window_layout("shell").map_or(width, |r| width.min((r[2] - 24.).max(1.0)))
     } else {
         width

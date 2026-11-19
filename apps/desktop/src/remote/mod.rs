@@ -26,6 +26,7 @@ pub(crate) use popup::clear as close_popup;
 pub(crate) use popup::view as popup;
 pub(crate) use scene::scene;
 pub(crate) use sidebar::{finish_removals, removal, request_removal, section as sidebar};
+pub(crate) use threads::start as new_session;
 pub(crate) use threads::view as threads_view;
 
 use crate::{

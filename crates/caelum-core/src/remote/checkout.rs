@@ -71,6 +71,13 @@ pub struct Checkout {
 }
 
 impl Checkout {
+    pub(crate) fn open_thread(&mut self, thread: super::Thread) {
+        let prior = std::mem::replace(&mut self.thread, thread);
+        if prior != super::Thread::default() {
+            self.other_threads.push(prior);
+        }
+    }
+
     pub fn machine(&self) -> Option<&Machine> {
         match &self.phase {
             Phase::Create(_) => None,

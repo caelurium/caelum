@@ -4,7 +4,7 @@ use crate::{
     panels::Screen,
     ui,
 };
-use rune::{El, ScrollSpec, col};
+use rune::{El, ScrollSpec, col, row};
 use rune_kit::{ButtonVariant, Kit, ScrollBar};
 
 pub(super) fn button(k: &Kit) -> El {
@@ -13,6 +13,12 @@ pub(super) fn button(k: &Kit) -> El {
         .on_press(|s: &mut Workspace| live_mut(s).panels.overlay = Some(Screen::VmThreads))
         .build(k)
         .key("vm-threads")
+}
+
+pub(crate) fn start(s: &mut Workspace, id: &str) {
+    if live_mut(s).app.new_vm_session(id) {
+        super::checkout::enter(s);
+    }
 }
 
 pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
@@ -72,6 +78,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                     })
             },
         );
+    let new = id.clone();
     body.child(
         col()
             .w_full()
@@ -82,5 +89,18 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
             })
             .child(rows)
             .scroll_bar(k),
+    )
+    .child(ui::divider(k))
+    .child(
+        row().w_full().justify_end().child(
+            ui::Button::new("New session on this VM")
+                .icon(&crate::PLUS)
+                .variant(ButtonVariant::Contrast)
+                .disabled(!app.can_start_vm_session(id))
+                .on_press(move |s: &mut Workspace| start(s, &new))
+                .build(k)
+                .key("new-vm-session")
+                .help("Start with an empty chat and draft on the same checkout."),
+        ),
     )
 }

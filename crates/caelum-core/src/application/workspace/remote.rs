@@ -9,6 +9,7 @@ mod removal;
 mod stats;
 #[cfg(test)]
 mod tests;
+mod threads;
 use crate::{
     application::{Command, Reply},
     remote::{Connection, Credential, Operation, Outcome},

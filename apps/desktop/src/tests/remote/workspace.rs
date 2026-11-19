@@ -6,6 +6,53 @@ use crate::{
 use caelum_core::remote::{Job, Line, Page, RunStatus, Speaker, ToolState, TurnEnd};
 
 #[test]
+fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
+    advance(&mut rt, 0.2);
+    key(&mut rt, Key::Escape, Mods::default());
+    fill(&mut rt, "remote-draft-checkout-example", "Keep my draft");
+    click(&mut rt, "vm-threads");
+    click(&mut rt, "new-vm-session");
+    let app = &mut live_mut(&mut rt.state).app;
+    let c = &app.remote.saved.checkouts[id];
+    let fresh = c.thread.editor_key(id).to_owned();
+    assert_ne!(fresh, id);
+    assert!(
+        c.thread.conversation.is_none() && c.thread.lines.is_empty() && c.thread.draft.is_empty()
+    );
+    assert_eq!(c.other_threads[0].draft, "Keep my draft");
+    assert!(
+        app.commands()
+            .iter()
+            .all(|(_, op)| !matches!(op, Command::Remote(_)))
+    );
+
+    // Starting again on an untouched draft reuses the fresh editor.
+    secondary(&mut rt, "remote-checkout-checkout-example");
+    choose_context(&mut rt, "New session on this VM");
+    let field = format!("remote-draft-{fresh}");
+    fill(&mut rt, &field, "Independent task");
+    click(&mut rt, "vm-threads");
+    click(&mut rt, "vm-thread-checkout-example");
+    let c = &live(&rt.state).app.remote.saved.checkouts[id];
+    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert_eq!(c.thread.draft, "Keep my draft");
+    assert_eq!(c.other_threads.len(), 1);
+    click(&mut rt, "vm-threads");
+    click(&mut rt, &format!("vm-thread-{fresh}"));
+    click(&mut rt, "remote-send");
+    let app = &mut live_mut(&mut rt.state).app;
+    let commands = app.commands();
+    assert!(
+        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, None, p)))] if t.machine.id == "vm-example" && p == "Independent task")
+    );
+    assert!(!app.new_vm_session(id));
+    assert!(!app.switch_vm_thread(id, id));
+}
+
+#[test]
 fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion() {
     let mut rt = design_runtime("", (800., 620.));
     rt.update(|s, _| crate::remote::scene(s, "remote-working"));

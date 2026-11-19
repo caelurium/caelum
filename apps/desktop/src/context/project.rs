@@ -13,6 +13,11 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
         let id = id.clone();
         let menu = Menu::new()
             .item(Item::new("open", "Open VM conversation").icon(&ui::SERVER))
+            .item(
+                Item::new("new", "New session on this VM")
+                    .icon(&crate::PLUS)
+                    .enabled(live(s).app.can_start_vm_session(&id)),
+            )
             .separator()
             .item(
                 Item::new(
@@ -36,6 +41,7 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
             );
         show(s, at, origin.clone(), menu, move |s, pick, _| match pick {
             "open" => crate::remote::select(s, &id),
+            "new" => crate::remote::new_session(s, &id),
             "remove" => crate::remote::request_removal(s, &id),
             _ => {}
         });
