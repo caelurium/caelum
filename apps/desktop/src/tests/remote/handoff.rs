@@ -374,7 +374,7 @@ fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_on
     assert!(rt.find("remote-branch").is_none());
     assert_eq!(
         element(&rt, "handoff-base").text.as_deref(),
-        Some("Session branch · feature/session")
+        Some("feature/session")
     );
     assert!(element(&rt, "create-remote").focusable);
     reveal(&mut rt, "vm-lifetime-24 h");

@@ -31,12 +31,12 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Settings => ("Settings", "", crate::settings::view(s, k, &mut menus)),
         Screen::CreateVm => (
             "Create VM",
-            "Start a new Boat machine for OpenCode.",
+            "Start a Boat checkout from a published GitHub branch.",
             crate::remote::create_view(s, k),
         ),
         Screen::RemotePicker => (
             "Open on remote machine",
-            "OpenCode will work in the checkout on Boat.",
+            "Use an existing Boat checkout or create a new one.",
             crate::remote::picker(s, k),
         ),
         Screen::RemoveVm => (
@@ -114,7 +114,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         ),
         _ => return,
     };
-    let (width, height) = match screen {
+    let (width, height): (f32, f32) = match screen {
         Screen::Settings => (740.0, crate::settings::height(s)),
         Screen::Launcher => (560.0, 380.0),
         Screen::Worktrees => (560.0, crate::checkouts::manager_height(s)),
@@ -132,6 +132,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             },
         ),
         Screen::CreateWorktree => (500.0, 330.0),
+        Screen::CreateVm | Screen::RemotePicker => (556.0, crate::remote::create_height(s)),
         Screen::Timeline => (580.0, 344.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),
         Screen::Stats => (720.0, 620.0),
@@ -141,6 +142,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     };
     let available =
         rune::memo::window_layout("shell").map_or(height, |r| (r[3] - 170.0).max(220.0));
+    let width = if matches!(screen, Screen::CreateVm | Screen::RemotePicker) {
+        rune::memo::window_layout("shell").map_or(width, |r| width.min((r[2] - 24.).max(1.0)))
+    } else {
+        width
+    };
     let dialog = Dialog::new("workspace", title);
     let dialog = if description.is_empty() {
         dialog

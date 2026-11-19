@@ -8,6 +8,37 @@ use caelum_core::{
 };
 
 #[test]
+fn small_destination_picker_keeps_creation_separate_from_attaching() {
+    let mut rt = design_runtime("", (510., 440.));
+    rt.update(|s, _| crate::remote::scene(s, "remote-picker"));
+    advance(&mut rt, 0.2);
+    assert!(rt.find("attach-vm-vm-example").is_some() && rt.find("create-remote").is_none());
+    let machine = element(&rt, "attach-vm-vm-example");
+    assert!(machine.visible[3] >= machine.rect[3] - 1.);
+    click(&mut rt, "handoff-new-vm");
+    advance(&mut rt, 0.45);
+    assert!(rt.find("attach-vm-vm-example").is_none());
+    let initial = element(&rt, "create-remote");
+    assert!(initial.visible[3] >= 28.);
+    reveal(&mut rt, "vm-lifetime-Until stopped");
+    click(&mut rt, "vm-lifetime-Until stopped");
+    let footer = element(&rt, "create-remote");
+    assert!(
+        (footer.rect[1] - initial.rect[1]).abs() < 1. && footer.visible[3] >= 28.,
+        "{footer:?}"
+    );
+    assert!(!footer.focusable);
+    click(&mut rt, "handoff-existing-vm");
+    assert!(rt.find("attach-vm-vm-example").is_some() && rt.find("create-remote").is_none());
+    let app = &mut rt.state.live.as_mut().unwrap().app;
+    assert!(app.remote.saved.checkouts.is_empty());
+    assert!(app.commands().iter().all(|(_, c)| !matches!(
+        c,
+        Command::Remote(Operation::Create(..) | Operation::Prompt(..))
+    )));
+}
+
+#[test]
 fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     let mut rt = design_runtime("", (800., 620.));
     rt.update(|s, _| crate::remote::scene(s, "remote-settings"));
@@ -44,7 +75,19 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     });
     advance(&mut rt, 0.2);
     assert!(!element(&rt, "create-remote").focusable);
+    fill(&mut rt, "remote-branch", "main");
+    assert!(!element(&rt, "create-remote").focusable);
+    assert!(element(&rt, "vm-branch-error").visible[3] > 0.);
     fill(&mut rt, "remote-branch", "feat/remote-ui");
+    assert!(rt.find("vm-branch-error").is_none());
+    click(&mut rt, "vm-size-Large");
+    click(&mut rt, "vm-lifetime-Until stopped");
+    assert!(
+        element(&rt, "vm-lifetime-detail")
+            .text
+            .unwrap()
+            .contains("until you stop")
+    );
     let submit = element(&rt, "create-remote");
     assert_eq!(submit.label.as_deref(), Some("Create VM"));
     assert!(submit.focusable && submit.visible[3] >= 28.);
@@ -67,6 +110,8 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     assert_eq!(source.repository, "example/project");
     assert_eq!(source.base, "main");
     assert_eq!(plan.branch, "feat/remote-ui");
+    assert_eq!(plan.size, caelum_core::remote::Size::Large);
+    assert_eq!(plan.lifetime, caelum_core::remote::Lifetime::UntilStopped);
 
     let denied = "Create checkout environment: Boat returned HTTP 403. Automatic setup needs environment.write.";
     rt.update(|s, _| {

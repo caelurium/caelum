@@ -87,7 +87,14 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
             .w_full()
             .center_y()
             .gap(8.0)
-            .child(ui::caption(&h.title, k).truncate().min_w(0.0).grow(1.0))
+            .child(
+                rune::text(&h.title)
+                    .font(k.ty.ui_medium)
+                    .color(k.c.text_base)
+                    .truncate()
+                    .min_w(0.0)
+                    .grow(1.0),
+            )
             .children((l.panels.screen == Screen::Home).then(|| {
                 ui::Button::new("Change source…")
                     .variant(ButtonVariant::GhostMuted)
@@ -96,27 +103,32 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
             })),
     );
     match &h.phase {
-        HandoffPhase::Reading(_) => return body.child(ui::caption("Reading local chat…", k)),
+        HandoffPhase::Reading(_) => {
+            return body.child(ui::busy_text("Reading local chat…", k.ty.ui, k).role("status"));
+        }
         HandoffPhase::Checking(..) | HandoffPhase::Verified(..) => {
-            return body.child(ui::caption("Checking the session branch on origin…", k));
+            return body
+                .child(ui::busy_text("Checking the published branch…", k.ty.ui, k).role("status"));
         }
         HandoffPhase::Failed(error) => {
             let source = h.source();
-            return body.child(ui::caption(error, k).wrap()).child(
-                ui::Button::new("Reload VM setup")
-                    .on_press(move |s: &mut Workspace| begin(s, source))
-                    .build(k),
-            );
+            return body
+                .child(ui::notice("Couldn’t prepare the handoff", error, k).role("alert"))
+                .child(
+                    ui::Button::new("Reload VM setup")
+                        .on_press(move |s: &mut Workspace| begin(s, source))
+                        .build(k),
+                );
         }
         HandoffPhase::Ready(chat) => {
             let n = chat.messages.len();
             let summary = if chat.clipped {
-                format!("Taking the latest {n} messages and your draft. Earlier text stays local.")
+                format!("First send includes the latest {n} messages.")
             } else if n == 0 {
-                "Your draft will open in a new OpenCode conversation.".into()
+                "Your draft will be ready before you send.".into()
             } else {
                 format!(
-                    "Taking {n} chat {} and your unsent draft.",
+                    "First send includes {n} chat {}.",
                     if n == 1 { "message" } else { "messages" }
                 )
             };

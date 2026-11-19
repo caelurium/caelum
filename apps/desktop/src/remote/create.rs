@@ -5,7 +5,7 @@ use crate::{
     ui,
 };
 use caelum_core::remote::{Connection, Picker};
-use rune::{El, FileDialogOptions, ScrollSpec, Tx, col, row};
+use rune::{El, FileDialogOptions, ScrollSpec, Tx, col};
 use rune_kit::{ButtonVariant, Kit, ScrollBar};
 
 #[derive(Default)]
@@ -62,44 +62,43 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
             ))
             .child(super::connection(s, k));
     }
-    let Some(target) = &l.app.remote.picker else {
+    if l.app.remote.picker.is_none() {
         return projects(s, k);
-    };
-    let path = match target {
-        Picker::Loading { project, .. } | Picker::Failed { project, .. } => project,
-        Picker::Ready(source) => &source.project,
-    };
-    col()
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .gap(8.0)
-        .child(
-            row()
-                .w_full()
-                .center_y()
-                .gap(8.0)
-                .child(
-                    ui::caption(format!("Project · {path}"), k)
-                        .min_w(0.0)
-                        .grow(1.0)
-                        .truncate()
-                        .help(path),
-                )
-                .child(
-                    ui::Button::new("Change project…")
-                        .variant(ButtonVariant::GhostMuted)
-                        .on_press(|s: &mut Workspace| {
-                            let l = live_mut(s);
-                            l.app.remote.picker = None;
-                            l.remote.form = Default::default();
-                            l.remote.folders.reset();
-                        })
-                        .build(k)
-                        .key("change-vm-project"),
-                ),
-        )
-        .child(super::picker(s, k).grow(1.0).min_h(0.0))
+    }
+    super::picker(s, k)
+}
+
+pub(super) fn change_button(k: &Kit) -> El {
+    ui::Button::new("Change project…")
+        .variant(ButtonVariant::GhostMuted)
+        .on_press(|s: &mut Workspace| {
+            let l = live_mut(s);
+            l.app.remote.picker = None;
+            l.remote.form = Default::default();
+            l.remote.folders.reset();
+        })
+        .build(k)
+        .key("change-vm-project")
+}
+
+pub(crate) fn height(s: &Workspace) -> f32 {
+    let l = live(s);
+    if l.app.remote.inventory.is_none() {
+        return 222.0;
+    }
+    match &l.app.remote.picker {
+        None => 286.0,
+        Some(Picker::Ready(source)) => {
+            super::picker::existing_height(s, source).unwrap_or_else(|| {
+                if rune::memo::window_layout("shell").is_some_and(|r| r[2] < 520.) {
+                    420.0
+                } else {
+                    340.0
+                }
+            })
+        }
+        _ => 180.0,
+    }
 }
 
 fn projects(s: &Workspace, k: &Kit) -> El {
@@ -125,9 +124,15 @@ fn projects(s: &Workspace, k: &Kit) -> El {
         .gap(12.0)
         .child(ui::section(
             "Choose a project",
-            "The VM will start from a published branch of its GitHub repository.",
+            "Choose a local checkout with a GitHub origin.",
             k,
         ))
+        .children(
+            l.app
+                .projects
+                .is_empty()
+                .then(|| ui::caption("Open a project folder to get started.", k)),
+        )
         .child(
             col()
                 .w_full()
@@ -146,6 +151,7 @@ fn projects(s: &Workspace, k: &Kit) -> El {
                 .as_ref()
                 .map(|e| ui::caption(e, k).wrap().color(k.c.danger.fg)),
         )
+        .child(ui::divider(k))
         .child(
             ui::Button::new("Open project folder…")
                 .icon(&ui::FOLDER)

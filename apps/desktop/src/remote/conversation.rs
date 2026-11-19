@@ -319,7 +319,7 @@ pub(super) fn view(
             .grow(1.0)
             .truncate()
             .help(format!(
-                "OpenCode on {} · {}",
+                "Boat-managed OpenCode on {} · {}. Set the model in Boat → Agents & Proxying.",
                 c.title(),
                 branch.unwrap_or(&c.source.repository)
             ))

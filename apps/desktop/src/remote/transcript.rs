@@ -86,7 +86,7 @@ pub(super) fn view(
                         .color(k.c.text_base),
                 )
                 .child(ui::caption(
-                    format!("Send a message to work with OpenCode on {}.", c.title()),
+                    format!("Send a message to run OpenCode on {}. The model is set in Boat → Agents & Proxying.", c.title()),
                     k,
                 )),
         );

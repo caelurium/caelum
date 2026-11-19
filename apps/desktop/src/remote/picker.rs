@@ -1,3 +1,5 @@
+mod fields;
+
 use crate::{
     Workspace,
     live::{live, live_mut},
@@ -8,9 +10,10 @@ use caelum_core::{
     application::VmDestination,
     remote::{Lifetime, Picker, Size, Source, valid_branch},
 };
-use rune::{El, ScrollSpec, TextEdit, col, row};
-use rune_kit::{Kit, ScrollBar};
+use rune::{El, ScrollSpec, TextEdit, col, icon, row, text};
+use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
+#[derive(Default)]
 pub(super) struct Form {
     base: TextEdit,
     branch: TextEdit,
@@ -19,20 +22,42 @@ pub(super) struct Form {
     tab: Tab,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq)]
 enum Tab {
+    #[default]
     Existing,
     New,
 }
 
-impl Default for Form {
-    fn default() -> Self {
-        Self {
-            base: TextEdit::default(),
-            branch: TextEdit::default(),
-            size: Size::Standard,
-            lifetime: Lifetime::default(),
-            tab: Tab::Existing,
+impl Form {
+    fn base<'a>(&'a self, source: &'a Source) -> &'a str {
+        if self.base.text.is_empty() {
+            &source.base
+        } else {
+            &self.base.text
+        }
+    }
+
+    fn branch_error(&self, source: &Source) -> Option<&'static str> {
+        let branch = self.branch.text.as_str();
+        if branch.is_empty() {
+            None
+        } else if !valid_branch(branch) {
+            Some("Enter a valid Git branch name.")
+        } else if branch == self.base(source) {
+            Some("Use a different name from the starting branch.")
+        } else {
+            None
+        }
+    }
+
+    fn ready(&self, source: &Source, handoff: bool) -> bool {
+        if handoff {
+            source.published_tip.is_some() && valid_branch(&source.base)
+        } else {
+            valid_branch(self.base(source))
+                && !self.branch.text.is_empty()
+                && self.branch_error(source).is_none()
         }
     }
 }
@@ -48,199 +73,193 @@ pub(crate) fn open(s: &mut Workspace, project: String) {
 
 pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let mut body = col().w_full().gap(8.0);
+    let screen = l.panels.overlay;
+    let standalone = screen == Some(Screen::CreateVm);
+    let handoff = screen == Some(Screen::VmHandoff);
     let source = match &l.app.remote.picker {
         Some(Picker::Ready(source)) => source,
         Some(Picker::Failed { project, error }) => {
             let project = project.clone();
-            return body.child(ui::caption(error, k).wrap()).child(
-                row()
-                    .gap(8.0)
-                    .child(
-                        ui::Button::new("Connection settings")
-                            .on_press(|s: &mut Workspace| {
-                                let l = live_mut(s);
-                                l.panels.settings_page = crate::settings::Page::Remote;
-                                l.panels.overlay = Some(Screen::Settings);
-                            })
-                            .build(k),
-                    )
-                    .child(
-                        ui::Button::new("Retry")
-                            .on_press(move |s: &mut Workspace| {
-                                live_mut(s).app.remote_picker(project.clone())
-                            })
-                            .build(k),
-                    ),
-            );
-        }
-        _ => return body.child(ui::caption("Looking up the project on Boat…", k)),
-    };
-    let handoff = l.panels.overlay == Some(Screen::VmHandoff);
-    if handoff && has_machines(s, source) {
-        let existing = l.remote.form.tab == Tab::Existing;
-        body = body.child(
-            row()
-                .gap(6.0)
+            return col()
+                .w_full()
+                .gap(12.0)
+                .child(ui::notice("Couldn’t open this repository on Boat", error, k).role("alert"))
                 .child(
-                    ui::tab("Existing VM", existing, k)
+                    row()
+                        .w_full()
+                        .center_y()
+                        .flex_wrap()
+                        .gap(6.0)
+                        .child(
+                            ui::Button::new("Retry")
+                                .icon(&ui::REFRESH)
+                                .on_press(move |s: &mut Workspace| {
+                                    live_mut(s).app.remote_picker(project.clone())
+                                })
+                                .build(k),
+                        )
+                        .children(standalone.then(|| super::create::change_button(k)))
+                        .child(
+                            ui::Button::new("Connection settings")
+                                .variant(ButtonVariant::GhostMuted)
+                                .on_press(|s: &mut Workspace| {
+                                    let l = live_mut(s);
+                                    l.panels.settings_page = crate::settings::Page::Remote;
+                                    l.panels.overlay = Some(Screen::Settings);
+                                })
+                                .build(k),
+                        ),
+                );
+        }
+        _ => {
+            return col()
+                .w_full()
+                .gap(8.0)
+                .child(
+                    ui::busy_text("Looking up the repository on Boat…", k.ty.ui, k).role("status"),
+                )
+                .children(standalone.then(|| super::create::change_button(k)));
+        }
+    };
+
+    let tabs = !standalone && has_machines(s, source);
+    let existing = tabs && l.remote.form.tab == Tab::Existing;
+    let mut pane = col().w_full().h_full().min_h(0.0).gap(8.0);
+    if tabs {
+        pane = pane.child(
+            row()
+                .role("tablist")
+                .label("VM destination")
+                .gap(4.0)
+                .child(
+                    ui::highlighted_tab("Existing VM", existing, k)
                         .key("handoff-existing-vm")
                         .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::Existing),
                 )
                 .child(
-                    ui::tab("New VM", !existing, k)
+                    ui::highlighted_tab("New VM", !existing, k)
                         .key("handoff-new-vm")
                         .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::New),
                 ),
         );
-        if existing {
-            return scroll(
-                body.child(ui::section(
-                    &source.repository,
-                    &format!("Choose a checkout containing origin/{}.", source.base),
-                    k,
-                ))
-                .child(machines(s, k, source, true)),
-                k,
-            );
-        }
     }
-    let form = &l.remote.form;
-    let base = if handoff || form.base.text.is_empty() {
-        &source.base
-    } else {
-        &form.base.text
-    };
-    body = body.child(ui::section(
-        &source.repository,
-        &source.environment.as_ref().map_or_else(
-            || "Create a Boat environment for this repository (needs environment.write).".into(),
-            |name| format!("Use the {name} environment on Boat."),
-        ),
-        k,
-    ));
-    let hint = if handoff {
-        body = body.child(
-            ui::caption(format!("Session branch · {}", source.base), k)
-                .key("handoff-base")
-                .wrap(),
-        );
-        (source.published_tip.is_none() || !valid_branch(base))
-            .then_some("The session branch must be published to origin.")
-    } else {
-        body = body
-            .child(
-                col()
-                    .w_full()
-                    .gap(4.0)
-                    .child(ui::caption("Base branch", k))
-                    .child(
-                        ui::field(&form.base, "Base branch", &source.base, k)
-                            .key("remote-base")
-                            .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.base),
-                    ),
-            )
-            .child(ui::caption("New branch on VM", k))
-            .child(
-                ui::field(&form.branch, "New branch", "Enter a branch name", k)
-                    .key("remote-branch")
-                    .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.branch),
-            );
-        if form.branch.text.is_empty() {
-            Some("Enter a new branch name, such as feat/my-change.")
-        } else if !valid_branch(base) {
-            Some("Choose a valid published base branch.")
-        } else if !valid_branch(&form.branch.text) || form.branch.text == *base {
-            Some("Choose a valid new branch name different from the base.")
-        } else {
-            None
-        }
-    };
-    let mut sizes = row().center_y().gap(4.0).child(ui::caption("Size", k));
-    for (name, size) in [
-        ("Small", Size::Small),
-        ("Standard", Size::Standard),
-        ("Large", Size::Large),
-        ("XL", Size::Xlarge),
-    ] {
-        sizes = sizes.child(
-            ui::tab(name, form.size == size, k)
-                .on_press(move |s: &mut Workspace| live_mut(s).remote.form.size = size),
-        );
-    }
-    let mut ttl = row()
+    let mut settings = col()
         .w_full()
-        .flex_wrap()
-        .center_y()
-        .gap(4.0)
-        .child(ui::caption("Auto-stop", k));
-    for lifetime in Lifetime::CHOICES {
-        ttl = ttl.child(
-            ui::tab(lifetime.label(), form.lifetime == lifetime, k)
-                .key(format!("vm-lifetime-{}", lifetime.label()))
-                .on_press(move |s: &mut Workspace| live_mut(s).remote.form.lifetime = lifetime),
-        );
+        .gap(12.0)
+        .child(repository(source, standalone, existing, k));
+    if existing {
+        settings = settings.child(machines(s, k, source, handoff));
+    } else {
+        settings = settings
+            .child(fields::checkout(s, k, source, handoff))
+            .child(fields::machine(s, k));
     }
-    let base = base.clone();
-    let note = match form.lifetime {
-        Lifetime::UntilStopped => {
-            "Runs and bills until you stop the VM. Requires a paid Boat plan."
-        }
-        Lifetime::Day | Lifetime::EightHours => {
-            "Paid plan. Active or waiting OpenCode prompts renew the timer; standalone commands don’t."
-        }
-        _ => "Active or waiting OpenCode prompts renew the timer; standalone commands don’t.",
-    };
-    body = body
-        .child(sizes)
-        .child(ttl)
-        .child(ui::caption(note, k).wrap())
-        .child(
-            row()
-                .w_full()
-                .gap(10.0)
-                .center_y()
-                .child(
-                    ui::Button::new("Create VM")
-                        .variant(rune_kit::ButtonVariant::Contrast)
-                        .disabled(hint.is_some())
-                        .on_press(move |s: &mut Workspace| {
-                            let l = live_mut(s);
-                            let f = &l.remote.form;
-                            if handoff {
-                                l.app.confirm_vm_handoff(VmDestination::Create {
-                                    size: f.size,
-                                    lifetime: f.lifetime,
-                                });
-                                l.schedule();
-                            } else if l
-                                .app
-                                .create_remote(&base, &f.branch.text, f.size, f.lifetime)
-                                .is_some()
-                            {
-                                super::checkout::enter(s);
-                            }
-                        })
-                        .build(k)
-                        .key("create-remote"),
-                )
-                .children(hint.map(|text| ui::caption(text, k).grow(1.0).min_w(0.0).wrap())),
-        );
-    if l.panels.overlay == Some(Screen::RemotePicker) {
-        body = body.child(machines(s, k, source, false));
+    pane = pane.child(
+        col()
+            .key("vm-settings-scroll")
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(settings)
+            .scroll_bar(k),
+    );
+    if existing {
+        return pane;
     }
-    scroll(body, k)
+
+    let owner = source.clone();
+    pane.child(ui::divider(k)).child(
+        row()
+            .key("vm-create-footer")
+            .w_full()
+            .gap(8.0)
+            .center_y()
+            .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted))
+            .child(
+                ui::caption("OpenCode · Boat default", k)
+                    .truncate()
+                    .min_w(0.0)
+                    .grow(1.0)
+                    .help("Set the remote model in Boat → Agents & Proxying."),
+            )
+            .child(
+                ui::Button::new("Create VM")
+                    .variant(ButtonVariant::Contrast)
+                    .disabled(!l.remote.form.ready(source, handoff))
+                    .on_press(move |s: &mut Workspace| submit(s, &owner, screen))
+                    .build(k)
+                    .key("create-remote"),
+            ),
+    )
 }
 
-fn scroll(body: El, k: &Kit) -> El {
-    col()
-        .h_full()
+fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
+    let l = live_mut(s);
+    let handoff = screen == Some(Screen::VmHandoff);
+    if l.panels.overlay != screen
+        || !matches!(&l.app.remote.picker,Some(Picker::Ready(source)) if source==owner)
+        || !l.remote.form.ready(owner, handoff)
+    {
+        return;
+    }
+    let f = &l.remote.form;
+    if handoff {
+        l.app.confirm_vm_handoff(VmDestination::Create {
+            size: f.size,
+            lifetime: f.lifetime,
+        });
+        l.schedule();
+    } else if l
+        .app
+        .create_remote(f.base(owner), &f.branch.text, f.size, f.lifetime)
+        .is_some()
+    {
+        super::checkout::enter(s);
+    }
+}
+
+fn repository(source: &Source, standalone: bool, existing: bool, k: &Kit) -> El {
+    let environment = if existing {
+        "GitHub repository".into()
+    } else {
+        source.environment.as_ref().map_or_else(
+            || "Creates a new Boat environment".into(),
+            |name| format!("Boat environment · {name}"),
+        )
+    };
+    row()
+        .key("vm-repository")
         .w_full()
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(body)
-        .scroll_bar(k)
+        .center_y()
+        .gap(9.0)
+        .child(
+            row()
+                .size(32.0, 32.0)
+                .center()
+                .radius(7.0)
+                .fill(k.c.layer_02)
+                .child(icon(&ui::FOLDER, 16.0).color(k.c.icon_muted)),
+        )
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(2.0)
+                .child(
+                    text(&source.repository)
+                        .font(k.ty.ui_medium)
+                        .color(k.c.text_base)
+                        .truncate()
+                        .help(&source.project),
+                )
+                .child(ui::caption(&environment, k).truncate().help(if !existing && source.environment.is_none() {
+                    "Creating this repository’s environment requires environment.write on the Boat key."
+                } else { &environment })),
+        )
+        .children(standalone.then(|| super::create::change_button(k)))
 }
 
 fn has_machines(s: &Workspace, source: &Source) -> bool {
@@ -252,51 +271,107 @@ fn has_machines(s: &Workspace, source: &Source) -> bool {
         .is_some_and(|i| i.machines.iter().any(|m| m.key.account == source.account))
 }
 
+pub(super) fn existing_height(s: &Workspace, source: &Source) -> Option<f32> {
+    let l = live(s);
+    if l.panels.overlay != Some(Screen::RemotePicker) || l.remote.form.tab != Tab::Existing {
+        return None;
+    }
+    let count = l
+        .app
+        .remote
+        .inventory
+        .as_ref()?
+        .machines
+        .iter()
+        .filter(|m| m.key.account == source.account)
+        .take(5)
+        .count();
+    (count > 0).then_some(144. + (count as f32) * 56.)
+}
+
 pub(crate) fn handoff_height(s: &Workspace) -> f32 {
     let l = live(s);
     if l.app.vm_handoff().is_none() || l.app.remote.inventory.is_none() {
-        return 256.0;
+        return 270.0;
     }
     if let Some(Picker::Ready(source)) = &l.app.remote.picker
         && has_machines(s, source)
         && l.remote.form.tab == Tab::Existing
     {
-        return 280.0;
+        return 296.0;
     }
-    400.0
+    436.0
 }
 
 fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
     let app = &live(s).app;
-    let mut list = col().w_full().gap(4.0);
-    let Some(inventory) = &app.remote.inventory else {
-        return list;
+    let detail = if handoff {
+        format!(
+            "The checkout must contain the published commit from origin/{}.",
+            source.base
+        )
+    } else {
+        "Open this repository on the VM’s current branch.".into()
     };
-    let mut machines = inventory
-        .machines
+    let mut list = col().w_full().gap(6.0).child(ui::caption(detail, k).wrap());
+    for machine in app
+        .remote
+        .inventory
         .iter()
+        .flat_map(|i| &i.machines)
         .filter(|m| m.key.account == source.account)
-        .peekable();
-    if !handoff && machines.peek().is_some() {
-        list = list.child(ui::caption("Use an existing VM", k));
-    }
-    for m in machines {
-        let machine = m.clone();
-        let blocker = handoff.then(|| app.handoff_machine_blocker(m)).flatten();
+    {
+        let blocker = handoff
+            .then(|| app.handoff_machine_blocker(machine))
+            .flatten();
+        let detail = blocker
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{} · {}", machine.state, machine.key.id));
+        let owner = machine.clone();
         list = list.child(
-            ui::Button::new(format!("{} · {}", m.name, blocker.unwrap_or(&m.state)))
-                .disabled(blocker.is_some())
-                .on_press(move |s: &mut Workspace| {
-                    let app = &mut live_mut(s).app;
-                    if handoff {
-                        app.confirm_vm_handoff(VmDestination::Existing(machine.clone()));
-                        live_mut(s).schedule();
-                    } else if app.attach_remote(machine.clone()).is_some() {
-                        super::checkout::enter(s);
-                    }
-                })
-                .build(k)
-                .key(format!("attach-vm-{}", m.key.id)),
+            k.interactive(
+                row()
+                    .w_full()
+                    .min_h(44.0)
+                    .px(10.0)
+                    .py(6.0)
+                    .center_y()
+                    .gap(9.0)
+                    .radius(7.0)
+                    .border(1.0, k.c.border_base)
+                    .child(icon(&ui::SERVER, 15.0).color(k.c.icon_muted))
+                    .child(
+                        col()
+                            .min_w(0.0)
+                            .grow(1.0)
+                            .gap(2.0)
+                            .child(
+                                text(&machine.name)
+                                    .font(k.ty.ui_medium)
+                                    .color(k.c.text_base)
+                                    .truncate(),
+                            )
+                            .child(ui::caption(&detail, k).wrap()),
+                    )
+                    .child(icon(&glyphs::ARROW_RIGHT, 13.0).color(k.c.icon_muted)),
+            )
+            .role("button")
+            .label(&machine.name)
+            .description(&detail)
+            .disabled(blocker.is_some())
+            .focusable(blocker.is_none())
+            .focus_ring(1.5, 0.0, k.c.border_focus)
+            .key(format!("attach-vm-{}", machine.key.id))
+            .on_press(move |s: &mut Workspace| {
+                let l = live_mut(s);
+                if handoff {
+                    l.app
+                        .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
+                    l.schedule();
+                } else if l.app.attach_remote(owner.clone()).is_some() {
+                    super::checkout::enter(s);
+                }
+            }),
         );
     }
     list

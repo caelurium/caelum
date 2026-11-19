@@ -3,8 +3,8 @@
 A remote machine has its own Git checkout and disk. Caelum sends messages to
 [Boat’s integrated OpenCode harness](https://docs.boat.dev/platform-guide/agents.md).
 Set the OpenCode model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
-Caelum uses that Boat default on every remote prompt; the local model, reasoning
-effort and Build/Plan/custom-agent selections do not transfer. There is no
+Caelum leaves model selection to Boat on every remote prompt. The local model,
+reasoning effort and primary agent (Build, Plan or custom) do not transfer. There is no
 Caelum agent or OpenCode server to install on the VM.
 
 ## Create or attach a checkout
@@ -15,14 +15,18 @@ Caelum agent or OpenCode server to install on the VM.
    **Connect Boat**. The key is stored in Keychain or Linux Secret Service.
 2. Click **Create VM…** in **Settings → Remote machines** or **New session**.
    Use the current project, choose another, or open a project folder with a GitHub `origin`.
-3. Choose a published base (defaults to the origin default branch, or `main`),
-   type a **new branch** name, choose size and auto-stop, and click **Create VM**.
+3. **Start from** defaults to the published origin default branch, or `main`.
+   Enter a different **New branch on VM** name, choose the [machine size](https://docs.boat.dev/machines.md)
+   and auto-stop, then click **Create VM**. Creation prepares the checkout;
+   your first **Send** starts the conversation.
    Caelum provisions the repository using a compatible single-repo
    environment or creates a dedicated one. Unpublished commits, staged changes
    and files on your laptop stay there.
 
+![Create VM with a published base, a new working branch and the selected machine size](design/previews/rune-light-remote-create-ready-small.png)
+
 To attach instead, right-click a project, choose **Open on remote machine…**,
-and select an existing machine. It must have a
+and choose the machine under **Existing VM**. It must have a
 current single-repo environment for the project's GitHub origin. **Resume** a
 stopped machine to use its saved disk; attaching keeps its current branch.
 If setup fails, **Refresh checkout** retries that checkout on the same machine.
@@ -60,6 +64,8 @@ its published commit on `origin`. The name is shown for reference; there’s
 nothing to enter. An existing VM keeps its branch and must already contain the
 published commit.
 
+![Handoff showing the session’s published commit and options for a new VM](design/previews/rune-dark-remote-handoff-new-small.png)
+
 Choose an existing VM, or choose the size and auto-stop time and click
 **Create VM**. While Boat prepares the checkout, a progress card takes the
 place of the message editor. The editor returns with a copy of your unsent draft.
@@ -73,15 +79,16 @@ reasoning, attachments and unpublished Git work stay local.
 
 ## Work on the VM
 
-Send a message from the remote composer. **Stop** interrupts
-that OpenCode conversation. Reopen Caelum or select the machine's sidebar row
-to continue the same thread. If Boat may have accepted a prompt but the
+Send a message from the remote composer. Reopen Caelum or select the machine’s
+sidebar row to continue the same thread. If Boat may have accepted a prompt but the
 acknowledgement was lost, check Boat and reconnect using the prompt ID.
 
 The composer shows queued turns, streaming replies and tool activity from the
 selected Boat conversation. If you used the earlier direct-OpenCode preview,
 its VM transcript and draft stay available for reference. Your next explicit
 send starts a managed conversation; opening the checkout does not replay a turn.
+Caelum no longer contacts the preview service. If one is still running on an
+old VM, stopping that VM ends its detached process.
 
 Find the checkout under **Remote VMs** in the project sidebar. **Stop** in the
 composer interrupts just the selected turn. **Stop machine** keeps the disk

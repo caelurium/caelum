@@ -18,6 +18,7 @@ pub(crate) use checkout::enter;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
 pub(crate) use create::button as create_button;
+pub(crate) use create::height as create_height;
 pub(crate) use create::view as create_view;
 pub(crate) use handoff::button as handoff_button;
 pub(crate) use picker::{open, picker};

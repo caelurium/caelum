@@ -33,13 +33,16 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, padding: f32)
     let detail = match job {
         Some(Job::Failed(e)) => e.as_str(),
         _ => match &c.phase {
-            Phase::Create(_) => "Boat is setting up a machine for this repository.",
+            Phase::Create(_) => "The editor will open when your VM and its branch are ready.",
+            Phase::Prepare { machine, .. } if machine.state == "cloning" => {
+                "Boat is fetching the repository from GitHub."
+            }
             Phase::Prepare { machine, .. }
                 if matches!(machine.state.as_str(), "stopped" | "archived") =>
             {
                 "Resume the machine to finish opening this checkout."
             }
-            _ => "Your message editor will be ready when the checkout opens.",
+            _ => "Caelum is checking the repository and branch before opening the editor.",
         },
     };
     let max_height =
