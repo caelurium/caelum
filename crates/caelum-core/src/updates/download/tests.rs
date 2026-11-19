@@ -4,7 +4,11 @@ use std::{io::Read, net::TcpListener, sync::Arc, thread};
 
 #[test]
 fn checksums_are_exact_unambiguous_and_validate_streamed_bytes() {
-    let hash = format!("{:x}", Sha256::digest(b"payload"));
+    let hash = sha256_hex(&Sha256::digest(b"payload"));
+    assert_eq!(
+        hash,
+        "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+    );
     for separator in ["  ", " *"] {
         assert_eq!(
             checksum(&format!("{hash}{separator}asset\n"), "asset").unwrap(),
@@ -99,7 +103,7 @@ fn downloads_and_verifies_a_real_http_response() {
     let url = format!("http://{}", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
         for body in [
-            format!("{:x}  asset\n", Sha256::digest(b"payload")),
+            format!("{}  asset\n", sha256_hex(&Sha256::digest(b"payload"))),
             "payload".into(),
         ] {
             let (mut stream, _) = listener.accept().unwrap();
