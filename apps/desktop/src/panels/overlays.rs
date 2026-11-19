@@ -109,7 +109,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         }
         Screen::Launcher => (
             "New session",
-            "Choose a project and provider.",
+            "Choose a provider and where the session runs.",
             launcher(s, k),
         ),
         _ => return,

@@ -217,12 +217,7 @@ impl Workspace {
         if machine.key.account != source.account {
             return Some("This VM belongs to another Boat account.");
         }
-        let (id, c) = self
-            .remote
-            .saved
-            .checkouts
-            .iter()
-            .find(|(_, c)| c.machine().is_some_and(|m| m.key == machine.key))?;
+        let (id, c) = self.registered_checkout(&machine.key)?;
         if !c.source.repository.eq_ignore_ascii_case(&source.repository) {
             Some("This VM has a different repository.")
         } else {

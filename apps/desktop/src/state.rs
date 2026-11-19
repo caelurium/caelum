@@ -166,6 +166,17 @@ impl Workspace {
 
     pub fn new_session(&mut self) {
         if let Some(live) = &mut self.live {
+            if live.panels.screen == crate::panels::Screen::Remote {
+                if let Some(id) = live.app.remote.saved.selected.clone()
+                    && live.panels.overlay.is_none()
+                    && live.app.can_start_vm_session(&id)
+                {
+                    crate::remote::new_session(self, &id);
+                } else {
+                    crate::panels::open_launcher(self);
+                }
+                return;
+            }
             live.new_session();
             return;
         }

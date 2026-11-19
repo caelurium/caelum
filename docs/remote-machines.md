@@ -89,6 +89,12 @@ New session on this VM**, or right-click the VM in the sidebar. The previous cha
 unsent draft stay in **Conversations…**. The new session shares the VM’s files
 and branch, but starts with an empty chat. Only **Send** creates its Boat conversation.
 
+You can also open **New session** (**⇧⌘N**), choose a provider, and select a
+checkout under the project’s **Remote VMs**. Search by VM name, repository or
+branch. From an open, idle VM, **⌘N** starts a fresh session with its current provider.
+
+![New session with Codex selected and a ready Boat VM listed under its project](design/previews/rune-dark-vm-session-launcher-small.png)
+
 To switch providers in an existing chat, finish the current turn, then choose
 **Codex** or **OpenCode** in the VM composer. The next **Send** uses that provider
 in the same [Boat conversation](https://docs.boat.dev/integrated-agents/conversations.md#switch-harness-or-model-in-a-conversation).

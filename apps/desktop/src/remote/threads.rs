@@ -16,7 +16,16 @@ pub(super) fn button(k: &Kit) -> El {
 }
 
 pub(crate) fn start(s: &mut Workspace, id: &str) {
-    if live_mut(s).app.new_vm_session(id) {
+    let l = live_mut(s);
+    let Some(c) = l.app.remote.saved.checkouts.get(id) else {
+        return;
+    };
+    let provider = if l.panels.overlay == Some(Screen::Launcher) {
+        l.panels.launch_provider
+    } else {
+        c.thread.provider
+    };
+    if l.app.new_vm_session(id, provider) {
         super::checkout::enter(s);
     }
 }

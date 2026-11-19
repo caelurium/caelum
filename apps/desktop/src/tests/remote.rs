@@ -141,6 +141,61 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
 }
 
 #[test]
+fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
+    use crate::live::{live, live_mut};
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| {
+        crate::remote::scene(s, "remote-settings");
+        crate::panels::open_launcher(s);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "open-create-vm");
+    let publish_source = |rt: &mut Runtime<Workspace>| {
+        rt.update(|s, _| {
+            let l = live_mut(s);
+            let (r, project) = l
+                .app
+                .commands()
+                .into_iter()
+                .find_map(|(r, op)| match op {
+                    Command::Remote(Operation::Discover(p)) => Some((r, p)),
+                    _ => None,
+                })
+                .unwrap();
+            l.apply(Event::Completed(
+                r,
+                Ok(Reply::Remote(Outcome::Source(Source {
+                    project,
+                    account: "example-account".into(),
+                    repository: "example/project".into(),
+                    base: "main".into(),
+                    published_tip: None,
+                    environment: None,
+                }))),
+            ));
+        });
+        advance(rt, 0.2);
+    };
+    publish_source(&mut rt);
+    click(&mut rt, "change-vm-project");
+    let project = &live(&rt.state).app.projects[0].path;
+    let choice = crate::code_view::source_key(project, "vm-project");
+    click(&mut rt, &choice);
+    publish_source(&mut rt);
+    fill(&mut rt, "remote-branch", "feature/launcher");
+    click(&mut rt, "create-remote");
+    let app = &mut live_mut(&mut rt.state).app;
+    let c = &app.remote.saved.checkouts[app.remote.saved.selected.as_ref().unwrap()];
+    assert_eq!(c.thread.provider, Provider::Codex);
+    assert!(c.thread.conversation.is_none());
+    assert!(matches!(
+        app.commands().as_slice(),
+        [(_, Command::Remote(Operation::Create(..)))]
+    ));
+}
+
+#[test]
 fn launcher_create_vm_can_connect_and_choose_a_folder_from_an_empty_workspace() {
     let mut rt = design_runtime("", (800., 620.));
     rt.update(|s, _| {

@@ -472,7 +472,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     let i = local(&mut app);
     let m = machine("vm");
     app.remote.picker = Some(Picker::Ready(source()));
-    let id = app.attach_remote(m.clone()).unwrap();
+    let id = app.attach_remote(m.clone(), None).unwrap();
     let (req, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(
         req,

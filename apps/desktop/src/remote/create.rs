@@ -35,8 +35,8 @@ pub(crate) fn button(k: &Kit) -> El {
 fn open(s: &mut Workspace) {
     let l = live_mut(s);
     l.app.dismiss_vm_handoff();
+    l.remote.form = super::picker::Form::for_entry(l);
     l.panels.overlay = Some(Screen::CreateVm);
-    l.remote.form = Default::default();
     l.remote.folders.reset();
     l.app.remote.picker = None;
     if l.app.remote.inventory.is_some() {
@@ -74,7 +74,7 @@ pub(super) fn change_button(k: &Kit) -> El {
         .on_press(|s: &mut Workspace| {
             let l = live_mut(s);
             l.app.remote.picker = None;
-            l.remote.form = Default::default();
+            l.remote.form.reset_project();
             l.remote.folders.reset();
         })
         .build(k)

@@ -1,6 +1,6 @@
 use super::Workspace;
 use crate::application::Provider;
-use crate::remote::{Job, Phase, Thread, Turn};
+use crate::remote::{Job, Machine, Phase, Thread, Turn};
 
 impl Workspace {
     pub fn can_switch_vm_thread(&self, id: &str) -> bool {
@@ -28,16 +28,26 @@ impl Workspace {
             && matches!(self.remote.saved.checkouts[id].phase, Phase::Ready { .. })
     }
 
+    pub fn vm_session_machine_blocker(&self, machine: &Machine) -> Option<&'static str> {
+        self.handoff_machine_blocker(machine).or_else(|| {
+            let (_, c) = self.registered_checkout(&machine.key)?;
+            (!matches!(c.phase, Phase::Ready { .. }))
+                .then_some("Prepare or resume this VM before starting a session.")
+        })
+    }
+
     /// Opening a blank editor never submits a prompt or changes the VM branch.
-    pub fn new_vm_session(&mut self, id: &str) -> bool {
+    pub fn new_vm_session(&mut self, id: &str, provider: Provider) -> bool {
         if !self.can_start_vm_session(id) {
             return false;
         }
         let c = self.remote.saved.checkouts.get_mut(id).unwrap();
-        if !c.thread.is_blank() {
+        if c.thread.is_blank() {
+            c.thread.provider = provider;
+        } else {
             c.open_thread(Thread {
                 local_id: Some(uuid::Uuid::new_v4().to_string()),
-                provider: c.thread.provider,
+                provider,
                 ..Default::default()
             });
         }

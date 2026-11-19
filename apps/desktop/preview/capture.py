@@ -11,6 +11,7 @@ import time
 root = Path(__file__).resolve().parents[3]
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
+    "vm-session-launcher": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True, "shift": True}, {"t": 0.5, "key": "launch-provider-codex"}]),
     "remote-provider": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.35, "key": "vm-provider-trigger"}]),
     "remote-sessions": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.25, "key": "vm-threads"}, {"t": 0.45, "key": "new-vm-session"}, {"t": 0.7, "key": "vm-threads"}]),
     "remote-create-ready": ("remote-create", [{"t": 0.25, "key": "remote-branch"}, {"t": 0.4, "paste": "feat/health-check"}]),

@@ -42,8 +42,10 @@ When there is no pending input, **PR #… · Changes requested** links directly 
 review feedback on a branch that session worked on. Use **Back to session** to
 return to the conversation and its draft.
 
-**⇧⌘N** opens the project/provider launcher; **⌘N** reuses that project's
-draft for the default provider chosen in Settings. Each session retains an
+**⇧⌘N** opens the launcher for local projects, worktrees and ready [Boat VMs](remote-machines.md).
+Choose the provider and destination for the new session. **⌘N** reuses a local
+project’s draft for the default provider chosen in Settings; on an idle VM it
+starts a fresh chat on that checkout with the current provider. Each session retains an
 independent draft and reading position. Hover a
 session to close it with **×**. A temporary notice names the archived session and
 offers **Undo**; it expires after eight unengaged seconds and pauses while hovered,
@@ -52,8 +54,8 @@ custom context menus also offer archive/reconnect. Hover any session row for its
 **…** popover; actions belong to that row, including background sessions. Escape
 returns focus to its button. Use the archive icon beside
 **Sessions** to switch between active and archived sessions. The **+** beside
-**Sessions**, just before the archive icon, starts a session with the default
-provider chosen in Settings → Providers. **Refresh sessions** reloads active
+**Sessions**, just before the archive icon, does the same as **⌘N**.
+**Refresh sessions** reloads active
 session history and model, effort and agent catalogues across all open
 projects and their worktrees, including catalogues for drafts and busy sessions.
 

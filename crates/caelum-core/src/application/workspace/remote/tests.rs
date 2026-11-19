@@ -18,7 +18,13 @@ fn source() -> Source {
 fn created(app: &mut Workspace) -> (String, u64, Plan) {
     app.remote.picker = Some(Picker::Ready(source()));
     let id = app
-        .create_remote("main", "feat/new", Size::Small, Lifetime::HalfHour)
+        .create_remote(
+            "main",
+            "feat/new",
+            Size::Small,
+            Lifetime::HalfHour,
+            crate::application::Provider::OpenCode,
+        )
         .unwrap();
     let (req, Command::Remote(Operation::Create(_, plan))) = app.commands().pop().unwrap() else {
         panic!()
@@ -36,6 +42,67 @@ fn machine(id: &str) -> Machine {
         state: "idle".into(),
         auto_stop_unix: None,
     }
+}
+
+#[test]
+fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout() {
+    use crate::application::Provider;
+    let mut app = Workspace::default();
+    let vm = machine("vm");
+    app.remote.inventory = Some(Inventory {
+        account: vm.key.account.clone(),
+        machines: vec![vm.clone()],
+    });
+    let attach = |app: &mut Workspace, provider| {
+        app.remote.picker = Some(Picker::Ready(source()));
+        app.attach_remote(vm.clone(), provider)
+    };
+    let prepared = |app: &mut Workspace| {
+        let cmds = app.commands();
+        let [(req, Command::Remote(Operation::Prepare(t, _, None)))] = cmds.as_slice() else {
+            panic!("{cmds:?}")
+        };
+        assert_eq!(t.machine, vm.key);
+        app.apply(Event::Completed(
+            *req,
+            Ok(Reply::Remote(Outcome::Prepared(
+                vm.clone(),
+                "existing".into(),
+            ))),
+        ));
+    };
+    let id = attach(&mut app, Some(Provider::Codex)).unwrap();
+    assert_eq!(
+        app.remote.saved.checkouts[&id].thread.provider,
+        Provider::Codex
+    );
+    assert!(attach(&mut app, Some(Provider::OpenCode)).is_none());
+    prepared(&mut app);
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .draft = "Unsent".into();
+    assert_eq!(attach(&mut app, None), Some(id.clone()));
+    prepared(&mut app);
+    let original = app.remote.saved.checkouts[&id].thread.clone();
+    assert_eq!(original.draft, "Unsent");
+    assert_eq!(original.provider, Provider::Codex);
+    app.remote.picker = Some(Picker::Ready(Source {
+        repository: "example/different".into(),
+        ..source()
+    }));
+    assert!(app
+        .attach_remote(vm.clone(), Some(Provider::OpenCode))
+        .is_none());
+    assert_eq!(attach(&mut app, Some(Provider::OpenCode)), Some(id.clone()));
+    let c = &app.remote.saved.checkouts[&id];
+    assert_eq!(c.thread.provider, Provider::OpenCode);
+    assert!(c.thread.draft.is_empty() && c.thread.conversation.is_none());
+    assert_eq!(c.other_threads, vec![original]);
+    assert!(app.commands().is_empty());
 }
 
 #[test]

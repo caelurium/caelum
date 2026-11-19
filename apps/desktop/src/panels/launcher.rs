@@ -12,8 +12,13 @@ pub fn open_launcher(s: &mut Workspace) {
     let l = live_mut(s);
     l.panels.launch_provider = l
         .app
+        .remote
+        .saved
         .selected
-        .map(|i| l.app.sessions[i].scope.provider)
+        .as_ref()
+        .and_then(|id| l.app.remote.saved.checkouts.get(id))
+        .map(|c| c.thread.provider)
+        .or_else(|| l.app.selected.map(|i| l.app.sessions[i].scope.provider))
         .unwrap_or(l.app.preferences.default_provider);
     l.panels.overlay = Some(Screen::Launcher);
     l.commands.search.clear();
@@ -38,8 +43,8 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
     body = body.child(providers).child(
         ui::field(
             &l.commands.search,
-            "Find project",
-            "Find a project or worktree…",
+            "Find session destination",
+            "Find a project, worktree or VM…",
             k,
         )
         .edit_menu("launch-search", |s| Some(&mut live_mut(s).commands.search)),
@@ -69,7 +74,8 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
                     .contains(&query)
             })
             .collect();
-        if !matches_project && trees.is_empty() {
+        let vms = crate::remote::launcher_group(s, k, &project.path, &query, matches_project);
+        if !matches_project && trees.is_empty() && vms.is_none() {
             continue;
         }
         let path = project.path.clone();
@@ -80,7 +86,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
             .w_full()
             .gap(2.0)
             .role("group")
-            .label(format!("{} project and worktrees", project.name))
+            .label(format!("Session destinations for {}", project.name))
             .key(crate::code_view::source_key(&path, "launch-group"))
             .child(
                 row()
@@ -168,6 +174,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
             }
             group = group.child(children);
         }
+        group = group.children(vms);
         if let Some(error) = crate::checkouts::error(&l.app, &project.path) {
             group = group.child(ui::caption(error, k).wrap().color(k.c.danger.fg).px(10.0));
         }

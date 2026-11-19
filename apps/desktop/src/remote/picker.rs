@@ -2,7 +2,7 @@ mod fields;
 
 use crate::{
     Workspace,
-    live::{live, live_mut},
+    live::{Live, live, live_mut},
     panels::Screen,
     ui,
 };
@@ -15,6 +15,7 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
 #[derive(Default)]
 pub(super) struct Form {
+    launcher_provider: Option<Provider>,
     base: TextEdit,
     branch: TextEdit,
     size: Size,
@@ -30,6 +31,25 @@ enum Tab {
 }
 
 impl Form {
+    pub(super) fn for_entry(l: &Live) -> Self {
+        Self {
+            launcher_provider: (l.panels.overlay == Some(Screen::Launcher))
+                .then_some(l.panels.launch_provider),
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn reset_project(&mut self) {
+        *self = Self {
+            launcher_provider: self.launcher_provider,
+            ..Self::default()
+        };
+    }
+
+    fn provider(&self) -> Provider {
+        self.launcher_provider.unwrap_or(Provider::OpenCode)
+    }
+
     fn base<'a>(&'a self, source: &'a Source) -> &'a str {
         if self.base.text.is_empty() {
             &source.base
@@ -65,7 +85,7 @@ impl Form {
 pub(crate) fn open(s: &mut Workspace, project: String) {
     let l = live_mut(s);
     l.app.dismiss_vm_handoff();
-    l.remote.form = Form::default();
+    l.remote.form = Form::for_entry(l);
     l.app.remote_picker(project);
     l.panels.overlay = Some(Screen::RemotePicker);
     l.schedule();
@@ -174,7 +194,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     let provider = l
         .app
         .vm_handoff()
-        .map_or(Provider::OpenCode, |h| h.provider);
+        .map_or(l.remote.form.provider(), |h| h.provider);
     pane.child(ui::divider(k)).child(
         row()
             .key("vm-create-footer")
@@ -218,7 +238,13 @@ fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
         l.schedule();
     } else if l
         .app
-        .create_remote(f.base(owner), &f.branch.text, f.size, f.lifetime)
+        .create_remote(
+            f.base(owner),
+            &f.branch.text,
+            f.size,
+            f.lifetime,
+            f.provider(),
+        )
         .is_some()
     {
         super::checkout::enter(s);
@@ -308,11 +334,18 @@ pub(crate) fn handoff_height(s: &Workspace) -> f32 {
 }
 
 fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
-    let app = &live(s).app;
+    let l = live(s);
+    let app = &l.app;
+    let new_session = l.remote.form.launcher_provider;
     let detail = if handoff {
         format!(
             "The checkout must contain the published commit from origin/{}.",
             source.base
+        )
+    } else if let Some(provider) = new_session {
+        format!(
+            "Start a {} session on the VM’s current branch.",
+            provider.name()
         )
     } else {
         "Open this repository on the VM’s current branch.".into()
@@ -325,9 +358,13 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
         .flat_map(|i| &i.machines)
         .filter(|m| m.key.account == source.account)
     {
-        let blocker = handoff
-            .then(|| app.handoff_machine_blocker(machine))
-            .flatten();
+        let blocker = if handoff {
+            app.handoff_machine_blocker(machine)
+        } else if new_session.is_some() {
+            app.vm_session_machine_blocker(machine)
+        } else {
+            None
+        };
         let detail = blocker
             .map(str::to_owned)
             .unwrap_or_else(|| format!("{} · {}", machine.state, machine.key.id));
@@ -372,7 +409,7 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
                     l.app
                         .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
                     l.schedule();
-                } else if l.app.attach_remote(owner.clone()).is_some() {
+                } else if l.app.attach_remote(owner.clone(), new_session).is_some() {
                     super::checkout::enter(s);
                 }
             }),

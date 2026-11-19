@@ -536,10 +536,13 @@ pub fn open_link(s: &mut Workspace, index: usize, url: &str, tx: &mut Tx) {
 }
 
 pub fn navigation(_: &Workspace, k: &Kit) -> El {
-    quiet_button(&ui::BRANCH, "New session in a project or worktree · ⇧⌘N")
-        .on_press(open_launcher)
-        .build(k)
-        .key("nav-worktrees")
+    quiet_button(
+        &ui::BRANCH,
+        "New session in a project, worktree or VM · ⇧⌘N",
+    )
+    .on_press(open_launcher)
+    .build(k)
+    .key("nav-worktrees")
 }
 
 pub(crate) fn find_files(s: &mut Workspace, content: bool) {

@@ -1,6 +1,6 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
-    application::{Command, Reply},
+    application::{Command, Provider, Reply},
     remote::*,
 };
 use std::time::{Duration, Instant};
@@ -102,6 +102,7 @@ impl Workspace {
         branch: &str,
         size: Size,
         lifetime: Lifetime,
+        provider: Provider,
     ) -> Option<String> {
         let Some(Picker::Ready(mut source)) = self.remote.picker.clone() else {
             return None;
@@ -111,6 +112,7 @@ impl Workspace {
         }
         source.base = base.into();
         let id = self.register_vm(source, branch, size, lifetime)?;
+        self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
         self.select_remote(&id);
         Some(id)
     }
@@ -146,7 +148,20 @@ impl Workspace {
         Some(id)
     }
 
-    pub fn attach_remote(&mut self, machine: Machine) -> Option<String> {
+    pub(super) fn registered_checkout(&self, key: &MachineId) -> Option<(&String, &Checkout)> {
+        self.remote
+            .saved
+            .checkouts
+            .iter()
+            .find(|(_, c)| c.machine().is_some_and(|m| m.key == *key))
+    }
+
+    /// The launcher asks for a new session; an ordinary attachment reopens the saved one.
+    pub fn attach_remote(
+        &mut self,
+        machine: Machine,
+        new_session: Option<Provider>,
+    ) -> Option<String> {
         if !self
             .remote
             .inventory
@@ -155,7 +170,23 @@ impl Workspace {
         {
             return None;
         }
+        if let Some(provider) = new_session {
+            if self.vm_session_machine_blocker(&machine).is_some() {
+                return None;
+            }
+            if let Some((id, _)) = self.registered_checkout(&machine.key) {
+                let id = id.clone();
+                if !self.new_vm_session(&id, provider) {
+                    return None;
+                }
+                self.remote.picker = None;
+                return Some(id);
+            }
+        }
         let id = self.register_machine(machine)?;
+        if let Some(provider) = new_session {
+            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
+        }
         self.select_remote(&id);
         Some(id)
     }
@@ -167,12 +198,7 @@ impl Workspace {
         if machine.key.account != source.account {
             return None;
         }
-        let existing = self
-            .remote
-            .saved
-            .checkouts
-            .iter()
-            .find(|(_, c)| c.machine().is_some_and(|m| m.key == machine.key));
+        let existing = self.registered_checkout(&machine.key);
         let id = if let Some((id, c)) = existing {
             if matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
                 || !c.source.repository.eq_ignore_ascii_case(&source.repository)

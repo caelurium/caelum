@@ -6,6 +6,61 @@ use crate::{
 use caelum_core::remote::{Job, Line, Page, RunStatus, Speaker, ToolState, TurnEnd};
 
 #[test]
+fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
+    advance(&mut rt, 0.2);
+    key(&mut rt, Key::Escape, Mods::default());
+    fill(&mut rt, "remote-draft-checkout-example", "Park this draft");
+    let shortcut = |rt: &mut Runtime<Workspace>, shift| {
+        key(
+            rt,
+            Key::Command('n'),
+            Mods {
+                cmd: true,
+                shift,
+                ..Default::default()
+            },
+        );
+        advance(rt, 0.2);
+    };
+    shortcut(&mut rt, true);
+    assert_eq!(live(&rt.state).panels.launch_provider, Provider::OpenCode);
+    fill(&mut rt, "launch-search", "no-such-machine");
+    assert!(rt.find("launch-vm-checkout-example").is_none());
+    fill(&mut rt, "launch-search", "feat/remote-checkout");
+    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "launch-vm-checkout-example");
+    let l = live(&rt.state);
+    assert_eq!(l.panels.screen, Screen::Remote);
+    assert_eq!(l.app.remote.saved.selected.as_deref(), Some(id));
+    let c = &l.app.remote.saved.checkouts[id];
+    assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(
+        (
+            c.other_threads[0].provider,
+            c.other_threads[0].draft.as_str()
+        ),
+        (Provider::OpenCode, "Park this draft")
+    );
+    let first = c.thread.editor_key(id).to_owned();
+    fill(&mut rt, &format!("remote-draft-{first}"), "Second draft");
+    shortcut(&mut rt, false);
+    let app = &mut live_mut(&mut rt.state).app;
+    let c = &app.remote.saved.checkouts[id];
+    assert!(c.thread.conversation.is_none() && c.thread.draft.is_empty());
+    assert_ne!(c.thread.editor_key(id), first);
+    assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(c.other_threads[1].draft, "Second draft");
+    assert!(
+        app.commands()
+            .iter()
+            .all(|(_, op)| !matches!(op, Command::Remote(_)))
+    );
+}
+
+#[test]
 fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let mut rt = design_runtime("", (800., 620.));
     let id = "checkout-example";
@@ -52,7 +107,7 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     assert!(
         matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, Provider::Codex, None, p)))] if t.machine.id == "vm-example" && p == "Independent task")
     );
-    assert!(!app.new_vm_session(id));
+    assert!(!app.new_vm_session(id, Provider::Codex));
     assert!(!app.switch_vm_thread(id, id));
 }
 
