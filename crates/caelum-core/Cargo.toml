@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 base64 = "0.23"
-boat-sdk = { git = "https://github.com/caelurium/boat-sdk-rs", tag = "v0.5.0" }
+boat-sdk = { git = "https://github.com/caelurium/boat-sdk-rs", tag = "v0.6.0" }
 caelum-protocol = { path = "../caelum-protocol" }
 ignore = "0.4"
 notify = "8.2"

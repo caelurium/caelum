@@ -1,4 +1,5 @@
 mod handoff;
+mod models;
 mod workspace;
 
 use super::*;
@@ -281,7 +282,7 @@ fn remote_composer_and_workspace_menu_target_the_vm_when_the_local_checkout_was_
     click(&mut rt, "remote-draft-checkout-example");
     key(&mut rt, Key::Enter, Mods::default());
     let app = &mut rt.state.live.as_mut().unwrap().app;
-    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,Provider::Codex,Some(c),text)) if target.machine.id=="vm-example" && c=="thread-example" && text=="Review the remote branch")));
+    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,p)) if target.machine.id=="vm-example" && p.provider==Provider::Codex && p.conversation.as_deref()==Some("thread-example") && p.text=="Review the remote branch")));
     assert!(app.active_project.is_none());
     assert!(!element(&rt, "vm-provider-trigger").focusable);
     choose_workspace_action(&mut rt, "View remote changes");

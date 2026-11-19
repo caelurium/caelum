@@ -6,6 +6,7 @@ mod credentials;
 mod git;
 mod harness;
 mod lifetime;
+mod models;
 mod runtime;
 mod stats;
 
@@ -17,8 +18,10 @@ pub use checkout::PublishedBase;
 pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};
-pub use harness::{Line, Page, Run, RunStatus, Speaker, Thread, ToolState, Turn, TurnEnd};
+pub use harness::{Line, Page, Prompt, Run, RunStatus, Speaker, Thread, ToolState, Turn, TurnEnd};
 pub use lifetime::Lifetime;
+pub use models::ModelCatalogue;
+pub use models::ModelLists;
 pub(crate) use runtime::Backend;
 pub use stats::{Activity, Monitor, Process, Sample};
 
@@ -85,6 +88,7 @@ trait Machines {
 pub enum Operation {
     Connect(Credential),
     Inventory,
+    Models,
     Disconnect,
     Discover(String),
     DiscoverHandoff(String),
@@ -93,7 +97,7 @@ pub enum Operation {
     Power(MachineId, bool),
     Delete(MachineId),
     Lifetime(MachineId, Lifetime),
-    Prompt(Target, Provider, Option<String>, String),
+    Prompt(Target, Prompt),
     Follow(Target, Run, Option<String>),
     Interrupt(Target, Run),
     Recover(Target, Provider, Option<String>, String),
@@ -104,6 +108,7 @@ pub enum Operation {
 #[derive(Debug)]
 pub enum Outcome {
     Inventory(Inventory),
+    Models(ModelLists),
     Disconnected,
     Deleted(MachineId),
     Source(Source),
@@ -122,6 +127,7 @@ pub enum Outcome {
 #[derive(Debug, Default)]
 pub struct State {
     pub inventory: Option<Inventory>,
+    pub models: ModelCatalogue,
     pub connection: Connection,
     pub saved: Saved,
     pub picker: Option<Picker>,

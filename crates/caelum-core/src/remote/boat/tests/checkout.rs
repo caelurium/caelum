@@ -1,4 +1,4 @@
-use super::{environment, fixture, sandbox};
+use super::{default_prompt, environment, fixture, sandbox};
 use crate::application::Provider;
 use crate::remote::{
     harness::Harness, GitAction, Host, MachineId, Machines, Outcome, Plan, PublishedBase, Size,
@@ -300,9 +300,12 @@ async fn runs_opencode_on_the_session_worktree_branch_and_publishes_only_the_rev
     let err = boat.prepare(&target, &source.base, None).await.unwrap_err();
     assert!(err.contains("does not include") && git(&vm, &["branch", "--show-current"]) == "main");
     assert!(matches!(
-        boat.send(&target, Provider::OpenCode, None, "Wrong branch")
-            .await
-            .unwrap(),
+        boat.send(
+            &target,
+            &default_prompt(Provider::OpenCode, None, "Wrong branch")
+        )
+        .await
+        .unwrap(),
         Outcome::Rejected(_)
     ));
     let Outcome::Prepared(_, branch) = boat
@@ -319,9 +322,12 @@ async fn runs_opencode_on_the_session_worktree_branch_and_publishes_only_the_rev
         "origin/feat/source"
     );
     assert!(matches!(
-        boat.send(&target, Provider::OpenCode, None, "Update the README")
-            .await
-            .unwrap(),
+        boat.send(
+            &target,
+            &default_prompt(Provider::OpenCode, None, "Update the README")
+        )
+        .await
+        .unwrap(),
         Outcome::Accepted(_)
     ));
     let review = boat.git(&target, &GitAction::Read).await.unwrap();

@@ -218,8 +218,18 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
     assert!(app.set_vm_provider(&id, &id, Provider::Codex));
     assert!(app.send_remote(&id, "Edit a file"));
     let saved_before_ack = app.snapshot();
-    let (req, Command::Remote(Operation::Prompt(_, Provider::Codex, None, _))) =
-        app.commands().pop().unwrap()
+    let (
+        req,
+        Command::Remote(Operation::Prompt(
+            _,
+            Prompt {
+                provider: Provider::Codex,
+                conversation: None,
+                model: None,
+                ..
+            },
+        )),
+    ) = app.commands().pop().unwrap()
     else {
         panic!()
     };
@@ -293,7 +303,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             assert_eq!(lines[2].speaker, Speaker::Outcome(TurnEnd::Finished));
             assert!(reopened.send_remote(&id, "Continue"));
             assert!(
-                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,Provider::OpenCode,Some(c),p)))] if c=="c" && p=="Continue")
+                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,p)))] if p.provider == Provider::OpenCode && p.conversation.as_deref()==Some("c") && p.model.is_none() && p.text=="Continue")
             );
         } else {
             assert!(work.is_empty());

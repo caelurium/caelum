@@ -551,8 +551,8 @@ dependencies = [
 
 [[package]]
 name = "boat-sdk"
-version = "0.5.0"
-source = "git+https://github.com/caelurium/boat-sdk-rs?tag=v0.5.0#f59c9420e97162fdfbbb280e7c365e515cc2c8ca"
+version = "0.6.0"
+source = "git+https://github.com/caelurium/boat-sdk-rs?tag=v0.6.0#c4cbf755221d4845c06b2293e6f1d5654206f6ce"
 dependencies = [
  "base64 0.22.1",
  "bytes",

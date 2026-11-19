@@ -1,6 +1,6 @@
 use super::{api, Boat};
 use crate::application::Provider;
-use crate::remote::{harness::Harness, Outcome, Page, Run, RunStatus, Target, TurnEnd};
+use crate::remote::{harness::Harness, Outcome, Page, Prompt, Run, RunStatus, Target, TurnEnd};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use boat_sdk::agents::{models::PromptRun, EventOrder, EventQuery, PromptRequest};
 
@@ -101,13 +101,9 @@ impl Boat {
 }
 
 impl Harness for Boat {
-    async fn send(
-        &self,
-        target: &Target,
-        provider: Provider,
-        conversation: Option<&str>,
-        text: &str,
-    ) -> Result<Outcome, String> {
+    async fn send(&self, target: &Target, prompt: &Prompt) -> Result<Outcome, String> {
+        let provider = prompt.provider;
+        let conversation = prompt.conversation.as_deref();
         if conversation.is_some_and(|c| !valid_id(c)) {
             return Ok(Outcome::Rejected("Invalid remote conversation".into()));
         }
@@ -119,9 +115,10 @@ impl Harness for Boat {
         }
         let request = PromptRequest {
             provider: Some(provider.as_str().into()),
+            model: prompt.model.clone(),
             new_conversation: conversation.is_none().then_some(true),
             conversation_id: conversation.map(str::to_owned),
-            ..PromptRequest::new(text)
+            ..PromptRequest::new(&prompt.text)
         };
         let response = match self.client.prompt(&target.machine.id, &request).await {
             Err(boat_sdk::Error::Api { status, code, .. })

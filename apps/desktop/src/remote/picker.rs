@@ -207,7 +207,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                     .truncate()
                     .min_w(0.0)
                     .grow(1.0)
-                    .help("Set the remote model in Boat → Agents & Proxying."),
+                    .help("You can choose a different model in the VM composer before sending."),
             )
             .child(
                 ui::Button::new("Create VM")

@@ -86,7 +86,7 @@ pub(super) fn view(
                         .color(k.c.text_base),
                 )
                 .child(ui::caption(
-                    format!("Send a message to run {} on {}. The model is set in Boat → Agents & Proxying.", c.thread.provider.name(), c.title()),
+                    format!("Choose a model or keep Boat default, then send your first message to {} on {}.", c.thread.provider.name(), c.title()),
                     k,
                 )),
         );

@@ -2,8 +2,8 @@
 
 A remote machine has its own Git checkout and disk. Caelum sends messages to
 [Boat’s integrated Codex and OpenCode agents](https://docs.boat.dev/platform-guide/agents.md).
-Set each provider’s model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
-Caelum leaves model selection to Boat on every remote prompt. The local model,
+Set each provider’s default model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
+The VM composer can override that default for a chat. The local model,
 reasoning effort and primary agent (Build, Plan or custom) do not transfer. There is no
 Caelum agent or OpenCode server to install on the VM.
 
@@ -80,9 +80,21 @@ reasoning, attachments and unpublished Git work stay local.
 
 ## Work on the VM
 
-Send a message from the remote composer. Reopen Caelum or select the machine’s
-sidebar row to continue the same thread. If Boat may have accepted a prompt but the
-acknowledgement was lost, check Boat and reconnect using the prompt ID.
+**Before your first Send**, open **Boat default** beside **Codex** or **OpenCode**
+in the VM composer. Search [Boat’s model catalogue](https://docs.boat.dev/integrated-agents/harnesses-and-models.md#the-model-catalog)
+and choose a model your Boat credentials support. You can change your choice
+while drafting, including after a local handoff. Only **Send** starts the
+conversation, using the last choice you made.
+
+![Choosing a model with the first VM message still in the editor](design/previews/rune-dark-vm-first-model-small.png)
+
+Each VM chat remembers its choice. Between turns you can pick another model in
+the same conversation. Changing providers resets the model to **Boat default**.
+That option uses your Boat settings and works even when the catalogue can’t load.
+
+Reopen Caelum or select the machine’s sidebar row to continue the same thread.
+If Boat may have accepted a prompt but the acknowledgement was lost, check
+Boat and reconnect using the prompt ID.
 
 When the VM is ready and its turn has finished, choose **Conversations… →
 New session on this VM**, or right-click the VM in the sidebar. The previous chat and its

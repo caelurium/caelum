@@ -70,6 +70,7 @@ impl Workspace {
             return false;
         }
         thread.provider = provider;
+        thread.model = None;
         self.remote.feeds.remove(id);
         true
     }

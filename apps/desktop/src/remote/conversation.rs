@@ -301,24 +301,24 @@ pub(super) fn view(
         c.title(),
         if stopped { " · Stopped" } else { "" }
     );
+    let selectors = super::provider::controls(s, k, id, &c.thread, layers);
     let mut controls = row()
-        .w_full()
+        .min_w(0.0)
         .gap(6.0)
         .center_y()
-        .child(super::provider::choice(s, k, id, &c.thread, layers))
         .child(
             text(c.title())
-            .font(k.ty.small_medium)
-            .color(k.c.text_muted)
-            .min_w(0.0)
-            .grow(1.0)
-            .truncate()
-            .help(format!(
-                "Boat-managed {provider} on {} · {}. Set the model in Boat → Agents & Proxying.",
-                c.title(),
-                branch.unwrap_or(&c.source.repository)
-            ))
-            .key("remote-destination"),
+                .font(k.ty.small_medium)
+                .color(k.c.text_muted)
+                .min_w(0.0)
+                .grow(1.0)
+                .truncate()
+                .help(format!(
+                    "Boat-managed {provider} on {} · {}.",
+                    c.title(),
+                    branch.unwrap_or(&c.source.repository)
+                ))
+                .key("remote-destination"),
         )
         .child(
             crate::quiet_button(&ui::SERVER, &label)
@@ -380,6 +380,20 @@ pub(super) fn view(
         );
     }
     let draft_scroll = editors.draft_scroll.clone();
+    let controls = if super::stats::wide() {
+        row()
+            .w_full()
+            .center_y()
+            .gap(6.)
+            .child(selectors)
+            .child(controls.grow(1.))
+    } else {
+        col()
+            .w_full()
+            .gap(4.)
+            .child(selectors)
+            .child(controls.w_full())
+    };
     let mounted = l
         .remote
         .mounted

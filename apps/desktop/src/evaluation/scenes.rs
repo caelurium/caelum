@@ -26,6 +26,9 @@ pub(crate) const SCENES: &[Scene] = &[
     ("remote-machine", |s| {
         crate::remote::scene(s, "remote-machine")
     }),
+    ("remote-model-draft", |s| {
+        crate::remote::scene(s, "remote-model-draft")
+    }),
     ("remote-changes", |s| {
         crate::remote::scene(s, "remote-changes")
     }),

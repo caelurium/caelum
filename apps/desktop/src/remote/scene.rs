@@ -103,6 +103,25 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         },
     };
     match name {
+        "remote-model-draft" => {
+            use caelum_core::application::Provider;
+            use caelum_protocol::ProviderChoice;
+            c.thread = Thread {
+                draft: "Review the changes on this branch.".into(),
+                ..Default::default()
+            };
+            let models = [
+                ("example/fast", "Example Fast"),
+                ("example/code", "Example Code"),
+                ("example/reasoning", "Example Reasoning"),
+            ]
+            .map(|(id, name)| ProviderChoice {
+                id: id.into(),
+                name: name.into(),
+            });
+            l.app.remote.models =
+                ModelCatalogue::Ready([(Provider::OpenCode, models.into())].into());
+        }
         "remote-working" => {
             l.app.remote.feeds.insert(
                 id.clone(),

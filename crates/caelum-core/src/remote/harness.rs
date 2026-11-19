@@ -18,6 +18,9 @@ pub struct Thread {
     pub continued: Option<Continuation>,
     #[serde(default = "opencode")]
     pub provider: Provider,
+    /// Explicit Boat model ID; `None` delegates to this harness's Boat settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub conversation: Option<String>,
     pub cursor: Option<String>,
     pub turn: Turn,
@@ -31,6 +34,7 @@ impl Default for Thread {
             local_id: None,
             continued: None,
             provider: opencode(),
+            model: None,
             conversation: None,
             cursor: None,
             turn: Turn::Idle,
@@ -161,6 +165,7 @@ impl Thread {
 
     pub(crate) fn is_blank(&self) -> bool {
         self.continued.is_none()
+            && self.model.is_none()
             && self.conversation.is_none()
             && self.cursor.is_none()
             && self.turn == Turn::Idle
@@ -280,14 +285,18 @@ pub struct Page {
     pub status: RunStatus,
 }
 
+/// Captured once, on explicit Send. Neither a model choice nor a conversation
+/// ID needs to be resolved by the worker.
+#[derive(Clone, Debug)]
+pub struct Prompt {
+    pub provider: Provider,
+    pub model: Option<String>,
+    pub conversation: Option<String>,
+    pub text: String,
+}
+
 pub(super) trait Harness {
-    async fn send(
-        &self,
-        target: &Target,
-        provider: Provider,
-        conversation: Option<&str>,
-        text: &str,
-    ) -> Result<super::Outcome, String>;
+    async fn send(&self, target: &Target, prompt: &Prompt) -> Result<super::Outcome, String>;
     async fn follow(
         &self,
         target: &Target,

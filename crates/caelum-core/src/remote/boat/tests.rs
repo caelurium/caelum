@@ -1,7 +1,7 @@
 use super::*;
 mod checkout;
 use crate::application::Provider;
-use crate::remote::Size;
+use crate::remote::{Prompt, Size};
 use serde_json::{json, Value};
 use wiremock::{
     matchers::{header, method, path, query_param},
@@ -246,6 +246,15 @@ fn agent_target() -> Target {
     }
 }
 
+fn default_prompt(provider: Provider, conversation: Option<&str>, text: &str) -> Prompt {
+    Prompt {
+        provider,
+        model: None,
+        conversation: conversation.map(str::to_owned),
+        text: text.into(),
+    }
+}
+
 #[tokio::test]
 async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_terminal_run() {
     use crate::remote::harness::Harness;
@@ -256,9 +265,15 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
     Mock::given(method("POST")).and(path("/sandboxes/vm-1/commands"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"command","success":true,"exitCode":0,"stdout":"git@github.com:example/project.git\n","stderr":"","timedOut":false}))).expect(2).mount(&server).await;
     for (scope, message, provider, prompt, id) in [
-        (json!({"new":true}), "Start", "codex", "p", "r"),
         (
-            json!({"conversationId":"c"}),
+            json!({"new":true,"model":"boat-model-b"}),
+            "Start",
+            "codex",
+            "p",
+            "r",
+        ),
+        (
+            json!({"conversationId":"c","model":"example:vendor/next"}),
             "Continue",
             "opencode",
             "p2",
@@ -275,7 +290,13 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
             .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":prompt,"conversationId":"c","promptRun":receipt,"status":"queued","provider":provider}))).expect(1).mount(&server).await;
     }
     let Outcome::Accepted(first) = boat
-        .send(&target, Provider::Codex, None, "Start")
+        .send(
+            &target,
+            &Prompt {
+                model: Some("boat-model-b".into()),
+                ..default_prompt(Provider::Codex, None, "Start")
+            },
+        )
         .await
         .unwrap()
     else {
@@ -325,9 +346,10 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
     let Outcome::Accepted(next) = boat
         .send(
             &target,
-            Provider::OpenCode,
-            Some(&first.conversation),
-            "Continue",
+            &Prompt {
+                model: Some("example:vendor/next".into()),
+                ..default_prompt(Provider::OpenCode, Some(&first.conversation), "Continue")
+            },
         )
         .await
         .unwrap()
@@ -364,7 +386,7 @@ async fn a_mismatched_receipt_is_uncertain_and_recovery_checks_the_latest_harnes
         .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":"p","conversationId":"c","promptRun":run("p"),"status":"queued","provider":"opencode"})))
         .expect(1).mount(&server).await;
     assert!(boat
-        .send(&target, Provider::Codex, Some("c"), "Next")
+        .send(&target, &default_prompt(Provider::Codex, Some("c"), "Next"))
         .await
         .is_err());
 

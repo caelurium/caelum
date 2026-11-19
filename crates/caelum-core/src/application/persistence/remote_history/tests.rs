@@ -21,6 +21,7 @@ fn preview_turns_become_saved_history_and_boat_receipts_are_untouched() {
     assert_eq!(checkout["other_threads"][1], managed);
     let legacy: Thread = serde_json::from_value(managed).unwrap();
     assert_eq!(legacy.provider, crate::application::Provider::OpenCode);
+    assert!(legacy.model.is_none());
     assert_eq!(legacy.turn.run().unwrap().provider, legacy.provider);
     for value in [&checkout["thread"], &checkout["other_threads"][0]] {
         let t: Thread = serde_json::from_value(value.clone()).unwrap();

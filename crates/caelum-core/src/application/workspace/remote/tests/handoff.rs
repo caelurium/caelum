@@ -349,6 +349,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     let mut app = Workspace::default();
     let i = local(&mut app);
     app.sessions[i].scope.provider = Provider::Codex;
+    app.sessions[i].options.model = Some("local-model".into());
     let req = reading(&mut app, i);
     ready(&mut app, req);
     app.sessions[i].draft = "New laptop draft".into();
@@ -397,14 +398,34 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         reopened.remote.saved.checkouts[&id].thread.draft,
         "Next step"
     );
+    let thread = &reopened.remote.saved.checkouts[&id].thread;
+    assert!(thread.model.is_none());
+    let editor = thread.editor_key(&id).to_owned();
+    reopened.remote.models = ModelCatalogue::Ready(
+        [(
+            Provider::Codex,
+            [caelum_protocol::ProviderChoice {
+                id: "remote-model".into(),
+                name: "Remote model".into(),
+            }]
+            .into(),
+        )]
+        .into(),
+    );
+    assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, Some("remote-model")));
+    assert!(reopened.commands().is_empty());
     for reject in [true, false] {
         assert!(reopened.send_remote(&id, "Edited next step"));
-        let (req, Command::Remote(Operation::Prompt(target, Provider::Codex, None, prompt))) =
+        let (req, Command::Remote(Operation::Prompt(target, turn))) =
             reopened.commands().pop().unwrap()
         else {
             panic!()
         };
         assert_eq!(target.machine.id, "vm");
+        assert_eq!(turn.provider, Provider::Codex);
+        assert_eq!(turn.model.as_deref(), Some("remote-model"));
+        assert!(turn.conversation.is_none());
+        let prompt = turn.text;
         assert!(
             prompt.contains("Earlier question")
                 && prompt.contains("Earlier answer")
@@ -429,7 +450,12 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         } else {
             let saved = reopened.snapshot().remote;
             reopened = Workspace::default();
-            reopened.remote.saved = saved;
+            reopened.remote.saved =
+                serde_json::from_value(serde_json::to_value(saved).unwrap()).unwrap();
+            assert_eq!(
+                reopened.remote.saved.checkouts[&id].thread.model.as_deref(),
+                Some("remote-model")
+            );
             assert!(!reopened.send_remote(&id, "duplicate"));
             reopened.recover_remote(&id, "p");
             let (req, Command::Remote(Operation::Recover(_, Provider::Codex, None, _))) =
@@ -458,9 +484,10 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
+            assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, None));
             assert!(reopened.send_remote(&id, "Again"));
             assert!(
-                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, Provider::Codex, Some(c), p)))] if c == "boat-thread" && p == "Again")
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, p)))] if p.provider == Provider::Codex && p.model.is_none() && p.conversation.as_deref() == Some("boat-thread") && p.text == "Again")
             );
         }
     }
@@ -524,8 +551,18 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     assert!(app.switch_vm_thread(&id, &new_key));
     assert!(app.send_remote(&id, "From Home"));
     let commands = app.commands();
-    let [(req, Command::Remote(Operation::Prompt(_, Provider::Codex, None, prompt)))] =
-        commands.as_slice()
+    let [(
+        req,
+        Command::Remote(Operation::Prompt(
+            _,
+            Prompt {
+                provider: Provider::Codex,
+                conversation: None,
+                model: None,
+                text: prompt,
+            },
+        )),
+    )] = commands.as_slice()
     else {
         panic!()
     };

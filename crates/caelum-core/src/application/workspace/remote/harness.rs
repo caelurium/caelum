@@ -21,9 +21,12 @@ impl Workspace {
         }
         let op = Operation::Prompt(
             c.target().unwrap(),
-            c.thread.provider,
-            c.thread.conversation.clone(),
-            c.thread.prompt(text),
+            Prompt {
+                provider: c.thread.provider,
+                model: c.thread.model.clone(),
+                conversation: c.thread.conversation.clone(),
+                text: c.thread.prompt(text),
+            },
         );
         c.thread.append(Line::new(Speaker::You, text));
         c.thread.turn = Turn::Submitting;

@@ -105,7 +105,7 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let app = &mut live_mut(&mut rt.state).app;
     let commands = app.commands();
     assert!(
-        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, Provider::Codex, None, p)))] if t.machine.id == "vm-example" && p == "Independent task")
+        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, p)))] if t.machine.id == "vm-example" && p.provider == Provider::Codex && p.conversation.is_none() && p.model.is_none() && p.text == "Independent task")
     );
     assert!(!app.new_vm_session(id, Provider::Codex));
     assert!(!app.switch_vm_thread(id, id));

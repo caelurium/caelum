@@ -5,6 +5,7 @@ pub(super) mod handoff;
 mod harness;
 mod lifetime;
 mod link;
+mod models;
 mod removal;
 mod stats;
 #[cfg(test)]
@@ -17,6 +18,7 @@ use crate::{
 
 pub(super) enum Lane {
     Connection,
+    Models,
     OpenProject,
     Picker,
     Handoff,
@@ -71,6 +73,7 @@ impl Workspace {
             _ => Err("Unexpected remote machine response".into()),
         });
         match lane {
+            Lane::Models => self.complete_vm_models(request, result),
             Lane::Delete(id, key) => self.complete_deletion(&id, request, &key, result),
             Lane::Picker => self.complete_remote_picker(request, result),
             Lane::ConfirmHandoff(plan) => {

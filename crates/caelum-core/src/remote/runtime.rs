@@ -52,6 +52,11 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Models => boat_sdk::agents::provider_models()
+                .await
+                .map(super::models::model_lists)
+                .map(Outcome::Models)
+                .map_err(api),
             Operation::Delete(key) => self.connected().await?.delete(key).await,
             Operation::Stats(key) => self.connected().await?.stats(key).await.map(Outcome::Stats),
             Operation::Git(target, action) => self
@@ -60,12 +65,8 @@ impl Backend {
                 .git(target, action)
                 .await
                 .map(Outcome::Review),
-            Operation::Prompt(target, provider, conversation, text) => match self.connected().await
-            {
-                Ok(boat) => {
-                    boat.send(target, *provider, conversation.as_deref(), text)
-                        .await
-                }
+            Operation::Prompt(target, prompt) => match self.connected().await {
+                Ok(boat) => boat.send(target, prompt).await,
                 Err(error) => Ok(Outcome::Rejected(error)),
             },
             Operation::Follow(target, run, cursor) => self
