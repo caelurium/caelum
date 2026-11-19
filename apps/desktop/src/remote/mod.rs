@@ -78,7 +78,7 @@ pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
         }
         for machine in &list.machines {
             view = view.child(ui::caption(
-                &format!("{} · {}", machine.name, machine.state),
+                format!("{} · {}", machine.name, machine.state),
                 k,
             ));
         }
