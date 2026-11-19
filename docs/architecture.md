@@ -60,6 +60,13 @@ survive a restart. A lost prompt acknowledgement requires reconciliation;
 reopening never resends it. Turn interruption always supplies the conversation
 ID, whereas stopping the machine is a distinct lifecycle operation.
 
+Remote **Changes** runs Git through the sandbox commands API. A temporary VM
+index captures tracked edits and non-ignored new files as one reviewable Git
+tree. Commit pins that tree and checks the branch, HEAD and original index;
+edits after review stay in the working directory. Push sends the reviewed
+commit to the verified GitHub origin without force. To bring it back to the
+laptop, fetch the branch in the local checkout.
+
 Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery

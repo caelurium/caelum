@@ -1,7 +1,9 @@
+mod changes;
 mod checkout;
 mod conversation;
 mod picker;
 
+pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use picker::{open, picker};
 
@@ -22,6 +24,7 @@ pub(crate) struct State {
     restored: bool,
     editors: std::collections::HashMap<String, conversation::Editors>,
     details: bool,
+    review: changes::Panel,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

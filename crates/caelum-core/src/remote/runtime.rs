@@ -44,6 +44,12 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Git(target, action) => self
+                .connected()
+                .await?
+                .git(target, action)
+                .await
+                .map(Outcome::Review),
             Operation::Prompt(target, conversation, text) => {
                 self.connected()
                     .await?

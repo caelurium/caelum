@@ -1,4 +1,5 @@
 use super::*;
+mod checkout;
 use serde_json::json;
 use wiremock::{
     matchers::{header, method, path, query_param},

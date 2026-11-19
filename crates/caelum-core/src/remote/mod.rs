@@ -2,11 +2,13 @@
 mod boat;
 mod checkout;
 mod credentials;
+mod git;
 mod harness;
 mod runtime;
 
 pub(crate) use checkout::github_slug;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
+pub use git::{Changes, GitAction, Review, Revision};
 pub use harness::{Line, Page, Run, Speaker, Thread, Turn};
 pub(crate) use runtime::Backend;
 
@@ -79,6 +81,7 @@ pub enum Operation {
     Follow(Target, Run, Option<String>),
     Interrupt(Target, Run),
     Recover(Target, Option<String>, String),
+    Git(Target, GitAction),
 }
 
 #[derive(Debug)]
@@ -93,6 +96,7 @@ pub enum Outcome {
     Rejected(String),
     Page(Page),
     Interrupted,
+    Review(Review),
 }
 
 #[derive(Debug, Default)]
@@ -104,6 +108,7 @@ pub struct State {
     pub jobs: std::collections::HashMap<String, Job>,
     pub feeds: std::collections::HashMap<String, Job>,
     pub interrupts: std::collections::HashMap<String, u64>,
+    pub changes: std::collections::HashMap<String, Changes>,
 }
 
 #[derive(Debug, Default)]

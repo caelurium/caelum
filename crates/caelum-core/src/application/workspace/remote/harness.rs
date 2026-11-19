@@ -4,6 +4,9 @@ use std::time::{Duration, Instant};
 
 impl Workspace {
     pub fn send_remote(&mut self, id: &str, text: &str) -> bool {
+        if self.publishing(id) {
+            return false;
+        }
         let Some(c) = self.remote.saved.checkouts.get_mut(id) else {
             return false;
         };
@@ -169,6 +172,11 @@ impl Workspace {
                             text: status,
                             partial: false,
                         });
+                    }
+                    if self.remote.saved.selected.as_deref() == Some(id)
+                        && self.remote.changes.contains_key(id)
+                    {
+                        self.review_remote(id);
                     }
                 } else {
                     let delay = if page.more {

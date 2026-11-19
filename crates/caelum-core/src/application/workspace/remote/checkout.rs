@@ -139,6 +139,9 @@ impl Workspace {
     }
 
     pub fn power_remote(&mut self, id: &str, resume: bool) {
+        if self.publishing(id) {
+            return;
+        }
         if let Some(machine) = self
             .remote
             .saved

@@ -257,6 +257,11 @@ fn details(_s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             row()
                 .gap(6.0)
                 .child(
+                    ui::Button::new("Changes")
+                        .on_press(super::open_changes)
+                        .build(k),
+                )
+                .child(
                     ui::Button::new("Refresh checkout")
                         .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_remote(&a))
                         .build(k),

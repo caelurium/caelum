@@ -49,6 +49,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     if let Some(at) = l.app.remote_deadline(now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
+    changed |= super::changes::sync(l);
     changed
 }
 

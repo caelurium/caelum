@@ -423,6 +423,11 @@ fn scroll(content: El) -> El {
 }
 
 pub fn show(s: &mut Workspace, screen: Screen) {
+    if live(s).panels.screen == Screen::Remote && matches!(screen, Screen::Changes | Screen::Files)
+    {
+        crate::remote::open_changes(s);
+        return;
+    }
     if screen == Screen::Worktrees
         && let Some(project) = live(s).app.active_project.clone()
     {
@@ -618,6 +623,9 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
 }
 
 pub fn inspector(s: &Workspace, k: &Kit) -> El {
+    if live(s).panels.screen == Screen::Remote {
+        return crate::remote::inspector(s, k);
+    }
     let mut tabs = row().w_full().h(44.0).px(8.0).center_y().gap(4.0);
     for (name, screen) in [("Files", Screen::Files), ("Changes", Screen::Changes)] {
         let selected = live(s).panels.inspector == screen;
