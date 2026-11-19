@@ -16,7 +16,7 @@ pub(crate) fn project(el: El, project: String) -> El {
         let menu = Menu::new()
             .item(Item::new("new", "New session").icon(&crate::PLUS))
             .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
-            .item(Item::new("remote", "Open on remote machine…").icon(&crate::ORBIT))
+            .item(Item::new("remote", "Open on remote machine…").icon(&ui::SERVER))
             .separator()
             .item(
                 Item::new("up", "Move project up")

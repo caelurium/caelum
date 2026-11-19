@@ -404,6 +404,11 @@ pub static TERMINAL: Icon = Icon {
     view: 16.0,
     body: r#"<rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="m4 6 2 2-2 2m4 0h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
+pub(crate) static SERVER: Icon = Icon {
+    name: "server",
+    view: 16.0,
+    body: r#"<rect x="1.5" y="2" width="13" height="5" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="1.5" y="9" width="13" height="5" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="4.5" cy="4.5" r=".8" fill="currentColor"/><circle cx="4.5" cy="11.5" r=".8" fill="currentColor"/>"#,
+};
 pub static EDIT: Icon = Icon {
     name: "edit",
     view: 16.0,

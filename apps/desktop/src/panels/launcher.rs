@@ -101,7 +101,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
                         .key(crate::code_view::source_key(&project.path, "launch")),
                     )
                     .child(
-                        quiet_button(&crate::ORBIT, "Run on remote machine…")
+                        quiet_button(&ui::SERVER, "Run on remote machine…")
                             .on_press(move |s: &mut Workspace| {
                                 crate::remote::open(s, remote_project.clone())
                             })

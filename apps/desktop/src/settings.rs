@@ -105,7 +105,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     for (name, target, glyph) in [
         ("Appearance", Page::Appearance, &crate::APPEARANCE),
         ("Providers", Page::Providers, &ui::AGENT),
-        ("Remote machines", Page::Remote, &crate::ORBIT),
+        ("Remote machines", Page::Remote, &ui::SERVER),
         ("Worktrees", Page::Worktrees, &ui::BRANCH),
         ("Notifications", Page::Notifications, &ui::BELL),
         ("About", Page::About, &crate::ORBIT),
