@@ -11,7 +11,7 @@ impl Workspace {
             return false;
         };
         if text.trim().is_empty()
-            || text.len() > 64 * 1024
+            || text.len() > Thread::MAX_MESSAGE_BYTES
             || !matches!(c.phase, Phase::Ready { .. })
             || self.remote.jobs.contains_key(id)
             || c.thread.turn != Turn::Idle
@@ -22,7 +22,7 @@ impl Workspace {
         let op = Operation::Prompt(
             c.target().unwrap(),
             c.thread.conversation.clone(),
-            text.into(),
+            c.thread.prompt(text),
         );
         c.thread.append(Line {
             speaker: Speaker::You,
@@ -133,6 +133,16 @@ impl Workspace {
             return;
         };
         match result {
+            Ok(Outcome::Accepted(run))
+                if c.other_threads
+                    .iter()
+                    .any(|t| t.conversation.as_ref() == Some(&run.conversation)) =>
+            {
+                self.remote.feeds.insert(
+                    id.into(),
+                    Job::Failed("That prompt belongs to another conversation on this VM.".into()),
+                );
+            }
             Ok(Outcome::Accepted(run))
                 if c.thread.turn == Turn::Submitting
                     && c.thread

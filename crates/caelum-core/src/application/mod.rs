@@ -29,10 +29,14 @@ pub use services::{Checkout, Review, Services, Task, TaskReply};
 pub use workspace::ForkBoundary;
 pub use workspace::ForkPicker;
 pub use workspace::ForkPoint;
+pub use workspace::HandoffPhase;
+pub use workspace::HandoffSource;
 pub use workspace::Home;
 pub use workspace::HomeDraft;
 pub use workspace::ProjectMove;
 pub use workspace::Session;
+pub use workspace::VmDestination;
+pub use workspace::VmHandoff;
 pub use workspace::Workspace;
 
 use serde::{Deserialize, Serialize};

@@ -1,10 +1,12 @@
-use super::Target;
+use super::{Continuation, Target};
 use serde::{Deserialize, Serialize};
 
 /// API keys and native provider sessions never enter this record. The cursor is
 /// advanced atomically with its visible messages in the workspace snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continued: Option<Continuation>,
     pub conversation: Option<String>,
     pub cursor: Option<String>,
     pub turn: Turn,
@@ -43,6 +45,35 @@ pub struct Line {
 }
 
 impl Thread {
+    pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
+
+    pub fn editor_key<'a>(&'a self, checkout: &'a str) -> &'a str {
+        self.continued.as_ref().map_or(checkout, |c| &c.id)
+    }
+
+    pub fn title(&self) -> &str {
+        self.continued
+            .as_ref()
+            .map(|c| c.title.as_str())
+            .or_else(|| {
+                self.lines
+                    .iter()
+                    .find(|l| l.speaker == Speaker::You)
+                    .map(|l| l.text.as_str())
+            })
+            .or_else(|| self.draft.lines().next())
+            .unwrap_or("VM conversation")
+    }
+
+    pub(crate) fn prompt(&self, text: &str) -> String {
+        if self.conversation.is_none() {
+            if let Some(c) = &self.continued {
+                return c.chat.prompt(text);
+            }
+        }
+        text.into()
+    }
+
     pub(crate) fn append(&mut self, mut line: Line) {
         // Boat streams snapshots of a response; replace the provisional text until it is final.
         if self
@@ -52,7 +83,8 @@ impl Thread {
         {
             self.lines.pop();
         }
-        line.text.truncate(line.text.floor_char_boundary(64 * 1024));
+        line.text
+            .truncate(line.text.floor_char_boundary(Self::MAX_MESSAGE_BYTES));
         self.lines.push(line);
         let mut bytes = 0;
         let count = self

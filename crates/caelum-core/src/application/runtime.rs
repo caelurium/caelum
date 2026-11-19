@@ -18,6 +18,7 @@ use super::{Options, Provider, SessionKey, Summary, Task};
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
 mod fork;
+mod handoff;
 mod messages;
 mod opencode;
 
@@ -377,17 +378,12 @@ impl ProviderRuntime {
                 };
             }
             Command::History(key, cursor) => {
-                return match key.scope.provider {
-                    Provider::Codex => self
-                        .codex
-                        .session_history(&key.scope.project, &key.id, cursor.as_deref())
-                        .map_err(|e| e.to_string()),
-                    Provider::OpenCode => self
-                        .opencode
-                        .session_history(&key.scope.project, &key.id, cursor.as_deref())
-                        .map_err(|e| e.to_string()),
-                }
-                .map(Reply::History);
+                return self
+                    .history_page(key, cursor.as_deref())
+                    .map(Reply::History);
+            }
+            Command::HandoffChat(key) => {
+                return self.handoff_chat(key).map(Reply::HandoffChat);
             }
             Command::Send(key, prompt, options) => match key.scope.provider {
                 Provider::Codex => self
@@ -676,7 +672,7 @@ impl Runtime {
             &self.control
         } else if matches!(
             command,
-            Command::Resume(_) | Command::History(..) | Command::Inbox(_)
+            Command::Resume(_) | Command::History(..) | Command::HandoffChat(_) | Command::Inbox(_)
         ) {
             &self.history
         } else {

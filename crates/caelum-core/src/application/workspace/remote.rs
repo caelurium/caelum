@@ -1,6 +1,7 @@
 use super::{Pending, Workspace};
 mod checkout;
 mod git;
+pub(super) mod handoff;
 mod harness;
 mod stats;
 #[cfg(test)]
@@ -14,6 +15,7 @@ pub(super) enum Lane {
     Connection,
     OpenProject,
     Picker,
+    Handoff,
     Checkout(String),
     Feed(String),
     Git(String),
@@ -52,6 +54,10 @@ impl Workspace {
             self.complete_remote_project(request, result);
             return;
         }
+        if let Lane::Handoff = lane {
+            self.complete_handoff_chat(request, result);
+            return;
+        }
         let result = result.and_then(|reply| match reply {
             Reply::Remote(value) => Ok(value),
             _ => Err("Unexpected remote machine response".into()),
@@ -68,6 +74,11 @@ impl Workspace {
                 self.remote.connection = match result {
                     Ok(Outcome::Inventory(inventory)) => {
                         self.remote.inventory = Some(inventory);
+                        if self.remote.picker.is_none() {
+                            if let Some(h) = self.vm_handoff() {
+                                self.discover_remote_source(self.group_path(&h.project).to_owned());
+                            }
+                        }
                         Connection::Idle
                     }
                     Ok(Outcome::Disconnected) => {

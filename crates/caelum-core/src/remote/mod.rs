@@ -1,5 +1,6 @@
 //! Machine identities and operations are independent of local project paths and coding providers.
 mod boat;
+mod chat;
 mod checkout;
 mod credentials;
 mod git;
@@ -7,6 +8,9 @@ mod harness;
 mod runtime;
 mod stats;
 
+pub use chat::Chat;
+pub use chat::Continuation;
+pub use chat::Message;
 pub(crate) use checkout::github_slug;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};

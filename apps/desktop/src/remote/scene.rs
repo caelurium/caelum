@@ -51,7 +51,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     l.app.active_project = None;
     l.app.remote.saved.selected = Some(id.clone());
     l.app.remote.saved.checkouts.insert(id.clone(),Checkout{source,
-        phase:Phase::Ready{machine:machine.clone(),branch:"feat/remote-checkout".into()},pinned_stats:true,
+        phase:Phase::Ready{machine:machine.clone(),branch:"feat/remote-checkout".into()},pinned_stats:true,other_threads:vec![],
         thread:Thread{conversation:Some("thread-example".into()),lines:vec![
             Line{speaker:Speaker::You,text:"Add a health check and show me the changes.".into(),partial:false},
             Line{speaker:Speaker::OpenCode,text:"I added a health check to src/server.rs. The response is ready to review on this branch.".into(),partial:false},

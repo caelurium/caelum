@@ -57,7 +57,7 @@ impl Workspace {
         }
     }
 
-    fn discover_remote_source(&mut self, project: String) {
+    pub(super) fn discover_remote_source(&mut self, project: String) {
         let request = self.request(
             Command::Remote(Operation::Discover(project.clone())),
             Pending::Remote(Lane::Picker),
@@ -118,6 +118,7 @@ impl Workspace {
                 source,
                 phase: Phase::Create(plan),
                 thread: Thread::default(),
+                other_threads: Vec::new(),
                 pinned_stats: false,
             },
         );
@@ -151,6 +152,7 @@ impl Workspace {
                 Checkout {
                     source,
                     thread: Thread::default(),
+                    other_threads: Vec::new(),
                     pinned_stats: false,
                     phase: Phase::Prepare {
                         machine,

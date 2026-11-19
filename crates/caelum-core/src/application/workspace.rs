@@ -24,6 +24,10 @@ pub use fork::ForkPoint;
 pub use home::Home;
 pub use home::HomeDraft;
 pub use projects::ProjectMove;
+pub use remote::handoff::HandoffPhase;
+pub use remote::handoff::HandoffSource;
+pub use remote::handoff::VmDestination;
+pub use remote::handoff::VmHandoff;
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -256,6 +260,7 @@ enum Pending {
 #[derive(Default)]
 pub struct Workspace {
     fork: Option<ForkPicker>,
+    handoff: Option<VmHandoff>,
     pub home: Home,
     pub remote: crate::remote::State,
     pub window_background: bool,

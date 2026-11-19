@@ -48,6 +48,8 @@ pub struct Checkout {
     pub phase: Phase,
     #[serde(default)]
     pub thread: super::Thread,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub other_threads: Vec<super::Thread>,
     #[serde(default)]
     pub pinned_stats: bool,
 }

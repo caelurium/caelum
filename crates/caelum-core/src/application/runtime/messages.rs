@@ -37,6 +37,7 @@ pub enum Command {
         destination: String,
     },
     History(SessionKey, Option<String>),
+    HandoffChat(SessionKey),
     Send(SessionKey, String, Options),
     Cancel(SessionKey),
     Approve(ApprovalPrompt, ApprovalDecision),
@@ -70,6 +71,7 @@ pub enum Reply {
     SessionMoved(OpenCodeMove),
     Choices(ProviderChoices),
     History(SessionHistoryPage),
+    HandoffChat(crate::remote::Chat),
     Done,
 }
 

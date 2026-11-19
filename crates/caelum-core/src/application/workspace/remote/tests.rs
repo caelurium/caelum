@@ -1,3 +1,5 @@
+mod handoff;
+
 use crate::{
     application::{Command, Event, Reply, Workspace},
     remote::*,
