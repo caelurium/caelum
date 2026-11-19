@@ -5,6 +5,7 @@ use super::{Workspace, spec};
 mod attention;
 mod composer;
 mod context;
+mod conversation_controls;
 mod files;
 mod home;
 mod layout;

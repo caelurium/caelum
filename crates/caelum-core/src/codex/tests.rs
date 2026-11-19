@@ -64,7 +64,7 @@ fn bounded_fork_rejects_older_servers_and_revalidates_the_thread_checkout_and_ac
             QuestionBroker::default(),
             dir.fake_codex(true),
         );
-        let fork = |id: &str| provider.fork_session(root.to_str().unwrap(), id, "turn-a");
+        let fork = |id: &str| provider.fork_session(root.to_str().unwrap(), id, "turn-a", false);
         assert!(fork("foreign-thread").is_err());
         fs::write(root.join("active-thread"), "").unwrap();
         assert!(fork("thread-existing").is_err());
@@ -192,6 +192,46 @@ fn session_archiving_is_reversible_scoped_and_keeps_recorded_branch_details() {
         .threads
         .is_empty());
     provider.shutdown();
+}
+
+#[test]
+fn session_controls_use_owned_id_addressed_operations_and_reject_unsupported_boundaries() {
+    for supported in [false, true] {
+        let dir = TestDirectory::new();
+        let root = dir.project().canonicalize().unwrap();
+        if supported {
+            fs::write(root.join("checkpoint-codex"), "").unwrap();
+        }
+        let provider = CodexProvider::with_executable(
+            Arc::new(ProcessRegistry::default()),
+            ApprovalBroker::default(),
+            QuestionBroker::default(),
+            dir.fake_codex(true),
+        );
+        let path = root.to_str().unwrap();
+        assert!(provider
+            .rename(path, "foreign-thread", "Named café")
+            .is_err());
+        provider
+            .rename(path, "thread-existing", "Named café")
+            .unwrap();
+        assert!(provider
+            .rewind(path, "thread-existing", "turn-a", "stale")
+            .is_err());
+        assert_eq!(
+            provider
+                .rewind(path, "thread-existing", "turn-a", "latest")
+                .is_ok(),
+            supported
+        );
+        assert_eq!(
+            provider
+                .fork_session(path, "thread-existing", "turn-a", true)
+                .is_ok(),
+            supported
+        );
+        assert_eq!(root.join("fork-request").exists(), supported);
+    }
 }
 
 #[test]

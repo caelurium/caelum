@@ -139,6 +139,7 @@ impl Session {
             remote_id,
             title,
             title_refresh_turns,
+            manual_title,
             options,
             draft,
             attachments,
@@ -155,6 +156,7 @@ impl Session {
             && self.remote_id == *remote_id
             && self.title == *title
             && self.title_state.turns == *title_refresh_turns
+            && self.title_state.manual == *manual_title
             && self.options == *options
             && self.draft == *draft
             && self.attachments == *attachments

@@ -14,6 +14,10 @@ impl Workspace {
             self.complete_remote(request, lane, result);
             return;
         }
+        if let Pending::ConversationControl(i, owner, operation) = pending {
+            self.finish_control(i, owner, operation, result);
+            return;
+        }
         if let Pending::Fork(pending) = pending {
             self.complete_fork(request, pending, result);
             return;
@@ -164,6 +168,7 @@ impl Workspace {
                     }
                     Pending::Remote(_)
                     | Pending::Home(_)
+                    | Pending::ConversationControl(..)
                     | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)
@@ -361,6 +366,7 @@ impl Workspace {
                                 session.title = saved.title;
                                 session.last_activity = saved.last_activity;
                                 session.title_state.turns = saved.title_refresh_turns;
+                                session.title_state.manual = saved.manual_title;
                                 session.options = saved.options;
                                 session.options_dirty = true;
                                 session.draft = saved.draft;
