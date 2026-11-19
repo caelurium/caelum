@@ -161,7 +161,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             );
     }
     if l.remote.details {
-        context = context.child(details(s, k, id, c));
+        context = context.child(super::stats::details(s, k, id, c));
     }
     let owner = id.to_owned();
     let input = text_input(&editors.draft, k.ty.ui)
@@ -190,21 +190,37 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             }
         })
         .on_submit(send);
+    let stopped = c
+        .machine()
+        .is_some_and(|m| matches!(m.state.as_str(), "archived" | "stopped"));
     let mut controls = row()
         .w_full()
         .gap(6.0)
         .center_y()
+        .children(super::stats::wide().then(|| ui::caption("OpenCode", k)))
         .child(
-            ui::Button::new(format!("Remote · {}", c.title()))
-                .variant(ButtonVariant::GhostMuted)
-                .on_press(|s: &mut Workspace| live_mut(s).remote.details = !live(s).remote.details)
-                .build(k)
-                .key("remote-badge")
-                .min_w(0.0)
-                .shrink(),
+            ui::Button::new(format!(
+                "Remote · {}{}",
+                c.title(),
+                if stopped { " · Stopped" } else { "" }
+            ))
+            .variant(ButtonVariant::GhostMuted)
+            .on_press(|s: &mut Workspace| live_mut(s).remote.details = !live(s).remote.details)
+            .build(k)
+            .key("remote-badge")
+            .min_w(0.0)
+            .shrink(),
         )
+        .children(super::stats::pinned(s, k, id, c))
         .child(rune::el().grow(1.0));
-    if matches!(c.thread.turn, Turn::Following(_)) {
+    if stopped {
+        let owner = id.to_owned();
+        controls = controls.child(
+            ui::Button::new("Resume")
+                .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true))
+                .build(k),
+        );
+    } else if matches!(c.thread.turn, Turn::Following(_)) {
         let a = id.to_owned();
         controls = controls.child(
             ui::Button::new("Stop")
@@ -246,35 +262,4 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         16.0,
         k,
     ))
-}
-
-fn details(_s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
-    let a = id.to_owned();
-    let b = a.clone();
-    col()
-        .w_full()
-        .gap(4.0)
-        .child(ui::caption(
-            format!("OpenCode · {} · {}", c.title(), c.machine().unwrap().state),
-            k,
-        ))
-        .child(
-            row()
-                .gap(6.0)
-                .child(
-                    ui::Button::new("Changes")
-                        .on_press(super::open_changes)
-                        .build(k),
-                )
-                .child(
-                    ui::Button::new("Refresh checkout")
-                        .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_remote(&a))
-                        .build(k),
-                )
-                .child(
-                    ui::Button::new("Stop machine")
-                        .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&b, false))
-                        .build(k),
-                ),
-        )
 }

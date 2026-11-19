@@ -112,9 +112,11 @@ pub(crate) fn inspector(s: &Workspace, k: &Kit) -> El {
         )
         .child(
             row()
+                .w_full()
+                .flex_wrap()
                 .gap(6.0)
                 .child(
-                    ui::Button::new("Commit reviewed changes")
+                    ui::Button::new("Commit reviewed")
                         .disabled(
                             !idle
                                 || review.patch.is_empty()
@@ -124,13 +126,16 @@ pub(crate) fn inspector(s: &Workspace, k: &Kit) -> El {
                             let l = live_mut(s);
                             l.app.commit_remote(&a, &l.remote.review.message.text);
                         })
-                        .build(k),
+                        .build(k)
+                        .key("remote-commit")
+                        .help("Commit exactly the changes reviewed on this machine"),
                 )
                 .child(
                     ui::Button::new("Push branch")
                         .disabled(!idle)
                         .on_press(move |s: &mut Workspace| live_mut(s).app.push_remote(&b))
-                        .build(k),
+                        .build(k)
+                        .key("remote-push"),
                 ),
         );
     if review.patch.is_empty() {

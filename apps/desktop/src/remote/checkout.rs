@@ -42,6 +42,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.app.remote.saved.selected = None;
     }
     let now = Instant::now();
+    super::stats::sync(l, tx, now);
     if let Some(at) = l.app.feed_deadline(now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
@@ -66,6 +67,14 @@ pub(crate) fn screen(s: &Workspace, k: &Kit) -> El {
     };
     if let Phase::Ready { branch, .. } = &c.phase {
         return super::conversation::view(s, k, id, c, branch);
+    }
+    if let Phase::Prepare {
+        machine,
+        new_branch: None,
+    } = &c.phase
+        && matches!(machine.state.as_str(), "archived" | "stopped")
+    {
+        return super::conversation::view(s, k, id, c, "Stopped");
     }
     body = body.child(ui::section(
         &format!("Remote · {}", c.title()),

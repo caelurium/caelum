@@ -13,9 +13,13 @@ use tokio::{
 pub(crate) struct Backend {
     runtime: OnceLock<Result<Runtime, String>>,
     connection: Mutex<Option<Boat>>,
+    closed: tokio::sync::watch::Sender<bool>,
 }
 
 impl Backend {
+    pub(crate) fn shutdown(&self) {
+        self.closed.send_replace(true);
+    }
     pub(crate) fn execute(&self, op: &Operation) -> Result<Outcome, String> {
         let rt = self.runtime.get_or_init(|| {
             Builder::new_current_thread()
@@ -24,9 +28,13 @@ impl Backend {
                 .map_err(|e| e.to_string())
         });
         rt.as_ref().map_err(Clone::clone)?.block_on(async {
-            tokio::time::timeout(Duration::from_secs(90), self.perform(op))
-                .await
-                .map_err(|_| "Boat did not respond in time".to_owned())?
+            let mut closed = self.closed.subscribe();
+            tokio::select! {
+                biased;
+                _ = closed.wait_for(|v| *v) => Err("Remote connection closed".into()),
+                result = tokio::time::timeout(Duration::from_secs(90), self.perform(op)) =>
+                    result.map_err(|_| "Boat did not respond in time".to_owned())?,
+            }
         })
     }
 
@@ -44,18 +52,17 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Stats(key) => self.connected().await?.stats(key).await.map(Outcome::Stats),
             Operation::Git(target, action) => self
                 .connected()
                 .await?
                 .git(target, action)
                 .await
                 .map(Outcome::Review),
-            Operation::Prompt(target, conversation, text) => {
-                self.connected()
-                    .await?
-                    .send(target, conversation.as_deref(), text)
-                    .await
-            }
+            Operation::Prompt(target, conversation, text) => match self.connected().await {
+                Ok(boat) => boat.send(target, conversation.as_deref(), text).await,
+                Err(error) => Ok(Outcome::Rejected(error)),
+            },
             Operation::Follow(target, run, cursor) => self
                 .connected()
                 .await?

@@ -498,10 +498,23 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                     text(
                         s.live
                             .as_ref()
-                            .filter(|_| !home::is_home(s))
-                            .and_then(|live| live.app.active_project.as_ref())
-                            .and_then(|path| std::path::Path::new(path).file_name())
-                            .and_then(|name| name.to_str())
+                            .and_then(|l| match l.panels.screen {
+                                panels::Screen::Remote => l
+                                    .app
+                                    .remote
+                                    .saved
+                                    .selected
+                                    .as_ref()
+                                    .and_then(|id| l.app.remote.saved.checkouts.get(id))
+                                    .and_then(|c| c.source.repository.rsplit('/').next()),
+                                panels::Screen::Home => None,
+                                _ => l
+                                    .app
+                                    .active_project
+                                    .as_ref()
+                                    .and_then(|path| std::path::Path::new(path).file_name())
+                                    .and_then(|name| name.to_str()),
+                            })
                             .unwrap_or("caelum"),
                     )
                     .font(k.ty.ui)

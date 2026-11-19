@@ -2,6 +2,7 @@ use super::{Pending, Workspace};
 mod checkout;
 mod git;
 mod harness;
+mod stats;
 #[cfg(test)]
 mod tests;
 use crate::{
@@ -15,6 +16,7 @@ pub(super) enum Lane {
     Checkout(String),
     Feed(String),
     Git(String),
+    Stats(String),
     Interrupt(String, crate::remote::Run),
 }
 
@@ -53,6 +55,7 @@ impl Workspace {
             Lane::Picker => self.complete_remote_picker(request, result),
             Lane::Feed(id) => self.complete_feed(&id, request, result),
             Lane::Git(id) => self.complete_git(&id, request, result),
+            Lane::Stats(id) => self.complete_stats(&id, request, result),
             Lane::Interrupt(id, run) => self.complete_interrupt(&id, request, &run, result),
             Lane::Checkout(id) => self.complete_checkout(&id, request, result),
             Lane::Connection if matches!(self.remote.connection, Connection::Loading(id) if id == request) =>

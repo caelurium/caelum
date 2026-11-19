@@ -5,12 +5,14 @@ mod credentials;
 mod git;
 mod harness;
 mod runtime;
+mod stats;
 
 pub(crate) use checkout::github_slug;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};
 pub use harness::{Line, Page, Run, Speaker, Thread, Turn};
 pub(crate) use runtime::Backend;
+pub use stats::{Activity, Monitor, Process, Sample};
 
 use serde::{Deserialize, Serialize};
 use std::{fmt, sync::Arc};
@@ -48,6 +50,8 @@ pub struct Machine {
     pub key: MachineId,
     pub name: String,
     pub state: String,
+    #[serde(default)]
+    pub auto_stop_unix: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +86,7 @@ pub enum Operation {
     Interrupt(Target, Run),
     Recover(Target, Option<String>, String),
     Git(Target, GitAction),
+    Stats(MachineId),
 }
 
 #[derive(Debug)]
@@ -97,6 +102,7 @@ pub enum Outcome {
     Page(Page),
     Interrupted,
     Review(Review),
+    Stats(Sample),
 }
 
 #[derive(Debug, Default)]
@@ -109,6 +115,7 @@ pub struct State {
     pub feeds: std::collections::HashMap<String, Job>,
     pub interrupts: std::collections::HashMap<String, u64>,
     pub changes: std::collections::HashMap<String, Changes>,
+    pub monitor: Monitor,
 }
 
 #[derive(Debug, Default)]

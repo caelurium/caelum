@@ -1,6 +1,7 @@
 mod checkout;
 mod git;
 mod harness;
+mod stats;
 
 use super::{Host, Inventory, Machine, MachineId, Machines, Outcome, Plan, Source, Target};
 use boat_sdk::{
@@ -31,6 +32,17 @@ impl Boat {
             },
             name: s.name,
             state: s.state,
+            auto_stop_unix: s
+                .archive_after
+                .as_deref()
+                .and_then(|value| {
+                    time::OffsetDateTime::parse(
+                        value,
+                        &time::format_description::well_known::Rfc3339,
+                    )
+                    .ok()
+                })
+                .map(|time| time.unix_timestamp()),
         }
     }
     fn owns(&self, key: &MachineId) -> Result<(), String> {

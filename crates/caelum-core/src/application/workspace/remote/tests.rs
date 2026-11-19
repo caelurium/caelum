@@ -31,6 +31,7 @@ fn machine(id: &str) -> Machine {
         },
         name: "dev".into(),
         state: "idle".into(),
+        auto_stop_unix: None,
     }
 }
 
@@ -161,4 +162,48 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             assert!(!reopened.send_remote(&id, "Edit a file"));
         }
     }
+}
+
+#[test]
+fn only_the_visible_monitor_polls_and_stale_samples_cannot_stop_a_new_attempt() {
+    use std::time::{Duration, Instant};
+    let mut app = Workspace::default();
+    let (id, req, _) = created(&mut app);
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Machine(machine("vm-a")))),
+    ));
+    let (req, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Prepared(
+            machine("vm-a"),
+            "feat/new".into(),
+        ))),
+    ));
+    let now = Instant::now();
+    assert!(app.monitor_remote(false, now).is_none() && app.commands().is_empty());
+    let sample = || {
+        Outcome::Stats(Sample {
+            machine: machine("vm-a"),
+            vcpu: Some(2),
+            memory_gb: Some(4),
+            activity: Activity::Unavailable,
+        })
+    };
+    app.monitor_remote(true, now);
+    let (old, _) = app.commands().pop().unwrap();
+    app.monitor_remote(false, now);
+    app.monitor_remote(true, now);
+    let (new, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(old, Ok(Reply::Remote(sample()))));
+    assert!(app.remote.monitor.sample(&id).is_none());
+    app.apply(Event::Completed(new, Ok(Reply::Remote(sample()))));
+    let next = app.monitor_remote(true, now).unwrap();
+    assert!(app.commands().is_empty());
+    assert!(
+        app.monitor_remote(false, next + Duration::from_secs(60))
+            .is_none()
+            && app.commands().is_empty()
+    );
 }

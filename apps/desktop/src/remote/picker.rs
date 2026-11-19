@@ -70,7 +70,10 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     body = body
         .child(ui::section(
             &source.repository,
-            "Create a machine from a published base branch.",
+            &source.environment.as_ref().map_or_else(
+                || "Create a dedicated Boat environment for this repository.".into(),
+                |name| format!("Start from a published branch in the {name} environment."),
+            ),
             k,
         ))
         .child(ui::caption("Base branch", k))

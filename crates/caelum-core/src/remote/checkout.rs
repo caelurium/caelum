@@ -48,6 +48,8 @@ pub struct Checkout {
     pub phase: Phase,
     #[serde(default)]
     pub thread: super::Thread,
+    #[serde(default)]
+    pub pinned_stats: bool,
 }
 
 impl Checkout {

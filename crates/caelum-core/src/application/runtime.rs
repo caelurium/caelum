@@ -71,6 +71,7 @@ impl Default for ProviderRuntime {
 
 impl ProviderRuntime {
     pub fn shutdown(&self) {
+        self.remote.shutdown();
         self.updates.shutdown();
         self.approvals.shutdown();
         // Close registration first: an in-flight connection cannot leak a child

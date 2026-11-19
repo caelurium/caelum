@@ -2,10 +2,13 @@ mod changes;
 mod checkout;
 mod conversation;
 mod picker;
+mod scene;
+mod stats;
 
 pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use picker::{open, picker};
+pub(crate) use scene::scene;
 
 use crate::{
     Workspace,
@@ -25,6 +28,7 @@ pub(crate) struct State {
     editors: std::collections::HashMap<String, conversation::Editors>,
     details: bool,
     review: changes::Panel,
+    checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

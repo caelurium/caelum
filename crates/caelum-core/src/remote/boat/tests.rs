@@ -165,3 +165,42 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
         .await;
     boat.interrupt(&target, &next).await.unwrap();
 }
+
+#[tokio::test]
+async fn live_and_historical_process_samples_never_expose_command_arguments() {
+    use crate::remote::Activity;
+    let (server, boat) = fixture().await;
+    let mut vm = sandbox("idle");
+    vm["vcpu"] = 4.into();
+    vm["memoryGB"] = 8.into();
+    vm["archiveAfter"] = "2026-01-01T12:00:00Z".into();
+    Mock::given(path("/sandboxes/vm-1"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"info","sandbox":vm})),
+        )
+        .mount(&server)
+        .await;
+    let key = MachineId {
+        host: Host::Boat,
+        account: "user-1".into(),
+        id: "vm-1".into(),
+    };
+    for live in [true, false] {
+        let guard=Mock::given(path("/sandboxes/vm-1/processes")).respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "ok":true,"type":"processes","live":live,"total":2,"processes":[
+                {"pid":25,"cpuPercent":1,"memoryMB":42,"command":"sh"},
+                {"pid":26,"cpuPercent":84.3,"memoryMB":610,"command":"/usr/bin/cargo --token fixture-secret"}
+            ]
+        }))).expect(1).mount_as_scoped(&server).await;
+        let sample = boat.stats(&key).await.unwrap();
+        assert_eq!((sample.vcpu, sample.memory_gb), (Some(4), Some(8)));
+        assert!(sample.machine.auto_stop_unix.is_some());
+        assert!(!format!("{sample:?}").contains("fixture-secret"));
+        match sample.activity {
+            Activity::Live(Some(p)) if live => assert_eq!(p.name, "cargo"),
+            Activity::LastSample(Some(p)) if !live => assert_eq!(p.cpu_percent, 84.3),
+            other => panic!("wrong sample {other:?}"),
+        }
+        drop(guard);
+    }
+}

@@ -30,6 +30,58 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 #[tokio::test]
+async fn first_checkout_configures_only_its_new_environment_before_creating_the_vm() {
+    let (server, boat) = fixture().await;
+    let plan = Plan {
+        token: uuid::Uuid::new_v4().to_string(),
+        branch: "feat/new".into(),
+        size: Size::Small,
+        minutes: 30,
+    };
+    let name = format!("caelum-{}", plan.token);
+    let environment = |id: &str, name: &str, is_default: bool| {
+        json!({"id":id,"name":name,"isDefault":is_default,
+        "safeForThirdParties":false,"passGithub":true,"passSecrets":false,"passSandboxCredentials":false,
+        "passAgentsCredentials":true,"envContents":"","secretFiles":[],"versions":[],"selectedRepositories":[]})
+    };
+    Mock::given(method("GET"))
+        .and(path("/environments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "environments":[environment("shared","base",true)]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(path("/repos")).and(wiremock::matchers::query_param("q","example/project"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"repos","environmentId":"shared",
+            "installations":[{"repositories":[{"fullName":"other/project","databaseId":"wrong"},{"fullName":"example/project","databaseId":"repo-1"}]}],"selectedRepositories":[]}))).mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/environments"))
+        .and(body_json(json!({"name":name})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"environments":[environment("dedicated",&name,false)]})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT")).and(path("/environments/dedicated")).and(body_json(json!({
+        "safeForThirdParties":false,"passGithub":true,"passSecrets":false,"passSandboxCredentials":false,
+        "passAgentsCredentials":true,"repositories":[{"repositoryId":"repo-1","baseBranch":"main"}]
+    }))).respond_with(ResponseTemplate::new(200).set_body_json(json!({"success":true}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).and(path("/sandboxes")).and(header("idempotency-key",plan.token.as_str()))
+        .and(wiremock::matchers::body_partial_json(json!({"environment":name})))
+        .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"create","status":"provisioning","sandbox":sandbox("provisioning")}))).expect(1).mount(&server).await;
+    let source = Source {
+        project: "/local/project".into(),
+        account: boat.account.clone(),
+        repository: "example/project".into(),
+        base: "main".into(),
+        environment: None,
+    };
+    assert_eq!(boat.create(&source, &plan).await.unwrap().key.id, "vm-1");
+}
+
+#[tokio::test]
 async fn opens_a_new_branch_runs_opencode_and_publishes_only_the_reviewed_vm_tree() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

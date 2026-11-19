@@ -65,6 +65,7 @@ impl Workspace {
                 source,
                 phase: Phase::Create(plan),
                 thread: Thread::default(),
+                pinned_stats: false,
             },
         );
         self.remote.picker = None;
@@ -97,6 +98,7 @@ impl Workspace {
                 Checkout {
                     source,
                     thread: Thread::default(),
+                    pinned_stats: false,
                     phase: Phase::Prepare {
                         machine,
                         new_branch: None,
@@ -156,6 +158,9 @@ impl Workspace {
     fn checkout_request(&mut self, id: &str, op: Operation) {
         if matches!(self.remote.jobs.get(id), Some(Job::Busy(_))) {
             return;
+        }
+        if self.remote.saved.selected.as_deref() == Some(id) {
+            self.remote.monitor = Monitor::Off;
         }
         let request = self.request(
             Command::Remote(op),
