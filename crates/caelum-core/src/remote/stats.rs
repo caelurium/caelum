@@ -44,6 +44,9 @@ pub enum Monitor {
 }
 
 impl Monitor {
+    pub(crate) fn owns(&self, id: &str) -> bool {
+        matches!(self, Self::Loading { owner, .. } | Self::Showing {owner,..} | Self::Failed{owner,..} if owner == id)
+    }
     pub fn sample(&self, id: &str) -> Option<&Sample> {
         match self {
             Self::Loading {

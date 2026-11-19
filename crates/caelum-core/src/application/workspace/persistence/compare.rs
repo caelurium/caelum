@@ -136,6 +136,7 @@ impl Workspace {
 impl Session {
     fn matches_saved(&self, saved: &SavedSession) -> bool {
         let SavedSession {
+            vm_link,
             last_activity,
             scope,
             remote_id,
@@ -152,7 +153,8 @@ impl Session {
             reading,
             unread,
         } = saved;
-        self.last_activity == *last_activity
+        self.vm_link == *vm_link
+            && self.last_activity == *last_activity
             && self.scope == *scope
             && self.remote_id == *remote_id
             && self.title == *title

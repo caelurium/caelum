@@ -7,9 +7,16 @@ use std::time::{Duration, Instant};
 
 impl Workspace {
     pub fn remote_picker(&mut self, project: String) {
+        if let Some(h) = self.vm_handoff() {
+            if h.project == project {
+                self.discover_remote_source(project, true);
+                self.list_machines();
+            }
+            return;
+        }
         let project = self.group_path(&project).to_owned();
         if self.projects.iter().any(|p| p.path == project) {
-            self.discover_remote_source(project);
+            self.discover_remote_source(project, false);
         } else {
             // A folder selected in the VM dialog goes through the normal project
             // validation worker without opening a conversation on the laptop.
@@ -44,7 +51,7 @@ impl Workspace {
                 if !self.projects.iter().any(|p| p.path == project.path) {
                     self.projects.push(project);
                 }
-                self.discover_remote_source(path);
+                self.discover_remote_source(path, false);
             }
             other => {
                 self.remote.picker = Some(Picker::Failed {
@@ -57,11 +64,13 @@ impl Workspace {
         }
     }
 
-    pub(super) fn discover_remote_source(&mut self, project: String) {
-        let request = self.request(
-            Command::Remote(Operation::Discover(project.clone())),
-            Pending::Remote(Lane::Picker),
-        );
+    pub(super) fn discover_remote_source(&mut self, project: String, handoff: bool) {
+        let op = if handoff {
+            Operation::DiscoverHandoff(project.clone())
+        } else {
+            Operation::Discover(project.clone())
+        };
+        let request = self.request(Command::Remote(op), Pending::Remote(Lane::Picker));
         self.remote.picker = Some(Picker::Loading { request, project });
     }
 
@@ -92,25 +101,36 @@ impl Workspace {
         base: &str,
         branch: &str,
         size: Size,
-        minutes: u32,
+        lifetime: Lifetime,
     ) -> Option<String> {
         let Some(Picker::Ready(mut source)) = self.remote.picker.clone() else {
             return None;
         };
-        if !valid_branch(base)
-            || !valid_branch(branch)
-            || base == branch
-            || !matches!(minutes, 30 | 60 | 120)
-        {
+        if source.published_tip.is_some() {
             return None;
         }
         source.base = base.into();
+        let id = self.register_vm(source, branch, size, lifetime)?;
+        self.select_remote(&id);
+        Some(id)
+    }
+
+    pub(super) fn register_vm(
+        &mut self,
+        source: Source,
+        branch: &str,
+        size: Size,
+        lifetime: Lifetime,
+    ) -> Option<String> {
+        if !source.valid_plan_branch(branch) {
+            return None;
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let plan = Plan {
             token: id.clone(),
             branch: branch.into(),
             size,
-            minutes,
+            lifetime,
         };
         self.remote.saved.checkouts.insert(
             id.clone(),
@@ -123,11 +143,16 @@ impl Workspace {
             },
         );
         self.remote.picker = None;
-        self.select_remote(&id);
         Some(id)
     }
 
     pub fn attach_remote(&mut self, machine: Machine) -> Option<String> {
+        let id = self.register_machine(machine)?;
+        self.select_remote(&id);
+        Some(id)
+    }
+
+    pub(super) fn register_machine(&mut self, machine: Machine) -> Option<String> {
         let Some(Picker::Ready(source)) = self.remote.picker.clone() else {
             return None;
         };
@@ -163,7 +188,6 @@ impl Workspace {
             id
         };
         self.remote.picker = None;
-        self.select_remote(&id);
         Some(id)
     }
 
@@ -211,10 +235,12 @@ impl Workspace {
     }
 
     fn checkout_request(&mut self, id: &str, op: Operation) {
-        if matches!(self.remote.jobs.get(id), Some(Job::Busy(_))) {
+        if matches!(self.remote.jobs.get(id), Some(Job::Busy(_)))
+            || matches!(self.remote.lifetimes.get(id), Some(Job::Busy(_)))
+        {
             return;
         }
-        if self.remote.saved.selected.as_deref() == Some(id) {
+        if self.remote.monitor.owns(id) {
             self.remote.monitor = Monitor::Off;
         }
         let request = self.request(

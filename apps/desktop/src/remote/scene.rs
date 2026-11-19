@@ -10,6 +10,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         account: "example-account".into(),
         repository: "example/project".into(),
         base: "main".into(),
+        published_tip: None,
         environment: Some("project".into()),
     };
     let machine = Machine {

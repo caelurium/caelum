@@ -1,14 +1,17 @@
 mod checkout;
 mod git;
 mod harness;
+mod setup_error;
 mod stats;
 
-use super::{Host, Inventory, Machine, MachineId, Machines, Outcome, Plan, Source, Target};
+use super::{
+    Host, Inventory, Lifetime, Machine, MachineId, Machines, Outcome, Plan, Source, Target,
+};
 use boat_sdk::{
     sandbox::{
-        requests::{ResumeRequest, StopRequest},
+        requests::{ResumeRequest, StopRequest, UpdateSandboxRequest},
         resources::Sandbox,
-        SandboxListQuery,
+        AutoStop, SandboxListQuery,
     },
     Client,
 };
@@ -23,6 +26,29 @@ pub(super) struct Boat {
 }
 
 impl Boat {
+    pub(super) async fn lifetime(
+        &self,
+        key: &MachineId,
+        lifetime: Lifetime,
+    ) -> Result<Machine, String> {
+        self.owns(key)?;
+        let result = self
+            .client
+            .update_sandbox(
+                &key.id,
+                &UpdateSandboxRequest {
+                    ttl_seconds: Some(auto_stop(lifetime)),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(api)?;
+        if !result.ok || result.sandbox.id != key.id {
+            return Err("Boat did not update the selected machine.".into());
+        }
+        Ok(self.machine(result.sandbox))
+    }
+
     fn machine(&self, s: Sandbox) -> Machine {
         Machine {
             key: MachineId {
@@ -56,7 +82,7 @@ impl Boat {
         let account = client
             .me()
             .await
-            .map_err(api)?
+            .map_err(|e| setup_error::Step::ReadAccount.error(e))?
             .user
             .id
             .filter(|id| !id.is_empty())
@@ -73,7 +99,11 @@ impl Machines for Boat {
             ..Default::default()
         };
         loop {
-            let page = self.client.list_sandboxes(&query).await.map_err(api)?;
+            let page = self
+                .client
+                .list_sandboxes(&query)
+                .await
+                .map_err(|e| setup_error::Step::ListMachines.error(e))?;
             machines.extend(page.sandboxes.into_iter().map(|s| self.machine(s)));
             let Some(info) = page.page_info.filter(|p| p.has_more) else {
                 break;
@@ -121,6 +151,14 @@ impl Machines for Boat {
 }
 
 pub(super) fn api(error: boat_sdk::Error) -> String {
+    if matches!(&error, boat_sdk::Error::Api {code, ..} if code.as_deref() == Some("trial_auto_stop_required"))
+    {
+        return "Boat trials require an auto-stop of 2 hours or less.".into();
+    }
     // SDK Display omits response bodies and secret-bearing URLs.
     error.to_string()
+}
+
+fn auto_stop(lifetime: Lifetime) -> AutoStop {
+    Option::<u32>::from(lifetime).map_or(AutoStop::Disabled, |m| AutoStop::AfterSeconds(m * 60))
 }

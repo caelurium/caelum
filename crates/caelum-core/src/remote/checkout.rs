@@ -2,14 +2,29 @@ use super::{Machine, MachineId};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, time::Instant};
 
-/// The only local input is the published GitHub origin. Remote paths are never passed to Project::open.
+/// GitHub origin and published branch from a local checkout; no local files are transferred.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub project: String,
     pub account: String,
     pub repository: String,
     pub base: String,
+    /// The published tip captured from the session's exact worktree for a handoff.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_tip: Option<String>,
     pub environment: Option<String>,
+}
+
+impl Source {
+    /// Standalone creates use a new name. Only a confirmed handoff can reuse the base name.
+    pub(crate) fn valid_plan_branch(&self, branch: &str) -> bool {
+        valid_branch(&self.base)
+            && valid_branch(branch)
+            && self
+                .published_tip
+                .as_deref()
+                .map_or(self.base != branch, valid_tip)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,7 +41,8 @@ pub struct Plan {
     pub token: String,
     pub branch: String,
     pub size: Size,
-    pub minutes: u32,
+    #[serde(default, rename = "minutes")]
+    pub lifetime: super::Lifetime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +84,12 @@ impl Checkout {
         Some(Target {
             machine: self.machine()?.key.clone(),
             repository: self.source.repository.clone(),
+            required_base: self
+                .thread
+                .continued
+                .as_ref()
+                .filter(|_| self.thread.conversation.is_none())
+                .and_then(|c| c.base.clone()),
         })
     }
 }
@@ -76,6 +98,29 @@ impl Checkout {
 pub struct Target {
     pub machine: MachineId,
     pub repository: String,
+    pub required_base: Option<PublishedBase>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishedBase {
+    pub branch: String,
+    pub tip: String,
+}
+
+impl PublishedBase {
+    pub(super) fn valid(&self) -> bool {
+        valid_branch(&self.branch) && valid_tip(&self.tip)
+    }
+}
+
+fn valid_tip(tip: &str) -> bool {
+    matches!(tip.len(), 40 | 64) && tip.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VmLink {
+    pub checkout: String,
+    pub thread: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -80,6 +80,9 @@ impl Harness for Boat {
         if let Err(error) = self.verify_origin(target).await {
             return Ok(Outcome::Rejected(error));
         }
+        if let Err(error) = self.verify_base(target).await {
+            return Ok(Outcome::Rejected(error));
+        }
         let request = PromptRequest {
             provider: Some("opencode".into()),
             new_conversation: conversation.is_none().then_some(true),

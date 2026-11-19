@@ -20,6 +20,8 @@ pub struct Continuation {
     pub id: String,
     pub title: String,
     pub chat: Chat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<super::PublishedBase>,
 }
 
 impl Chat {

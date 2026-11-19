@@ -119,6 +119,7 @@ impl Workspace {
                 let saved_index = session_indices.len();
                 session_indices.insert(index, saved_index);
                 Some(SavedSession {
+                    vm_link: s.vm_link.clone(),
                     last_activity: s.last_activity,
                     scope: s.scope.clone(),
                     remote_id: s.remote_id.clone(),

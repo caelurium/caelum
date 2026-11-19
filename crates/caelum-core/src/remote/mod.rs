@@ -5,6 +5,7 @@ mod checkout;
 mod credentials;
 mod git;
 mod harness;
+mod lifetime;
 mod runtime;
 mod stats;
 
@@ -12,9 +13,12 @@ pub use chat::Chat;
 pub use chat::Continuation;
 pub use chat::Message;
 pub(crate) use checkout::github_slug;
+pub use checkout::PublishedBase;
+pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};
 pub use harness::{Line, Page, Run, Speaker, Thread, Turn};
+pub use lifetime::Lifetime;
 pub(crate) use runtime::Backend;
 pub use stats::{Activity, Monitor, Process, Sample};
 
@@ -82,9 +86,11 @@ pub enum Operation {
     Inventory,
     Disconnect,
     Discover(String),
+    DiscoverHandoff(String),
     Create(Source, Plan),
     Prepare(Target, String, Option<String>),
     Power(MachineId, bool),
+    Lifetime(MachineId, Lifetime),
     Prompt(Target, Option<String>, String),
     Follow(Target, Run, Option<String>),
     Interrupt(Target, Run),
@@ -101,6 +107,7 @@ pub enum Outcome {
     Machine(Machine),
     Waiting(Machine),
     Prepared(Machine, String),
+    Lifetime(Machine),
     Accepted(Run),
     Rejected(String),
     Page(Page),
@@ -120,6 +127,7 @@ pub struct State {
     pub interrupts: std::collections::HashMap<String, u64>,
     pub changes: std::collections::HashMap<String, Changes>,
     pub monitor: Monitor,
+    pub lifetimes: std::collections::HashMap<String, Job>,
 }
 
 #[derive(Debug, Default)]

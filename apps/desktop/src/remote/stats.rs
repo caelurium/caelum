@@ -55,7 +55,8 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
             l.app.refresh_remote(&id);
         }
     }
-    if let Some(at) = l.app.monitor_remote(visible, now) {
+    let owner = l.app.remote.saved.selected.clone().filter(|_| visible);
+    if let Some(at) = l.app.monitor_remote(owner.as_deref(), now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
 }

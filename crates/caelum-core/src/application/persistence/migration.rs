@@ -139,6 +139,7 @@ fn from_legacy(old: caelum_protocol::WorkspaceSnapshot) -> Snapshot {
 
 fn saved(scope: Scope, remote_id: Option<String>) -> SavedSession {
     SavedSession {
+        vm_link: None,
         last_activity: None,
         scope,
         remote_id,

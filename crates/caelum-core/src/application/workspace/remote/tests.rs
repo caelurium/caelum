@@ -7,6 +7,7 @@ use crate::{
 
 fn source() -> Source {
     Source {
+        published_tip: None,
         project: "/local/project".into(),
         repository: "example/project".into(),
         account: "owner".into(),
@@ -17,7 +18,7 @@ fn source() -> Source {
 fn created(app: &mut Workspace) -> (String, u64, Plan) {
     app.remote.picker = Some(Picker::Ready(source()));
     let id = app
-        .create_remote("main", "feat/new", Size::Small, 30)
+        .create_remote("main", "feat/new", Size::Small, Lifetime::HalfHour)
         .unwrap();
     let (req, Command::Remote(Operation::Create(_, plan))) = app.commands().pop().unwrap() else {
         panic!()
@@ -35,6 +36,20 @@ fn machine(id: &str) -> Machine {
         state: "idle".into(),
         auto_stop_unix: None,
     }
+}
+
+#[test]
+fn pending_vm_plans_preserve_old_timers_and_require_explicit_manual_stop() {
+    use serde_json::{json, Value};
+    let mut plan = json!({"token":"attempt","branch":"feature","size":"Small","minutes":120});
+    let read = |v: &Value| serde_json::from_value::<Plan>(v.clone()).map(|p| p.lifetime);
+    assert_eq!(read(&plan).unwrap(), Lifetime::TwoHours);
+    plan.as_object_mut().unwrap().remove("minutes");
+    assert_eq!(read(&plan).unwrap(), Lifetime::Hour);
+    plan["minutes"] = Value::Null;
+    assert_eq!(read(&plan).unwrap(), Lifetime::UntilStopped);
+    plan["minutes"] = json!(0);
+    assert!(read(&plan).is_err());
 }
 
 #[test]
@@ -222,7 +237,7 @@ fn only_the_visible_monitor_polls_and_stale_samples_cannot_stop_a_new_attempt() 
         ))),
     ));
     let now = Instant::now();
-    assert!(app.monitor_remote(false, now).is_none() && app.commands().is_empty());
+    assert!(app.monitor_remote(None, now).is_none() && app.commands().is_empty());
     let sample = || {
         Outcome::Stats(Sample {
             machine: machine("vm-a"),
@@ -231,18 +246,18 @@ fn only_the_visible_monitor_polls_and_stale_samples_cannot_stop_a_new_attempt() 
             activity: Activity::Unavailable,
         })
     };
-    app.monitor_remote(true, now);
+    app.monitor_remote(Some(&id), now);
     let (old, _) = app.commands().pop().unwrap();
-    app.monitor_remote(false, now);
-    app.monitor_remote(true, now);
+    app.monitor_remote(None, now);
+    app.monitor_remote(Some(&id), now);
     let (new, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(old, Ok(Reply::Remote(sample()))));
     assert!(app.remote.monitor.sample(&id).is_none());
     app.apply(Event::Completed(new, Ok(Reply::Remote(sample()))));
-    let next = app.monitor_remote(true, now).unwrap();
+    let next = app.monitor_remote(Some(&id), now).unwrap();
     assert!(app.commands().is_empty());
     assert!(
-        app.monitor_remote(false, next + Duration::from_secs(60))
+        app.monitor_remote(None, next + Duration::from_secs(60))
             .is_none()
             && app.commands().is_empty()
     );

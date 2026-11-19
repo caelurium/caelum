@@ -39,6 +39,7 @@ use super::{
 };
 
 pub struct Session {
+    vm_link: Option<crate::remote::VmLink>,
     pub scope: Scope,
     pub remote_id: Option<String>,
     relocation: relocation::Relocation,
@@ -99,6 +100,7 @@ pub struct Session {
 impl Session {
     fn new(scope: Scope) -> Self {
         Self {
+            vm_link: None,
             scope,
             remote_id: None,
             relocation: Default::default(),

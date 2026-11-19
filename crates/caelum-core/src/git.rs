@@ -14,6 +14,7 @@ use thiserror::Error;
 
 use crate::projects::{Project, ProjectError};
 
+mod handoff;
 mod paths;
 use paths::{
     git_path_string, project_relative_prefix, validate_project_relative_path, validate_scoped_file,

@@ -4,7 +4,7 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::{Picker, Size, valid_branch};
+use caelum_core::remote::{Lifetime, Picker, Size, valid_branch};
 use rune::{El, ScrollSpec, TextEdit, col, row};
 use rune_kit::{Kit, ScrollBar};
 
@@ -12,7 +12,7 @@ pub(super) struct Form {
     base: TextEdit,
     branch: TextEdit,
     size: Size,
-    minutes: u32,
+    lifetime: Lifetime,
 }
 impl Default for Form {
     fn default() -> Self {
@@ -20,7 +20,7 @@ impl Default for Form {
             base: TextEdit::default(),
             branch: TextEdit::default(),
             size: Size::Standard,
-            minutes: 60,
+            lifetime: Lifetime::default(),
         }
     }
 }
@@ -102,11 +102,15 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                 .on_press(move |s: &mut Workspace| live_mut(s).remote.form.size = size),
         );
     }
-    let mut ttl = row().center_y().gap(4.0).child(ui::caption("Auto-stop", k));
-    for minutes in [30, 60, 120] {
+    let mut ttl = row()
+        .flex_wrap()
+        .center_y()
+        .gap(4.0)
+        .child(ui::caption("Auto-stop", k));
+    for lifetime in Lifetime::CHOICES {
         ttl = ttl.child(
-            ui::tab(&format!("{minutes} min"), form.minutes == minutes, k)
-                .on_press(move |s: &mut Workspace| live_mut(s).remote.form.minutes = minutes),
+            ui::tab(lifetime.label(), form.lifetime == lifetime, k)
+                .on_press(move |s: &mut Workspace| live_mut(s).remote.form.lifetime = lifetime),
         );
     }
     let hint = if form.branch.text.is_empty() {
@@ -119,30 +123,40 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
         None
     };
     let base = base.clone();
-    body = body.child(sizes).child(ttl).child(
-        row()
-            .w_full()
-            .gap(10.0)
-            .center_y()
-            .child(
-                ui::Button::new("Create VM")
-                    .variant(rune_kit::ButtonVariant::Contrast)
-                    .disabled(hint.is_some())
-                    .on_press(move |s: &mut Workspace| {
-                        let l = live_mut(s);
-                        let f = &l.remote.form;
-                        if l.app
-                            .create_remote(&base, &f.branch.text, f.size, f.minutes)
-                            .is_some()
-                        {
-                            super::checkout::enter(s);
-                        }
-                    })
-                    .build(k)
-                    .key("create-remote"),
+    body = body
+        .child(sizes)
+        .child(ttl)
+        .children((form.lifetime == Lifetime::UntilStopped).then(|| {
+            ui::caption(
+                "Runs and bills until you stop the VM. Requires a paid Boat plan.",
+                k,
             )
-            .children(hint.map(|text| ui::caption(text, k).grow(1.0).min_w(0.0).wrap())),
-    );
+            .wrap()
+        }))
+        .child(
+            row()
+                .w_full()
+                .gap(10.0)
+                .center_y()
+                .child(
+                    ui::Button::new("Create VM")
+                        .variant(rune_kit::ButtonVariant::Contrast)
+                        .disabled(hint.is_some())
+                        .on_press(move |s: &mut Workspace| {
+                            let l = live_mut(s);
+                            let f = &l.remote.form;
+                            if l.app
+                                .create_remote(&base, &f.branch.text, f.size, f.lifetime)
+                                .is_some()
+                            {
+                                super::checkout::enter(s);
+                            }
+                        })
+                        .build(k)
+                        .key("create-remote"),
+                )
+                .children(hint.map(|text| ui::caption(text, k).grow(1.0).min_w(0.0).wrap())),
+        );
     if l.panels.overlay != Some(Screen::CreateVm)
         && let Some(inventory) = &l.app.remote.inventory
     {

@@ -4,10 +4,10 @@ use std::time::{Duration, Instant};
 
 impl Workspace {
     /// The desktop supplies visibility; all request and deadline ownership stays in core.
-    pub fn monitor_remote(&mut self, visible: bool, now: Instant) -> Option<Instant> {
-        let owner = self.remote.saved.selected.as_ref().filter(|id| {
-            visible
-                && !self.remote.jobs.contains_key(*id)
+    pub fn monitor_remote(&mut self, visible: Option<&str>, now: Instant) -> Option<Instant> {
+        let owner = visible.filter(|id| {
+            !self.remote.jobs.contains_key(*id)
+                && !matches!(self.remote.lifetimes.get(*id), Some(Job::Busy(_)))
                 && self
                     .remote
                     .saved
@@ -28,7 +28,7 @@ impl Workspace {
             }
             _ => {}
         }
-        let id = id.clone();
+        let id = id.to_owned();
         let key = self.remote.saved.checkouts[&id]
             .machine()
             .unwrap()
@@ -56,7 +56,6 @@ impl Workspace {
         result: Result<Outcome, String>,
     ) {
         if !matches!(&self.remote.monitor,Monitor::Loading{owner,request:r,..} if owner==id && *r==request)
-            || self.remote.saved.selected.as_deref() != Some(id)
         {
             return;
         }

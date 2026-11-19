@@ -3,6 +3,8 @@ mod checkout;
 mod git;
 pub(super) mod handoff;
 mod harness;
+mod lifetime;
+mod link;
 mod stats;
 #[cfg(test)]
 mod tests;
@@ -16,10 +18,12 @@ pub(super) enum Lane {
     OpenProject,
     Picker,
     Handoff,
+    ConfirmHandoff(Box<(crate::remote::Source, handoff::VmDestination)>),
     Checkout(String),
     Feed(String),
     Git(String),
     Stats(String),
+    Lifetime(String),
     Interrupt(String, crate::remote::Run),
 }
 
@@ -64,9 +68,13 @@ impl Workspace {
         });
         match lane {
             Lane::Picker => self.complete_remote_picker(request, result),
+            Lane::ConfirmHandoff(plan) => {
+                self.complete_handoff_confirmation(request, plan.0, plan.1, result)
+            }
             Lane::Feed(id) => self.complete_feed(&id, request, result),
             Lane::Git(id) => self.complete_git(&id, request, result),
             Lane::Stats(id) => self.complete_stats(&id, request, result),
+            Lane::Lifetime(id) => self.complete_lifetime(&id, request, result),
             Lane::Interrupt(id, run) => self.complete_interrupt(&id, request, &run, result),
             Lane::Checkout(id) => self.complete_checkout(&id, request, result),
             Lane::Connection if matches!(self.remote.connection, Connection::Loading(id) if id == request) =>
@@ -76,7 +84,7 @@ impl Workspace {
                         self.remote.inventory = Some(inventory);
                         if self.remote.picker.is_none() {
                             if let Some(h) = self.vm_handoff() {
-                                self.discover_remote_source(self.group_path(&h.project).to_owned());
+                                self.discover_remote_source(h.project.clone(), true);
                             }
                         }
                         Connection::Idle

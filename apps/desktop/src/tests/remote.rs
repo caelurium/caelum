@@ -30,6 +30,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         l.apply(Event::Completed(
             id,
             Ok(Reply::Remote(Outcome::Source(Source {
+                published_tip: None,
                 account: "example-account".into(),
                 project,
                 repository: "example/project".into(),

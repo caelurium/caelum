@@ -2,6 +2,14 @@ use super::*;
 use crate::application::{Attachment, HandoffPhase, HandoffSource, Provider, Scope, VmDestination};
 use caelum_protocol::ProjectInfo;
 
+fn source() -> Source {
+    Source {
+        base: "feature/local".into(),
+        published_tip: Some("a".repeat(40)),
+        ..super::source()
+    }
+}
+
 fn local(app: &mut Workspace) -> usize {
     let project = source().project;
     app.projects.push(ProjectInfo {
@@ -54,11 +62,158 @@ fn ready(app: &mut Workspace, req: u64) {
 
 fn new_vm() -> VmDestination {
     VmDestination::Create {
-        base: "main".into(),
-        branch: "feat/next".into(),
         size: Size::Small,
-        minutes: 30,
+        lifetime: Lifetime::EightHours,
     }
+}
+
+#[test]
+fn a_second_handoff_cannot_repurpose_an_unfinished_new_vm_checkout() {
+    let mut app = Workspace::default();
+    let i = local(&mut app);
+    let req = reading(&mut app, i);
+    ready(&mut app, req);
+    let id = app.finish_vm_handoff(new_vm()).unwrap();
+    let (create, _) = app.commands().pop().unwrap();
+    let m = machine("vm");
+    app.apply(Event::Completed(
+        create,
+        Ok(Reply::Remote(Outcome::Machine(m.clone()))),
+    ));
+    let (prepare, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(prepare, Err("Lost setup response".into())));
+
+    app.home_select_project(source().project);
+    assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
+    app.remote.picker = Some(Picker::Ready(Source {
+        base: "other-branch".into(),
+        ..source()
+    }));
+    assert!(app.finish_vm_handoff(VmDestination::Existing(m)).is_none());
+    app.refresh_remote(&id);
+    let commands = app.commands();
+    assert!(commands.iter().any(|(_, c)| matches!(c, Command::Remote(Operation::Prepare(t, base, Some(branch)))
+        if base == "feature/local" && branch == base && t.required_base.as_ref().is_some_and(|p| p.branch == *base))));
+}
+
+#[test]
+fn confirming_checks_the_exact_worktree_again_and_a_late_or_changed_branch_cannot_start_a_vm() {
+    let mut app = Workspace::default();
+    let i = local(&mut app);
+    let path = app.sessions[i].scope.project.clone();
+    app.project_roots
+        .insert(path.clone(), "/other/main-worktree".into());
+    let request = reading(&mut app, i);
+    ready(&mut app, request);
+    let confirm = |app: &mut Workspace| {
+        app.confirm_vm_handoff(new_vm());
+        let cmds = app.commands();
+        let [(req, Command::Remote(Operation::DiscoverHandoff(p)))] = cmds.as_slice() else {
+            panic!("{cmds:?}")
+        };
+        assert_eq!(p, &path);
+        *req
+    };
+    let old = confirm(&mut app);
+    app.dismiss_vm_handoff();
+    let req = reading(&mut app, i);
+    ready(&mut app, req);
+    let current = confirm(&mut app);
+    app.apply(Event::Completed(
+        old,
+        Ok(Reply::Remote(Outcome::Source(source()))),
+    ));
+    assert!(!app.enter_confirmed_vm());
+    app.apply(Event::Completed(
+        current,
+        Ok(Reply::Remote(Outcome::Source(Source {
+            base: "switched".into(),
+            ..source()
+        }))),
+    ));
+    assert!(!app.enter_confirmed_vm());
+    assert!(matches!(
+        app.vm_handoff().unwrap().phase,
+        HandoffPhase::Failed(_)
+    ));
+    assert!(app.remote.saved.checkouts.is_empty() && app.commands().is_empty());
+    assert_eq!(app.selected, Some(i));
+}
+
+#[test]
+fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touch_the_active_prompt(
+) {
+    use crate::application::HandoffSource;
+    use std::time::Instant;
+    let mut app = Workspace::default();
+    let i = local(&mut app);
+    let req = reading(&mut app, i);
+    ready(&mut app, req);
+    let id = app
+        .finish_vm_handoff(VmDestination::Existing(machine("vm")))
+        .unwrap();
+    let link = app.linked_vm(i).unwrap().clone();
+    let (req, _) = app.commands().pop().unwrap();
+    let prepared = || Outcome::Prepared(machine("vm"), "feature/local".into());
+    app.apply(Event::Completed(req, Ok(Reply::Remote(prepared()))));
+    app.home_select_project(source().project);
+    assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
+    app.remote.picker = Some(Picker::Ready(source()));
+    app.finish_vm_handoff(VmDestination::Existing(machine("vm")))
+        .unwrap();
+    let saved = app.snapshot();
+    let mut app = Workspace::default();
+    app.enable_store("/unused-vm-links".into());
+    let load = app.commands()[0].0;
+    app.apply(Event::Completed(
+        load,
+        Ok(Reply::Snapshot(Some(Box::new(saved)))),
+    ));
+    assert_eq!(app.linked_vm(i), Some(&link));
+    assert!(app.open_linked_vm(i));
+    assert_eq!(
+        app.remote.saved.checkouts[&id].thread.editor_key(&id),
+        link.thread
+    );
+    // A stats panel can inspect this machine while the local session stays selected.
+    app.remote.saved.selected = None;
+    app.select(i);
+    app.remote.jobs.clear();
+    let run = Run {
+        conversation: "conv".into(),
+        prompt: "prompt".into(),
+        id: "run".into(),
+    };
+    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Following(run.clone());
+    app.monitor_remote(Some(&id), Instant::now());
+    let Monitor::Loading { request: stale, .. } = app.remote.monitor else {
+        panic!()
+    };
+    app.set_vm_lifetime(&id, Lifetime::Day);
+    let Some(Job::Busy(req)) = app.remote.lifetimes.get(&id) else {
+        panic!()
+    };
+    let req = *req;
+    let mut m = machine("vm");
+    m.auto_stop_unix = Some(86_400);
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Lifetime(m))),
+    ));
+    app.apply(Event::Completed(
+        stale,
+        Ok(Reply::Remote(Outcome::Stats(Sample {
+            machine: machine("vm"),
+            vcpu: None,
+            memory_gb: None,
+            activity: Activity::Unavailable,
+        }))),
+    ));
+    let c = &app.remote.saved.checkouts[&id];
+    assert_eq!(c.machine().unwrap().auto_stop_unix, Some(86_400));
+    assert_eq!(c.thread.turn, Turn::Following(run));
+    assert_eq!(app.selected, Some(i));
+    assert!(app.remote.saved.selected.is_none());
 }
 
 #[test]
@@ -106,9 +261,11 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     assert_eq!(app.sessions[i].draft, "New laptop draft");
     assert_eq!(app.sessions[i].attachments.len(), 1);
     let creates = app.commands();
-    let [(req, Command::Remote(Operation::Create(_, _)))] = creates.as_slice() else {
+    let [(req, Command::Remote(Operation::Create(source, original)))] = creates.as_slice() else {
         panic!()
     };
+    assert_eq!(original.branch, "feature/local");
+    assert_eq!(original.branch, source.base);
     app.apply(Event::Completed(*req, Err("network offline".into())));
     assert!(app.commands().is_empty());
     let mut reopened = Workspace::default();
@@ -119,16 +276,26 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     else {
         panic!()
     };
-    assert_eq!(plan.token, id);
+    assert_eq!(&plan, original);
     let complete = |app: &mut Workspace, req, result| {
         app.apply(Event::Completed(req, Ok(Reply::Remote(result))))
     };
     complete(&mut reopened, retry, Outcome::Machine(machine("vm")));
-    let (prepare, _) = reopened.commands().pop().unwrap();
+    let (prepare, Command::Remote(Operation::Prepare(target, base, Some(branch)))) =
+        reopened.commands().pop().unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(branch, plan.branch);
+    assert_eq!(base, branch);
+    assert_eq!(
+        target.required_base.unwrap().tip,
+        source.published_tip.as_deref().unwrap()
+    );
     complete(
         &mut reopened,
         prepare,
-        Outcome::Prepared(machine("vm"), "feat/next".into()),
+        Outcome::Prepared(machine("vm"), branch),
     );
     assert!(reopened.commands().is_empty());
     assert_eq!(

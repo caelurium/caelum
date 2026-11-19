@@ -81,12 +81,18 @@ impl Backend {
                 .recover(target, conv.as_deref(), prompt)
                 .await
                 .map(Outcome::Accepted),
-            Operation::Discover(project) => self
+            Operation::Discover(project) | Operation::DiscoverHandoff(project) => self
                 .connected()
                 .await?
-                .discover(project)
+                .discover(project, matches!(op, Operation::DiscoverHandoff(_)))
                 .await
                 .map(Outcome::Source),
+            Operation::Lifetime(key, lifetime) => self
+                .connected()
+                .await?
+                .lifetime(key, *lifetime)
+                .await
+                .map(Outcome::Lifetime),
             Operation::Create(source, plan) => self
                 .connected()
                 .await?

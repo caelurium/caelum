@@ -40,6 +40,7 @@ fn every_persisted_field_participates_in_change_detection() {
         ("last_activity", json!(12)),
         ("scope", json!({"project":"/other","provider":"opencode"})),
         ("remote_id", json!("remote")),
+        ("vm_link", json!({"checkout":"vm", "thread":"chat"})),
         ("title", json!("New title")),
         ("title_refresh_turns", json!(2)),
         ("options", json!({"model":"new-model"})),

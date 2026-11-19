@@ -18,6 +18,16 @@ current single-repo environment for the project's GitHub origin. **Resume** a
 stopped machine to use its saved disk; attaching keeps its current branch.
 If setup fails, **Refresh checkout** retries that checkout on the same machine.
 
+**Auto-stop** defaults to one hour. Boat renews the deadline while a managed
+prompt is running or waiting. Trials allow up to two hours; on a paid account
+you can also choose 8 hours, 24 hours or **Until stopped**. With **Until stopped**,
+the VM continues billing until you stop it.
+
+If **Create checkout environment** or **Configure checkout environment** returns
+403, your Boat key needs `environment.write` for first-time repository setup.
+Alternatively, configure a single-repository environment in Boat with GitHub
+access and agent credentials enabled. See [Boat key scopes](https://docs.boat.dev/api-keys/scopes.md).
+
 Send a message from the **Remote · machine-name** composer. **Stop** interrupts
 that OpenCode conversation. Reopen Caelum or select the machine's sidebar row
 to continue the same thread. If Boat may have accepted a prompt but the

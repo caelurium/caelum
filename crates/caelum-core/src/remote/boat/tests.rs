@@ -1,6 +1,7 @@
 use super::*;
 mod checkout;
-use serde_json::json;
+use crate::remote::Size;
+use serde_json::{json, Value};
 use wiremock::{
     matchers::{header, method, path, query_param},
     Mock, MockServer, ResponseTemplate,
@@ -57,6 +58,40 @@ fn sandbox(state: &str) -> serde_json::Value {
            "environment":"project-env","environmentVersion":2})
 }
 
+#[tokio::test]
+async fn running_machine_lifetime_uses_explicit_seconds_or_null_and_boats_actual_deadline() {
+    let (server, boat) = fixture().await;
+    let key = MachineId {
+        host: Host::Boat,
+        account: boat.account.clone(),
+        id: "vm-1".into(),
+    };
+    for (lifetime, value, deadline) in [
+        (
+            Lifetime::EightHours,
+            json!(28800),
+            Some("2026-11-20T00:00:00Z"),
+        ),
+        (Lifetime::UntilStopped, Value::Null, None),
+    ] {
+        let mut machine = sandbox("running");
+        machine["archiveAfter"] = json!(deadline);
+        Mock::given(method("PATCH"))
+            .and(path("/sandboxes/vm-1"))
+            .and(wiremock::matchers::body_json(json!({"ttlSeconds":value})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"ok":true,"type":"info","sandbox":machine})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let actual = boat.lifetime(&key, lifetime).await.unwrap();
+        assert_eq!(actual.key, key);
+        assert_eq!(actual.auto_stop_unix.is_some(), deadline.is_some());
+    }
+}
+
 async fn environment(server: &MockServer) {
     Mock::given(method("GET")).and(path("/environments")).respond_with(ResponseTemplate::new(200).set_body_json(json!({
         "environments":[{"id":"env-1","name":"project-env","isDefault":true,"latestVersionNumber":2,
@@ -67,10 +102,10 @@ async fn environment(server: &MockServer) {
 
 #[tokio::test]
 async fn create_retry_reuses_body_and_idempotency_key_without_changing_shared_environment() {
-    use crate::remote::Size;
     let (server, boat) = fixture().await;
     environment(&server).await;
     let source = Source {
+        published_tip: None,
         project: "/local/project".into(),
         account: boat.account.clone(),
         repository: "example/project".into(),
@@ -81,7 +116,7 @@ async fn create_retry_reuses_body_and_idempotency_key_without_changing_shared_en
         token: uuid::Uuid::new_v4().to_string(),
         branch: "feat/new".into(),
         size: Size::Small,
-        minutes: 30,
+        lifetime: crate::remote::Lifetime::HalfHour,
     };
     Mock::given(method("POST")).and(path("/sandboxes")).and(header("idempotency-key",plan.token.as_str()))
         .and(wiremock::matchers::body_partial_json(json!({"environment":"project-env","type":"small","ttlSeconds":1800})))
@@ -101,11 +136,68 @@ async fn create_retry_reuses_body_and_idempotency_key_without_changing_shared_en
 }
 
 #[tokio::test]
+async fn a_prepared_environment_reports_create_scope_and_plan_denials_at_the_vm_step() {
+    let (server, boat) = fixture().await;
+    environment(&server).await;
+    let source = Source {
+        project: "/local/project".into(),
+        account: boat.account.clone(),
+        repository: "example/project".into(),
+        base: "main".into(),
+        published_tip: None,
+        environment: Some("project-env".into()),
+    };
+    let plan = Plan {
+        token: uuid::Uuid::new_v4().to_string(),
+        branch: "feat/new".into(),
+        size: Size::Large,
+        lifetime: Lifetime::Hour,
+    };
+    for (body, hint) in [
+        (json!({"code":"api_key_action_forbidden"}), "sandbox.create"),
+        (
+            json!({"code":"api_key_sandbox_forbidden"}),
+            "allowed resources",
+        ),
+        (
+            json!({"code":"trial_machine_class_not_allowed"}),
+            "Small or Standard",
+        ),
+        (
+            json!({"code":"private-detail", "requestId":"https://example.invalid/private-detail"}),
+            "sandbox.create",
+        ),
+        (json!({"error":"Forbidden"}), "sandbox.create"),
+    ] {
+        let denied = Mock::given(method("POST"))
+            .and(path("/sandboxes"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(body))
+            .expect(1)
+            .mount_as_scoped(&server)
+            .await;
+        let error = boat.create(&source, &plan).await.unwrap_err();
+        assert!(
+            error.starts_with("Create VM:") && error.contains("403") && error.contains(hint),
+            "{error}"
+        );
+        assert!(!error.contains("environment.write") && !error.contains("private-detail"));
+        drop(denied);
+    }
+    assert!(server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .all(|r| r.method.as_str() == "GET" || r.url.path() == "/sandboxes"));
+}
+
+#[tokio::test]
 async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
     use crate::remote::harness::Harness;
     use wiremock::matchers::body_json;
     let (server, boat) = fixture().await;
     let target = Target {
+        required_base: None,
         machine: MachineId {
             host: Host::Boat,
             account: "user-1".into(),

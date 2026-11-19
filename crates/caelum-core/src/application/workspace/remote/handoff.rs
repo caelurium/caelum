@@ -1,7 +1,10 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
     application::{Command, Reply, SessionKey},
-    remote::{Chat, Connection, Continuation, Job, Machine, Picker, Size, Thread, Turn},
+    remote::{
+        Chat, Connection, Continuation, Job, Lifetime, Machine, Phase, Picker, PublishedBase, Size,
+        Thread, Turn, VmLink,
+    },
 };
 
 enum Origin {
@@ -34,6 +37,8 @@ impl HandoffSource {
 pub enum HandoffPhase {
     Reading(u64),
     Ready(Chat),
+    Checking(u64, Chat),
+    Verified(VmDestination, Chat),
     Failed(String),
 }
 
@@ -48,12 +53,7 @@ pub struct VmHandoff {
 }
 
 pub enum VmDestination {
-    Create {
-        base: String,
-        branch: String,
-        size: Size,
-        minutes: u32,
-    },
+    Create { size: Size, lifetime: Lifetime },
     Existing(Machine),
 }
 
@@ -226,48 +226,139 @@ impl Workspace {
         }
     }
 
+    /// Re-read the worktree branch and its published tip immediately before
+    /// admission. After admission, a provisioning retry only needs the saved plan.
+    pub fn confirm_vm_handoff(&mut self, destination: VmDestination) {
+        let Some(h) = self.vm_handoff() else { return };
+        let Some(Picker::Ready(source)) = &self.remote.picker else {
+            return;
+        };
+        if !matches!(h.phase, HandoffPhase::Ready(_))
+            || source.project != h.project
+            || source.published_tip.is_none()
+        {
+            return;
+        }
+        let request = self.request(
+            Command::Remote(crate::remote::Operation::DiscoverHandoff(
+                source.project.clone(),
+            )),
+            Pending::Remote(Lane::ConfirmHandoff(Box::new((
+                source.clone(),
+                destination,
+            )))),
+        );
+        let h = self.handoff.as_mut().unwrap();
+        let HandoffPhase::Ready(chat) = &mut h.phase else {
+            unreachable!()
+        };
+        h.phase = HandoffPhase::Checking(request, std::mem::take(chat));
+    }
+
+    pub(super) fn complete_handoff_confirmation(
+        &mut self,
+        request: u64,
+        expected: crate::remote::Source,
+        destination: VmDestination,
+        result: Result<crate::remote::Outcome, String>,
+    ) {
+        if !self
+            .vm_handoff()
+            .is_some_and(|h| matches!(h.phase, HandoffPhase::Checking(id, _) if id == request))
+        {
+            return;
+        }
+        let h = self.handoff.as_mut().unwrap();
+        let HandoffPhase::Checking(_, chat) = &mut h.phase else {
+            unreachable!()
+        };
+        h.phase = match result {
+            Ok(crate::remote::Outcome::Source(actual))
+                if actual == expected
+                    && matches!(&self.remote.picker, Some(Picker::Ready(s)) if *s == actual) =>
+            {
+                HandoffPhase::Verified(destination, std::mem::take(chat))
+            }
+            other => HandoffPhase::Failed(other.err().unwrap_or_else(|| {
+                "The session branch or VM setup changed. Reload to use the current branch.".into()
+            })),
+        };
+    }
+
+    pub fn enter_confirmed_vm(&mut self) -> bool {
+        if !self
+            .vm_handoff()
+            .is_some_and(|h| matches!(h.phase, HandoffPhase::Verified(..)))
+        {
+            return false;
+        }
+        let h = self.handoff.as_mut().unwrap();
+        let HandoffPhase::Verified(destination, chat) =
+            std::mem::replace(&mut h.phase, HandoffPhase::Ready(Chat::default()))
+        else {
+            unreachable!()
+        };
+        h.phase = HandoffPhase::Ready(chat);
+        if self.finish_vm_handoff(destination).is_some() {
+            return true;
+        }
+        self.handoff.as_mut().unwrap().phase =
+            HandoffPhase::Failed("The destination is no longer available. Reload VM setup.".into());
+        false
+    }
+
     /// Commit the captured source to exactly one checkout before dispatching
     /// any machine work. Provisioning retries reuse that checkout and thread.
-    pub fn finish_vm_handoff(&mut self, destination: VmDestination) -> Option<String> {
+    pub(super) fn finish_vm_handoff(&mut self, destination: VmDestination) -> Option<String> {
         let h = self.vm_handoff()?;
         let Some(Picker::Ready(source)) = &self.remote.picker else {
             return None;
         };
         let inventory = self.remote.inventory.as_ref()?;
         if !matches!(h.phase, HandoffPhase::Ready(_))
-            || source.project != self.group_path(&h.project)
+            || source.project != h.project
             || source.account != inventory.account
         {
             return None;
         }
+        let base = PublishedBase {
+            branch: source.base.clone(),
+            tip: source.published_tip.clone()?,
+        };
+        let local = h.source().session();
         let id = match destination {
-            VmDestination::Create {
-                base,
-                branch,
-                size,
-                minutes,
-            } => self.create_remote(&base, &branch, size, minutes)?,
+            VmDestination::Create { size, lifetime } => {
+                self.register_vm(source.clone(), &base.branch, size, lifetime)?
+            }
             VmDestination::Existing(m) => {
                 if self.handoff_machine_blocker(&m).is_some()
                     || !inventory.machines.iter().any(|v| v.key == m.key)
                 {
                     return None;
                 }
-                self.attach_remote(m)?
+                self.register_machine(m)?
             }
         };
         let h = self.handoff.take().unwrap();
         let HandoffPhase::Ready(chat) = h.phase else {
             unreachable!()
         };
+        let thread = uuid::Uuid::new_v4().to_string();
+        if let Some(index) = local {
+            self.sessions[index].vm_link = Some(VmLink {
+                checkout: id.clone(),
+                thread: thread.clone(),
+            });
+        }
         let c = self.remote.saved.checkouts.get_mut(&id).unwrap();
         let prior = std::mem::replace(
             &mut c.thread,
             Thread {
                 continued: Some(Continuation {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: thread,
                     title: h.title,
                     chat,
+                    base: Some(base),
                 }),
                 draft: h.draft,
                 ..Default::default()
@@ -277,23 +368,41 @@ impl Workspace {
             c.other_threads.push(prior);
         }
         self.remote.feeds.remove(&id);
+        self.select_remote(&id);
         Some(id)
     }
 
     pub fn can_switch_vm_thread(&self, id: &str) -> bool {
-        self.remote
-            .saved
-            .checkouts
-            .get(id)
-            .is_some_and(|c| c.thread.turn == Turn::Idle)
-            && !matches!(self.remote.jobs.get(id), Some(Job::Busy(_) | Job::Wait(_)))
+        self.remote.saved.checkouts.get(id).is_some_and(|c| {
+            c.thread.turn == Turn::Idle
+                && !matches!(
+                    c.phase,
+                    Phase::Create(_)
+                        | Phase::Prepare {
+                            new_branch: Some(_),
+                            ..
+                        }
+                )
+        }) && !matches!(self.remote.jobs.get(id), Some(Job::Busy(_) | Job::Wait(_)))
             && !matches!(self.remote.feeds.get(id), Some(Job::Busy(_) | Job::Wait(_)))
+            && !matches!(self.remote.lifetimes.get(id), Some(Job::Busy(_)))
             && !self.remote.interrupts.contains_key(id)
             && !self.publishing(id)
     }
 
     pub fn switch_vm_thread(&mut self, id: &str, thread: &str) -> bool {
-        if self.remote.saved.selected.as_deref() != Some(id) || !self.can_switch_vm_thread(id) {
+        if self.remote.saved.selected.as_deref() != Some(id) || !self.activate_vm_thread(id, thread)
+        {
+            return false;
+        }
+        if matches!(self.remote.jobs.get(id), Some(Job::Failed(_))) {
+            self.refresh_remote(id);
+        }
+        true
+    }
+
+    pub(super) fn activate_vm_thread(&mut self, id: &str, thread: &str) -> bool {
+        if !self.can_switch_vm_thread(id) {
             return false;
         }
         let c = self.remote.saved.checkouts.get_mut(id).unwrap();

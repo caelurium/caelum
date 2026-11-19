@@ -357,6 +357,7 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
+                                session.vm_link = saved.vm_link;
                                 session.loaded = saved.remote_id.is_none();
                                 session.remote_id = saved.remote_id;
                                 session.title = saved.title;
