@@ -4,8 +4,7 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::{Job, Phase};
-use rune::{El, Tx, col};
+use rune::{El, Tx};
 use rune_kit::Kit;
 use std::time::Instant;
 
@@ -16,6 +15,7 @@ pub(crate) fn enter(s: &mut Workspace) {
     l.session_menu = None;
     l.remote.inspection = None;
     super::conversation::sync_editor(l);
+    super::conversation::focus(l);
     l.schedule();
     s.inspector.set_open(false);
 }
@@ -54,6 +54,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         tx.wake_after(at.saturating_duration_since(now));
     }
     super::conversation::sync_editor(l);
+    changed |= super::conversation::restore(l, tx);
     if let Some(at) = l.app.remote_deadline(now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
@@ -61,71 +62,15 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     changed
 }
 
-pub(crate) fn screen(s: &Workspace, k: &Kit) -> El {
+pub(crate) fn screen(s: &Workspace, k: &Kit, padding: f32, reduced: bool) -> El {
     let r = &live(s).app.remote;
-    let mut body = col().w_full().h_full().min_h(0.0).padding(20.0).gap(10.0);
     let Some((id, c)) = r
         .saved
         .selected
         .as_ref()
         .and_then(|id| r.saved.checkouts.get_key_value(id))
     else {
-        return body;
+        return ui::empty("No remote checkout", "Choose a VM under its project.", k);
     };
-    if let Phase::Ready { branch, .. } = &c.phase {
-        return super::conversation::view(s, k, id, c, branch);
-    }
-    if let Phase::Prepare {
-        machine,
-        new_branch: None,
-    } = &c.phase
-        && matches!(machine.state.as_str(), "archived" | "stopped")
-    {
-        return super::conversation::view(s, k, id, c, "Stopped");
-    }
-    body = body.child(ui::section(
-        &format!("Remote · {}", c.title()),
-        &c.source.repository,
-        k,
-    ));
-    if let Some(Job::Failed(e)) = r.jobs.get(id) {
-        body = body.child(ui::caption(e, k).wrap().color(k.c.danger.fg));
-    } else {
-        let detail = match &c.phase {
-            Phase::Create(_) => "Creating machine…",
-            Phase::Prepare { machine, .. } => &machine.state,
-            Phase::Ready { branch, .. } => branch,
-        };
-        body = body.child(ui::caption(detail, k));
-    }
-    let busy = matches!(r.jobs.get(id), Some(Job::Busy(_) | Job::Wait(_)));
-    let key = id.clone();
-    body = body.child(
-        ui::Button::new(if busy {
-            "Checking machine…"
-        } else {
-            "Refresh checkout"
-        })
-        .disabled(busy)
-        .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_remote(&key))
-        .build(k)
-        .key("refresh-remote-checkout")
-        .self_start(),
-    );
-    if let Some(m) = c.machine() {
-        let resume = matches!(m.state.as_str(), "archived" | "stopped");
-        let id = id.clone();
-        body = body.child(
-            ui::Button::new(if resume {
-                "Resume machine"
-            } else {
-                "Stop machine"
-            })
-            .disabled(busy)
-            .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&id, resume))
-            .build(k)
-            .self_start(),
-        );
-    }
-    body
+    super::conversation::view(s, k, id, c, padding, reduced)
 }

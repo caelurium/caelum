@@ -9,6 +9,7 @@ use std::{
 };
 
 mod migration;
+mod remote_history;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -260,6 +261,7 @@ impl Store {
             value["preferences"]["themeFamily"] = "vercel".into();
             value["preferences"]["accentColor"] = "theme".into();
         }
+        remote_history::retire_vm_sessions(&mut value);
         let state: Snapshot = serde_json::from_value(value)
             .map_err(|e| format!("Cannot read saved workspace: {e}"))?;
         if state.version != 1 {

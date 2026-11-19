@@ -1,17 +1,68 @@
+use super::setup::Dock;
 use crate::{
     Workspace,
     context::EditMenu,
     live::{Live, live, live_mut},
     ui,
 };
-use caelum_core::remote::{Checkout, Job, Message, Speaker, Thread, Turn};
-use rune::{El, Key, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
-use rune_kit::{ButtonVariant, Kit, ScrollBar};
+use caelum_core::remote::{Checkout, Job, Thread, Turn};
+use rune::{El, Key, ScrollPos, TextEdit, TextStyle, Tx, col, icon, row, text, text_input};
+use rune_kit::{ButtonVariant, Kit};
+use std::{cell::Cell, rc::Rc};
 
 #[derive(Default)]
 pub(super) struct Editors {
     draft: TextEdit,
     recovery: TextEdit,
+    pub(super) reading: Rc<Cell<ScrollPos>>,
+    draft_scroll: Rc<Cell<ScrollPos>>,
+}
+
+pub(crate) fn focus(l: &mut Live) {
+    if let Some((id, c)) = l
+        .app
+        .remote
+        .saved
+        .selected
+        .as_ref()
+        .and_then(|id| l.app.remote.saved.checkouts.get_key_value(id))
+        && let Some(e) = l.remote.editors.get_mut(c.thread.editor_key(id))
+    {
+        e.draft.focused = true;
+    }
+}
+
+pub(super) fn restore(l: &mut Live, tx: &mut Tx) -> bool {
+    let next = l.app.remote.saved.selected.as_ref().and_then(|id| {
+        let c = l.app.remote.saved.checkouts.get(id)?;
+        Some((c.thread.editor_key(id), Dock::for_checkout(c)))
+    });
+    let previous = l
+        .remote
+        .mounted
+        .as_ref()
+        .map(|(key, dock)| (key.as_str(), *dock));
+    if next == previous {
+        return false;
+    }
+    if let Some((key, dock)) = next
+        && let Some(e) = l.remote.editors.get(key)
+    {
+        if previous.is_none_or(|(owner, _)| owner != key) {
+            let p = e.reading.get();
+            let region = format!("remote-transcript-{key}");
+            if p.offset[1] >= p.max[1] - 1.0 {
+                tx.scroll_to_bottom_instant(region);
+            } else {
+                tx.scroll_to_y(region, p.offset[1]);
+            }
+        }
+        if dock == Dock::Draft {
+            tx.scroll_to_y("composer-editor", e.draft_scroll.get().offset[1]);
+        }
+    }
+    l.remote.mounted = next.map(|(key, dock)| (key.to_owned(), dock));
+    true
 }
 
 pub(super) fn sync_editor(l: &mut Live) {
@@ -27,7 +78,7 @@ pub(super) fn sync_editor(l: &mut Live) {
         .entry(c.thread.editor_key(id).to_owned())
         .or_default();
     if editors.draft.text != c.thread.draft {
-        editors.draft = TextEdit::new(&c.thread.draft);
+        editors.draft.replace_text(&c.thread.draft);
     }
 }
 
@@ -59,103 +110,81 @@ fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
     }
 }
 
-fn transcript_line(thread: &Thread, index: usize) -> Option<(&str, &str)> {
-    let imported = thread
-        .continued
-        .as_ref()
-        .map_or(&[][..], |c| &c.chat.messages);
-    if let Some(message) = imported.get(index) {
-        return Some(match message {
-            Message::User(text) => ("You · local", text),
-            Message::Assistant(text) => ("Assistant · local", text),
-        });
-    }
-    let line = thread.lines.get(index - imported.len())?;
-    Some((
-        match line.speaker {
-            Speaker::You => "You",
-            Speaker::OpenCode => "OpenCode",
-            Speaker::Activity => "Activity",
-        },
-        &line.text,
-    ))
-}
-
-pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str) -> El {
+pub(super) fn view(
+    s: &Workspace,
+    k: &Kit,
+    id: &str,
+    c: &Checkout,
+    padding: f32,
+    reduced: bool,
+) -> El {
     let l = live(s);
-    let mut body = col().w_full().h_full().min_h(0.0).items_center().gap(8.0);
-    body = body.child(
-        row()
-            .center_y()
-            .gap(8.0)
-            .py(8.0)
-            .child(
-                ui::caption(format!("{}  /  {branch}", c.source.repository), k)
-                    .truncate()
-                    .min_w(0.0),
-            )
-            .children((!c.other_threads.is_empty()).then(|| super::threads::button(k))),
-    );
     let key = c.thread.editor_key(id);
-    let row_key = key.to_owned();
-    let owner = id.to_owned();
-    let kit = k.clone();
-    body = body.child(
-        col()
-            .key(format!("remote-transcript-{key}"))
-            .label("Remote conversation")
-            .role("region")
-            .w_full()
-            .max_w(840.0)
-            .min_h(0.0)
-            .grow(1.0)
-            .px(20.0)
-            .scroll(ScrollSpec { stick_bottom: true })
-            .child(
-                col()
-                    .w_full()
-                    .growth(rune::GrowthSpec::default())
-                    .virtual_rows(
-                        c.thread.lines.len()
-                            + c.thread
-                                .continued
-                                .as_ref()
-                                .map_or(0, |c| c.chat.messages.len()),
-                        80.0,
-                        move |_: &Workspace, i| format!("remote-line-{row_key}-{i}").into(),
-                        move |s: &Workspace, i| {
-                            let Some((speaker, message)) = live(s)
-                                .app
-                                .remote
-                                .saved
-                                .checkouts
-                                .get(&owner)
-                                .and_then(|c| transcript_line(&c.thread, i))
-                            else {
-                                return col();
-                            };
-                            col()
-                                .w_full()
-                                .py(6.0)
-                                .gap(4.0)
-                                .child(ui::caption(speaker, &kit))
-                                .child(
-                                    text(message)
-                                        .font(kit.ty.ui)
-                                        .color(kit.c.text_base)
-                                        .selectable(true)
-                                        .wrap(),
-                                )
+    let branch = super::status::branch(c);
+    let dock = Dock::for_checkout(c);
+    let body = col()
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .items_center()
+        .child(ui::divider(k))
+        .child(
+            row()
+                .w_full()
+                .max_w(840.0)
+                .px(padding)
+                .h(42.0)
+                .gap(7.0)
+                .center_y()
+                .child(
+                    icon(
+                        if branch.is_some() {
+                            &ui::BRANCH
+                        } else {
+                            &ui::FOLDER
                         },
-                    ),
-            )
-            .scroll_bar(k),
-    );
+                        13.0,
+                    )
+                    .color(k.c.icon_muted),
+                )
+                .child(
+                    ui::caption(branch.unwrap_or(&c.source.repository), k)
+                        .truncate()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .help(branch.map_or_else(
+                            || c.source.repository.clone(),
+                            |b| format!("{} · {b}", c.source.repository),
+                        )),
+                )
+                .children(
+                    (dock == Dock::Draft && !c.other_threads.is_empty())
+                        .then(|| super::threads::button(k)),
+                )
+                .children((dock == Dock::Draft).then(|| {
+                    crate::quiet_button(&ui::FILE, "View remote changes")
+                        .on_press(super::open_changes)
+                        .build(k)
+                        .key("remote-view-changes")
+                })),
+        )
+        .child(super::transcript::view(s, k, id, c, padding, reduced));
+    if dock == Dock::Setup {
+        return body.child(super::setup::view(s, k, id, c, padding));
+    }
     let Some(editors) = l.remote.editors.get(key) else {
         return body;
     };
     let busy = matches!(l.app.remote.feeds.get(id), Some(Job::Busy(_)));
-    let mut context = col().w_full().gap(6.0);
+    let status = super::status::status(&l.app.remote, id, c);
+    let mut context = col().w_full().max_h(160.0).gap(6.0).child(
+        row()
+            .w_full()
+            .center_y()
+            .gap(6.0)
+            .child(status.view(k).key("remote-turn-status").grow(1.0))
+            .children(super::stats::pinned(s, k, id, c)),
+    );
     let too_long = editors.draft.text.len() > Thread::MAX_MESSAGE_BYTES;
     if too_long {
         context = context.child(ui::caption(
@@ -171,6 +200,28 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             context = context.child(ui::caption(e, k).wrap().color(k.c.danger.fg));
         }
     }
+    if matches!(l.app.remote.jobs.get(id), Some(Job::Failed(_))) {
+        let owner = id.to_owned();
+        context = context.child(
+            ui::Button::new("Refresh checkout")
+                .icon(&ui::REFRESH)
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_remote(&owner))
+                .build(k)
+                .key("refresh-remote-checkout"),
+        );
+    }
+    if c.thread.turn.run().is_some() && matches!(l.app.remote.feeds.get(id), Some(Job::Failed(_))) {
+        let owner = id.to_owned();
+        context = context.child(
+            ui::Button::new("Reconnect to turn")
+                .icon(&ui::REFRESH)
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(move |s: &mut Workspace| live_mut(s).app.follow_remote(&owner))
+                .build(k)
+                .key("remote-reconnect"),
+        );
+    }
     if c.thread.turn == Turn::Submitting && !busy {
         let a = key.to_owned();
         let recovery = a.clone();
@@ -178,7 +229,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         let d = b.clone();
         context = context
             .child(ui::caption(
-                "Delivery unconfirmed. Check Boat, then reconnect with its prompt ID.",
+                "Check Boat for this message, then reconnect with its prompt ID.",
                 k,
             ))
             .child(
@@ -190,6 +241,8 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             )
             .child(
                 row()
+                    .w_full()
+                    .flex_wrap()
                     .gap(6.0)
                     .child(
                         ui::Button::new("Reconnect turn")
@@ -213,9 +266,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
     let change_owner = owner.clone();
     let key_owner = owner.clone();
     let submit_owner = owner.clone();
-    let input = text_input(&editors.draft, k.ty.ui)
+    let input = text_input(&editors.draft, TextStyle::new(14.0, 400.0).lh(23.0))
         .label("Message remote OpenCode")
-        .placeholder("Message OpenCode on this machine…", k.c.text_muted)
+        .placeholder("Message OpenCode on this VM…", k.c.text_muted)
+        .help("Enter to send · Shift+Enter for a new line")
         .color(k.c.text_base)
         .selection_color(k.selection())
         .w_full()
@@ -235,7 +289,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                 send(s, tx, &key_owner);
                 true
             } else {
-                false
+                crate::on_key(s, e, tx)
             }
         })
         .on_submit(move |s, tx| send(s, tx, &submit_owner));
@@ -252,9 +306,25 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         .w_full()
         .gap(6.0)
         .center_y()
-        .children(super::stats::wide().then(|| ui::caption("OpenCode", k)))
-        .child(rune::el().grow(1.0))
-        .children(super::stats::pinned(s, k, id, c))
+        .child(icon(&ui::AGENT, 13.0).color(k.c.icon_muted))
+        .child(
+            text(if super::stats::wide() {
+                format!("OpenCode · {}", c.title())
+            } else {
+                c.title().to_owned()
+            })
+            .font(k.ty.small_medium)
+            .color(k.c.text_muted)
+            .min_w(0.0)
+            .grow(1.0)
+            .truncate()
+            .help(format!(
+                "OpenCode on {} · {}",
+                c.title(),
+                branch.unwrap_or(&c.source.repository)
+            ))
+            .key("remote-destination"),
+        )
         .child(
             crate::quiet_button(&ui::SERVER, &label)
                 .variant(rune_kit::IconButtonVariant::Ghost)
@@ -271,26 +341,28 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         let owner = id.to_owned();
         controls = controls.child(
             ui::Button::new("Resume")
+                .disabled(matches!(
+                    l.app.remote.jobs.get(id),
+                    Some(Job::Busy(_) | Job::Wait(_))
+                ))
                 .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true))
                 .build(k),
         );
-    } else if matches!(c.thread.turn, Turn::Following(_)) {
+    } else if c.thread.turn.run().is_some() {
         let a = id.to_owned();
+        let stopping =
+            l.app.remote.interrupts.contains_key(id) || matches!(c.thread.turn, Turn::Stopping(_));
         controls = controls.child(
-            ui::Button::new("Stop")
-                .disabled(l.app.remote.interrupts.contains_key(id))
+            ui::Button::new(if stopping { "Stopping…" } else { "Stop" })
+                .icon(&crate::STOP)
+                .variant(ButtonVariant::GhostMuted)
+                .disabled(stopping || matches!(c.thread.turn, Turn::Finishing(_)))
                 .on_press(move |s: &mut Workspace| live_mut(s).app.interrupt_remote(&a))
                 .build(k)
-                .label("Stop this turn"),
+                .key("remote-stop")
+                .label("Stop this turn")
+                .help("Stop the remote turn · Escape"),
         );
-        if matches!(l.app.remote.feeds.get(id), Some(Job::Failed(_))) {
-            let a = id.to_owned();
-            controls = controls.child(
-                ui::Button::new("Reconnect")
-                    .on_press(move |s: &mut Workspace| live_mut(s).app.follow_remote(&a))
-                    .build(k),
-            );
-        }
     } else {
         let owner = key.to_owned();
         controls = controls.child(
@@ -300,6 +372,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                 "Send"
             })
             .variant(ButtonVariant::Contrast)
+            .icon(&crate::SEND)
             .disabled(
                 c.thread.turn != Turn::Idle
                     || editors.draft.text.trim().is_empty()
@@ -311,11 +384,23 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             .key("remote-send"),
         );
     }
+    let draft_scroll = editors.draft_scroll.clone();
+    let mounted = l
+        .remote
+        .mounted
+        .as_ref()
+        .is_some_and(|(owner, dock)| owner == key && *dock == Dock::Draft);
+    let height =
+        rune::memo::window_layout("main-pane").map_or(220.0, |r| (r[3] * 0.35).clamp(96.0, 360.0));
     body.child(ui::composer(
-        ui::composer_editor(input, 48.0, 140.0),
+        ui::composer_editor(input, 56.0, height).on_scroll_offset(move |p| {
+            if mounted {
+                draft_scroll.set(p);
+            }
+        }),
         controls,
         context,
-        16.0,
+        padding,
         k,
     ))
 }

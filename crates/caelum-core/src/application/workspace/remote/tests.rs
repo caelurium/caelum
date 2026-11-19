@@ -166,12 +166,14 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         Outcome::Page(Page {
             cursor: Some("after".into()),
             lines: vec![Line {
+                key: None,
+                tool_detail: None,
                 speaker: Speaker::OpenCode,
                 text: "Part".into(),
                 partial: true,
             }],
             more: false,
-            finished: None,
+            status: RunStatus::Running,
         }),
     );
     for (snapshot, known) in [(saved_before_ack, false), (app.snapshot(), true)] {
@@ -199,15 +201,20 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                 Outcome::Page(Page {
                     cursor: Some("end".into()),
                     lines: vec![Line {
+                        key: None,
+                        tool_detail: None,
                         speaker: Speaker::OpenCode,
                         text: "Full reply".into(),
                         partial: false,
                     }],
                     more: false,
-                    finished: Some("finished".into()),
+                    status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
-            assert_eq!(reopened.remote.saved.checkouts[&id].thread.lines.len(), 2);
+            let lines = &reopened.remote.saved.checkouts[&id].thread.lines;
+            assert_eq!(lines.len(), 3);
+            assert_eq!(lines[1].text, "Full reply");
+            assert_eq!(lines[2].speaker, Speaker::Outcome(TurnEnd::Finished));
             assert!(reopened.send_remote(&id, "Continue"));
             assert!(
                 matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,Some(c),_)))] if c=="c")

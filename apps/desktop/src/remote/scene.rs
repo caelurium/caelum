@@ -82,26 +82,106 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     l.app.leave_conversation();
     l.app.active_project = None;
     l.app.remote.saved.selected = Some(id.clone());
-    l.app.remote.saved.checkouts.insert(id.clone(),Checkout{source,
-        phase:Phase::Ready{machine:machine.clone(),branch:"feat/remote-checkout".into()},pinned_stats:true,other_threads:vec![],
-        thread:Thread{conversation:Some("thread-example".into()),lines:vec![
-            Line{speaker:Speaker::You,text:"Add a health check and show me the changes.".into(),partial:false},
-            Line{speaker:Speaker::OpenCode,text:"I added a health check to src/server.rs. The response is ready to review on this branch.".into(),partial:false},
-        ],..Default::default()}});
-    l.app.remote.monitor = Monitor::Showing {
-        owner: id.clone(),
-        sample: Sample {
-            machine,
-            vcpu: Some(4),
-            memory_gb: Some(8),
-            activity: Activity::Live(Some(Process {
-                name: "cargo".into(),
-                cpu_percent: 82.,
-                memory_mb: Some(610.),
-            })),
+    let mut c = Checkout {
+        source,
+        phase: Phase::Ready {
+            machine: machine.clone(),
+            branch: "feat/remote-checkout".into(),
         },
-        next: Instant::now() + Duration::from_secs(60),
+        pinned_stats: true,
+        other_threads: vec![],
+        thread: Thread {
+            conversation: Some("thread-example".into()),
+            lines: vec![
+                Line::new(Speaker::You, "Add a health check and show me the changes."),
+                Line::new(
+                    Speaker::OpenCode,
+                    "I added a health check to `src/server.rs`.",
+                ),
+            ],
+            ..Default::default()
+        },
     };
+    match name {
+        "remote-working" => {
+            l.app.remote.feeds.insert(
+                id.clone(),
+                Job::Wait(Instant::now() + Duration::from_secs(60)),
+            );
+            c.thread.lines.extend([
+                Line {
+                    tool_detail: Some("src/server.rs".into()),
+                    ..Line::new(Speaker::Tool(ToolState::Complete), "Edit")
+                },
+                Line {
+                    tool_detail: Some("cargo".into()),
+                    ..Line::new(Speaker::Tool(ToolState::Running), "Bash")
+                },
+            ]);
+            c.thread.turn = Turn::Following(Run {
+                conversation: "thread-example".into(),
+                prompt: "prompt-example".into(),
+                id: "run-example".into(),
+            });
+        }
+        "remote-creating" | "remote-setup-failed" => {
+            c.phase = Phase::Create(Plan {
+                token: id.clone(),
+                branch: "feat/health".into(),
+                size: Size::Small,
+                lifetime: Lifetime::Hour,
+            });
+            c.thread = Thread::default();
+            let job = if name == "remote-creating" {
+                c.thread.continued = Some(Continuation {
+                    id: "health-check-thread".into(),
+                    title: "Add a health check".into(),
+                    chat: Chat {
+                        messages: vec![
+                            Message::User("Where should the health check go?".into()),
+                            Message::Assistant("Add a `/health` route in `src/server.rs`.".into()),
+                        ],
+                        clipped: false,
+                    },
+                    base: None,
+                });
+                c.thread.draft = "Implement it on this branch.".into();
+                Job::Busy(1)
+            } else {
+                Job::Failed("Create checkout environment: Boat returned HTTP 403. Automatic setup needs environment.write.".into())
+            };
+            l.app.remote.jobs.insert(id.clone(), job);
+        }
+        "remote-stopped" => {
+            let mut stopped = machine.clone();
+            stopped.state = "archived".into();
+            c.phase = Phase::Prepare {
+                machine: stopped,
+                new_branch: None,
+            };
+        }
+        _ => {}
+    }
+    l.app.remote.saved.checkouts.insert(id.clone(), c);
+    if !matches!(
+        name,
+        "remote-creating" | "remote-setup-failed" | "remote-stopped"
+    ) {
+        l.app.remote.monitor = Monitor::Showing {
+            owner: id.clone(),
+            sample: Sample {
+                machine,
+                vcpu: Some(4),
+                memory_gb: Some(8),
+                activity: Activity::Live(Some(Process {
+                    name: "cargo".into(),
+                    cpu_percent: 82.,
+                    memory_mb: Some(610.),
+                })),
+            },
+            next: Instant::now() + Duration::from_secs(60),
+        };
+    }
     l.remote.restored = true;
     conversation::sync_editor(l);
     checkout::enter(s);

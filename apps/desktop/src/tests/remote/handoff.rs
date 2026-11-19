@@ -190,6 +190,97 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
 }
 
 #[test]
+fn vm_setup_occupies_the_composer_until_the_prepared_checkout_restores_the_draft() {
+    let mut rt = live_runtime_size((800., 620.));
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        l.app.sessions[0].remote_id = Some("session-a".into());
+        l.app.remote.inventory = Some(inventory());
+    });
+    fill(&mut rt, "live-draft-0", "Keep this draft");
+    let dock = element(&rt, "message-composer").rect;
+    let same_dock = |rect: [f32; 4]| {
+        for (a, b) in [
+            (rect[0], dock[0]),
+            (rect[2], dock[2]),
+            (rect[1] + rect[3], dock[1] + dock[3]),
+        ] {
+            assert!((a - b).abs() < 1., "dock {rect:?} vs {dock:?}");
+        }
+    };
+    click(&mut rt, "continue-on-vm");
+    prepare(&mut rt, "/project", true);
+    click(&mut rt, "handoff-new-vm");
+    reveal(&mut rt, "create-remote");
+    click(&mut rt, "create-remote");
+    confirm(&mut rt);
+    let l = live(&rt.state);
+    let id = l.app.remote.saved.selected.as_ref().unwrap();
+    let owner = l.app.remote.saved.checkouts[id]
+        .thread
+        .editor_key(id)
+        .to_owned();
+    let editor = format!("remote-draft-{owner}");
+    let transcript = format!("remote-transcript-{owner}");
+    same_dock(element(&rt, "remote-setup-composer").rect);
+    assert_eq!(
+        element(&rt, "remote-setup-status").label.as_deref(),
+        Some("Creating VM…")
+    );
+    assert!(rt.find(&editor).is_none() && rt.find("remote-send").is_none());
+    assert!(rt.elements().iter().any(|e| e.path.contains(&transcript)
+        && e.text.as_deref() == Some("Prior answer")
+        && e.visible[3] > 0.));
+
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        let commands = l.app.commands();
+        let [(req, Command::Remote(Operation::Create(..)))] = commands.as_slice() else {
+            panic!("{commands:?}")
+        };
+        l.apply(Event::Completed(
+            *req,
+            Ok(Reply::Remote(Outcome::Machine(machine()))),
+        ));
+    });
+    advance(&mut rt, 0.1);
+    assert_eq!(
+        element(&rt, "remote-setup-status").label.as_deref(),
+        Some("Preparing checkout…")
+    );
+    assert!(rt.find(&editor).is_none());
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        let commands = l.app.commands();
+        let [(req, Command::Remote(Operation::Prepare(..)))] = commands.as_slice() else {
+            panic!("{commands:?}")
+        };
+        l.apply(Event::Completed(
+            *req,
+            Ok(Reply::Remote(Outcome::Prepared(
+                machine(),
+                "feature/session".into(),
+            ))),
+        ));
+    });
+    advance(&mut rt, 0.2);
+    same_dock(element(&rt, "message-composer").rect);
+    assert!(rt.find("remote-setup-composer").is_none());
+    let input = element(&rt, &editor);
+    assert!(input.focused);
+    assert_eq!(input.text.as_deref(), Some("Keep this draft"));
+    assert!(rt.find(&transcript).is_some() && element(&rt, "remote-send").focusable);
+    assert_eq!(live(&rt.state).drafts[0].text, "Keep this draft");
+    assert!(
+        live_mut(&mut rt.state)
+            .app
+            .commands()
+            .iter()
+            .all(|(_, c)| !matches!(c, Command::Remote(Operation::Prompt(..))))
+    );
+}
+
+#[test]
 fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_only_on_confirm() {
     let mut rt = live_runtime();
     click(&mut rt, "nav-home");

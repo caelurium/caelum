@@ -4,8 +4,8 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::{Activity, Checkout, Job, Lifetime, Monitor, Phase, Process, Turn};
-use rune::{El, Tx, col, row};
+use caelum_core::remote::{Activity, Checkout, Job, Lifetime, Monitor, Phase, Process};
+use rune::{El, Tx, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -88,7 +88,14 @@ fn info(label: &str, value: impl Into<String>, k: &Kit) -> El {
         .w_full()
         .gap(8.0)
         .child(ui::caption(label, k).w(76.0))
-        .child(ui::caption(value, k).wrap().min_w(0.0))
+        .child(
+            text(value.into())
+                .font(k.ty.small_medium)
+                .color(k.c.text_base)
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
+        )
 }
 
 pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
@@ -96,14 +103,33 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
     let machine = c.machine().unwrap();
     let mut box_ = col()
         .w_full()
-        .gap(5.0)
+        .gap(8.0)
         .pb(8.0)
         .key("remote-machine-details")
-        .child(info(
-            "Machine",
-            format!("{} · {}", machine.name, machine.state),
-            k,
-        ));
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(8.0)
+                .child(icon(&ui::SERVER, 18.0).color(k.c.icon_accent))
+                .child(
+                    col()
+                        .min_w(0.0)
+                        .grow(1.0)
+                        .gap(2.0)
+                        .child(
+                            text(&machine.name)
+                                .font(k.ty.ui_medium)
+                                .color(k.c.text_base)
+                                .truncate(),
+                        )
+                        .child(
+                            ui::caption(format!("{} · {}", c.source.repository, machine.state), k)
+                                .truncate(),
+                        ),
+                ),
+        )
+        .child(ui::divider(k));
     let resume = matches!(machine.state.as_str(), "stopped" | "archived");
     let ttl = if resume {
         "Stopped".into()
@@ -126,12 +152,8 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
         )
     };
     box_ = box_.child(info("Auto-stop", ttl, k)).child(info(
-        "VM thread",
-        match &c.thread.turn {
-            Turn::Idle => "Idle",
-            Turn::Submitting => "Awaiting acknowledgement",
-            Turn::Following(_) => "Prompt active",
-        },
+        "Active thread",
+        super::status::status(r, id, c).label,
         k,
     ));
     if let Some(sample) = r.monitor.sample(id) {
@@ -187,7 +209,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
                     .key(format!("set-vm-lifetime-{}", time.label())),
             );
         }
-        box_ = box_.child(choices).child(
+        box_ = box_.child(ui::divider(k)).child(choices).child(
             ui::caption(
                 "Boat renews timed VMs while an OpenCode prompt runs or waits.",
                 k,

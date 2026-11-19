@@ -5,6 +5,18 @@ use crate::{Workspace, panels};
 type Scene = (&'static str, fn(&mut Workspace));
 
 pub(crate) const SCENES: &[Scene] = &[
+    ("remote-creating", |s| {
+        crate::remote::scene(s, "remote-creating")
+    }),
+    ("remote-working", |s| {
+        crate::remote::scene(s, "remote-working")
+    }),
+    ("remote-setup-failed", |s| {
+        crate::remote::scene(s, "remote-setup-failed")
+    }),
+    ("remote-stopped", |s| {
+        crate::remote::scene(s, "remote-stopped")
+    }),
     ("remote-create", |s| {
         crate::remote::scene(s, "remote-create")
     }),

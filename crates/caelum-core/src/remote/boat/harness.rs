@@ -1,10 +1,10 @@
 use super::{api, Boat};
-use crate::remote::{harness::Harness, Line, Outcome, Page, Run, Speaker, Target};
+use crate::remote::{harness::Harness, Outcome, Page, Run, RunStatus, Target, TurnEnd};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use boat_sdk::agents::{models::PromptRun, EventOrder, EventQuery, PromptRequest};
 
 // In particular disallow commas: the events API interprets these as multiple conversations.
-fn valid_id(value: &str) -> bool {
+pub(super) fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && value
@@ -191,45 +191,26 @@ impl Harness for Boat {
         } else {
             cursor.map(str::to_owned)
         };
-        let mut lines = Vec::new();
-        for e in events.events.into_iter().filter(|e| {
-            e.conversation_id.as_deref() == Some(&run.conversation) && e.kind == "response"
-        }) {
-            let Some(data) = e.data else { continue };
-            if let Some(text) = data
-                .get("content")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-            {
-                lines.push(Line {
-                    speaker: Speaker::OpenCode,
-                    text: text.into(),
-                    partial: data
-                        .get("is_streaming")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false),
-                });
-            }
-            for tool in data
-                .get("tools")
-                .and_then(|v| v.as_array())
-                .into_iter()
-                .flatten()
-            {
-                if let Some(name) = tool.get("name").and_then(|v| v.as_str()) {
-                    lines.push(Line {
-                        speaker: Speaker::Activity,
-                        text: format!("Tool · {name}"),
-                        partial: false,
-                    });
-                }
-            }
-        }
+        let status = match (
+            status.prompt_run.done,
+            more,
+            status.prompt_run.status.as_str(),
+        ) {
+            (true, true, _) => RunStatus::Finishing,
+            (true, false, s) => RunStatus::Ended(match s {
+                "finished" => TurnEnd::Finished,
+                "interrupted" => TurnEnd::Interrupted,
+                "failed" => TurnEnd::Failed,
+                _ => TurnEnd::Other,
+            }),
+            (false, _, "queued" | "sending") => RunStatus::Queued,
+            _ => RunStatus::Running,
+        };
         Ok(Page {
-            lines,
+            lines: super::events::lines(events.events, run, &target.repository),
             cursor: next,
             more,
-            finished: (status.prompt_run.done && !more).then_some(status.prompt_run.status),
+            status,
         })
     }
 

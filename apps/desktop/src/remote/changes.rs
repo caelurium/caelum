@@ -4,7 +4,7 @@ use crate::{
     quiet_button, ui,
 };
 use caelum_core::remote::{Changes, Turn};
-use rune::{El, TextEdit, col, row};
+use rune::{El, TextEdit, col, icon, row, text};
 use rune_kit::{
     Kit,
     diff::{self, DiffState, DiffView},
@@ -64,24 +64,42 @@ pub(crate) fn inspector(s: &Workspace, k: &Kit) -> El {
     else {
         return body;
     };
-    body = body.child(
-        row()
-            .w_full()
-            .center_y()
-            .gap(4.0)
-            .child(
-                ui::caption(format!("Changes · Remote · {}", c.title()), k)
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .truncate(),
+    body = body
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(6.0)
+                .child(icon(&ui::BRANCH, 14.0).color(k.c.icon_muted))
+                .child(
+                    text("Changes")
+                        .font(k.ty.ui_medium)
+                        .color(k.c.text_base)
+                        .grow(1.0),
+                )
+                .child(
+                    quiet_button(&ui::REFRESH, "Refresh remote changes")
+                        .on_press(open)
+                        .build(k),
+                )
+                .child(
+                    quiet_button(&glyphs::CLOSE, "Hide remote changes")
+                        .on_press(|s: &mut Workspace| s.inspector.set_open(false))
+                        .build(k),
+                ),
+        )
+        .child(
+            ui::caption(
+                format!(
+                    "{} · {}",
+                    c.title(),
+                    super::status::branch(c).unwrap_or(&c.source.repository)
+                ),
+                k,
             )
-            .child(ui::Button::new("Refresh").on_press(open).build(k))
-            .child(
-                quiet_button(&glyphs::CLOSE, "Hide remote changes")
-                    .on_press(|s: &mut Workspace| s.inspector.set_open(false))
-                    .build(k),
-            ),
-    );
+            .truncate(),
+        )
+        .child(ui::divider(k));
     let review = match l.app.remote.changes.get(id) {
         Some(Changes::Ready(r)) => r,
         Some(Changes::Failed(e)) => {
@@ -97,9 +115,35 @@ pub(crate) fn inspector(s: &Workspace, k: &Kit) -> El {
         && !l.app.remote.jobs.contains_key(id);
     let a = id.clone();
     let b = id.clone();
-    let status = review.status.lines().take(6).collect::<Vec<_>>().join("\n");
+    let files: Vec<_> = review
+        .status
+        .lines()
+        .filter(|p| !p.starts_with("## "))
+        .collect();
+    for file in files.iter().take(4) {
+        body = body.child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(7.0)
+                .child(
+                    text(file.get(..2).unwrap_or("").trim())
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_accent)
+                        .w(21.0),
+                )
+                .child(
+                    ui::caption(file.get(3..).unwrap_or(file), k)
+                        .truncate()
+                        .min_w(0.0)
+                        .help(*file),
+                ),
+        );
+    }
+    if files.len() > 4 {
+        body = body.child(ui::caption(format!("+{} more", files.len() - 4), k));
+    }
     body = body
-        .child(ui::caption(&status, k).wrap().selectable(true))
         .child(
             ui::field(
                 &l.remote.review.message,

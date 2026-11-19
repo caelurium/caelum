@@ -61,7 +61,8 @@ nothing to enter. An existing VM keeps its branch and must already contain the
 published commit.
 
 Choose an existing VM, or choose the size and auto-stop time and click
-**Create VM**. The remote composer opens with a copy of your unsent draft.
+**Create VM**. While Boat prepares the checkout, a progress card takes the
+place of the message editor. The editor returns with a copy of your unsent draft.
 Your original session and draft stay on the laptop.
 If the VM already had a conversation, **Conversations…** switches back to it.
 
@@ -76,6 +77,11 @@ Send a message from the remote composer. **Stop** interrupts
 that OpenCode conversation. Reopen Caelum or select the machine's sidebar row
 to continue the same thread. If Boat may have accepted a prompt but the
 acknowledgement was lost, check Boat and reconnect using the prompt ID.
+
+The composer shows queued turns, streaming replies and tool activity from the
+selected Boat conversation. If you used the earlier direct-OpenCode preview,
+its VM transcript and draft stay available for reference. Your next explicit
+send starts a managed conversation; opening the checkout does not replay a turn.
 
 Click the server icon in the remote composer or the original linked session for
 machine stats: capacity, the auto-stop deadline, and the busiest sampled process.

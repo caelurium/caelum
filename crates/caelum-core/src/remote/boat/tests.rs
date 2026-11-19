@@ -231,13 +231,36 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
     Mock::given(path("/sandboxes/vm-1/events")).and(query_param("conversation","c")).and(query_param("cursor","before")).and(query_param("sort","asc"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"events","id":"vm-1","events":[
             {"type":"response","id":"1","conversationId":"other","timestamp":10,"data":{"content":"another session"}},
-            {"type":"response","id":"2","conversationId":"c","timestamp":11,"data":{"content":"Edited the file."}}
+            {"type":"response","id":"old","conversationId":"c","taskId":"old-prompt","timestamp":10,"data":{"content":"another turn"}},
+            {"type":"response","id":"unowned","timestamp":10,"data":{"content":"unowned"}},
+            {"type":"response","id":"text","conversationId":"c","timestamp":11,"data":{"content":"Editing…","is_streaming":true}},
+            {"type":"response","id":"tools","conversationId":"c","timestamp":12,"data":{"tools":[{"use":{"id":"call-1","name":"Edit","input":{"filePath":"/home/user/project/src/lib.rs","token":"private-tool-input"}}}]}},
+            {"type":"response","id":"done","taskId":"p","timestamp":13,"data":{"content":"Edited the file."}},
+            {"type":"response","id":"result","conversationId":"c","timestamp":14,"data":{"tools":[{"use":{"id":"call-1","name":"Edit"},"result":{"is_error":false,"content":"private-tool-output"}},{"use":{"id":"call-2","name":"Bash","input":{"command":"cargo test --token private-tool-input"}},"result":{"is_error":true}}]}},
+            {"type":"response","id":"reverted","conversationId":"c","timestamp":15,"data":{"content":"obsolete","is_reverted":true}}
         ],"pageInfo":{"hasMore":false,"nextCursor":"after","limit":100}}))).expect(1).mount(&server).await;
     let page = boat.follow(&target, &first, Some("before")).await.unwrap();
-    assert_eq!(page.lines.len(), 1);
-    assert_eq!(page.lines[0].text, "Edited the file.");
+    use crate::remote::{Speaker, Thread, ToolState};
+    assert_eq!(page.lines[1].speaker, Speaker::Tool(ToolState::Running));
+    let mut thread = Thread::default();
+    for line in page.lines {
+        thread.append(line);
+    }
+    assert_eq!(thread.lines.len(), 3);
+    assert_eq!(thread.lines[0].text, "Edited the file.");
+    assert!(!thread.lines[0].partial);
+    assert_eq!(thread.lines[1].speaker, Speaker::Tool(ToolState::Complete));
+    assert_eq!(thread.lines[1].tool_detail.as_deref(), Some("src/lib.rs"));
+    assert_eq!(thread.lines[2].tool_detail.as_deref(), Some("cargo"));
+    assert_eq!(thread.lines[2].speaker, Speaker::Tool(ToolState::Failed));
+    assert!(!serde_json::to_string(&thread)
+        .unwrap()
+        .contains("private-tool"));
     assert_eq!(page.cursor.as_deref(), Some("after"));
-    assert_eq!(page.finished.as_deref(), Some("finished"));
+    assert_eq!(
+        page.status,
+        crate::remote::RunStatus::Ended(crate::remote::TurnEnd::Finished)
+    );
     let Outcome::Accepted(next) = boat
         .send(&target, Some(&first.conversation), "Continue")
         .await

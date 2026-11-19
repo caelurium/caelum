@@ -1,4 +1,5 @@
 mod checkout;
+mod events;
 mod git;
 mod harness;
 mod setup_error;

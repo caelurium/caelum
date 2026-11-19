@@ -121,7 +121,9 @@ impl Workspace {
                     .selected
                     .as_ref()
                     .and_then(|id| live.app.remote.saved.checkouts.get(id))
-                    .map_or("Remote checkout", |c| c.title());
+                    .map_or("Remote checkout", |c| {
+                        c.thread.heading().unwrap_or_else(|| c.title())
+                    });
             }
             live.app
                 .selected

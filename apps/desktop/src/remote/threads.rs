@@ -67,6 +67,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                         if l.app.switch_vm_thread(&id, &key) {
                             l.panels.overlay = None;
                             super::conversation::sync_editor(l);
+                            super::conversation::focus(l);
                         }
                     })
             },

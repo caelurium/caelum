@@ -359,7 +359,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                     lines: vec![],
                     cursor: None,
                     more: false,
-                    finished: Some("finished".into()),
+                    status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
             assert!(reopened.send_remote(&id, "Again"));

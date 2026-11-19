@@ -184,6 +184,10 @@ impl Live {
     }
 
     pub fn focus(&mut self) {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            crate::remote::focus(self);
+            return;
+        }
         if self.panels.screen == crate::panels::Screen::Home {
             self.home.editor.focused = true;
             return;
@@ -352,6 +356,16 @@ impl Live {
     }
 
     pub fn working(&self) -> bool {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            return self
+                .app
+                .remote
+                .saved
+                .selected
+                .as_ref()
+                .and_then(|id| self.app.remote.saved.checkouts.get(id))
+                .is_some_and(|c| c.thread.turn.run().is_some());
+        }
         self.panels.screen == crate::panels::Screen::Conversation
             && self
                 .app
@@ -361,6 +375,12 @@ impl Live {
 
     pub fn stop(&mut self) {
         self.schedule();
+        if self.panels.screen == crate::panels::Screen::Remote {
+            if let Some(id) = self.app.remote.saved.selected.clone() {
+                self.app.interrupt_remote(&id);
+            }
+            return;
+        }
         if let Some(index) = self.app.selected {
             self.app.cancel(index);
         }

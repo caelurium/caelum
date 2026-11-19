@@ -87,7 +87,7 @@ fn machine(s: &Workspace, k: &Kit, id: &str) -> El {
     if c.machine().is_some() {
         body = body.child(super::stats::details(s, k, id, c));
     } else {
-        body = body.child(ui::caption("Setting up the VM…", k));
+        body = body.child(super::status::status(&l.app.remote, id, c).view(k));
     }
     if let Some(Job::Failed(error)) = l.app.remote.jobs.get(id) {
         body = body.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
@@ -140,7 +140,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         let Some(id) = owner(l) else {
             return;
         };
-        ("Machine stats", machine(s, k, id), 344.0)
+        ("Machine stats", machine(s, k, id), 368.0)
     } else {
         (
             "Continue on VM",

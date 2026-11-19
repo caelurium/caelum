@@ -1,4 +1,5 @@
 mod handoff;
+mod workspace;
 
 use super::*;
 use caelum_core::{
@@ -78,7 +79,9 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     assert!(
         rt.elements()
             .iter()
-            .any(|e| e.text.as_deref() == Some(denied) && e.visible[3] > 0.)
+            .any(|e| e.path.contains("remote-setup-composer")
+                && e.text.as_deref() == Some(denied)
+                && e.visible[3] > 0.)
     );
     assert!(
         rt.elements()

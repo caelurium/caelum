@@ -289,7 +289,7 @@ impl Boat {
         }
         if matches!(
             sandbox.state.as_str(),
-            "provisioning" | "provisioned" | "cloning" | "archiving"
+            "init" | "provisioning" | "provisioned" | "cloning" | "archiving"
         ) || sandbox.hydrated == Some(false)
             || matches!(sandbox.setup_status.as_deref(), Some("pending" | "running"))
         {

@@ -24,11 +24,7 @@ impl Workspace {
             c.thread.conversation.clone(),
             c.thread.prompt(text),
         );
-        c.thread.append(Line {
-            speaker: Speaker::You,
-            text: text.into(),
-            partial: false,
-        });
+        c.thread.append(Line::new(Speaker::You, text));
         c.thread.turn = Turn::Submitting;
         c.thread.draft.clear();
         self.feed_request(id, op);
@@ -55,11 +51,10 @@ impl Workspace {
         if let Some(c) = self.remote.saved.checkouts.get_mut(id) {
             if c.thread.turn == Turn::Submitting {
                 c.thread.turn = Turn::Idle;
-                c.thread.append(Line {
-                    speaker: Speaker::Activity,
-                    text: "Unconfirmed submission dismissed".into(),
-                    partial: false,
-                });
+                c.thread.append(Line::new(
+                    Speaker::Activity,
+                    "Unconfirmed submission dismissed",
+                ));
                 self.remote.feeds.remove(id);
             }
         }
@@ -69,7 +64,7 @@ impl Workspace {
         let Some(c) = self.remote.saved.checkouts.get(id) else {
             return;
         };
-        if let (Some(target), Turn::Following(run)) = (c.target(), &c.thread.turn) {
+        if let (Some(target), Some(run)) = (c.target(), c.thread.turn.run()) {
             self.feed_request(
                 id,
                 Operation::Follow(target, run.clone(), c.thread.cursor.clone()),
@@ -92,7 +87,10 @@ impl Workspace {
         let Some(c) = self.remote.saved.checkouts.get(id) else {
             return;
         };
-        if let (Some(target), Turn::Following(run)) = (c.target(), &c.thread.turn) {
+        if matches!(c.thread.turn, Turn::Stopping(_) | Turn::Finishing(_)) {
+            return;
+        }
+        if let (Some(target), Some(run)) = (c.target(), c.thread.turn.run()) {
             let request = self.request(
                 Command::Remote(Operation::Interrupt(target, run.clone())),
                 Pending::Remote(Lane::Interrupt(id.into(), run.clone())),
@@ -112,13 +110,11 @@ impl Workspace {
         }
         self.remote.interrupts.remove(id);
         if let Some(c) = self.remote.saved.checkouts.get_mut(id) {
-            if matches!(&c.thread.turn,Turn::Following(r) if r==run) {
-                if let Err(error) = result {
-                    c.thread.append(Line {
-                        speaker: Speaker::Activity,
-                        text: error,
-                        partial: false,
-                    });
+            if c.thread.turn.run() == Some(run) {
+                match result {
+                    Ok(Outcome::Interrupted) => c.thread.turn = Turn::Stopping(run.clone()),
+                    Err(error) => c.thread.append(Line::new(Speaker::Activity, error)),
+                    _ => {}
                 }
                 self.follow_remote(id);
             }
@@ -166,29 +162,41 @@ impl Workspace {
                 }
                 self.remote.feeds.insert(id.into(), Job::Failed(error));
             }
-            Ok(Outcome::Page(page)) if matches!(&c.thread.turn, Turn::Following(_)) => {
+            Ok(Outcome::Page(page)) if c.thread.turn.run().is_some() => {
                 for line in page.lines {
                     c.thread.append(line);
                 }
                 c.thread.cursor = page.cursor;
-                if let Some(status) = page.finished {
-                    if let Some(last) = c.thread.lines.last_mut() {
-                        last.partial = false;
+                if let RunStatus::Ended(status) = page.status {
+                    for line in c
+                        .thread
+                        .lines
+                        .iter_mut()
+                        .rev()
+                        .take_while(|l| l.speaker != Speaker::You)
+                    {
+                        line.partial = false;
+                        if line.speaker == Speaker::Tool(ToolState::Running) {
+                            line.speaker = Speaker::Tool(ToolState::Reported);
+                        }
                     }
                     c.thread.turn = Turn::Idle;
-                    if status != "finished" {
-                        c.thread.append(Line {
-                            speaker: Speaker::Activity,
-                            text: status,
-                            partial: false,
-                        });
-                    }
+                    c.thread
+                        .append(Line::new(Speaker::Outcome(status), status.label()));
                     if self.remote.saved.selected.as_deref() == Some(id)
                         && self.remote.changes.contains_key(id)
                     {
                         self.review_remote(id);
                     }
                 } else {
+                    if !matches!(c.thread.turn, Turn::Stopping(_)) {
+                        let run = c.thread.turn.run().unwrap().clone();
+                        c.thread.turn = match page.status {
+                            RunStatus::Queued => Turn::Queued(run),
+                            RunStatus::Finishing => Turn::Finishing(run),
+                            _ => Turn::Following(run),
+                        };
+                    }
                     let delay = if page.more {
                         Duration::ZERO
                     } else {

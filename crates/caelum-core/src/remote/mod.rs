@@ -17,7 +17,7 @@ pub use checkout::PublishedBase;
 pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};
-pub use harness::{Line, Page, Run, Speaker, Thread, Turn};
+pub use harness::{Line, Page, Run, RunStatus, Speaker, Thread, ToolState, Turn, TurnEnd};
 pub use lifetime::Lifetime;
 pub(crate) use runtime::Backend;
 pub use stats::{Activity, Monitor, Process, Sample};
