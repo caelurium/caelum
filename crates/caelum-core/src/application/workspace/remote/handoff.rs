@@ -383,8 +383,10 @@ impl Workspace {
                             ..
                         }
                 )
-        }) && !matches!(self.remote.jobs.get(id), Some(Job::Busy(_) | Job::Wait(_)))
-            && !matches!(self.remote.feeds.get(id), Some(Job::Busy(_) | Job::Wait(_)))
+        }) && !matches!(
+            self.remote.jobs.get(id),
+            Some(Job::Busy(_) | Job::Wait(_) | Job::Deleting(_))
+        ) && !matches!(self.remote.feeds.get(id), Some(Job::Busy(_) | Job::Wait(_)))
             && !matches!(self.remote.lifetimes.get(id), Some(Job::Busy(_)))
             && !self.remote.interrupts.contains_key(id)
             && !self.publishing(id)

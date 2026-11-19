@@ -78,7 +78,7 @@ impl Checkout {
         }
     }
     pub fn title(&self) -> &str {
-        self.machine().map_or("Creating machine", |m| &m.name)
+        self.machine().map_or("VM setup", |m| &m.name)
     }
     pub fn target(&self) -> Option<Target> {
         Some(Target {
@@ -127,11 +127,14 @@ pub struct VmLink {
 pub struct Saved {
     pub checkouts: BTreeMap<String, Checkout>,
     pub selected: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub expanded: BTreeMap<String, bool>,
 }
 
 #[derive(Debug)]
 pub enum Job {
     Busy(u64),
+    Deleting(u64),
     Wait(Instant),
     Failed(String),
 }

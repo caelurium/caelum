@@ -1,4 +1,5 @@
 //! Caelum's shared visual vocabulary, used by live views and deterministic previews.
+pub(crate) mod project_group;
 use rune::{El, Icon, TextStyle, col, icon, row, text};
 use rune_kit::{Kit, ScrollBar, shell::SidebarRow};
 

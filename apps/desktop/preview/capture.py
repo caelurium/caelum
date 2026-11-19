@@ -11,6 +11,7 @@ import time
 root = Path(__file__).resolve().parents[3]
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
+    "remote-remove": ("remote-working", [{"t": 0.25, "key": "remove-remote-checkout-example"}]),
     "home-continue-on-vm": ("home-draft", [{"t": 0.25, "key": "continue-on-vm"}]),
     "remote-handoff-new": ("remote-handoff", [{"t": 0.25, "key": "handoff-new-vm"}]),
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),

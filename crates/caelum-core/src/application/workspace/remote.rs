@@ -5,6 +5,7 @@ pub(super) mod handoff;
 mod harness;
 mod lifetime;
 mod link;
+mod removal;
 mod stats;
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,7 @@ pub(super) enum Lane {
     Handoff,
     ConfirmHandoff(Box<(crate::remote::Source, handoff::VmDestination)>),
     Checkout(String),
+    Delete(String, crate::remote::MachineId),
     Feed(String),
     Git(String),
     Stats(String),
@@ -45,6 +47,7 @@ impl Workspace {
             return;
         }
         let request = self.request(Command::Remote(op), Pending::Remote(Lane::Connection));
+        self.remote.deleted_during_inventory.clear();
         self.remote.connection = Connection::Loading(request);
     }
 
@@ -67,6 +70,7 @@ impl Workspace {
             _ => Err("Unexpected remote machine response".into()),
         });
         match lane {
+            Lane::Delete(id, key) => self.complete_deletion(&id, request, &key, result),
             Lane::Picker => self.complete_remote_picker(request, result),
             Lane::ConfirmHandoff(plan) => {
                 self.complete_handoff_confirmation(request, plan.0, plan.1, result)
@@ -80,7 +84,10 @@ impl Workspace {
             Lane::Connection if matches!(self.remote.connection, Connection::Loading(id) if id == request) =>
             {
                 self.remote.connection = match result {
-                    Ok(Outcome::Inventory(inventory)) => {
+                    Ok(Outcome::Inventory(mut inventory)) => {
+                        inventory
+                            .machines
+                            .retain(|m| !self.remote.deleted_during_inventory.contains(&m.key));
                         self.remote.inventory = Some(inventory);
                         if self.remote.picker.is_none() {
                             if let Some(h) = self.vm_handoff() {

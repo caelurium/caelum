@@ -227,6 +227,9 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
             live.feed.hidden();
         }
         let changed = live.poll(tx);
+        if !live.app.remote.removed.is_empty() {
+            return crate::remote::finish_removals(s);
+        }
         if live.panels.overlay == Some(crate::panels::Screen::VmHandoff)
             && live.app.enter_confirmed_vm()
         {

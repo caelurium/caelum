@@ -59,6 +59,48 @@ fn sandbox(state: &str) -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn deletion_confirms_the_exact_boat_id_and_requires_its_owning_account() {
+    let (server, boat) = fixture().await;
+    let key = MachineId {
+        host: Host::Boat,
+        account: boat.account.clone(),
+        id: "vm-1".into(),
+    };
+    assert!(boat
+        .delete(&MachineId {
+            account: "other".into(),
+            ..key.clone()
+        })
+        .await
+        .is_err());
+    for (target, status, accepted) in [
+        ("vm-2", 202, false),
+        ("vm-1", 403, false),
+        ("vm-1", 202, true),
+    ] {
+        let mock=Mock::given(method("DELETE")).and(path("/sandboxes/vm-1"))
+            .and(header("x-ascii-confirm-delete","vm-1")).and(header("authorization","Bearer fixture-key"))
+            .respond_with(ResponseTemplate::new(status).set_body_json(json!({"ok":true,"type":"sandbox.deleting",
+              "operation":{"id":"op-example","kind":"sandbox","targetId":target,"status":"pending","reason":"explicit",
+              "attemptCount":0,"requestedAt":"2026-01-01T00:00:00Z","completedAt":null}})))
+            .expect(1).mount_as_scoped(&server).await;
+        let result = boat.delete(&key).await;
+        if accepted {
+            assert!(matches!(result,Ok(Outcome::Deleted(k)) if k==key));
+        } else {
+            let error = result.unwrap_err();
+            assert!(error.contains(if status == 403 {
+                "sandbox.delete-own"
+            } else {
+                "did not confirm"
+            }));
+        }
+        drop(mock);
+    }
+    assert_eq!(server.received_requests().await.unwrap().len(), 4);
+}
+
+#[tokio::test]
 async fn running_machine_lifetime_uses_explicit_seconds_or_null_and_boats_actual_deadline() {
     let (server, boat) = fixture().await;
     let key = MachineId {

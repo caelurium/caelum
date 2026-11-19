@@ -52,6 +52,7 @@ pub enum Screen {
     Remote,
     CreateVm,
     RemotePicker,
+    RemoveVm,
     VmHandoff,
     VmStats,
     VmThreads,

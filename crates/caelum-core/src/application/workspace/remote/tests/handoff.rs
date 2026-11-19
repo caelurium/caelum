@@ -68,6 +68,98 @@ fn new_vm() -> VmDestination {
 }
 
 #[test]
+fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
+    let mut app = Workspace::default();
+    let index = local(&mut app);
+    let req = reading(&mut app, index);
+    ready(&mut app, req);
+    let id = app
+        .finish_vm_handoff(VmDestination::Existing(machine("vm")))
+        .unwrap();
+    let req = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Prepared(
+            machine("vm"),
+            "feature/local".into(),
+        ))),
+    ));
+    app.remote
+        .saved
+        .expanded
+        .insert(source().project.clone(), true);
+    assert!(app.linked_vm(index).is_some());
+    assert!(app.send_remote(&id, "Keep working"));
+    let key = machine("vm").key;
+    assert!(!app.remove_remote(&id, Some(&key)));
+    let req = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Accepted(Run {
+            conversation: "c".into(),
+            prompt: "p".into(),
+            id: "r".into(),
+        }))),
+    ));
+    let (feed, Command::Remote(Operation::Follow(..))) = app.commands().pop().unwrap() else {
+        panic!()
+    };
+    app.monitor_remote(Some(&id), std::time::Instant::now());
+    let (stats, Command::Remote(Operation::Stats(_))) = app.commands().pop().unwrap() else {
+        panic!()
+    };
+    assert!(!app.remove_remote(&id, None));
+    assert!(!app.remove_remote(&id, Some(&machine("other").key)));
+    assert!(app.remove_remote(&id, Some(&key)));
+    assert!(!app.remove_remote(&id, Some(&key)));
+    let (r, Command::Remote(Operation::Delete(sent))) = app.commands().pop().unwrap() else {
+        panic!()
+    };
+    assert_eq!(sent, key);
+    app.apply(Event::Completed(r, Err("Access denied".into())));
+    assert!(app.linked_vm(index).is_some() && app.remote.delete_errors.contains_key(&id));
+    assert!(app.remove_remote(&id, Some(&key)));
+    let (r, _) = app.commands().pop().unwrap();
+    let Connection::Loading(list) = app.remote.connection else {
+        panic!("handoff inventory must still be in flight")
+    };
+    let prior = app.remote.inventory.clone().unwrap();
+    app.apply(Event::Completed(
+        r,
+        Ok(Reply::Remote(Outcome::Deleted(key))),
+    ));
+    app.apply(Event::Completed(
+        list,
+        Ok(Reply::Remote(Outcome::Inventory(prior))),
+    ));
+    assert!(app.remote.inventory.as_ref().unwrap().machines.is_empty());
+    app.apply(Event::Completed(
+        feed,
+        Ok(Reply::Remote(Outcome::Page(Page {
+            cursor: None,
+            more: false,
+            lines: vec![],
+            status: RunStatus::Running,
+        }))),
+    ));
+    app.apply(Event::Completed(stats, Err("obsolete sample".into())));
+    assert!(app
+        .commands()
+        .iter()
+        .all(|(_, c)| !matches!(c, Command::Remote(_))));
+    assert!(matches!(app.remote.monitor, Monitor::Off));
+    assert!(
+        app.remote.feeds.is_empty()
+            && app.remote.jobs.is_empty()
+            && app.remote.saved.expanded.is_empty()
+    );
+    let saved = app.snapshot();
+    assert!(saved.remote.checkouts.is_empty() && saved.remote.selected.is_none());
+    assert!(saved.sessions[index].vm_link.is_none());
+    assert_eq!(saved.sessions[index].draft, "Next step");
+}
+
+#[test]
 fn a_second_handoff_cannot_repurpose_an_unfinished_new_vm_checkout() {
     let mut app = Workspace::default();
     let i = local(&mut app);

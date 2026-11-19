@@ -187,6 +187,47 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     click(&mut rt, "open-linked-vm");
     assert_eq!(live(&rt.state).panels.screen, Screen::Remote);
     assert_eq!(live(&rt.state).drafts[0].text, "Edit this on the VM");
+    let id = live(&rt.state).app.remote.saved.selected.clone().unwrap();
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        let req = l
+            .app
+            .commands()
+            .into_iter()
+            .find_map(|(req, command)| {
+                matches!(command, Command::Remote(Operation::Prepare(..))).then_some(req)
+            })
+            .unwrap();
+        l.apply(Event::Completed(
+            req,
+            Ok(Reply::Remote(Outcome::Prepared(
+                machine(),
+                "feat/existing".into(),
+            ))),
+        ));
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, &format!("remove-remote-{id}"));
+    click(&mut rt, "confirm-remove-vm");
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        let (r, Command::Remote(Operation::Delete(key))) = l.app.commands().pop().unwrap() else {
+            panic!()
+        };
+        assert_eq!(key, machine().key);
+        assert!(l.app.remote.saved.checkouts.contains_key(&id));
+        l.apply(Event::Completed(
+            r,
+            Ok(Reply::Remote(Outcome::Deleted(key))),
+        ));
+    });
+    advance(&mut rt, 0.2);
+    let l = live(&rt.state);
+    assert_eq!(l.panels.screen, Screen::Conversation);
+    assert_eq!(l.app.selected, Some(0));
+    assert_eq!(l.drafts[0].text, "Edit this on the VM");
+    assert!(l.app.linked_vm(0).is_none());
+    assert!(rt.find("continue-on-vm").is_some());
 }
 
 #[test]
@@ -263,7 +304,7 @@ fn vm_setup_occupies_the_composer_until_the_prepared_checkout_restores_the_draft
             ))),
         ));
     });
-    advance(&mut rt, 0.2);
+    advance(&mut rt, 0.5);
     same_dock(element(&rt, "message-composer").rect);
     assert!(rt.find("remote-setup-composer").is_none());
     let input = element(&rt, &editor);

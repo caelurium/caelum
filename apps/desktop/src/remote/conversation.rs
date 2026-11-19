@@ -343,7 +343,7 @@ pub(super) fn view(
             ui::Button::new("Resume")
                 .disabled(matches!(
                     l.app.remote.jobs.get(id),
-                    Some(Job::Busy(_) | Job::Wait(_))
+                    Some(Job::Busy(_) | Job::Wait(_) | Job::Deleting(_))
                 ))
                 .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true))
                 .build(k),

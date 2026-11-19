@@ -147,6 +147,14 @@ impl Workspace {
     }
 
     pub fn attach_remote(&mut self, machine: Machine) -> Option<String> {
+        if !self
+            .remote
+            .inventory
+            .as_ref()
+            .is_some_and(|i| i.machines.iter().any(|m| m.key == machine.key))
+        {
+            return None;
+        }
         let id = self.register_machine(machine)?;
         self.select_remote(&id);
         Some(id)
@@ -166,7 +174,9 @@ impl Workspace {
             .iter()
             .find(|(_, c)| c.machine().is_some_and(|m| m.key == machine.key));
         let id = if let Some((id, c)) = existing {
-            if !c.source.repository.eq_ignore_ascii_case(&source.repository) {
+            if matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
+                || !c.source.repository.eq_ignore_ascii_case(&source.repository)
+            {
                 return None;
             }
             id.clone()
@@ -235,8 +245,10 @@ impl Workspace {
     }
 
     fn checkout_request(&mut self, id: &str, op: Operation) {
-        if matches!(self.remote.jobs.get(id), Some(Job::Busy(_)))
-            || matches!(self.remote.lifetimes.get(id), Some(Job::Busy(_)))
+        if matches!(
+            self.remote.jobs.get(id),
+            Some(Job::Busy(_) | Job::Deleting(_))
+        ) || matches!(self.remote.lifetimes.get(id), Some(Job::Busy(_)))
         {
             return;
         }

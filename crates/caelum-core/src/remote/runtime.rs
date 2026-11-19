@@ -52,6 +52,7 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Delete(key) => self.connected().await?.delete(key).await,
             Operation::Stats(key) => self.connected().await?.stats(key).await.map(Outcome::Stats),
             Operation::Git(target, action) => self
                 .connected()

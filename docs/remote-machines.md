@@ -83,6 +83,14 @@ selected Boat conversation. If you used the earlier direct-OpenCode preview,
 its VM transcript and draft stay available for reference. Your next explicit
 send starts a managed conversation; opening the checkout does not replay a turn.
 
+Find the checkout under **Remote VMs** in the project sidebar. **Stop** in the
+composer interrupts just the selected turn. **Stop machine** keeps the disk
+for a later resume. **Delete VM on Boat…** permanently deletes the machine and
+its disk. Confirm its exact name and ID; Caelum removes the chats, drafts and
+links only after Boat accepts deletion. If it fails, the checkout stays available
+to retry. The key needs `sandbox.delete` or `sandbox.delete-own` for a VM it
+created. A setup that has no Boat machine ID can only be discarded locally.
+
 Click the server icon in the remote composer or the original linked session for
 machine stats: capacity, the auto-stop deadline, and the busiest sampled process.
 From the original session, **Open VM conversation** returns to its specific

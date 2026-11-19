@@ -65,6 +65,12 @@ fn dot(color: Color) -> El {
 
 pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
     use Tone::*;
+    if matches!(r.jobs.get(id), Some(Job::Deleting(_))) {
+        return Status::new(Busy, "Deleting VM on Boat…");
+    }
+    if r.delete_errors.contains_key(id) {
+        return Status::new(Error, "VM deletion failed");
+    }
     if matches!(r.jobs.get(id), Some(Job::Failed(_))) {
         return Status::new(
             Error,

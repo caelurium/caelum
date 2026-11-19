@@ -45,7 +45,9 @@ impl Workspace {
 
     /// After inspecting Boat, the user can discard the uncertain submission. No network effect.
     pub fn dismiss_remote_submission(&mut self, id: &str) {
-        if matches!(self.remote.feeds.get(id), Some(Job::Busy(_))) {
+        if matches!(self.remote.feeds.get(id), Some(Job::Busy(_)))
+            || matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
+        {
             return;
         }
         if let Some(c) = self.remote.saved.checkouts.get_mut(id) {
@@ -73,7 +75,9 @@ impl Workspace {
     }
 
     fn feed_request(&mut self, id: &str, op: Operation) {
-        if matches!(self.remote.feeds.get(id), Some(Job::Busy(_))) {
+        if matches!(self.remote.feeds.get(id), Some(Job::Busy(_)))
+            || matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
+        {
             return;
         }
         let request = self.request(Command::Remote(op), Pending::Remote(Lane::Feed(id.into())));
@@ -81,7 +85,9 @@ impl Workspace {
     }
 
     pub fn interrupt_remote(&mut self, id: &str) {
-        if self.remote.interrupts.contains_key(id) {
+        if self.remote.interrupts.contains_key(id)
+            || matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
+        {
             return;
         }
         let Some(c) = self.remote.saved.checkouts.get(id) else {
@@ -152,13 +158,20 @@ impl Workspace {
             }
             Ok(Outcome::Rejected(error)) if c.thread.turn == Turn::Submitting => {
                 c.thread.turn = Turn::Idle;
-                if let Some(line) = c
-                    .thread
+                if c.thread
                     .lines
                     .last()
-                    .filter(|l| l.speaker == Speaker::You && c.thread.draft.is_empty())
+                    .is_some_and(|l| l.speaker == Speaker::You)
                 {
-                    c.thread.draft.clone_from(&line.text);
+                    let line = c.thread.lines.pop().unwrap();
+                    if c.thread.draft.is_empty() {
+                        c.thread.draft = line.text;
+                    } else {
+                        c.thread.append(Line::new(
+                            Speaker::Activity,
+                            format!("Not sent: {}", line.text),
+                        ));
+                    }
                 }
                 self.remote.feeds.insert(id.into(), Job::Failed(error));
             }

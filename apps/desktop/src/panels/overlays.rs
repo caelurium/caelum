@@ -12,6 +12,7 @@ pub(super) fn close(s: &mut Workspace) {
     match l.panels.overlay.take() {
         Some(Screen::Fork) => l.app.dismiss_fork(),
         Some(Screen::VmHandoff | Screen::VmStats) => crate::remote::close_popup(l),
+        Some(Screen::RemoveVm) => l.remote.removing = None,
         _ => {}
     }
     l.focus();
@@ -37,6 +38,20 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Open on remote machine",
             "OpenCode will work in the checkout on Boat.",
             crate::remote::picker(s, k),
+        ),
+        Screen::RemoveVm => (
+            if live(s)
+                .remote
+                .removing
+                .as_ref()
+                .is_some_and(|(_, k)| k.is_some())
+            {
+                "Delete VM on Boat?"
+            } else {
+                "Remove VM setup?"
+            },
+            "",
+            crate::remote::removal(s, k),
         ),
         Screen::VmThreads => (
             "Conversations on this VM",
@@ -103,6 +118,19 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Settings => (740.0, crate::settings::height(s)),
         Screen::Launcher => (560.0, 380.0),
         Screen::Worktrees => (560.0, crate::checkouts::manager_height(s)),
+        Screen::RemoveVm => (
+            460.0,
+            if live(s)
+                .remote
+                .removing
+                .as_ref()
+                .is_some_and(|(id, _)| live(s).app.remote.delete_errors.contains_key(id))
+            {
+                292.0
+            } else {
+                242.0
+            },
+        ),
         Screen::CreateWorktree => (500.0, 330.0),
         Screen::Timeline => (580.0, 344.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),

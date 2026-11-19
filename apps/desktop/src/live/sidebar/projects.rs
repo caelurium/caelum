@@ -78,7 +78,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             .w_full()
             .key(crate::code_view::source_key(&path, "project-group"))
             .role("group")
-            .label(format!("{} project and worktrees", project.name))
+            .label(format!("{} project and checkouts", project.name))
             .child(crate::context::project(
                 k.interactive(
                     row()
@@ -158,25 +158,9 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             group = group.child(trees);
             height += tree_height;
         }
-        for (id, c) in app
-            .remote
-            .saved
-            .checkouts
-            .iter()
-            .filter(|(_, c)| c.source.project == path)
-        {
-            let id = id.clone();
-            let key = format!("remote-checkout-{id}");
-            group = group.child(
-                ui::Button::new(format!("Remote · {}", c.title()))
-                    .variant(rune_kit::ButtonVariant::GhostMuted)
-                    .on_press(move |s: &mut Workspace| crate::remote::select(s, &id))
-                    .build(k)
-                    .key(key)
-                    .h(28.0)
-                    .ml(16.0),
-            );
-            height += 28.0;
+        if let Some((vms, vm_height)) = crate::remote::sidebar(s, k, &path) {
+            group = group.child(vms);
+            height += vm_height;
         }
         projects = projects.child(group);
     }

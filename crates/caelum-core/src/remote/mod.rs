@@ -90,6 +90,7 @@ pub enum Operation {
     Create(Source, Plan),
     Prepare(Target, String, Option<String>),
     Power(MachineId, bool),
+    Delete(MachineId),
     Lifetime(MachineId, Lifetime),
     Prompt(Target, Option<String>, String),
     Follow(Target, Run, Option<String>),
@@ -103,6 +104,7 @@ pub enum Operation {
 pub enum Outcome {
     Inventory(Inventory),
     Disconnected,
+    Deleted(MachineId),
     Source(Source),
     Machine(Machine),
     Waiting(Machine),
@@ -128,6 +130,9 @@ pub struct State {
     pub changes: std::collections::HashMap<String, Changes>,
     pub monitor: Monitor,
     pub lifetimes: std::collections::HashMap<String, Job>,
+    pub delete_errors: std::collections::HashMap<String, String>,
+    pub removed: Vec<String>,
+    pub(crate) deleted_during_inventory: Vec<MachineId>,
 }
 
 #[derive(Debug, Default)]

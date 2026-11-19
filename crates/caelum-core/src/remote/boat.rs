@@ -27,6 +27,33 @@ pub(super) struct Boat {
 }
 
 impl Boat {
+    pub(super) async fn delete(&self, key: &MachineId) -> Result<Outcome, String> {
+        self.owns(key)?;
+        let reply = self.client.delete_sandbox(&key.id).await.map_err(|e| {
+            if matches!(&e, boat_sdk::Error::Api {status,..} if status.as_u16()==403) {
+                "Boat refused deletion. This key needs sandbox.delete, or sandbox.delete-own for a machine it created.".to_owned()
+            } else {format!("Delete machine on Boat: {}", api(e))}
+        })?;
+        let op = reply.operation;
+        // Once accepted, Boat removes the target from inventory immediately; disk purging is asynchronous.
+        if !reply.ok
+            || !matches!(
+                reply.kind.as_str(),
+                "sandbox.deleting" | "deletion.operation"
+            )
+            || op.kind != "sandbox"
+            || op.target_id != key.id
+            || op.id.is_empty()
+            || !matches!(
+                op.status.as_str(),
+                "pending" | "processing" | "blocked" | "completed"
+            )
+        {
+            return Err("Boat did not confirm deletion of this machine.".into());
+        }
+        Ok(Outcome::Deleted(key.clone()))
+    }
+
     pub(super) async fn lifetime(
         &self,
         key: &MachineId,

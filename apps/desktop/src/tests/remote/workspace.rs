@@ -1,6 +1,9 @@
 use super::*;
-use crate::live::{live, live_mut};
-use caelum_core::remote::{Line, Page, RunStatus, Speaker, ToolState, TurnEnd};
+use crate::{
+    live::{live, live_mut},
+    panels::Screen,
+};
+use caelum_core::remote::{Job, Line, Page, RunStatus, Speaker, ToolState, TurnEnd};
 
 #[test]
 fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion() {
@@ -121,4 +124,124 @@ fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion()
             .iter()
             .all(|l| !l.partial && l.speaker != Speaker::Tool(ToolState::Running))
     );
+}
+
+#[test]
+fn project_vm_group_owns_its_worktree_rows_and_removal_preserves_other_checkouts() {
+    let mut rt = design_runtime("", (1024., 800.));
+    let id = "checkout-example";
+    rt.update(|s, _| {
+        crate::remote::scene(s, "remote-setup-failed");
+        let l = live_mut(s);
+        let mut other = l.app.remote.saved.checkouts[id].clone();
+        let root = other.source.project.clone();
+        other.source.project = "/synthetic/worktrees/topic".into();
+        l.app
+            .project_roots
+            .insert(other.source.project.clone(), root);
+        l.app.remote.saved.checkouts.insert("parked".into(), other);
+        l.app
+            .remote
+            .jobs
+            .insert("parked".into(), Job::Failed("Old error".into()));
+    });
+    advance(&mut rt, 0.2);
+    let path = live(&rt.state).app.remote.saved.checkouts[id]
+        .source
+        .project
+        .clone();
+    let toggle = crate::code_view::source_key(&path, "remote-toggle");
+    assert!(
+        element(&rt, "remote-checkout-parked")
+            .help
+            .unwrap()
+            .contains("Setup needs attention")
+    );
+    click(&mut rt, &toggle);
+    assert!(rt.find("remote-checkout-parked").is_none());
+    click(&mut rt, &toggle);
+    reveal(&mut rt, "remote-checkout-parked");
+    let (x, y) = rt.find("remote-checkout-parked").unwrap();
+    rt.pointer_move(x, y);
+    advance(&mut rt, 0.1);
+    click(&mut rt, "remove-remote-parked");
+    assert_eq!(
+        live(&rt.state).panels.overlay,
+        Some(Screen::RemoveVm),
+        "{:?}",
+        element(&rt, "remove-remote-parked")
+    );
+    click(&mut rt, "cancel-remove-vm");
+    assert!(rt.find("remote-checkout-parked").is_some());
+    secondary(&mut rt, "remote-checkout-parked");
+    choose_context(&mut rt, "Remove from project…");
+    click(&mut rt, "confirm-remove-vm");
+    assert!(rt.find("remote-checkout-parked").is_none());
+    assert_eq!(
+        live(&rt.state).app.remote.saved.selected.as_deref(),
+        Some(id)
+    );
+    click(&mut rt, "remove-failed-checkout");
+    click(&mut rt, "confirm-remove-vm");
+    assert!(rt.find(&toggle).is_none());
+    assert_eq!(live(&rt.state).panels.screen, Screen::Home);
+    assert!(
+        live_mut(&mut rt.state)
+            .app
+            .commands()
+            .iter()
+            .all(|(_, op)| !matches!(
+                op,
+                Command::Remote(Operation::Power(..) | Operation::Create(..))
+            ))
+    );
+}
+
+#[test]
+fn denied_boat_deletion_keeps_the_draft_and_background_success_stays_on_home() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    rt.update(|s, _| crate::remote::scene(s, "remote-working"));
+    advance(&mut rt, 0.2);
+    fill(&mut rt, "remote-draft-checkout-example", "Unsent VM work");
+    click(&mut rt, "remove-remote-checkout-example");
+    click(&mut rt, "confirm-remove-vm");
+    let request = |rt: &mut Runtime<Workspace>| {
+        live_mut(&mut rt.state)
+            .app
+            .commands()
+            .into_iter()
+            .find_map(|(r, c)| match c {
+                Command::Remote(Operation::Delete(key)) => Some((r, key)),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let (r, target) = request(&mut rt);
+    assert!(!element(&rt, "confirm-remove-vm").focusable);
+    rt.update(|s, _| live_mut(s).apply(Event::Completed(r, Err("Boat refused deletion".into()))));
+    advance(&mut rt, 0.2);
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| e.text.as_deref() == Some("Boat refused deletion") && e.visible[3] > 0.)
+    );
+    assert_eq!(
+        live(&rt.state).app.remote.saved.checkouts[id].thread.draft,
+        "Unsent VM work"
+    );
+    click(&mut rt, "confirm-remove-vm");
+    let (r, retry) = request(&mut rt);
+    assert_eq!(retry, target);
+    click(&mut rt, "cancel-remove-vm");
+    click(&mut rt, "nav-home");
+    rt.update(|s, _| {
+        live_mut(s).apply(Event::Completed(
+            r,
+            Ok(Reply::Remote(Outcome::Deleted(target))),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    assert_eq!(live(&rt.state).panels.screen, Screen::Home);
+    assert!(!live(&rt.state).app.remote.saved.checkouts.contains_key(id));
 }

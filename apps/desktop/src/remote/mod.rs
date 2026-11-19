@@ -7,6 +7,7 @@ mod picker;
 mod popup;
 mod scene;
 mod setup;
+mod sidebar;
 mod stats;
 mod status;
 mod threads;
@@ -23,6 +24,7 @@ pub(crate) use picker::{open, picker};
 pub(crate) use popup::clear as close_popup;
 pub(crate) use popup::view as popup;
 pub(crate) use scene::scene;
+pub(crate) use sidebar::{finish_removals, removal, request_removal, section as sidebar};
 pub(crate) use threads::view as threads_view;
 
 use crate::{
@@ -44,6 +46,7 @@ pub(crate) struct State {
     editors: std::collections::HashMap<String, conversation::Editors>,
     mounted: Option<(String, setup::Dock)>,
     inspection: Option<popup::Inspection>,
+    pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,
     checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
 }

@@ -91,11 +91,15 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, padding: f32)
                 .child(ui::caption(detail, k).selectable(matches!(job, Some(Job::Failed(_)))))
                 .scroll_bar(k),
         )
-        .children((!matches!(job, Some(Job::Busy(_) | Job::Wait(_)))).then(|| actions(k, id, c)));
+        .children(
+            (!matches!(job, Some(Job::Busy(_) | Job::Wait(_) | Job::Deleting(_))))
+                .then(|| actions(s, k, id, c)),
+        );
     ui::composer_dock(card, padding, k)
 }
 
-fn actions(k: &Kit, id: &str, c: &Checkout) -> El {
+fn actions(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
+    let app = &live(s).app;
     let retry = id.to_owned();
     let mut actions = row().w_full().center_y().flex_wrap().gap(6.0).child(
         ui::Button::new("Refresh checkout")
@@ -116,6 +120,21 @@ fn actions(k: &Kit, id: &str, c: &Checkout) -> El {
             .variant(ButtonVariant::GhostMuted)
             .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, resume))
             .build(k),
+        );
+    }
+    if matches!(app.remote.jobs.get(id), Some(Job::Failed(_))) {
+        let owner = id.to_owned();
+        actions = actions.child(
+            ui::Button::new(if c.machine().is_some() {
+                "Delete VM on Boat…"
+            } else {
+                "Remove from project…"
+            })
+            .variant(ButtonVariant::GhostMuted)
+            .disabled(!app.can_remove_remote(id))
+            .on_press(move |s: &mut Workspace| super::request_removal(s, &owner))
+            .build(k)
+            .key("remove-failed-checkout"),
         );
     }
     actions
