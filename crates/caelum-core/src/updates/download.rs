@@ -180,6 +180,16 @@ fn checksum(manifest: &str, name: &str) -> Result<String, String> {
     Ok(hash.to_ascii_lowercase())
 }
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
+}
+
 struct Transfer<W> {
     output: W,
     hash: Sha256,
@@ -209,7 +219,7 @@ impl<W: Write> Transfer<W> {
     }
     fn finish(self, expected: &str) -> Result<W, String> {
         if self.total.is_some_and(|size| size != self.bytes)
-            || format!("{:x}", self.hash.finalize()) != expected
+            || sha256_hex(&self.hash.finalize()) != expected
         {
             return Err("Update verification failed. The download is incomplete or does not match SHA256SUMS. Retry the download.".into());
         }
