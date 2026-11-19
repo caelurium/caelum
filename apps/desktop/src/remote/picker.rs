@@ -153,6 +153,6 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .scroll_bar(k)
         .child(body)
+        .scroll_bar(k)
 }
