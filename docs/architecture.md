@@ -52,6 +52,14 @@ same machine. A one-repository environment puts the agent and remote Git in
 `/home/user/<repository>`. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
+The first remote harness is OpenCode. Its composer explicitly targets a new
+conversation or the saved conversation ID. The core follows ascending event
+pages and uses `promptRun.done` to finish only after the last page. The account,
+machine, conversation, prompt/run IDs, event cursor and bounded transcript
+survive a restart. A lost prompt acknowledgement requires reconciliation;
+reopening never resends it. Turn interruption always supplies the conversation
+ID, whereas stopping the machine is a distinct lifecycle operation.
+
 Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery

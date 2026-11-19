@@ -1,3 +1,4 @@
+use super::harness::Harness;
 use super::{
     boat::{api, Boat},
     credentials, Credential, Machines, Operation, Outcome,
@@ -43,6 +44,30 @@ impl Backend {
 
     async fn perform(&self, op: &Operation) -> Result<Outcome, String> {
         match op {
+            Operation::Prompt(target, conversation, text) => {
+                self.connected()
+                    .await?
+                    .send(target, conversation.as_deref(), text)
+                    .await
+            }
+            Operation::Follow(target, run, cursor) => self
+                .connected()
+                .await?
+                .follow(target, run, cursor.as_deref())
+                .await
+                .map(Outcome::Page),
+            Operation::Interrupt(target, run) => self
+                .connected()
+                .await?
+                .interrupt(target, run)
+                .await
+                .map(|_| Outcome::Interrupted),
+            Operation::Recover(target, conv, prompt) => self
+                .connected()
+                .await?
+                .recover(target, conv.as_deref(), prompt)
+                .await
+                .map(Outcome::Accepted),
             Operation::Discover(project) => self
                 .connected()
                 .await?

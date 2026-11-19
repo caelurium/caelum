@@ -2,10 +2,12 @@
 mod boat;
 mod checkout;
 mod credentials;
+mod harness;
 mod runtime;
 
 pub(crate) use checkout::github_slug;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
+pub use harness::{Line, Page, Run, Speaker, Thread, Turn};
 pub(crate) use runtime::Backend;
 
 use serde::{Deserialize, Serialize};
@@ -73,6 +75,10 @@ pub enum Operation {
     Create(Source, Plan),
     Prepare(Target, String, Option<String>),
     Power(MachineId, bool),
+    Prompt(Target, Option<String>, String),
+    Follow(Target, Run, Option<String>),
+    Interrupt(Target, Run),
+    Recover(Target, Option<String>, String),
 }
 
 #[derive(Debug)]
@@ -83,6 +89,10 @@ pub enum Outcome {
     Machine(Machine),
     Waiting(Machine),
     Prepared(Machine, String),
+    Accepted(Run),
+    Rejected(String),
+    Page(Page),
+    Interrupted,
 }
 
 #[derive(Debug, Default)]
@@ -92,6 +102,8 @@ pub struct State {
     pub saved: Saved,
     pub picker: Option<Picker>,
     pub jobs: std::collections::HashMap<String, Job>,
+    pub feeds: std::collections::HashMap<String, Job>,
+    pub interrupts: std::collections::HashMap<String, u64>,
 }
 
 #[derive(Debug, Default)]

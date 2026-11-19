@@ -26,6 +26,7 @@ impl Workspace {
                     Command::Load(_)
                         | Command::Task(Task::Updates | Task::Update(_))
                         | Command::Cancel(_)
+                        | Command::Remote(crate::remote::Operation::Interrupt(..))
                         | Command::Task(
                             Task::Shell { .. }
                                 | Task::Git { .. }

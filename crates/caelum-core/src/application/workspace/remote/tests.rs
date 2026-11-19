@@ -77,3 +77,88 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
     assert!(restored.active_project.is_none());
     assert!(restored.sessions.is_empty());
 }
+
+#[test]
+fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
+    let mut app = Workspace::default();
+    let (id, req, _) = created(&mut app);
+    let finish =
+        |app: &mut Workspace, req, out| app.apply(Event::Completed(req, Ok(Reply::Remote(out))));
+    finish(&mut app, req, Outcome::Machine(machine("vm-a")));
+    let (req, _) = app.commands().pop().unwrap();
+    finish(
+        &mut app,
+        req,
+        Outcome::Prepared(machine("vm-a"), "feat/new".into()),
+    );
+    assert!(app.send_remote(&id, "Edit a file"));
+    let saved_before_ack = app.snapshot();
+    let (req, Command::Remote(Operation::Prompt(_, None, _))) = app.commands().pop().unwrap()
+    else {
+        panic!()
+    };
+    let run = Run {
+        conversation: "c".into(),
+        id: "r".into(),
+        prompt: "p".into(),
+    };
+    finish(&mut app, req, Outcome::Accepted(run.clone()));
+    let (req, _) = app.commands().pop().unwrap();
+    finish(
+        &mut app,
+        req,
+        Outcome::Page(Page {
+            cursor: Some("after".into()),
+            lines: vec![Line {
+                speaker: Speaker::OpenCode,
+                text: "Part".into(),
+                partial: true,
+            }],
+            more: false,
+            finished: None,
+        }),
+    );
+    for (snapshot, known) in [(saved_before_ack, false), (app.snapshot(), true)] {
+        let mut reopened = Workspace::default();
+        reopened.remote.saved = snapshot.remote;
+        reopened.select_remote(&id);
+        let (req, _) = reopened.commands().pop().unwrap();
+        finish(
+            &mut reopened,
+            req,
+            Outcome::Prepared(machine("vm-a"), "feat/new".into()),
+        );
+        let mut work = reopened.commands();
+        if known {
+            let (req, Command::Remote(Operation::Follow(_, restored, cursor))) =
+                work.pop().unwrap()
+            else {
+                panic!()
+            };
+            assert_eq!(restored, run);
+            assert_eq!(cursor.as_deref(), Some("after"));
+            finish(
+                &mut reopened,
+                req,
+                Outcome::Page(Page {
+                    cursor: Some("end".into()),
+                    lines: vec![Line {
+                        speaker: Speaker::OpenCode,
+                        text: "Full reply".into(),
+                        partial: false,
+                    }],
+                    more: false,
+                    finished: Some("finished".into()),
+                }),
+            );
+            assert_eq!(reopened.remote.saved.checkouts[&id].thread.lines.len(), 2);
+            assert!(reopened.send_remote(&id, "Continue"));
+            assert!(
+                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,Some(c),_)))] if c=="c")
+            );
+        } else {
+            assert!(work.is_empty());
+            assert!(!reopened.send_remote(&id, "Edit a file"));
+        }
+    }
+}

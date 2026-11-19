@@ -14,6 +14,8 @@ pub(super) fn enter(s: &mut Workspace) {
     l.panels.overlay = None;
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
+    l.remote.details = false;
+    super::conversation::sync_editor(l);
     l.schedule();
     s.inspector.set_open(false);
 }
@@ -40,6 +42,10 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.app.remote.saved.selected = None;
     }
     let now = Instant::now();
+    if let Some(at) = l.app.feed_deadline(now) {
+        tx.wake_after(at.saturating_duration_since(now));
+    }
+    super::conversation::sync_editor(l);
     if let Some(at) = l.app.remote_deadline(now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
@@ -57,6 +63,9 @@ pub(crate) fn screen(s: &Workspace, k: &Kit) -> El {
     else {
         return body;
     };
+    if let Phase::Ready { branch, .. } = &c.phase {
+        return super::conversation::view(s, k, id, c, branch);
+    }
     body = body.child(ui::section(
         &format!("Remote · {}", c.title()),
         &c.source.repository,

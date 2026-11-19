@@ -1,4 +1,5 @@
 mod checkout;
+mod harness;
 
 use super::{Host, Inventory, Machine, MachineId, Machines, Outcome, Plan, Source, Target};
 use boat_sdk::{

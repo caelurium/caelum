@@ -1,4 +1,5 @@
 mod checkout;
+mod conversation;
 mod picker;
 
 pub(crate) use checkout::{screen, select, sync};
@@ -19,6 +20,8 @@ pub(crate) struct State {
     key: TextEdit,
     form: picker::Form,
     restored: bool,
+    editors: std::collections::HashMap<String, conversation::Editors>,
+    details: bool,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

@@ -64,6 +64,7 @@ impl Workspace {
             Checkout {
                 source,
                 phase: Phase::Create(plan),
+                thread: Thread::default(),
             },
         );
         self.remote.picker = None;
@@ -95,6 +96,7 @@ impl Workspace {
                 id.clone(),
                 Checkout {
                     source,
+                    thread: Thread::default(),
                     phase: Phase::Prepare {
                         machine,
                         new_branch: None,
@@ -182,7 +184,8 @@ impl Workspace {
         };
         match result {
             Ok(Outcome::Prepared(machine, branch)) if valid(&machine) => {
-                c.phase = Phase::Ready { machine, branch }
+                c.phase = Phase::Ready { machine, branch };
+                self.follow_remote(id);
             }
             Ok(Outcome::Machine(machine)) if valid(&machine) => {
                 let terminal = matches!(

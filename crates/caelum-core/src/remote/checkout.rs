@@ -46,6 +46,8 @@ pub enum Phase {
 pub struct Checkout {
     pub source: Source,
     pub phase: Phase,
+    #[serde(default)]
+    pub thread: super::Thread,
 }
 
 impl Checkout {

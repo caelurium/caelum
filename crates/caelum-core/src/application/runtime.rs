@@ -665,6 +665,7 @@ impl Runtime {
         let queue = if matches!(
             command,
             Command::Cancel(_)
+                | Command::Remote(crate::remote::Operation::Interrupt(..))
                 | Command::Task(Task::Shell { stop: true, .. })
                 | Command::Approve(..)
                 | Command::Answer(..)

@@ -1,5 +1,6 @@
 use super::{Pending, Workspace};
 mod checkout;
+mod harness;
 #[cfg(test)]
 mod tests;
 use crate::{
@@ -11,6 +12,8 @@ pub(super) enum Lane {
     Connection,
     Picker,
     Checkout(String),
+    Feed(String),
+    Interrupt(String, crate::remote::Run),
 }
 
 impl Workspace {
@@ -46,6 +49,8 @@ impl Workspace {
         });
         match lane {
             Lane::Picker => self.complete_remote_picker(request, result),
+            Lane::Feed(id) => self.complete_feed(&id, request, result),
+            Lane::Interrupt(id, run) => self.complete_interrupt(&id, request, &run, result),
             Lane::Checkout(id) => self.complete_checkout(&id, request, result),
             Lane::Connection if matches!(self.remote.connection, Connection::Loading(id) if id == request) =>
             {
