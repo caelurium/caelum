@@ -78,7 +78,7 @@ scenes += ("tool-output-long", "vercel-tool-output-long", "tool-search", "vercel
 scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-queue-error", "composer-attachments")
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
-scenes += ("fork",)
+scenes += ("fork", "edit-branch", "rewind-checkpoint", "rename-session")
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

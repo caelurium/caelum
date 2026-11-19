@@ -17,5 +17,6 @@ semver = "1"
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
+tempfile = "3"
 thiserror.workspace = true
 tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }

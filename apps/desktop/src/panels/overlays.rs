@@ -34,9 +34,17 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Find and reveal an earlier prompt.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
-        Screen::Fork => (
-            "Fork conversation",
-            "Keep the history through the chosen turn in a new session.",
+        Screen::Fork => {
+            let (title, description) = crate::commands::history_header(s);
+            (
+                title,
+                description,
+                crate::commands::view(s, k, screen, &mut menus),
+            )
+        }
+        Screen::Rename => (
+            "Rename session",
+            "This title is saved with the provider and stops automatic naming in Caelum.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
         Screen::Sessions => (
@@ -77,6 +85,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::CreateWorktree => (500.0, 330.0),
         Screen::Timeline => (580.0, 344.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),
+        Screen::Rename => (460.0, 155.0),
         Screen::Stats => (720.0, 620.0),
         Screen::Image => (760.0, 480.0),
         Screen::Attachment => (760.0, crate::composer::preview_height(s)),
