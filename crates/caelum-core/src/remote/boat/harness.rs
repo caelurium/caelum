@@ -1,4 +1,5 @@
 use super::{api, Boat};
+use crate::application::Provider;
 use crate::remote::{harness::Harness, Outcome, Page, Run, RunStatus, Target, TurnEnd};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use boat_sdk::agents::{models::PromptRun, EventOrder, EventQuery, PromptRequest};
@@ -27,6 +28,7 @@ impl Boat {
     pub(in crate::remote) async fn recover(
         &self,
         target: &Target,
+        provider: Provider,
         conversation: Option<&str>,
         prompt: &str,
     ) -> Result<Run, String> {
@@ -51,15 +53,46 @@ impl Boat {
             .conversations(&target.machine.id)
             .await
             .map_err(api)?;
-        if list.id != target.machine.id
-            || !list
-                .conversations
-                .iter()
-                .any(|c| c.id == conv && c.last_harness.as_deref() == Some("opencode"))
-        {
-            return Err("Select an OpenCode conversation on this machine".into());
+        let Some(chat) = list.conversations.iter().find(|c| c.id == conv) else {
+            return Err("Boat did not list this prompt’s conversation.".into());
+        };
+        if list.id != target.machine.id || chat.last_harness.as_deref() != Some(provider.as_str()) {
+            return Err("That conversation does not match the provider used for this turn.".into());
+        }
+        // lastHarness describes only the latest prompt, not every turn in a mixed-provider chat.
+        if chat.prompts != 1 {
+            if conversation.is_none() || chat.prompts < 1 {
+                return Err("Choose the first prompt of the new Boat conversation.".into());
+            }
+            let latest = self
+                .client
+                .events(
+                    &target.machine.id,
+                    &EventQuery {
+                        conversation: Some(conv.clone()),
+                        types: Some("prompt".into()),
+                        sort: Some(EventOrder::Desc),
+                        limit: Some(1),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(api)?;
+            if latest.id != target.machine.id
+                || !latest.events.first().is_some_and(|e| {
+                    e.kind == "prompt"
+                        && e.conversation_id.as_deref().is_none_or(|c| c == conv)
+                        && e.task_id
+                            .as_ref()
+                            .or(e.id.as_ref())
+                            .is_some_and(|id| id == prompt)
+                })
+            {
+                return Err("That is not the latest prompt in this Boat conversation.".into());
+            }
         }
         Ok(Run {
+            provider,
             conversation: conv,
             prompt: prompt.into(),
             id: run.id,
@@ -71,6 +104,7 @@ impl Harness for Boat {
     async fn send(
         &self,
         target: &Target,
+        provider: Provider,
         conversation: Option<&str>,
         text: &str,
     ) -> Result<Outcome, String> {
@@ -84,7 +118,7 @@ impl Harness for Boat {
             return Ok(Outcome::Rejected(error));
         }
         let request = PromptRequest {
-            provider: Some("opencode".into()),
+            provider: Some(provider.as_str().into()),
             new_conversation: conversation.is_none().then_some(true),
             conversation_id: conversation.map(str::to_owned),
             ..PromptRequest::new(text)
@@ -95,7 +129,7 @@ impl Harness for Boat {
             {
                 return Ok(Outcome::Rejected(
                     if code.as_deref() == Some("provider_not_configured") {
-                        "Connect an OpenCode-compatible model in Boat → Agents & Proxying.".into()
+                        format!("Configure {} in Boat → Agents & Proxying.", provider.name())
                     } else {
                         format!("Boat declined the prompt: HTTP {status}")
                     },
@@ -108,7 +142,7 @@ impl Harness for Boat {
             .or_else(|| response.prompt_run.conversation_id.clone())
             .ok_or("Missing Boat conversation ID")?;
         if response.id != target.machine.id
-            || response.provider != "opencode"
+            || response.provider != provider.as_str()
             || !valid_id(&conv)
             || conversation.is_some_and(|c| c != conv)
             || !owned(
@@ -121,6 +155,7 @@ impl Harness for Boat {
             return Err("Boat returned a different machine, conversation or harness".into());
         }
         Ok(Outcome::Accepted(Run {
+            provider,
             conversation: conv,
             prompt: response.prompt_id,
             id: response.prompt_run.id,

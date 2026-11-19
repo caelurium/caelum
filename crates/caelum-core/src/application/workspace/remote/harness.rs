@@ -21,6 +21,7 @@ impl Workspace {
         }
         let op = Operation::Prompt(
             c.target().unwrap(),
+            c.thread.provider,
             c.thread.conversation.clone(),
             c.thread.prompt(text),
         );
@@ -38,7 +39,12 @@ impl Workspace {
         if let (Turn::Submitting, Some(target)) = (&c.thread.turn, c.target()) {
             self.feed_request(
                 id,
-                Operation::Recover(target, c.thread.conversation.clone(), prompt.trim().into()),
+                Operation::Recover(
+                    target,
+                    c.thread.provider,
+                    c.thread.conversation.clone(),
+                    prompt.trim().into(),
+                ),
             );
         }
     }
@@ -147,6 +153,7 @@ impl Workspace {
             }
             Ok(Outcome::Accepted(run))
                 if c.thread.turn == Turn::Submitting
+                    && c.thread.provider == run.provider
                     && c.thread
                         .conversation
                         .as_ref()

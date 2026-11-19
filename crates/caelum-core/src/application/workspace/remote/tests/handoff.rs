@@ -96,6 +96,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
+            provider: Provider::OpenCode,
             conversation: "c".into(),
             prompt: "p".into(),
             id: "r".into(),
@@ -272,6 +273,7 @@ fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touc
     app.select(i);
     app.remote.jobs.clear();
     let run = Run {
+        provider: Provider::OpenCode,
         conversation: "conv".into(),
         prompt: "prompt".into(),
         id: "run".into(),
@@ -346,6 +348,7 @@ fn late_history_and_source_changes_cannot_provision_or_replace_a_newer_attempt()
 fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_after_ack() {
     let mut app = Workspace::default();
     let i = local(&mut app);
+    app.sessions[i].scope.provider = Provider::Codex;
     let req = reading(&mut app, i);
     ready(&mut app, req);
     app.sessions[i].draft = "New laptop draft".into();
@@ -396,7 +399,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     );
     for reject in [true, false] {
         assert!(reopened.send_remote(&id, "Edited next step"));
-        let (req, Command::Remote(Operation::Prompt(target, None, prompt))) =
+        let (req, Command::Remote(Operation::Prompt(target, Provider::Codex, None, prompt))) =
             reopened.commands().pop().unwrap()
         else {
             panic!()
@@ -429,7 +432,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
             reopened.remote.saved = saved;
             assert!(!reopened.send_remote(&id, "duplicate"));
             reopened.recover_remote(&id, "p");
-            let (req, Command::Remote(Operation::Recover(_, None, _))) =
+            let (req, Command::Remote(Operation::Recover(_, Provider::Codex, None, _))) =
                 reopened.commands().pop().unwrap()
             else {
                 panic!()
@@ -438,6 +441,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                 &mut reopened,
                 req,
                 Outcome::Accepted(Run {
+                    provider: Provider::Codex,
                     conversation: "boat-thread".into(),
                     id: "r".into(),
                     prompt: "p".into(),
@@ -456,7 +460,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
             );
             assert!(reopened.send_remote(&id, "Again"));
             assert!(
-                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, Some(c), p)))] if c == "boat-thread" && p == "Again")
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, Provider::Codex, Some(c), p)))] if c == "boat-thread" && p == "Again")
             );
         }
     }
@@ -485,6 +489,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     app.remote.saved.checkouts.get_mut(&id).unwrap().thread = original.clone();
     app.home_select_project(source().project);
     app.home.draft.text = "From Home".into();
+    app.home_set_provider(Provider::Codex);
     assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
     app.home_select_project(source().project);
     app.remote.picker = Some(Picker::Ready(source()));
@@ -519,7 +524,9 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     assert!(app.switch_vm_thread(&id, &new_key));
     assert!(app.send_remote(&id, "From Home"));
     let commands = app.commands();
-    let [(req, Command::Remote(Operation::Prompt(_, None, prompt)))] = commands.as_slice() else {
+    let [(req, Command::Remote(Operation::Prompt(_, Provider::Codex, None, prompt)))] =
+        commands.as_slice()
+    else {
         panic!()
     };
     assert_eq!(prompt, "From Home");
@@ -530,6 +537,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
+            provider: Provider::Codex,
             conversation: "original".into(),
             prompt: "old-prompt".into(),
             id: "old-run".into(),

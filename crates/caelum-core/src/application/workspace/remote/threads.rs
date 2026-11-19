@@ -1,4 +1,5 @@
 use super::Workspace;
+use crate::application::Provider;
 use crate::remote::{Job, Phase, Thread, Turn};
 
 impl Workspace {
@@ -36,6 +37,7 @@ impl Workspace {
         if !c.thread.is_blank() {
             c.open_thread(Thread {
                 local_id: Some(uuid::Uuid::new_v4().to_string()),
+                provider: c.thread.provider,
                 ..Default::default()
             });
         }
@@ -45,6 +47,20 @@ impl Workspace {
         } else if matches!(self.remote.jobs.get(id), Some(Job::Failed(_))) {
             self.refresh_remote(id);
         }
+        true
+    }
+
+    /// The next Send uses this harness in the same Boat conversation.
+    pub fn set_vm_provider(&mut self, id: &str, owner: &str, provider: Provider) -> bool {
+        if self.remote.saved.selected.as_deref() != Some(id) || !self.can_switch_vm_thread(id) {
+            return false;
+        }
+        let thread = &mut self.remote.saved.checkouts.get_mut(id).unwrap().thread;
+        if thread.editor_key(id) != owner || thread.provider == provider {
+            return false;
+        }
+        thread.provider = provider;
+        self.remote.feeds.remove(id);
         true
     }
 

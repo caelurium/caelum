@@ -136,6 +136,7 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
 
 #[test]
 fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
+    use crate::application::Provider;
     let mut app = Workspace::default();
     let (id, req, _) = created(&mut app);
     let finish =
@@ -147,13 +148,16 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         req,
         Outcome::Prepared(machine("vm-a"), "feat/new".into()),
     );
+    assert!(app.set_vm_provider(&id, &id, Provider::Codex));
     assert!(app.send_remote(&id, "Edit a file"));
     let saved_before_ack = app.snapshot();
-    let (req, Command::Remote(Operation::Prompt(_, None, _))) = app.commands().pop().unwrap()
+    let (req, Command::Remote(Operation::Prompt(_, Provider::Codex, None, _))) =
+        app.commands().pop().unwrap()
     else {
         panic!()
     };
     let run = Run {
+        provider: Provider::Codex,
         conversation: "c".into(),
         id: "r".into(),
         prompt: "p".into(),
@@ -168,7 +172,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             lines: vec![Line {
                 key: None,
                 tool_detail: None,
-                speaker: Speaker::OpenCode,
+                speaker: Speaker::Codex,
                 text: "Part".into(),
                 partial: true,
             }],
@@ -178,7 +182,8 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
     );
     for (snapshot, known) in [(saved_before_ack, false), (app.snapshot(), true)] {
         let mut reopened = Workspace::default();
-        reopened.remote.saved = snapshot.remote;
+        reopened.remote.saved =
+            serde_json::from_value(serde_json::to_value(snapshot.remote).unwrap()).unwrap();
         reopened.select_remote(&id);
         let (req, _) = reopened.commands().pop().unwrap();
         finish(
@@ -187,6 +192,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             Outcome::Prepared(machine("vm-a"), "feat/new".into()),
         );
         let mut work = reopened.commands();
+        assert!(!reopened.set_vm_provider(&id, &id, Provider::OpenCode));
         if known {
             let (req, Command::Remote(Operation::Follow(_, restored, cursor))) =
                 work.pop().unwrap()
@@ -203,7 +209,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                     lines: vec![Line {
                         key: None,
                         tool_detail: None,
-                        speaker: Speaker::OpenCode,
+                        speaker: Speaker::Codex,
                         text: "Full reply".into(),
                         partial: false,
                     }],
@@ -211,17 +217,24 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
+            assert!(!reopened.set_vm_provider(&id, "stale-editor", Provider::OpenCode));
+            assert!(reopened.set_vm_provider(&id, &id, Provider::OpenCode));
             let lines = &reopened.remote.saved.checkouts[&id].thread.lines;
             assert_eq!(lines.len(), 3);
             assert_eq!(lines[1].text, "Full reply");
+            assert_eq!(lines[1].speaker, Speaker::Codex);
             assert_eq!(lines[2].speaker, Speaker::Outcome(TurnEnd::Finished));
             assert!(reopened.send_remote(&id, "Continue"));
             assert!(
-                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,Some(c),_)))] if c=="c")
+                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,Provider::OpenCode,Some(c),p)))] if c=="c" && p=="Continue")
             );
         } else {
             assert!(work.is_empty());
             assert!(!reopened.send_remote(&id, "Edit a file"));
+            reopened.recover_remote(&id, "p");
+            assert!(
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Recover(_, Provider::Codex, None, p)))] if p=="p")
+            );
         }
     }
 }

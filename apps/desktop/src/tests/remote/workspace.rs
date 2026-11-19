@@ -34,11 +34,15 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     choose_context(&mut rt, "New session on this VM");
     let field = format!("remote-draft-{fresh}");
     fill(&mut rt, &field, "Independent task");
+    click(&mut rt, "vm-provider-trigger");
+    click(&mut rt, "option0");
     click(&mut rt, "vm-threads");
     click(&mut rt, "vm-thread-checkout-example");
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
     assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
     assert_eq!(c.thread.draft, "Keep my draft");
+    assert_eq!(c.thread.provider, Provider::OpenCode);
+    assert_eq!(c.other_threads[0].provider, Provider::Codex);
     assert_eq!(c.other_threads.len(), 1);
     click(&mut rt, "vm-threads");
     click(&mut rt, &format!("vm-thread-{fresh}"));
@@ -46,7 +50,7 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let app = &mut live_mut(&mut rt.state).app;
     let commands = app.commands();
     assert!(
-        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, None, p)))] if t.machine.id == "vm-example" && p == "Independent task")
+        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, Provider::Codex, None, p)))] if t.machine.id == "vm-example" && p == "Independent task")
     );
     assert!(!app.new_vm_session(id));
     assert!(!app.switch_vm_thread(id, id));

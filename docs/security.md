@@ -39,4 +39,4 @@ remain provider-owned; they do not belong in workspace snapshots or branch metad
 Keychain or Linux Secret Service. Disconnect removes it. The adapter exposes
 account-scoped machine metadata and process names, not desktop access URLs,
 environment secrets or process arguments. On a remote checkout, Boat hosts
-the OpenCode harness and controls its in-VM credentials and tool permissions.
+Codex and OpenCode and controls their in-VM credentials and tool permissions.

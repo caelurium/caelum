@@ -488,10 +488,7 @@ pub static BACK: Icon = Icon {
 };
 
 pub fn provider_name(provider: caelum_core::application::Provider) -> &'static str {
-    match provider {
-        caelum_core::application::Provider::Codex => "Codex",
-        caelum_core::application::Provider::OpenCode => "OpenCode",
-    }
+    provider.name()
 }
 
 pub fn sidebar_collapse(s: &crate::Workspace, k: &Kit) -> Option<El> {

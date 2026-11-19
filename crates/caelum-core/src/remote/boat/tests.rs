@@ -1,5 +1,6 @@
 use super::*;
 mod checkout;
+use crate::application::Provider;
 use crate::remote::Size;
 use serde_json::{json, Value};
 use wiremock::{
@@ -233,12 +234,8 @@ async fn a_prepared_environment_reports_create_scope_and_plan_denials_at_the_vm_
         .all(|r| r.method.as_str() == "GET" || r.url.path() == "/sandboxes"));
 }
 
-#[tokio::test]
-async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
-    use crate::remote::harness::Harness;
-    use wiremock::matchers::body_json;
-    let (server, boat) = fixture().await;
-    let target = Target {
+fn agent_target() -> Target {
+    Target {
         required_base: None,
         machine: MachineId {
             host: Host::Boat,
@@ -246,21 +243,42 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
             id: "vm-1".into(),
         },
         repository: "example/project".into(),
-    };
+    }
+}
+
+#[tokio::test]
+async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_terminal_run() {
+    use crate::remote::harness::Harness;
+    use wiremock::matchers::body_json;
+    let (server, boat) = fixture().await;
+    let target = agent_target();
     let run = json!({"id":"r","promptId":"p","sandboxId":"vm-1","conversationId":"c","status":"finished","done":true});
     Mock::given(method("POST")).and(path("/sandboxes/vm-1/commands"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"command","success":true,"exitCode":0,"stdout":"git@github.com:example/project.git\n","stderr":"","timedOut":false}))).expect(2).mount(&server).await;
-    for (scope, message) in [
-        (json!({"new":true}), "Start"),
-        (json!({"conversationId":"c"}), "Continue"),
+    for (scope, message, provider, prompt, id) in [
+        (json!({"new":true}), "Start", "codex", "p", "r"),
+        (
+            json!({"conversationId":"c"}),
+            "Continue",
+            "opencode",
+            "p2",
+            "r2",
+        ),
     ] {
         let mut body = scope;
-        body["provider"] = "opencode".into();
+        body["provider"] = provider.into();
         body["prompt"] = message.into();
+        let mut receipt = run.clone();
+        receipt["promptId"] = prompt.into();
+        receipt["id"] = id.into();
         Mock::given(method("POST")).and(path("/sandboxes/vm-1/prompt")).and(body_json(body))
-            .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":"p","conversationId":"c","promptRun":run,"status":"queued","provider":"opencode"}))).expect(1).mount(&server).await;
+            .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":prompt,"conversationId":"c","promptRun":receipt,"status":"queued","provider":provider}))).expect(1).mount(&server).await;
     }
-    let Outcome::Accepted(first) = boat.send(&target, None, "Start").await.unwrap() else {
+    let Outcome::Accepted(first) = boat
+        .send(&target, Provider::Codex, None, "Start")
+        .await
+        .unwrap()
+    else {
         panic!()
     };
     Mock::given(path("/sandboxes/vm-1/prompts/p"))
@@ -290,6 +308,7 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
     }
     assert_eq!(thread.lines.len(), 3);
     assert_eq!(thread.lines[0].text, "Edited the file.");
+    assert_eq!(thread.lines[0].speaker, Speaker::Codex);
     assert!(!thread.lines[0].partial);
     assert_eq!(thread.lines[1].speaker, Speaker::Tool(ToolState::Complete));
     assert_eq!(thread.lines[1].tool_detail.as_deref(), Some("src/lib.rs"));
@@ -304,12 +323,20 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
         crate::remote::RunStatus::Ended(crate::remote::TurnEnd::Finished)
     );
     let Outcome::Accepted(next) = boat
-        .send(&target, Some(&first.conversation), "Continue")
+        .send(
+            &target,
+            Provider::OpenCode,
+            Some(&first.conversation),
+            "Continue",
+        )
         .await
         .unwrap()
     else {
         panic!()
     };
+    assert_eq!(next.provider, Provider::OpenCode);
+    assert_eq!(next.conversation, first.conversation);
+    assert_ne!(next.id, first.id);
     Mock::given(method("POST"))
         .and(path("/sandboxes/vm-1/interrupt"))
         .and(query_param("conversation", "c"))
@@ -321,6 +348,65 @@ async fn opencode_uses_exact_machine_conversation_cursor_and_terminal_run() {
         .mount(&server)
         .await;
     boat.interrupt(&target, &next).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_mismatched_receipt_is_uncertain_and_recovery_checks_the_latest_harness_and_prompt() {
+    use crate::remote::harness::Harness;
+    use wiremock::matchers::body_json;
+    let (server, boat) = fixture().await;
+    let target = agent_target();
+    let run = |p: &str| json!({"id":format!("run-{p}"),"promptId":p,"sandboxId":"vm-1","conversationId":"c","status":"finished","done":true});
+    Mock::given(method("POST")).and(path("/sandboxes/vm-1/commands"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"command","success":true,"exitCode":0,"stdout":"git@github.com:example/project.git\n","stderr":"","timedOut":false}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).and(path("/sandboxes/vm-1/prompt"))
+        .and(body_json(json!({"provider":"codex","conversationId":"c","prompt":"Next"})))
+        .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":"p","conversationId":"c","promptRun":run("p"),"status":"queued","provider":"opencode"})))
+        .expect(1).mount(&server).await;
+    assert!(boat
+        .send(&target, Provider::Codex, Some("c"), "Next")
+        .await
+        .is_err());
+
+    for p in ["p", "older"] {
+        Mock::given(method("GET"))
+            .and(path(format!("/sandboxes/vm-1/prompts/{p}")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    json!({"ok":true,"type":"status","id":"vm-1","promptRun":run(p)}),
+                ),
+            )
+            .mount(&server)
+            .await;
+    }
+    Mock::given(method("GET")).and(path("/sandboxes/vm-1/conversations"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"conversations","id":"vm-1","conversations":[{"id":"c","lastHarness":"codex","prompts":2,"running":false,"current":true}]})))
+        .mount(&server).await;
+    Mock::given(method("GET")).and(path("/sandboxes/vm-1/events")).and(query_param("conversation","c"))
+        .and(query_param("type","prompt")).and(query_param("sort","desc")).and(query_param("limit","1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"events","id":"vm-1","events":[{"type":"prompt","conversationId":"c","taskId":"p"}]})))
+        .expect(2).mount(&server).await;
+    assert!(boat
+        .recover(&target, Provider::OpenCode, Some("c"), "p")
+        .await
+        .is_err());
+    assert!(boat
+        .recover(&target, Provider::Codex, Some("c"), "older")
+        .await
+        .is_err());
+    assert!(boat
+        .recover(&target, Provider::Codex, None, "p")
+        .await
+        .is_err());
+    let found = boat
+        .recover(&target, Provider::Codex, Some("c"), "p")
+        .await
+        .unwrap();
+    assert_eq!(found.provider, Provider::Codex);
+    assert_eq!(
+        (found.conversation.as_str(), found.id.as_str()),
+        ("c", "run-p")
+    );
 }
 
 #[tokio::test]

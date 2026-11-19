@@ -5,6 +5,7 @@ mod create;
 mod handoff;
 mod picker;
 mod popup;
+mod provider;
 mod scene;
 mod setup;
 mod sidebar;
@@ -47,6 +48,7 @@ pub(crate) struct State {
     restored: bool,
     editors: std::collections::HashMap<String, conversation::Editors>,
     mounted: Option<(String, setup::Dock)>,
+    provider_menu: Option<String>,
     inspection: Option<popup::Inspection>,
     pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,

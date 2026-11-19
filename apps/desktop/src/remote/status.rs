@@ -125,7 +125,7 @@ pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
         Turn::Queued(_) => Status::new(Busy, "Queued on Boat…"),
         Turn::Finishing(_) => Status::new(Busy, "Receiving final updates…"),
         Turn::Stopping(_) => Status::new(Attention, "Stopping turn…"),
-        Turn::Following(_) => {
+        Turn::Following(run) => {
             for l in c
                 .thread
                 .lines
@@ -145,11 +145,11 @@ pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
                     }
                     return Status::new(Busy, format!("Using {}…", l.text));
                 }
-                if l.speaker == Speaker::OpenCode && l.partial {
+                if l.speaker.is_assistant() && l.partial {
                     return Status::new(Busy, "Responding…");
                 }
             }
-            Status::new(Busy, "OpenCode is working…")
+            Status::new(Busy, format!("{} is working…", run.provider.name()))
         }
         Turn::Idle if matches!(feed, Some(Job::Failed(_))) => {
             Status::new(Attention, "Message not sent")

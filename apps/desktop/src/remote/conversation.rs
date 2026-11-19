@@ -117,6 +117,7 @@ pub(super) fn view(
     c: &Checkout,
     padding: f32,
     reduced: bool,
+    layers: &mut Vec<El>,
 ) -> El {
     let l = live(s);
     let key = c.thread.editor_key(id);
@@ -263,9 +264,10 @@ pub(super) fn view(
     let change_owner = owner.clone();
     let key_owner = owner.clone();
     let submit_owner = owner.clone();
+    let provider = c.thread.provider.name();
     let input = text_input(&editors.draft, TextStyle::new(14.0, 400.0).lh(23.0))
-        .label("Message remote OpenCode")
-        .placeholder("Message OpenCode on this VM…", k.c.text_muted)
+        .label(format!("Message remote {provider}"))
+        .placeholder(format!("Message {provider} on this VM…"), k.c.text_muted)
         .help("Enter to send · Shift+Enter for a new line")
         .color(k.c.text_base)
         .selection_color(k.selection())
@@ -303,20 +305,16 @@ pub(super) fn view(
         .w_full()
         .gap(6.0)
         .center_y()
-        .child(icon(&ui::AGENT, 13.0).color(k.c.icon_muted))
+        .child(super::provider::choice(s, k, id, &c.thread, layers))
         .child(
-            text(if super::stats::wide() {
-                format!("OpenCode · {}", c.title())
-            } else {
-                c.title().to_owned()
-            })
+            text(c.title())
             .font(k.ty.small_medium)
             .color(k.c.text_muted)
             .min_w(0.0)
             .grow(1.0)
             .truncate()
             .help(format!(
-                "Boat-managed OpenCode on {} · {}. Set the model in Boat → Agents & Proxying.",
+                "Boat-managed {provider} on {} · {}. Set the model in Boat → Agents & Proxying.",
                 c.title(),
                 branch.unwrap_or(&c.source.repository)
             ))

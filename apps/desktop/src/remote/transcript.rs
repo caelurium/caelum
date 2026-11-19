@@ -86,7 +86,7 @@ pub(super) fn view(
                         .color(k.c.text_base),
                 )
                 .child(ui::caption(
-                    format!("Send a message to run OpenCode on {}. The model is set in Boat → Agents & Proxying.", c.title()),
+                    format!("Send a message to run {} on {}. The model is set in Boat → Agents & Proxying.", c.thread.provider.name(), c.title()),
                     k,
                 )),
         );
@@ -140,6 +140,9 @@ pub(super) fn view(
                         let Some(e) = entry(&c.thread, i) else {
                             return col();
                         };
+                        let answer = |l: &Line, who| {
+                            reply(&l.text, who, l.partial && following, reduced, &kit)
+                        };
                         let body = match e {
                             Entry::User(v) => user(v, &kit),
                             Entry::Reply(v, who, partial) => reply(v, who, partial, reduced, &kit),
@@ -152,13 +155,8 @@ pub(super) fn view(
                                 .child(ui::divider(&kit).min_w(0.0).grow(1.0)),
                             Entry::Line(l) => match l.speaker {
                                 Speaker::You => user(&l.text, &kit),
-                                Speaker::OpenCode => reply(
-                                    &l.text,
-                                    "OpenCode",
-                                    l.partial && following,
-                                    reduced,
-                                    &kit,
-                                ),
+                                Speaker::Codex => answer(l, "Codex"),
+                                Speaker::OpenCode => answer(l, "OpenCode"),
                                 Speaker::Tool(state) => tool(l, state, following, &kit),
                                 Speaker::Outcome(end) => row()
                                     .w_full()

@@ -32,12 +32,17 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
     else {
         return col();
     };
-    let mut body = col()
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .gap(6.0)
-        .child(ui::caption(format!("Current · {}", checkout.thread.title()), k).truncate());
+    let mut body = col().w_full().h_full().min_h(0.0).gap(6.0).child(
+        ui::caption(
+            format!(
+                "Current · {} · {}",
+                checkout.thread.provider.name(),
+                checkout.thread.title()
+            ),
+            k,
+        )
+        .truncate(),
+    );
     let available = app.can_switch_vm_thread(id);
     if !available {
         body = body.child(
@@ -65,7 +70,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                 let thread = &live(s).app.remote.saved.checkouts[&owner].other_threads[i];
                 let key = thread.editor_key(&owner).to_owned();
                 let id = owner.clone();
-                ui::choice(thread.title(), "", false, &kit)
+                ui::choice(thread.title(), thread.provider.name(), false, &kit)
                     .disabled(!available)
                     .focusable(available)
                     .on_press(move |s: &mut Workspace| {

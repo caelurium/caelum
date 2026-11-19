@@ -22,6 +22,7 @@ pub use lifetime::Lifetime;
 pub(crate) use runtime::Backend;
 pub use stats::{Activity, Monitor, Process, Sample};
 
+use crate::application::Provider;
 use serde::{Deserialize, Serialize};
 use std::{fmt, sync::Arc};
 use zeroize::Zeroizing;
@@ -92,10 +93,10 @@ pub enum Operation {
     Power(MachineId, bool),
     Delete(MachineId),
     Lifetime(MachineId, Lifetime),
-    Prompt(Target, Option<String>, String),
+    Prompt(Target, Provider, Option<String>, String),
     Follow(Target, Run, Option<String>),
     Interrupt(Target, Run),
-    Recover(Target, Option<String>, String),
+    Recover(Target, Provider, Option<String>, String),
     Git(Target, GitAction),
     Stats(MachineId),
 }

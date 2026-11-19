@@ -211,7 +211,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
         }
         box_ = box_.child(ui::divider(k)).child(choices).child(
             ui::caption(
-                "Boat renews timed VMs while an OpenCode prompt runs or waits.",
+                "Boat renews timed VMs while an agent prompt runs or waits.",
                 k,
             )
             .wrap(),

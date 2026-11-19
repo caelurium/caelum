@@ -60,8 +60,12 @@ impl Backend {
                 .git(target, action)
                 .await
                 .map(Outcome::Review),
-            Operation::Prompt(target, conversation, text) => match self.connected().await {
-                Ok(boat) => boat.send(target, conversation.as_deref(), text).await,
+            Operation::Prompt(target, provider, conversation, text) => match self.connected().await
+            {
+                Ok(boat) => {
+                    boat.send(target, *provider, conversation.as_deref(), text)
+                        .await
+                }
                 Err(error) => Ok(Outcome::Rejected(error)),
             },
             Operation::Follow(target, run, cursor) => self
@@ -76,10 +80,10 @@ impl Backend {
                 .interrupt(target, run)
                 .await
                 .map(|_| Outcome::Interrupted),
-            Operation::Recover(target, conv, prompt) => self
+            Operation::Recover(target, provider, conv, prompt) => self
                 .connected()
                 .await?
-                .recover(target, conv.as_deref(), prompt)
+                .recover(target, *provider, conv.as_deref(), prompt)
                 .await
                 .map(Outcome::Accepted),
             Operation::Discover(project) | Operation::DiscoverHandoff(project) => self

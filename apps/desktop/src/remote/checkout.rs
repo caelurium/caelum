@@ -48,6 +48,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     if l.panels.screen != Screen::Remote && l.remote.restored {
         l.app.remote.saved.selected = None;
     }
+    changed |= super::provider::sync(l);
     let now = Instant::now();
     super::stats::sync(l, tx, now);
     if let Some(at) = l.app.feed_deadline(now) {
@@ -62,7 +63,13 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     changed
 }
 
-pub(crate) fn screen(s: &Workspace, k: &Kit, padding: f32, reduced: bool) -> El {
+pub(crate) fn screen(
+    s: &Workspace,
+    k: &Kit,
+    padding: f32,
+    reduced: bool,
+    layers: &mut Vec<El>,
+) -> El {
     let r = &live(s).app.remote;
     let Some((id, c)) = r
         .saved
@@ -72,5 +79,5 @@ pub(crate) fn screen(s: &Workspace, k: &Kit, padding: f32, reduced: bool) -> El 
     else {
         return ui::empty("No remote checkout", "Choose a VM under its project.", k);
     };
-    super::conversation::view(s, k, id, c, padding, reduced)
+    super::conversation::view(s, k, id, c, padding, reduced, layers)
 }

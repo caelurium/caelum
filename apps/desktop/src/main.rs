@@ -442,7 +442,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         .as_ref()
         .is_some_and(|l| l.panels.screen == panels::Screen::Remote);
     let main = if remote {
-        remote::screen(s, &k, padding, cx.is_reduced_motion())
+        remote::screen(s, &k, padding, cx.is_reduced_motion(), &mut layers)
     } else if home::is_home(s) {
         home::view(s, &k, cx.is_reduced_motion(), &mut layers)
     } else {

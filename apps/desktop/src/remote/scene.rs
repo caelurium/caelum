@@ -119,6 +119,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
                 },
             ]);
             c.thread.turn = Turn::Following(Run {
+                provider: c.thread.provider,
                 conversation: "thread-example".into(),
                 prompt: "prompt-example".into(),
                 id: "run-example".into(),

@@ -34,7 +34,7 @@ pub(super) fn lines(events: Vec<SandboxEvent>, run: &Run, repository: &str) -> V
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false),
                 ..Line::new(
-                    Speaker::OpenCode,
+                    run.provider.into(),
                     &text[..text.floor_char_boundary(
                         crate::remote::Thread::MAX_MESSAGE_BYTES.min(text.len()),
                     )],

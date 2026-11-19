@@ -52,8 +52,10 @@ same machine. A one-repository environment puts the agent and remote Git in
 `/home/user/<repository>`. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
-The remote composer uses Boat’s integrated OpenCode prompt, omitting model and
-reasoning overrides so Boat applies its configured model. Caelum does not
+The remote composer sends the thread’s selected provider (`codex` or `opencode`)
+to Boat, omitting model and reasoning overrides so Boat applies that provider’s
+configured model. Switching providers keeps the conversation ID and event cursor;
+the accepted run records which provider authored its replies. Caelum does not
 install a VM bridge or connect to a native OpenCode session in the checkout.
 Each send explicitly targets a new conversation or its saved Boat conversation ID.
 The core follows ascending event

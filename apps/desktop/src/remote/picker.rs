@@ -7,7 +7,7 @@ use crate::{
     ui,
 };
 use caelum_core::{
-    application::VmDestination,
+    application::{Provider, VmDestination},
     remote::{Lifetime, Picker, Size, Source, valid_branch},
 };
 use rune::{El, ScrollSpec, TextEdit, col, icon, row, text};
@@ -171,6 +171,10 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     }
 
     let owner = source.clone();
+    let provider = l
+        .app
+        .vm_handoff()
+        .map_or(Provider::OpenCode, |h| h.provider);
     pane.child(ui::divider(k)).child(
         row()
             .key("vm-create-footer")
@@ -179,7 +183,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
             .center_y()
             .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted))
             .child(
-                ui::caption("OpenCode · Boat default", k)
+                ui::caption(format!("{} · Boat default model", provider.name()), k)
                     .truncate()
                     .min_w(0.0)
                     .grow(1.0)

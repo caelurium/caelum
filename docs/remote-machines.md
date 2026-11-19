@@ -1,15 +1,15 @@
-# Run OpenCode on Boat
+# Run Codex or OpenCode on Boat
 
 A remote machine has its own Git checkout and disk. Caelum sends messages to
-[Boat’s integrated OpenCode harness](https://docs.boat.dev/platform-guide/agents.md).
-Set the OpenCode model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
+[Boat’s integrated Codex and OpenCode agents](https://docs.boat.dev/platform-guide/agents.md).
+Set each provider’s model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
 Caelum leaves model selection to Boat on every remote prompt. The local model,
 reasoning effort and primary agent (Build, Plan or custom) do not transfer. There is no
 Caelum agent or OpenCode server to install on the VM.
 
 ## Create or attach a checkout
 
-1. Connect GitHub and an OpenCode-compatible model credential in your
+1. Connect GitHub and credentials for the provider you want to use in your
    [Boat account](https://docs.boat.dev/integrated-agents/keys.md). In Caelum,
    open **Settings → Remote machines**, enter your Boat API key and click
    **Connect Boat**. The key is stored in Keychain or Linux Secret Service.
@@ -73,7 +73,8 @@ Your original session and draft stay on the laptop.
 If the VM already had a conversation, **Conversations…** switches back to it.
 
 The first time you press **Send**, Caelum includes the local user and assistant
-messages as context for a new OpenCode conversation. Setup shows how much chat
+messages as context for a new Boat conversation. The VM composer starts with
+the provider from your local session or Home draft. Setup shows how much chat
 will travel: up to the most recent 200 messages or 64 KiB of text. Tool output,
 reasoning, attachments and unpublished Git work stay local.
 
@@ -83,10 +84,17 @@ Send a message from the remote composer. Reopen Caelum or select the machine’s
 sidebar row to continue the same thread. If Boat may have accepted a prompt but the
 acknowledgement was lost, check Boat and reconnect using the prompt ID.
 
-To start fresh on the same checkout, choose **Conversations… → New session on
-this VM**, or right-click the VM in the sidebar. The previous chat and its
+When the VM is ready and its turn has finished, choose **Conversations… →
+New session on this VM**, or right-click the VM in the sidebar. The previous chat and its
 unsent draft stay in **Conversations…**. The new session shares the VM’s files
 and branch, but starts with an empty chat. Only **Send** creates its Boat conversation.
+
+To switch providers in an existing chat, finish the current turn, then choose
+**Codex** or **OpenCode** in the VM composer. The next **Send** uses that provider
+in the same [Boat conversation](https://docs.boat.dev/integrated-agents/conversations.md#switch-harness-or-model-in-a-conversation).
+Your draft stays in the editor, and earlier replies keep their original provider labels.
+
+![Choosing Codex or OpenCode for the next message in a VM chat](design/previews/rune-light-remote-provider-small.png)
 
 The composer shows queued turns, streaming replies and tool activity from the
 selected Boat conversation. If you used the earlier direct-OpenCode preview,
@@ -110,7 +118,7 @@ thread. **Pin stats to VM composer** keeps process activity visible on the VM.
 
 The default lifetime is **1 h**. For longer work, choose **8 h**, **24 h**,
 or **Until stopped**. Boat automatically moves a timed VM’s deadline forward
-while an OpenCode prompt is running or waiting, even if Caelum is closed.
+while an agent prompt is running or waiting, even if Caelum is closed.
 Standalone commands and services don’t renew it. In machine stats, **Set from
 now** changes the remaining time without interrupting the turn. **Until stopped**
 keeps billing until you stop the VM; trials require a timer of at most 2 h.

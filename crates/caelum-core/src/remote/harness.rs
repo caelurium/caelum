@@ -1,20 +1,43 @@
 use super::{Continuation, Target};
+use crate::application::Provider;
 use serde::{Deserialize, Serialize};
+
+// All managed VM conversations saved before provider selection used OpenCode.
+fn opencode() -> Provider {
+    Provider::OpenCode
+}
 
 /// API keys and native provider sessions never enter this record. The cursor is
 /// advanced atomically with its visible messages in the workspace snapshot.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
     /// A fresh session needs an editor identity before Boat assigns a conversation ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continued: Option<Continuation>,
+    #[serde(default = "opencode")]
+    pub provider: Provider,
     pub conversation: Option<String>,
     pub cursor: Option<String>,
     pub turn: Turn,
     pub lines: Vec<Line>,
     pub draft: String,
+}
+
+impl Default for Thread {
+    fn default() -> Self {
+        Self {
+            local_id: None,
+            continued: None,
+            provider: opencode(),
+            conversation: None,
+            cursor: None,
+            turn: Turn::Idle,
+            lines: Vec::new(),
+            draft: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +66,8 @@ impl Turn {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
+    #[serde(default = "opencode")]
+    pub provider: Provider,
     pub conversation: String,
     pub prompt: String,
     pub id: String,
@@ -51,10 +76,26 @@ pub struct Run {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Speaker {
     You,
+    Codex,
     OpenCode,
     Activity,
     Tool(ToolState),
     Outcome(TurnEnd),
+}
+
+impl Speaker {
+    pub fn is_assistant(self) -> bool {
+        matches!(self, Self::Codex | Self::OpenCode)
+    }
+}
+
+impl From<Provider> for Speaker {
+    fn from(provider: Provider) -> Self {
+        match provider {
+            Provider::Codex => Self::Codex,
+            Provider::OpenCode => Self::OpenCode,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,7 +111,7 @@ impl TurnEnd {
         match self {
             Self::Finished => "Turn finished",
             Self::Interrupted => "Turn stopped",
-            Self::Failed => "OpenCode’s turn failed",
+            Self::Failed => "Turn failed",
             Self::Other => "Turn ended",
         }
     }
@@ -174,18 +215,19 @@ impl Thread {
             .as_ref()
             .and_then(|key| current.iter().position(|l| l.key.as_ref() == Some(key)))
             .or_else(|| {
-                (line.speaker == Speaker::OpenCode)
+                line.speaker
+                    .is_assistant()
                     .then(|| {
                         current
                             .iter()
-                            .rposition(|l| l.speaker == Speaker::OpenCode && l.partial)
+                            .rposition(|l| l.speaker == line.speaker && l.partial)
                     })
                     .flatten()
             });
         if let Some(i) = update {
             let old = &mut current[i];
             // A repeated snapshot must not reopen an already finished tool.
-            if old.speaker == Speaker::OpenCode && !old.partial && line.partial
+            if old.speaker.is_assistant() && !old.partial && line.partial
                 || matches!(
                     old.speaker,
                     Speaker::Tool(ToolState::Complete | ToolState::Failed)
@@ -242,6 +284,7 @@ pub(super) trait Harness {
     async fn send(
         &self,
         target: &Target,
+        provider: Provider,
         conversation: Option<&str>,
         text: &str,
     ) -> Result<super::Outcome, String>;

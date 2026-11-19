@@ -3,7 +3,7 @@ mod workspace;
 
 use super::*;
 use caelum_core::{
-    application::{Command, Event, Reply},
+    application::{Command, Event, Provider, Reply},
     remote::{Inventory, Operation, Outcome, Source},
 };
 
@@ -213,10 +213,22 @@ fn remote_composer_and_workspace_menu_target_the_vm_when_the_local_checkout_was_
         "remote-draft-checkout-example",
         "Review the remote branch",
     );
+    click(&mut rt, "vm-provider-trigger");
+    click(&mut rt, "option0");
+    let thread =
+        &rt.state.live.as_ref().unwrap().app.remote.saved.checkouts["checkout-example"].thread;
+    assert_eq!(thread.provider, Provider::Codex);
+    assert_eq!(thread.draft, "Review the remote branch");
+    assert_eq!(
+        thread.lines[1].speaker,
+        caelum_core::remote::Speaker::OpenCode
+    );
+    click(&mut rt, "remote-draft-checkout-example");
     key(&mut rt, Key::Enter, Mods::default());
     let app = &mut rt.state.live.as_mut().unwrap().app;
-    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,Some(c),text)) if target.machine.id=="vm-example" && c=="thread-example" && text=="Review the remote branch")));
+    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,Provider::Codex,Some(c),text)) if target.machine.id=="vm-example" && c=="thread-example" && text=="Review the remote branch")));
     assert!(app.active_project.is_none());
+    assert!(!element(&rt, "vm-provider-trigger").focusable);
     choose_workspace_action(&mut rt, "View remote changes");
     assert!(rt.state.live.as_mut().unwrap().app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Git(target,_)) if target.machine.id=="vm-example")));
 }

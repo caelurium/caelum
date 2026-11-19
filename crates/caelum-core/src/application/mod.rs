@@ -52,6 +52,13 @@ pub enum Provider {
 impl Provider {
     pub const ALL: [Self; 2] = [Self::Codex, Self::OpenCode];
 
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::OpenCode => "OpenCode",
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Codex => "codex",
