@@ -4,7 +4,10 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::{Lifetime, Picker, Size, valid_branch};
+use caelum_core::{
+    application::VmDestination,
+    remote::{Lifetime, Picker, Size, Source, valid_branch},
+};
 use rune::{El, ScrollSpec, TextEdit, col, row};
 use rune_kit::{Kit, ScrollBar};
 
@@ -13,7 +16,15 @@ pub(super) struct Form {
     branch: TextEdit,
     size: Size,
     lifetime: Lifetime,
+    tab: Tab,
 }
+
+#[derive(PartialEq, Eq)]
+enum Tab {
+    Existing,
+    New,
+}
+
 impl Default for Form {
     fn default() -> Self {
         Self {
@@ -21,12 +32,14 @@ impl Default for Form {
             branch: TextEdit::default(),
             size: Size::Standard,
             lifetime: Lifetime::default(),
+            tab: Tab::Existing,
         }
     }
 }
 
 pub(crate) fn open(s: &mut Workspace, project: String) {
     let l = live_mut(s);
+    l.app.dismiss_vm_handoff();
     l.remote.form = Form::default();
     l.app.remote_picker(project);
     l.panels.overlay = Some(Screen::RemotePicker);
@@ -63,33 +76,86 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
         }
         _ => return body.child(ui::caption("Looking up the project on Boat…", k)),
     };
+    let handoff = l.panels.overlay == Some(Screen::VmHandoff);
+    if handoff && has_machines(s, source) {
+        let existing = l.remote.form.tab == Tab::Existing;
+        body = body.child(
+            row()
+                .gap(6.0)
+                .child(
+                    ui::tab("Existing VM", existing, k)
+                        .key("handoff-existing-vm")
+                        .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::Existing),
+                )
+                .child(
+                    ui::tab("New VM", !existing, k)
+                        .key("handoff-new-vm")
+                        .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::New),
+                ),
+        );
+        if existing {
+            return scroll(
+                body.child(ui::section(
+                    &source.repository,
+                    &format!("Choose a checkout containing origin/{}.", source.base),
+                    k,
+                ))
+                .child(machines(s, k, source, true)),
+                k,
+            );
+        }
+    }
     let form = &l.remote.form;
-    let base = if form.base.text.is_empty() {
+    let base = if handoff || form.base.text.is_empty() {
         &source.base
     } else {
         &form.base.text
     };
-    body = body
-        .child(ui::section(
-            &source.repository,
-            &source.environment.as_ref().map_or_else(
-                || "Create a dedicated Boat environment for this repository.".into(),
-                |name| format!("Start from a published branch in the {name} environment."),
-            ),
-            k,
-        ))
-        .child(ui::caption("Base branch", k))
-        .child(
-            ui::field(&form.base, "Base branch", &source.base, k)
-                .key("remote-base")
-                .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.base),
-        )
-        .child(ui::caption("New branch on VM", k))
-        .child(
-            ui::field(&form.branch, "New branch", "Enter a branch name", k)
-                .key("remote-branch")
-                .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.branch),
+    body = body.child(ui::section(
+        &source.repository,
+        &source.environment.as_ref().map_or_else(
+            || "Create a Boat environment for this repository (needs environment.write).".into(),
+            |name| format!("Use the {name} environment on Boat."),
+        ),
+        k,
+    ));
+    let hint = if handoff {
+        body = body.child(
+            ui::caption(format!("Session branch · {}", source.base), k)
+                .key("handoff-base")
+                .wrap(),
         );
+        (source.published_tip.is_none() || !valid_branch(base))
+            .then_some("The session branch must be published to origin.")
+    } else {
+        body = body
+            .child(
+                col()
+                    .w_full()
+                    .gap(4.0)
+                    .child(ui::caption("Base branch", k))
+                    .child(
+                        ui::field(&form.base, "Base branch", &source.base, k)
+                            .key("remote-base")
+                            .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.base),
+                    ),
+            )
+            .child(ui::caption("New branch on VM", k))
+            .child(
+                ui::field(&form.branch, "New branch", "Enter a branch name", k)
+                    .key("remote-branch")
+                    .on_edit(|s: &mut Workspace| &mut live_mut(s).remote.form.branch),
+            );
+        if form.branch.text.is_empty() {
+            Some("Enter a new branch name, such as feat/my-change.")
+        } else if !valid_branch(base) {
+            Some("Choose a valid published base branch.")
+        } else if !valid_branch(&form.branch.text) || form.branch.text == *base {
+            Some("Choose a valid new branch name different from the base.")
+        } else {
+            None
+        }
+    };
     let mut sizes = row().center_y().gap(4.0).child(ui::caption("Size", k));
     for (name, size) in [
         ("Small", Size::Small),
@@ -103,6 +169,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
         );
     }
     let mut ttl = row()
+        .w_full()
         .flex_wrap()
         .center_y()
         .gap(4.0)
@@ -110,29 +177,24 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     for lifetime in Lifetime::CHOICES {
         ttl = ttl.child(
             ui::tab(lifetime.label(), form.lifetime == lifetime, k)
+                .key(format!("vm-lifetime-{}", lifetime.label()))
                 .on_press(move |s: &mut Workspace| live_mut(s).remote.form.lifetime = lifetime),
         );
     }
-    let hint = if form.branch.text.is_empty() {
-        Some("Enter a new branch name, such as feat/my-change.")
-    } else if !valid_branch(base) {
-        Some("Choose a valid published base branch.")
-    } else if !valid_branch(&form.branch.text) || form.branch.text == *base {
-        Some("Choose a valid new branch name different from the base.")
-    } else {
-        None
-    };
     let base = base.clone();
+    let note = match form.lifetime {
+        Lifetime::UntilStopped => {
+            "Runs and bills until you stop the VM. Requires a paid Boat plan."
+        }
+        Lifetime::Day | Lifetime::EightHours => {
+            "Paid plan. Active or waiting OpenCode prompts renew the timer; standalone commands don’t."
+        }
+        _ => "Active or waiting OpenCode prompts renew the timer; standalone commands don’t.",
+    };
     body = body
         .child(sizes)
         .child(ttl)
-        .children((form.lifetime == Lifetime::UntilStopped).then(|| {
-            ui::caption(
-                "Runs and bills until you stop the VM. Requires a paid Boat plan.",
-                k,
-            )
-            .wrap()
-        }))
+        .child(ui::caption(note, k).wrap())
         .child(
             row()
                 .w_full()
@@ -145,7 +207,14 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                         .on_press(move |s: &mut Workspace| {
                             let l = live_mut(s);
                             let f = &l.remote.form;
-                            if l.app
+                            if handoff {
+                                l.app.confirm_vm_handoff(VmDestination::Create {
+                                    size: f.size,
+                                    lifetime: f.lifetime,
+                                });
+                                l.schedule();
+                            } else if l
+                                .app
                                 .create_remote(&base, &f.branch.text, f.size, f.lifetime)
                                 .is_some()
                             {
@@ -157,27 +226,13 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                 )
                 .children(hint.map(|text| ui::caption(text, k).grow(1.0).min_w(0.0).wrap())),
         );
-    if l.panels.overlay != Some(Screen::CreateVm)
-        && let Some(inventory) = &l.app.remote.inventory
-    {
-        body = body.child(ui::caption("Existing machines", k));
-        for m in inventory
-            .machines
-            .iter()
-            .filter(|m| m.key.account == source.account)
-        {
-            let machine = m.clone();
-            body = body.child(
-                ui::Button::new(format!("{} · {}", m.name, m.state))
-                    .on_press(move |s: &mut Workspace| {
-                        if live_mut(s).app.attach_remote(machine.clone()).is_some() {
-                            super::checkout::enter(s);
-                        }
-                    })
-                    .build(k),
-            );
-        }
+    if l.panels.overlay == Some(Screen::RemotePicker) {
+        body = body.child(machines(s, k, source, false));
     }
+    scroll(body, k)
+}
+
+fn scroll(body: El, k: &Kit) -> El {
     col()
         .h_full()
         .w_full()
@@ -186,4 +241,63 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
         })
         .child(body)
         .scroll_bar(k)
+}
+
+fn has_machines(s: &Workspace, source: &Source) -> bool {
+    live(s)
+        .app
+        .remote
+        .inventory
+        .as_ref()
+        .is_some_and(|i| i.machines.iter().any(|m| m.key.account == source.account))
+}
+
+pub(crate) fn handoff_height(s: &Workspace) -> f32 {
+    let l = live(s);
+    if l.app.vm_handoff().is_none() || l.app.remote.inventory.is_none() {
+        return 256.0;
+    }
+    if let Some(Picker::Ready(source)) = &l.app.remote.picker
+        && has_machines(s, source)
+        && l.remote.form.tab == Tab::Existing
+    {
+        return 280.0;
+    }
+    400.0
+}
+
+fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
+    let app = &live(s).app;
+    let mut list = col().w_full().gap(4.0);
+    let Some(inventory) = &app.remote.inventory else {
+        return list;
+    };
+    let mut machines = inventory
+        .machines
+        .iter()
+        .filter(|m| m.key.account == source.account)
+        .peekable();
+    if !handoff && machines.peek().is_some() {
+        list = list.child(ui::caption("Use an existing VM", k));
+    }
+    for m in machines {
+        let machine = m.clone();
+        let blocker = handoff.then(|| app.handoff_machine_blocker(m)).flatten();
+        list = list.child(
+            ui::Button::new(format!("{} · {}", m.name, blocker.unwrap_or(&m.state)))
+                .disabled(blocker.is_some())
+                .on_press(move |s: &mut Workspace| {
+                    let app = &mut live_mut(s).app;
+                    if handoff {
+                        app.confirm_vm_handoff(VmDestination::Existing(machine.clone()));
+                        live_mut(s).schedule();
+                    } else if app.attach_remote(machine.clone()).is_some() {
+                        super::checkout::enter(s);
+                    }
+                })
+                .build(k)
+                .key(format!("attach-vm-{}", m.key.id)),
+        );
+    }
+    list
 }

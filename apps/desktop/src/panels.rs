@@ -52,6 +52,9 @@ pub enum Screen {
     Remote,
     CreateVm,
     RemotePicker,
+    VmHandoff,
+    VmStats,
+    VmThreads,
     Settings,
     Session,
     Sessions,
@@ -560,11 +563,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return crate::commands::sessions_key(s, ev, tx);
         }
         if ev.key == Key::Escape {
-            if live(s).panels.overlay == Some(Screen::Fork) {
-                live_mut(s).app.dismiss_fork();
-            }
-            live_mut(s).panels.overlay = None;
-            live_mut(s).focus();
+            overlays::close(s);
         }
         return ['n', 'p', 'o', 'l', 'k', ',', 'i']
             .iter()

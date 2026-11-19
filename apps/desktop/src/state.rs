@@ -225,6 +225,12 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
             live.feed.hidden();
         }
         let changed = live.poll(tx);
+        if live.panels.overlay == Some(crate::panels::Screen::VmHandoff)
+            && live.app.enter_confirmed_vm()
+        {
+            crate::remote::enter(s);
+            return true;
+        }
         return crate::context::sync(live, tx) || changed;
     }
     let mut changed = false;

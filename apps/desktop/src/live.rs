@@ -284,9 +284,16 @@ impl Live {
         if self.panels.overlay != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
         }
+        if self.panels.overlay != Some(crate::panels::Screen::VmHandoff) {
+            self.app.dismiss_vm_handoff();
+        }
         if !matches!(
             self.panels.overlay,
-            Some(crate::panels::Screen::CreateVm | crate::panels::Screen::RemotePicker)
+            Some(
+                crate::panels::Screen::CreateVm
+                    | crate::panels::Screen::RemotePicker
+                    | crate::panels::Screen::VmHandoff
+            )
         ) {
             self.app.remote.picker = None;
         }

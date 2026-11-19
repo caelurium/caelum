@@ -4,7 +4,7 @@ use crate::{
     live::{Live, live, live_mut},
     ui,
 };
-use caelum_core::remote::{Checkout, Job, Speaker, Turn};
+use caelum_core::remote::{Checkout, Job, Message, Speaker, Thread, Turn};
 use rune::{El, Key, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{ButtonVariant, Kit, ScrollBar};
 
@@ -21,44 +21,88 @@ pub(super) fn sync_editor(l: &mut Live) {
     let Some(c) = l.app.remote.saved.checkouts.get(id) else {
         return;
     };
-    let editors = l.remote.editors.entry(id.clone()).or_default();
+    let editors = l
+        .remote
+        .editors
+        .entry(c.thread.editor_key(id).to_owned())
+        .or_default();
     if editors.draft.text != c.thread.draft {
         editors.draft = TextEdit::new(&c.thread.draft);
     }
 }
 
-fn changed(s: &mut Workspace, _: &mut Tx) {
+fn changed(s: &mut Workspace, owner: &str) {
     let l = live_mut(s);
     if let Some(id) = &l.app.remote.saved.selected
         && let Some(c) = l.app.remote.saved.checkouts.get_mut(id)
+        && c.thread.editor_key(id) == owner
     {
-        c.thread.draft.clone_from(&l.remote.editors[id].draft.text);
+        c.thread
+            .draft
+            .clone_from(&l.remote.editors[owner].draft.text);
     }
 }
-fn send(s: &mut Workspace, tx: &mut Tx) {
+fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
     let l = live_mut(s);
     let Some(id) = l.app.remote.saved.selected.clone() else {
         return;
     };
-    let editor = &mut l.remote.editors.get_mut(&id).unwrap().draft;
+    if l.app.remote.saved.checkouts[&id].thread.editor_key(&id) != owner {
+        return;
+    }
+    let editor = &mut l.remote.editors.get_mut(owner).unwrap().draft;
     if l.app.send_remote(&id, &editor.text) {
         editor.clear();
         editor.focused = true;
-        tx.scroll_to_bottom(format!("remote-transcript-{id}"));
+        tx.scroll_to_bottom(format!("remote-transcript-{owner}"));
         l.schedule();
     }
+}
+
+fn transcript_line(thread: &Thread, index: usize) -> Option<(&str, &str)> {
+    let imported = thread
+        .continued
+        .as_ref()
+        .map_or(&[][..], |c| &c.chat.messages);
+    if let Some(message) = imported.get(index) {
+        return Some(match message {
+            Message::User(text) => ("You · local", text),
+            Message::Assistant(text) => ("Assistant · local", text),
+        });
+    }
+    let line = thread.lines.get(index - imported.len())?;
+    Some((
+        match line.speaker {
+            Speaker::You => "You",
+            Speaker::OpenCode => "OpenCode",
+            Speaker::Activity => "Activity",
+        },
+        &line.text,
+    ))
 }
 
 pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str) -> El {
     let l = live(s);
     let mut body = col().w_full().h_full().min_h(0.0).items_center().gap(8.0);
-    body = body.child(ui::caption(format!("{}  /  {branch}", c.source.repository), k).py(12.0));
-    let key = id.to_owned();
+    body = body.child(
+        row()
+            .center_y()
+            .gap(8.0)
+            .py(8.0)
+            .child(
+                ui::caption(format!("{}  /  {branch}", c.source.repository), k)
+                    .truncate()
+                    .min_w(0.0),
+            )
+            .children((!c.other_threads.is_empty()).then(|| super::threads::button(k))),
+    );
+    let key = c.thread.editor_key(id);
+    let row_key = key.to_owned();
     let owner = id.to_owned();
     let kit = k.clone();
     body = body.child(
         col()
-            .key(format!("remote-transcript-{id}"))
+            .key(format!("remote-transcript-{key}"))
             .label("Remote conversation")
             .role("region")
             .w_full()
@@ -72,17 +116,21 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                     .w_full()
                     .growth(rune::GrowthSpec::default())
                     .virtual_rows(
-                        c.thread.lines.len(),
+                        c.thread.lines.len()
+                            + c.thread
+                                .continued
+                                .as_ref()
+                                .map_or(0, |c| c.chat.messages.len()),
                         80.0,
-                        move |_: &Workspace, i| format!("remote-line-{key}-{i}").into(),
+                        move |_: &Workspace, i| format!("remote-line-{row_key}-{i}").into(),
                         move |s: &Workspace, i| {
-                            let Some(line) = live(s)
+                            let Some((speaker, message)) = live(s)
                                 .app
                                 .remote
                                 .saved
                                 .checkouts
                                 .get(&owner)
-                                .and_then(|c| c.thread.lines.get(i))
+                                .and_then(|c| transcript_line(&c.thread, i))
                             else {
                                 return col();
                             };
@@ -90,16 +138,9 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                                 .w_full()
                                 .py(6.0)
                                 .gap(4.0)
-                                .child(ui::caption(
-                                    match line.speaker {
-                                        Speaker::You => "You",
-                                        Speaker::OpenCode => "OpenCode",
-                                        Speaker::Activity => "Activity",
-                                    },
-                                    &kit,
-                                ))
+                                .child(ui::caption(speaker, &kit))
                                 .child(
-                                    text(&line.text)
+                                    text(message)
                                         .font(kit.ty.ui)
                                         .color(kit.c.text_base)
                                         .selectable(true)
@@ -110,11 +151,18 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             )
             .scroll_bar(k),
     );
-    let Some(editors) = l.remote.editors.get(id) else {
+    let Some(editors) = l.remote.editors.get(key) else {
         return body;
     };
     let busy = matches!(l.app.remote.feeds.get(id), Some(Job::Busy(_)));
     let mut context = col().w_full().gap(6.0);
+    let too_long = editors.draft.text.len() > Thread::MAX_MESSAGE_BYTES;
+    if too_long {
+        context = context.child(ui::caption(
+            "Shorten your message to 64 KiB before sending.",
+            k,
+        ));
+    }
     for error in [l.app.remote.jobs.get(id), l.app.remote.feeds.get(id)]
         .into_iter()
         .flatten()
@@ -124,9 +172,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         }
     }
     if c.thread.turn == Turn::Submitting && !busy {
-        let a = id.to_owned();
-        let b = a.clone();
-        let d = a.clone();
+        let a = key.to_owned();
+        let recovery = a.clone();
+        let b = id.to_owned();
+        let d = b.clone();
         context = context
             .child(ui::caption(
                 "Delivery unconfirmed. Check Boat, then reconnect with its prompt ID.",
@@ -147,7 +196,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                             .on_press(move |s: &mut Workspace| {
                                 let l = live_mut(s);
                                 l.app
-                                    .recover_remote(&b, &l.remote.editors[&b].recovery.text);
+                                    .recover_remote(&b, &l.remote.editors[&recovery].recovery.text);
                             })
                             .build(k),
                     )
@@ -160,10 +209,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                     ),
             );
     }
-    if l.remote.details {
-        context = context.child(super::stats::details(s, k, id, c));
-    }
-    let owner = id.to_owned();
+    let owner = key.to_owned();
+    let change_owner = owner.clone();
+    let key_owner = owner.clone();
+    let submit_owner = owner.clone();
     let input = text_input(&editors.draft, k.ty.ui)
         .label("Message remote OpenCode")
         .placeholder("Message OpenCode on this machine…", k.c.text_muted)
@@ -171,7 +220,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
         .selection_color(k.selection())
         .w_full()
         .edit_menu_changed(
-            format!("remote-draft-{id}"),
+            format!("remote-draft-{key}"),
             move |s| {
                 live_mut(s)
                     .remote
@@ -179,40 +228,45 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
                     .get_mut(&owner)
                     .map(|e| &mut e.draft)
             },
-            changed,
+            move |s, _| changed(s, &change_owner),
         )
-        .on_input_key(|s: &mut Workspace, e, tx| {
+        .on_input_key(move |s: &mut Workspace, e, tx| {
             if e.key == Key::Enter && !e.mods.shift {
-                send(s, tx);
+                send(s, tx, &key_owner);
                 true
             } else {
                 false
             }
         })
-        .on_submit(send);
+        .on_submit(move |s, tx| send(s, tx, &submit_owner));
     let stopped = c
         .machine()
         .is_some_and(|m| matches!(m.state.as_str(), "archived" | "stopped"));
+    let stats_owner = id.to_owned();
+    let label = format!(
+        "Machine stats · {}{}",
+        c.title(),
+        if stopped { " · Stopped" } else { "" }
+    );
     let mut controls = row()
         .w_full()
         .gap(6.0)
         .center_y()
         .children(super::stats::wide().then(|| ui::caption("OpenCode", k)))
-        .child(
-            ui::Button::new(format!(
-                "Remote · {}{}",
-                c.title(),
-                if stopped { " · Stopped" } else { "" }
-            ))
-            .variant(ButtonVariant::GhostMuted)
-            .on_press(|s: &mut Workspace| live_mut(s).remote.details = !live(s).remote.details)
-            .build(k)
-            .key("remote-badge")
-            .min_w(0.0)
-            .shrink(),
-        )
+        .child(rune::el().grow(1.0))
         .children(super::stats::pinned(s, k, id, c))
-        .child(rune::el().grow(1.0));
+        .child(
+            crate::quiet_button(&ui::SERVER, &label)
+                .variant(rune_kit::IconButtonVariant::Ghost)
+                .expanded(l.panels.overlay == Some(crate::panels::Screen::VmStats))
+                .on_press(move |s: &mut Workspace| {
+                    super::popup::inspect_remote(live_mut(s), &stats_owner)
+                })
+                .build(k)
+                .size(32.0, 32.0)
+                .key("remote-badge")
+                .help(label),
+        );
     if stopped {
         let owner = id.to_owned();
         controls = controls.child(
@@ -238,6 +292,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             );
         }
     } else {
+        let owner = key.to_owned();
         controls = controls.child(
             ui::Button::new(if c.thread.turn == Turn::Submitting {
                 "Sending…"
@@ -248,9 +303,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, branch: &str)
             .disabled(
                 c.thread.turn != Turn::Idle
                     || editors.draft.text.trim().is_empty()
+                    || too_long
                     || l.app.remote.jobs.contains_key(id),
             )
-            .on_press_tx(send)
+            .on_press_tx(move |s, tx| send(s, tx, &owner))
             .build(k)
             .key("remote-send"),
         );

@@ -7,10 +7,24 @@ use crate::live::{live, live_mut};
 use super::Screen;
 use super::launcher::launcher;
 
+pub(super) fn close(s: &mut Workspace) {
+    let l = live_mut(s);
+    match l.panels.overlay.take() {
+        Some(Screen::Fork) => l.app.dismiss_fork(),
+        Some(Screen::VmHandoff | Screen::VmStats) => crate::remote::close_popup(l),
+        _ => {}
+    }
+    l.focus();
+}
+
 pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let Some(screen) = live(s).panels.overlay else {
         return;
     };
+    if matches!(screen, Screen::VmHandoff | Screen::VmStats) {
+        crate::remote::popup(s, k, layers);
+        return;
+    }
     let mut menus = Vec::new();
     let (title, description, body) = match screen {
         Screen::Settings => ("Settings", "", crate::settings::view(s, k, &mut menus)),
@@ -23,6 +37,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Open on remote machine",
             "OpenCode will work in the checkout on Boat.",
             crate::remote::picker(s, k),
+        ),
+        Screen::VmThreads => (
+            "Conversations on this VM",
+            "Each conversation has its own chat and draft.",
+            crate::remote::threads_view(s, k),
         ),
         Screen::Worktrees => (
             "Caelum worktrees",
@@ -105,13 +124,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .click_outside(false)
         .width(width)
         .fit()
-        .on_close(move |s: &mut Workspace| {
-            if screen == Screen::Fork {
-                live_mut(s).app.dismiss_fork();
-            }
-            live_mut(s).panels.overlay = None;
-            live_mut(s).focus();
-        })
+        .on_close(close)
         .child(
             col()
                 .w_full()

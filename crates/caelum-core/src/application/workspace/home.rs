@@ -65,6 +65,7 @@ pub(super) enum Request {
 impl Workspace {
     /// A navigation barrier for asynchronous project opens and archive restoration.
     pub fn leave_conversation(&mut self) {
+        self.remote.saved.selected = None;
         self.navigation += 1;
         self.notifications.cancel();
         if let Some(index) = self.selected.take() {

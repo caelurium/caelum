@@ -1,3 +1,5 @@
+mod handoff;
+
 use super::*;
 use caelum_core::{
     application::{Command, Event, Reply},
@@ -53,13 +55,40 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         .app
         .commands()
         .into_iter()
-        .filter_map(|(_, c)| match c {
-            Command::Remote(Operation::Create(s, p)) => Some((s, p)),
+        .filter_map(|(req, c)| match c {
+            Command::Remote(Operation::Create(s, p)) => Some((req, s, p)),
             _ => None,
         })
         .collect();
+    let [(req, source, plan)] = creates.as_slice() else {
+        panic!("{creates:?}")
+    };
+    assert_eq!(source.repository, "example/project");
+    assert_eq!(source.base, "main");
+    assert_eq!(plan.branch, "feat/remote-ui");
+
+    let denied = "Create checkout environment: Boat returned HTTP 403. Automatic setup needs environment.write.";
+    rt.update(|s, _| {
+        s.live
+            .as_mut()
+            .unwrap()
+            .apply(Event::Completed(*req, Err(denied.into())))
+    });
+    advance(&mut rt, 0.2);
     assert!(
-        matches!(creates.as_slice(),[(s,p)] if s.repository=="example/project" && s.base=="main" && p.branch=="feat/remote-ui")
+        rt.elements()
+            .iter()
+            .any(|e| e.text.as_deref() == Some(denied) && e.visible[3] > 0.)
+    );
+    assert!(
+        rt.elements()
+            .iter()
+            .all(|e| e.text.as_deref() != Some("Creating machine…") || e.exiting)
+    );
+    click(&mut rt, "refresh-remote-checkout");
+    let commands = rt.state.live.as_mut().unwrap().app.commands();
+    assert!(
+        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Create(s, p)))] if s == source && p == plan)
     );
 }
 
@@ -126,11 +155,11 @@ fn remote_composer_and_workspace_menu_target_the_vm_when_the_local_checkout_was_
     advance(&mut rt, 0.3);
     let badge = element(&rt, "remote-badge");
     assert!(
-        badge.visible[2] >= 70. && badge.visible[3] >= 26.,
+        (26.0..=36.0).contains(&badge.visible[2]) && badge.visible[3] >= 26.,
         "{badge:?}"
     );
     assert!(rt.find("remote-pin-stats").is_some());
-    click(&mut rt, "remote-badge");
+    key(&mut rt, Key::Escape, Mods::default());
     fill(
         &mut rt,
         "remote-draft-checkout-example",

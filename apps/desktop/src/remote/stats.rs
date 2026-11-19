@@ -4,7 +4,7 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::{Activity, Checkout, Monitor, Phase, Process};
+use caelum_core::remote::{Activity, Checkout, Job, Lifetime, Monitor, Phase, Process, Turn};
 use rune::{El, Tx, col, row};
 use rune_kit::{ButtonVariant, Kit};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,23 +23,24 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
     if l.fixture || l.evaluation {
         return;
     }
-    let shown =
-        l.panels.screen == Screen::Remote && l.panels.overlay.is_none() && !l.app.window_background;
-    let checkout = l
-        .app
-        .remote
-        .saved
-        .selected
-        .as_ref()
-        .and_then(|id| l.app.remote.saved.checkouts.get(id));
-    let visible =
-        shown && (l.remote.details || (wide() && checkout.is_some_and(|c| c.pinned_stats)));
+    let inspected = super::popup::owner(l);
+    let id = if l.app.window_background {
+        None
+    } else if inspected.is_some() {
+        inspected
+    } else if l.panels.screen == Screen::Remote && l.panels.overlay.is_none() {
+        l.app.remote.saved.selected.as_deref()
+    } else {
+        None
+    };
+    let Some((id, checkout)) = id.and_then(|id| l.app.remote.saved.checkouts.get_key_value(id))
+    else {
+        l.app.monitor_remote(None, now);
+        return;
+    };
+    let visible = (inspected.is_some() || (wide() && checkout.pinned_stats)).then(|| id.clone());
     // A collapsed badge doesn't sample processes, but must still notice its known auto-stop.
-    if shown
-        && let Some(Checkout {
-            phase: Phase::Ready { machine, .. },
-            ..
-        }) = checkout
+    if let Phase::Ready { machine, .. } = &checkout.phase
         && let Some(stops) = machine.auto_stop_unix
         && !l
             .remote
@@ -50,13 +51,13 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         let remaining = stops.saturating_add(6).saturating_sub(unix_now());
         if remaining > 0 {
             tx.wake_after(Duration::from_secs(remaining as u64));
-        } else if let Some(id) = l.app.remote.saved.selected.clone() {
+        } else {
+            let id = id.clone();
             l.remote.checked_deadline = Some((machine.key.clone(), stops));
             l.app.refresh_remote(&id);
         }
     }
-    let owner = l.app.remote.saved.selected.clone().filter(|_| visible);
-    if let Some(at) = l.app.monitor_remote(owner.as_deref(), now) {
+    if let Some(at) = l.app.monitor_remote(visible.as_deref(), now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
 }
@@ -103,22 +104,40 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             format!("{} · {}", machine.name, machine.state),
             k,
         ));
-    if let Some(sample) = r.monitor.sample(id) {
-        if let (Some(cpu), Some(ram)) = (sample.vcpu, sample.memory_gb) {
-            box_ = box_.child(info("Capacity", format!("{cpu} vCPU · {ram} GB RAM"), k));
-        }
-        let ttl = machine.auto_stop_unix.map_or_else(
+    let resume = matches!(machine.state.as_str(), "stopped" | "archived");
+    let ttl = if resume {
+        "Stopped".into()
+    } else {
+        machine.auto_stop_unix.map_or_else(
             || "Off".into(),
             |t| {
                 let left = t.saturating_sub(unix_now());
                 if left <= 0 {
                     "Due now".into()
                 } else {
-                    format!("in {} min", left.div_euclid(60) + i64::from(left % 60 != 0))
+                    let mins = left.div_euclid(60) + i64::from(left % 60 != 0);
+                    match (mins / 60, mins % 60) {
+                        (0, m) => format!("in {m} min"),
+                        (h, 0) => format!("in {h} h"),
+                        (h, m) => format!("in {h} h {m} min"),
+                    }
                 }
             },
-        );
-        box_ = box_.child(info("Auto-stop", ttl, k));
+        )
+    };
+    box_ = box_.child(info("Auto-stop", ttl, k)).child(info(
+        "VM thread",
+        match &c.thread.turn {
+            Turn::Idle => "Idle",
+            Turn::Submitting => "Awaiting acknowledgement",
+            Turn::Following(_) => "Prompt active",
+        },
+        k,
+    ));
+    if let Some(sample) = r.monitor.sample(id) {
+        if let (Some(cpu), Some(ram)) = (sample.vcpu, sample.memory_gb) {
+            box_ = box_.child(info("Capacity", format!("{cpu} vCPU · {ram} GB RAM"), k));
+        }
         let (label, p) = match &sample.activity {
             Activity::Live(p) => ("Busy now", p.as_ref()),
             Activity::LastSample(p) => ("Last sample", p.as_ref()),
@@ -143,12 +162,56 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
     let a = id.to_owned();
     let b = a.clone();
     let owner = a.clone();
-    let resume = matches!(machine.state.as_str(), "stopped" | "archived");
+    if !resume {
+        let mut choices = row()
+            .w_full()
+            .flex_wrap()
+            .center_y()
+            .gap(4.0)
+            .child(ui::caption("Set from now", k));
+        for time in [
+            Lifetime::TwoHours,
+            Lifetime::EightHours,
+            Lifetime::Day,
+            Lifetime::UntilStopped,
+        ] {
+            let owner = id.to_owned();
+            choices = choices.child(
+                ui::Button::new(time.label())
+                    .variant(ButtonVariant::GhostMuted)
+                    .disabled(!live(s).app.can_set_vm_lifetime(id))
+                    .on_press(move |s: &mut Workspace| {
+                        live_mut(s).app.set_vm_lifetime(&owner, time)
+                    })
+                    .build(k)
+                    .key(format!("set-vm-lifetime-{}", time.label())),
+            );
+        }
+        box_ = box_.child(choices).child(
+            ui::caption(
+                "Boat renews timed VMs while an OpenCode prompt runs or waits.",
+                k,
+            )
+            .wrap(),
+        );
+    }
+    if let Some(job) = r.lifetimes.get(id) {
+        box_ = box_.child(
+            ui::caption(
+                match job {
+                    Job::Failed(e) => e,
+                    _ => "Updating auto-stop…",
+                },
+                k,
+            )
+            .wrap(),
+        );
+    }
     box_.child(
         ui::Button::new(if c.pinned_stats {
             "Unpin stats"
         } else {
-            "Pin stats to composer"
+            "Pin stats to VM composer"
         })
         .variant(ButtonVariant::GhostMuted)
         .on_press(move |s: &mut Workspace| {
@@ -164,11 +227,14 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             .w_full()
             .flex_wrap()
             .gap(4.0)
-            .child(
+            .children((live(s).panels.screen == Screen::Remote).then(|| {
                 ui::Button::new("Changes")
-                    .on_press(super::open_changes)
-                    .build(k),
-            )
+                    .on_press(|s: &mut Workspace| {
+                        live_mut(s).panels.overlay = None;
+                        super::open_changes(s);
+                    })
+                    .build(k)
+            }))
             .child(
                 ui::Button::new("Refresh")
                     .on_press(move |s: &mut Workspace| {

@@ -9,12 +9,12 @@ use rune::{El, Tx, col};
 use rune_kit::Kit;
 use std::time::Instant;
 
-pub(super) fn enter(s: &mut Workspace) {
+pub(crate) fn enter(s: &mut Workspace) {
     let l = live_mut(s);
     l.panels.overlay = None;
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
-    l.remote.details = false;
+    l.remote.inspection = None;
     super::conversation::sync_editor(l);
     l.schedule();
     s.inspector.set_open(false);
@@ -27,6 +27,13 @@ pub(crate) fn select(s: &mut Workspace, id: &str) {
 
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let mut changed = false;
+    if l.panels.overlay == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
+        l.panels.overlay = None;
+        changed = true;
+    }
+    if l.panels.overlay != Some(Screen::VmStats) {
+        l.remote.inspection = None;
+    }
     if !l.remote.restored && l.app.restored() {
         l.remote.restored = true;
         if !l.app.opening
@@ -81,14 +88,15 @@ pub(crate) fn screen(s: &Workspace, k: &Kit) -> El {
         &c.source.repository,
         k,
     ));
-    let detail = match &c.phase {
-        Phase::Create(_) => "Creating machine…",
-        Phase::Prepare { machine, .. } => &machine.state,
-        Phase::Ready { branch, .. } => branch,
-    };
-    body = body.child(ui::caption(detail, k));
     if let Some(Job::Failed(e)) = r.jobs.get(id) {
         body = body.child(ui::caption(e, k).wrap().color(k.c.danger.fg));
+    } else {
+        let detail = match &c.phase {
+            Phase::Create(_) => "Creating machine…",
+            Phase::Prepare { machine, .. } => &machine.state,
+            Phase::Ready { branch, .. } => branch,
+        };
+        body = body.child(ui::caption(detail, k));
     }
     let busy = matches!(r.jobs.get(id), Some(Job::Busy(_) | Job::Wait(_)));
     let key = id.clone();
@@ -101,6 +109,7 @@ pub(crate) fn screen(s: &Workspace, k: &Kit) -> El {
         .disabled(busy)
         .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_remote(&key))
         .build(k)
+        .key("refresh-remote-checkout")
         .self_start(),
     );
     if let Some(m) = c.machine() {

@@ -11,6 +11,8 @@ import time
 root = Path(__file__).resolve().parents[3]
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
+    "home-continue-on-vm": ("home-draft", [{"t": 0.25, "key": "continue-on-vm"}]),
+    "remote-handoff-new": ("remote-handoff", [{"t": 0.25, "key": "handoff-new-vm"}]),
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
     "question-pending": ("questions", [{"t": 0.25, "key": "question-submit-fixture"}]),
     "session-feed-filter": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}]),
@@ -79,7 +81,7 @@ scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
 scenes += ("fork",)
-scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create")
+scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create", "remote-handoff")
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

@@ -2,16 +2,24 @@ mod changes;
 mod checkout;
 mod conversation;
 mod create;
+mod handoff;
 mod picker;
+mod popup;
 mod scene;
 mod stats;
+mod threads;
 
 pub(crate) use changes::{inspector, open as open_changes};
+pub(crate) use checkout::enter;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use create::button as create_button;
 pub(crate) use create::view as create_view;
+pub(crate) use handoff::button as handoff_button;
 pub(crate) use picker::{open, picker};
+pub(crate) use popup::clear as close_popup;
+pub(crate) use popup::view as popup;
 pub(crate) use scene::scene;
+pub(crate) use threads::view as threads_view;
 
 use crate::{
     Workspace,
@@ -30,7 +38,7 @@ pub(crate) struct State {
     folders: create::Folders,
     restored: bool,
     editors: std::collections::HashMap<String, conversation::Editors>,
-    details: bool,
+    inspection: Option<popup::Inspection>,
     review: changes::Panel,
     checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
 }

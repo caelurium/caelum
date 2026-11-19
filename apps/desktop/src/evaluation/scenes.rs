@@ -8,6 +8,9 @@ pub(crate) const SCENES: &[Scene] = &[
     ("remote-create", |s| {
         crate::remote::scene(s, "remote-create")
     }),
+    ("remote-handoff", |s| {
+        crate::remote::scene(s, "remote-handoff")
+    }),
     ("remote-machine", |s| {
         crate::remote::scene(s, "remote-machine")
     }),

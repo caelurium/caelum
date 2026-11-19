@@ -9,9 +9,16 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         project: l.app.projects[0].path.clone(),
         account: "example-account".into(),
         repository: "example/project".into(),
-        base: "main".into(),
-        published_tip: None,
-        environment: Some("project".into()),
+        base: if name == "remote-handoff" {
+            l.app
+                .session_branch(&l.app.sessions[0])
+                .expect("fixture session branch")
+        } else {
+            "main"
+        }
+        .into(),
+        published_tip: (name == "remote-handoff").then(|| "a".repeat(40)),
+        environment: (name != "remote-create").then(|| "project".into()),
     };
     let machine = Machine {
         key: MachineId {
@@ -33,6 +40,30 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         account: source.account.clone(),
         machines: vec![machine.clone()],
     });
+    if name == "remote-handoff" {
+        use caelum_core::application::{Command, Event, HandoffSource, Reply};
+        l.app.sessions[0].remote_id = Some("source-session".into());
+        l.panels.overlay = Some(Screen::VmHandoff);
+        l.app.begin_vm_handoff(HandoffSource::Composer(0));
+        let (request, _) = l
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::HandoffChat(_)))
+            .expect("fixture session");
+        l.apply(Event::Completed(
+            request,
+            Ok(Reply::HandoffChat(Chat {
+                messages: vec![
+                    Message::User("Check the rollout plan.".into()),
+                    Message::Assistant("The rollout is ready to review.".into()),
+                ],
+                clipped: false,
+            })),
+        ));
+        l.app.remote.picker = Some(Picker::Ready(source));
+        return;
+    }
     if name == "remote-settings" {
         l.panels.settings_page = Page::Remote;
         l.panels.overlay = Some(Screen::Settings);
@@ -75,7 +106,9 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     conversation::sync_editor(l);
     checkout::enter(s);
     let l = live_mut(s);
-    l.remote.details = name == "remote-machine";
+    if name == "remote-machine" {
+        super::popup::inspect_remote(l, &id);
+    }
     if name == "remote-changes" {
         l.app.remote.changes.insert(id,Changes::Ready(Review{revision:Revision{branch:"feat/remote-checkout".into(),head:"a".repeat(40),index:"b".repeat(40),tree:"c".repeat(40)},
             status:"## feat/remote-checkout\n M src/server.rs".into(),patch:"diff --git a/src/server.rs b/src/server.rs\n--- a/src/server.rs\n+++ b/src/server.rs\n@@ -1,3 +1,4 @@\n fn routes() {\n+    add_health_check();\n     start_server();\n }\n".into()}));

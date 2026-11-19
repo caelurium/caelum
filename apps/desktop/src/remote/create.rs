@@ -34,6 +34,7 @@ pub(crate) fn button(k: &Kit) -> El {
 
 fn open(s: &mut Workspace) {
     let l = live_mut(s);
+    l.app.dismiss_vm_handoff();
     l.panels.overlay = Some(Screen::CreateVm);
     l.remote.form = Default::default();
     l.remote.folders.reset();

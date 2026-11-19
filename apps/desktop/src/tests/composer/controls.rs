@@ -17,7 +17,13 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
                     .working = working
             });
             advance(&mut rt, 0.3);
-            for name in ["model-trigger", "effort-trigger", "agent-trigger", "send"] {
+            for name in [
+                "model-trigger",
+                "effort-trigger",
+                "agent-trigger",
+                "continue-on-vm",
+                "send",
+            ] {
                 let e = element(&rt, name);
                 assert!(e.rect[2] >= 32.0 && e.rect[3] >= 28.0, "{name}: {e:?}");
                 assert!(
