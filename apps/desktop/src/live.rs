@@ -37,6 +37,7 @@ pub struct Live {
     pub completion: crate::completion::Menu,
     pub composer: crate::composer::State,
     pub home: crate::home::State,
+    pub remote: crate::remote::State,
     pub commands: crate::commands::State,
     pub models: crate::models::Picker,
     pub notifications: crate::notifications::State,
@@ -104,6 +105,7 @@ impl Live {
             completion: Default::default(),
             composer: Default::default(),
             home: Default::default(),
+            remote: Default::default(),
             commands: Default::default(),
             models: Default::default(),
             notifications: Default::default(),
@@ -641,7 +643,7 @@ impl Live {
         changed
     }
 
-    fn schedule(&self) {
+    pub(crate) fn schedule(&self) {
         if let Some(wake) = &self.wake {
             wake();
         }

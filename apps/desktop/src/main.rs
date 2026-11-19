@@ -17,6 +17,7 @@ mod models;
 mod notifications;
 mod panels;
 mod questions;
+mod remote;
 mod select;
 mod settings;
 mod shells;

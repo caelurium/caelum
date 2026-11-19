@@ -10,6 +10,7 @@ mod persistence;
 mod projects;
 mod queue;
 mod relocation;
+mod remote;
 mod review;
 mod sessions;
 mod subagents;
@@ -205,6 +206,7 @@ impl Session {
 }
 
 enum Pending {
+    Remote(remote::Lane),
     Fork(fork::Request),
     Home(home::Request),
     Inbox(usize, u64),
@@ -255,6 +257,7 @@ enum Pending {
 pub struct Workspace {
     fork: Option<ForkPicker>,
     pub home: Home,
+    pub remote: crate::remote::State,
     pub window_background: bool,
     pub conversation_hidden: bool,
     pub projects: Vec<ProjectInfo>,

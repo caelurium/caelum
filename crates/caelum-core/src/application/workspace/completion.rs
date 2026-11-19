@@ -10,6 +10,10 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::Remote(lane) = pending {
+            self.complete_remote(request, lane, result);
+            return;
+        }
         if let Pending::Fork(pending) = pending {
             self.complete_fork(request, pending, result);
             return;
@@ -158,7 +162,8 @@ impl Workspace {
                         self.durable_outgoing = commands;
                         self.persistence_error = Some(error);
                     }
-                    Pending::Home(_)
+                    Pending::Remote(_)
+                    | Pending::Home(_)
                     | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)

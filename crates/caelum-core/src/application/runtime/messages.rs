@@ -9,6 +9,7 @@ use caelum_protocol::{
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    Remote(crate::remote::Operation),
     Inbox(SessionKey),
     Enqueue(SessionKey, String, String),
     RemoveQueued(SessionKey, String),
@@ -53,6 +54,7 @@ pub struct OpenCodeMove {
 
 #[derive(Debug)]
 pub enum Reply {
+    Remote(crate::remote::Outcome),
     Inbox(Vec<serde_json::Value>),
     Generated(String),
     Task(TaskReply),

@@ -34,6 +34,7 @@ pub struct ProviderRuntime {
     pub approvals: ApprovalBroker,
     pub questions: QuestionBroker,
     pub processes: Arc<ProcessRegistry>,
+    remote: Arc<crate::remote::Backend>,
     pub worktrees: crate::worktrees::WorktreeClient,
     pub branches: Arc<Mutex<crate::session_branches::SessionBranches>>,
     pub(super) review_cache: Arc<Mutex<Option<crate::github::cache::Cache>>>,
@@ -53,6 +54,7 @@ impl Default for ProviderRuntime {
                 questions.clone(),
             ),
             processes,
+            remote: Arc::default(),
             approvals,
             questions,
             worktrees: crate::worktrees::WorktreeClient::new(
@@ -80,6 +82,7 @@ impl ProviderRuntime {
 
     fn execute(&self, command: &Command) -> Result<Reply, String> {
         let result = match command {
+            Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
                 return self
                     .opencode

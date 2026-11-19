@@ -34,3 +34,8 @@ core project validation as the CLI. It does not dispatch commands or prompts.
 Workspace JSON is private, atomically replaced and locked for the desktop's
 lifetime. Migration copies legacy data and preserves the sources. Credentials
 remain provider-owned; they do not belong in workspace snapshots or branch metadata.
+
+**Settings → Remote machines** authenticates a Boat key before saving it to macOS
+Keychain or Linux Secret Service. Disconnect removes it. Only account-scoped machine
+IDs, names and states cross the adapter; Boat desktop access URLs and environment
+secrets are not exposed to the desktop.
