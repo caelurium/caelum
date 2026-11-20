@@ -163,6 +163,8 @@ pub struct SavedSession {
     pub title: String,
     #[serde(default)]
     pub title_refresh_turns: u8,
+    #[serde(default)]
+    pub manual_title: bool,
     pub options: Options,
     pub draft: String,
     pub attachments: Vec<Attachment>,
