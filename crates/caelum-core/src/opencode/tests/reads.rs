@@ -84,6 +84,61 @@ fn fork_respects_the_exact_message_boundary_and_rejects_a_changed_tip() {
 }
 
 #[test]
+fn conversation_controls_reject_other_checkouts_stale_tips_and_existing_reverts() {
+    let svc = Service::new();
+    let path = svc.path().to_str().unwrap();
+    let rewind = |tip: &str, files: bool| {
+        svc.provider
+            .rewind(path, "ses_read", "msg_before", tip, files)
+    };
+    svc.configure(json!({"directory":"/elsewhere"}));
+    assert!(svc
+        .provider
+        .set_title(path, "ses_read", "Named café")
+        .is_err());
+    assert!(rewind("msg_tip", true).is_err());
+    assert!(svc.requests().iter().all(|s| s.starts_with("GET ")));
+    svc.configure(json!({"directory":path,"revert":{"messageID":"another"}}));
+    assert!(rewind("msg_tip", false).is_err());
+    svc.configure(json!({"revert":null}));
+    assert!(rewind("stale", true).is_err());
+    assert!(svc.requests().iter().all(|s| s.starts_with("GET ")));
+    svc.provider
+        .set_title(path, "ses_read", "Named café")
+        .unwrap();
+    assert_eq!(
+        svc.provider
+            .checkpoint_files(path, "ses_read", "msg_before", "msg_latest_user")
+            .unwrap(),
+        ["src/example.rs"]
+    );
+    for files in [true, false] {
+        rewind("msg_tip", files).unwrap();
+        let requests = svc.requests();
+        let writes: Vec<_> = requests
+            .iter()
+            .filter(|s| s.starts_with("POST"))
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            writes,
+            [
+                "POST /api/session/ses_read/revert/stage",
+                "POST /api/session/ses_read/revert/commit"
+            ]
+        );
+    }
+    svc.configure(json!({"commit_error":true}));
+    assert!(rewind("msg_tip", false)
+        .unwrap_err()
+        .to_string()
+        .contains("staged revert"));
+    svc.requests();
+    assert!(rewind("msg_tip", false).is_err());
+    assert!(svc.requests().iter().all(|r| r.starts_with("GET ")));
+}
+
+#[test]
 fn runtime_resume_returns_metadata_and_history_with_three_reads() {
     let service = Service::new();
     service.configure(json!({"active": true}));

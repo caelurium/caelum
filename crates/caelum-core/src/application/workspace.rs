@@ -1,6 +1,7 @@
 mod archive;
 mod completion;
 mod composer;
+mod controls;
 mod events;
 mod fork;
 mod history;
@@ -18,9 +19,11 @@ mod submission;
 mod tasks;
 mod titles;
 
+pub use fork::FilePreview;
 pub use fork::ForkBoundary;
 pub use fork::ForkPicker;
 pub use fork::ForkPoint;
+pub use fork::HistoryAction;
 pub use home::Home;
 pub use home::HomeDraft;
 pub use projects::ProjectMove;
@@ -40,6 +43,7 @@ pub struct Session {
     relocation: relocation::Relocation,
     pub title: String,
     title_state: titles::TitleState,
+    controls: controls::Status,
     /// Last meaningful activity in Unix milliseconds; selection and token deltas do not bump it.
     pub last_activity: Option<u64>,
     pub conversation: Conversation,
@@ -100,6 +104,7 @@ impl Session {
             relocation: Default::default(),
             title: "New session".into(),
             title_state: Default::default(),
+            controls: Default::default(),
             last_activity: None,
             conversation: Conversation::default(),
             options: Options::default(),
@@ -181,7 +186,8 @@ impl Session {
     }
 
     pub fn can_send(&self) -> bool {
-        !self.relocation.pending()
+        !self.rewinding()
+            && !self.relocation.pending()
             && !self.working()
             && self.loaded
             && !self.loading
@@ -195,7 +201,8 @@ impl Session {
 
     /// Whether a draft may be submitted, including to the queue while working.
     pub fn can_submit(&self) -> bool {
-        !self.relocation.pending()
+        !self.rewinding()
+            && !self.relocation.pending()
             && !self.archived
             && !self.forgotten
             && !self.stopping
@@ -207,6 +214,7 @@ impl Session {
 
 enum Pending {
     Remote(remote::Lane),
+    ConversationControl(usize, SessionKey, controls::Operation),
     Fork(fork::Request),
     Home(home::Request),
     Inbox(usize, u64),
@@ -329,7 +337,10 @@ fn update_summary(session: &mut Session, summary: Summary, request: u64) {
             session.record_activity(at);
         }
     }
-    if request > session.title_state.barrier && !summary.title.trim().is_empty() {
+    if !session.title_state.manual
+        && request > session.title_state.barrier
+        && !summary.title.trim().is_empty()
+    {
         session.title = summary.title;
     }
     if summary.options.model.is_some() && !session.options_dirty {
