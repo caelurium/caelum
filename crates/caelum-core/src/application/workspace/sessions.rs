@@ -154,7 +154,11 @@ impl Workspace {
 
     pub fn refresh(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading || session.submitting || session.relocation.pending() {
+        if session.loading
+            || session.submitting
+            || session.relocation.pending()
+            || session.rewinding()
+        {
             return;
         }
         let Some(key) = session.key() else {
@@ -168,7 +172,7 @@ impl Workspace {
 
     pub fn older(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading {
+        if session.loading || session.rewinding() {
             return;
         }
         let (Some(key), Some(cursor)) = (session.key(), session.next_cursor.clone()) else {
