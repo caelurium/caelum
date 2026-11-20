@@ -161,7 +161,7 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
             .is_some_and(|f| f == &key || f == &close_key);
         let name = path.rsplit('/').next().unwrap_or(&path);
         let available_tab_width = rune::memo::window_layout("file-tabs")
-            .map_or(150.0, |rect| (rect[2] - 16.0).clamp(80.0, 210.0));
+            .map_or(120.0, |rect| (rect[2] - 32.0).clamp(80.0, 210.0));
         let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0)
             .min(available_tab_width)
             .max(80.0);
