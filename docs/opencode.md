@@ -31,6 +31,15 @@ the newest turn, Caelum checks that the end of history still matches the picker.
 The new session is opened only after checking the returned checkout, source and
 message boundary. If history has changed, reload the picker before retrying.
 
+`/edit` uses the selected user message itself as the exclusive boundary. It
+restores Caelum context snapshots, inline images and provider-stored image blobs
+into the child draft. `/rewind` previews the snapshot diff for the chosen range
+and, after confirmation, stages that message with `files: false` for history
+alone or `files: true` for the explicit file-restore action. It commits the
+verified staged boundary. If a revert is already staged, or commit is
+interrupted, inspect it in OpenCode and commit or clear it before retrying.
+Export follows the message endpoint's opaque cursors to the oldest record.
+
 Waiting activity uses `/api/shell`, filtering running commands by `metadata.sessionID` after validating session ownership. This works with OpenCode 2.2.1 and does not require the newer experimental job endpoint. The selected session and sessions with known running commands refresh on shell/tool/execution events, focus and every five seconds while the app is visible.
 
 The persistent composer strip offers per-command output and Stop. The adapter checks
@@ -73,7 +82,7 @@ OpenCode's managed v2 server always uses Basic authentication: when `OPENCODE_SE
 
 - The adapter verifies the local server by listing sessions through `GET /api/session` and scopes all session operations to the canonical project directory.
 - Sessions are created, restored, and listed through the v2 `/api/session` endpoints. Prompts use `/api/session/{sessionID}/prompt`; cancellation uses `/interrupt`.
-- Every three successful executions observed for a session, Caelum requests a fresh title with `PATCH /api/session/{sessionID}` and `{"title":""}`. OpenCode chooses the title model and publishes `session.renamed`; generation does not add conversation messages. The per-session cadence survives restart, overlapping requests coalesce, and automatic retries wait for another three successful executions. Failed or interrupted executions do not count.
+- Every three successful executions observed for an automatically named session, Caelum requests a fresh title with `PATCH /api/session/{sessionID}` and `{"title":""}`. OpenCode chooses the title model and publishes `session.renamed`; generation does not add conversation messages. `/rename` sends an explicit title and disables this cadence for the session across restarts. For automatic titles, overlapping requests coalesce and retries wait for another three successful executions. Failed or interrupted executions do not count.
 - The sidebar Refresh button and session-menu Refresh actions reload session history and provider metadata. Title generation follows the successful-execution cadence above.
 - Archiving uses `PATCH /api/session/{sessionID}` with `archived: true`; Undo sends `false`. Active sessions cannot be archived, and listings request `archived=false`. The desktop removes the scoped saved session/selection, invalidates pending snapshots, and retains the latest archived draft/settings for Undo.
 - Sidebar rows and PR discovery load optional details without blocking navigation. `/api/session/{sessionID}/diff?context=0` supplies added/deleted line counts for the newest user-message turn. Caelum records the local branch on `session.execution.started` and succeeded/failed/interrupted completion events, persisting associations across restart and archive/undo. Directory-wide `/api/vcs` metadata is not used to attribute branches to historical sessions; older sessions gain an association the next time they execute while connected. Concurrent sessions in one checkout suppress ambiguous updates. Missing diff metadata leaves counts absent; completed turns and refreshes update them.
