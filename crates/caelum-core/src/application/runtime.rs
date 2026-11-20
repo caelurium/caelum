@@ -17,9 +17,8 @@ use super::{Options, Provider, SessionKey, Summary, Task};
 
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
-mod fork;
-mod handoff;
 mod conversation;
+mod handoff;
 mod messages;
 mod opencode;
 
