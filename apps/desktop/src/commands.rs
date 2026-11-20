@@ -1,11 +1,14 @@
 //! Native surfaces for local commands; provider requests and results stay in core.
+mod controls;
 mod dispatch;
 mod fork;
 mod sessions;
 mod timeline;
 
+pub(crate) use controls::{export, history, rename};
 pub use dispatch::dispatch;
 pub use fork::fork_key;
+pub(crate) use fork::header as history_header;
 use sessions::sessions;
 pub use sessions::sessions_key;
 use timeline::timeline;
@@ -25,6 +28,7 @@ use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_inp
 use rune_kit::{ButtonVariant, Kit, Markdown, Progress, ScrollBar, glyphs};
 
 pub struct State {
+    rename: Option<controls::RenameForm>,
     fork_selected: Option<caelum_core::application::ForkBoundary>,
     pub owner: Option<usize>,
     pub search: TextEdit,
@@ -43,6 +47,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            rename: None,
             fork_selected: None,
             owner: None,
             search: TextEdit::new(""),
@@ -240,6 +245,7 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
         return col();
     };
     match screen {
+        Screen::Rename => controls::rename_view(s, k),
         Screen::Fork => fork::view(s, k),
         Screen::Timeline => timeline(s, k, index),
         Screen::Sessions => sessions(s, k, index),
