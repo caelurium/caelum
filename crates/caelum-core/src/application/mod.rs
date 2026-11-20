@@ -4,6 +4,7 @@
 pub mod commands;
 mod composer;
 mod conversation;
+mod export;
 mod feed;
 pub mod forms;
 mod inbox;
@@ -20,17 +21,20 @@ pub use composer::{
     split_context, Attachment, AttachmentKind, Completion, CompletionKind, QueuedPrompt,
 };
 pub use conversation::{Conversation, Entry, EntryKind};
+pub use export::ExportFormat;
 pub use feed::SessionScope;
 pub use inbox::{Inbox, InboxPrompt};
 pub use notifications::Notification;
 pub use persistence::{Preferences, SavedSession, Snapshot, Store, StoreLock};
 pub use runtime::{Command, Event, OpenCodeMove, ProviderRuntime, Reply, Runtime};
 pub use services::{Checkout, Review, Services, Task, TaskReply};
+pub use workspace::FilePreview;
 pub use workspace::ForkBoundary;
 pub use workspace::ForkPicker;
 pub use workspace::ForkPoint;
 pub use workspace::HandoffPhase;
 pub use workspace::HandoffSource;
+pub use workspace::HistoryAction;
 pub use workspace::Home;
 pub use workspace::HomeDraft;
 pub use workspace::ProjectMove;

@@ -4,6 +4,10 @@ use super::Provider;
 pub enum LocalCommand {
     New,
     Fork,
+    Edit,
+    Export,
+    Rename,
+    Rewind,
     Sessions,
     Models,
     Variants,
@@ -59,6 +63,26 @@ pub const COMMANDS: &[(&str, &str, LocalCommand)] = &[
         "Branch this conversation at a chosen turn",
         LocalCommand::Fork,
     ),
+    (
+        "rename",
+        "Set a persistent session title",
+        LocalCommand::Rename,
+    ),
+    (
+        "edit",
+        "Edit an earlier prompt in a new branch",
+        LocalCommand::Edit,
+    ),
+    (
+        "rewind",
+        "Preview a checkpoint before rewinding",
+        LocalCommand::Rewind,
+    ),
+    (
+        "export",
+        "Save full provider history as Markdown or JSON",
+        LocalCommand::Export,
+    ),
 ];
 
 impl LocalCommand {
@@ -78,7 +102,11 @@ impl LocalCommand {
         if !command.available(provider) {
             return Err(format!("/{name} is only available with OpenCode."));
         }
-        if !matches!(*command, Self::SideQuestion | Self::Effort) && !args.trim().is_empty() {
+        if !matches!(
+            *command,
+            Self::SideQuestion | Self::Effort | Self::Rename | Self::Export
+        ) && !args.trim().is_empty()
+        {
             return Err(format!("/{name} does not take arguments."));
         }
         Ok(Some((*command, args.trim())))

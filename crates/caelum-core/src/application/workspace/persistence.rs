@@ -125,6 +125,7 @@ impl Workspace {
                     remote_id: s.remote_id.clone(),
                     title: s.title.clone(),
                     title_refresh_turns: s.title_state.turns,
+                    manual_title: s.title_state.manual,
                     options: s.options.clone(),
                     draft: s.draft.clone(),
                     attachments: s.attachments.clone(),

@@ -385,3 +385,63 @@ fn title_cadence_survives_restart_and_old_snapshots_default_to_zero() {
     let legacy: Snapshot = serde_json::from_value(saved).unwrap();
     assert_eq!(legacy.sessions[index].title_refresh_turns, 0);
 }
+
+#[test]
+fn manual_titles_are_owned_provider_writes_persisted_across_late_reads_events_and_restart() {
+    for provider in Provider::ALL {
+        let mut app = Workspace::default();
+        let index = connected(&mut app, provider, "/a", "one");
+        let owner = app.sessions[index].key().unwrap();
+        app.refresh(index);
+        let resume = app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::Resume(_)))
+            .unwrap()
+            .0;
+        assert!(app.rename_session(index, &owner, " New title "));
+        let save = app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c,Command::Rename(k,t) if *k==owner && t=="New title"))
+            .unwrap()
+            .0;
+        assert!(!app.rename_session(index, &owner, "Second write"));
+        let other = connected(&mut app, provider, "/b", "one");
+        app.apply(Event::Completed(save, Err("offline".into())));
+        assert_eq!(app.sessions[index].title, "Original title");
+        assert!(app.sessions[other].error.is_none());
+        assert!(app.rename_session(index, &owner, "New title"));
+        let save = app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::Rename(..)))
+            .unwrap()
+            .0;
+        app.apply(Event::Completed(save, Ok(Reply::Done)));
+        app.apply(Event::Completed(
+            resume,
+            Ok(Reply::Session(summary(owner.scope.clone(), "one"))),
+        ));
+        let mut restored = Workspace::default();
+        restored.enable_store("/unused-in-reducer-test".into());
+        let load = restored.commands().pop().unwrap().0;
+        restored.apply(Event::Completed(
+            load,
+            Ok(Reply::Snapshot(Some(Box::new(app.snapshot())))),
+        ));
+        restored.apply(event(
+            "/a",
+            "one",
+            "old-rename",
+            "session.renamed",
+            json!({"title":"Automatic"}),
+        ));
+        for n in 1..=6 {
+            succeeded(&mut restored, index, n);
+        }
+        assert!(requests(&mut restored).is_empty());
+        assert_eq!(restored.sessions[index].title, "New title");
+        assert_eq!(restored.sessions[other].title, "Original title");
+    }
+}
