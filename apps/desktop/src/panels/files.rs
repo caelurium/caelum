@@ -160,7 +160,7 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
             .as_ref()
             .is_some_and(|f| f == &key || f == &close_key);
         let name = path.rsplit('/').next().unwrap_or(&path);
-        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0).clamp(100.0, 210.0);
+        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0).clamp(100.0, 190.0);
         let close = quiet_button(&glyphs::CLOSE, "Close file")
             .on_press(move |s: &mut Workspace| {
                 let c = live_mut(s)
