@@ -145,6 +145,7 @@ fn saved(scope: Scope, remote_id: Option<String>) -> SavedSession {
         remote_id,
         title: "Restored session".into(),
         title_refresh_turns: 0,
+        manual_title: false,
         options: Options::default(),
         draft: String::new(),
         attachments: vec![],
