@@ -172,7 +172,21 @@ pub(crate) const SCENES: &[Scene] = &[
     }),
     ("launcher", |s| scene(s, "launcher")),
     ("session", |s| scene(s, "session")),
-    ("fork", fork),
+    ("fork", |s| {
+        history(s, caelum_core::application::HistoryAction::Fork)
+    }),
+    ("edit-branch", |s| {
+        history(s, caelum_core::application::HistoryAction::Edit)
+    }),
+    ("rewind-checkpoint", |s| {
+        history(s, caelum_core::application::HistoryAction::Rewind)
+    }),
+    ("rename-session", |s| {
+        history(s, caelum_core::application::HistoryAction::Fork);
+        if let Some(index) = s.live.as_ref().and_then(|l| l.app.selected) {
+            crate::commands::rename(s, index);
+        }
+    }),
     ("timeline", |s| scene(s, "timeline")),
     ("usage", |s| scene(s, "usage")),
     ("stats", |s| scene(s, "stats")),
@@ -209,7 +223,7 @@ pub(crate) const SCENES: &[Scene] = &[
     }),
 ];
 
-fn fork(state: &mut Workspace) {
+fn history(state: &mut Workspace, action: caelum_core::application::HistoryAction) {
     use caelum_core::application::{Command, Event, Provider, Reply, Scope};
     use serde_json::json;
     let l = state.live.as_mut().unwrap();
@@ -220,7 +234,7 @@ fn fork(state: &mut Workspace) {
     });
     l.app.sessions[index].remote_id = Some("ses_fork_preview".into());
     l.sync_editors();
-    if !l.app.open_fork(index) {
+    if !l.app.open_history_action(index, action, None) {
         return;
     }
     let id = l
@@ -252,6 +266,24 @@ fn fork(state: &mut Workspace) {
     l.commands.owner = Some(index);
     l.commands.search.focused = true;
     l.panels.overlay = Some(panels::Screen::Fork);
+    if action == caelum_core::application::HistoryAction::Rewind {
+        let boundary = l.app.fork_picker().unwrap().points[1].boundary.clone();
+        l.app.fork_at(&boundary);
+        let id = l
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::CheckpointFiles(..)))
+            .unwrap()
+            .0;
+        l.app.apply(Event::Completed(
+            id,
+            Ok(Reply::CheckpointFiles(vec![
+                "src/sidebar.rs".into(),
+                "src/worktrees.rs".into(),
+            ])),
+        ));
+    }
 }
 
 fn completed_shell(state: &mut Workspace, output: bool) {
