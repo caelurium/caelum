@@ -246,6 +246,9 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
         ));
     }
     if !checkout.tabs.is_empty() {
+        // Keep a little scroll room after the last tab so focus-reveal can
+        // bring it fully inside the viewport on fractional-scale layouts.
+        tabs = tabs.child(rune::el().w(12.0));
         browser = browser.child(tabs).child(ui::divider(k));
     }
     let Some(path) = &checkout.selected_file else {
