@@ -19,7 +19,7 @@ for raw in sys.stdin:
         continue
     if method == 'initialize':
         assert params['capabilities']['experimentalApi'] is True
-        version = '0.142.0' if os.path.exists('old-codex') else '0.143.0'
+        version = '0.142.0' if os.path.exists('old-codex') else ('0.148.0' if os.path.exists('checkpoint-codex') else '0.143.0')
         result = {'userAgent': 'caelum/' + version + ' (test)'}
     elif method == 'thread/list':
         present = ('thread-existing' in archived) == params['archived'] and 'thread-existing' not in deleted
@@ -27,9 +27,16 @@ for raw in sys.stdin:
     elif method == 'thread/read':
         result = {'thread': {'id': params['threadId'], 'cwd': os.path.dirname(os.getcwd()) if params['threadId'] == 'foreign-thread' else os.getcwd(), 'gitInfo': {'branch': 'feature/sidebar'}, 'status': {'type': 'active' if os.path.exists('active-thread') else 'idle'}}}
     elif method == 'thread/fork':
-        assert params == {'threadId':'thread-existing','lastTurnId':'turn-a','excludeTurns':True,'cwd':os.getcwd()}
-        with open('fork-request', 'w') as f: f.write(params['lastTurnId'])
+        boundary = 'beforeTurnId' if os.path.exists('checkpoint-codex') else 'lastTurnId'
+        assert params == {'threadId':'thread-existing',boundary:'turn-a','excludeTurns':True,'cwd':os.getcwd()}
+        with open('fork-request', 'w') as f: f.write(params[boundary])
         result = {'thread': {'id':'thread-child','forkedFromId':'thread-existing','cwd':os.getcwd()}, 'model':'saved-model'}
+    elif method == 'thread/name/set':
+        assert params == {'threadId':'thread-existing','name':'Named café'}
+        result = {}
+    elif method == 'thread/revert':
+        assert params == {'threadId':'thread-existing','beforeTurnId':'turn-a'}
+        result = {'thread': {'id':params['threadId'],'cwd':os.getcwd(),'turns':[]}}
     elif method in ['thread/archive', 'thread/unarchive']:
         if os.path.exists('archive-error'):
             print(json.dumps({'id': request_id, 'error': {'code': -32000, 'message': 'archive unavailable'}}), flush=True)

@@ -201,6 +201,7 @@ impl Workspace {
         let session = &mut self.sessions[index];
         if session.scope.provider != Provider::OpenCode
             || session.generating
+            || session.rewinding()
             || prompt.trim().is_empty()
         {
             return false;
