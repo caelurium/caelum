@@ -160,11 +160,9 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
             .as_ref()
             .is_some_and(|f| f == &key || f == &close_key);
         let name = path.rsplit('/').next().unwrap_or(&path);
-        let available_tab_width = rune::memo::window_layout("file-tabs")
-            .map_or(120.0, |rect| (rect[2] - 40.0).clamp(80.0, 210.0));
-        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0)
-            .min(available_tab_width)
-            .max(80.0);
+        // Keep tabs narrower than the inspector's compact viewport. Scroll rows
+        // report their content extent here, which can exceed the visible clip.
+        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0).clamp(80.0, 120.0);
         let close = quiet_button(&glyphs::CLOSE, "Close file")
             .on_press(move |s: &mut Workspace| {
                 let c = live_mut(s)
