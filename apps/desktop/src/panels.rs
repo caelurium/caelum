@@ -55,6 +55,7 @@ pub enum Screen {
     Session,
     Sessions,
     Fork,
+    Rename,
     Timeline,
     Usage,
     Stats,
@@ -449,6 +450,7 @@ pub fn show(s: &mut Workspace, screen: Screen) {
         | Screen::Session
         | Screen::Sessions
         | Screen::Fork
+        | Screen::Rename
         | Screen::Timeline
         | Screen::Usage
         | Screen::Stats => live.panels.overlay = Some(screen),
