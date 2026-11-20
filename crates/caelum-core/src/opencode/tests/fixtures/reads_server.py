@@ -46,6 +46,7 @@ class Handler(BaseHTTPRequestHandler):
             'model': {'providerID': 'local', 'id': state.get('model', 'original'), 'variant': 'high'},
             'agent': 'build',
         }
+        if state.get('revert'): session['revert'] = state['revert']
         if path == '/api/event':
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
@@ -64,6 +65,25 @@ class Handler(BaseHTTPRequestHandler):
             self.reply({'data': [session]})
         elif path == '/api/session/ses_read' and self.command == 'GET':
             self.reply({'data': session})
+        elif path == '/api/session/ses_read' and self.command == 'PATCH' and 'title' in body:
+            assert body in [{'title': 'Named café'}, {'title': ''}]
+            self.reply({})
+        elif path == '/api/session/ses_read/revert/stage':
+            assert body['messageID'] == 'msg_before' and isinstance(body['files'], bool)
+            revert = {'messageID':body['messageID']}
+            if body['files']: revert['snapshot'] = 'snapshot'
+            with lock: config['revert'] = revert
+            self.reply({'data':revert})
+        elif path == '/api/session/ses_read/revert/commit':
+            assert state.get('revert')
+            if state.get('commit_error'):
+                self.reply({'error':'commit interrupted'}, 503)
+                return
+            with lock: config['revert'] = None
+            self.reply({})
+        elif path == '/api/session/ses_read/diff' and 'from' in parse_qs(url.query):
+            assert parse_qs(url.query) == {'from':['msg_before'],'to':['msg_latest_user'],'context':['0']}
+            self.reply({'data':[{'file':'src/example.rs','patch':'diff','additions':1,'deletions':0}]})
         elif path == '/api/session/ses_read/message':
             query = parse_qs(url.query)
             if query == {'order':['desc'],'limit':['1']}:
