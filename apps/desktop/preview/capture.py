@@ -80,6 +80,7 @@ scenes += ("composer-long", "composer-attachment-status", "composer-attachment-p
 scenes += ("models-settings",)
 scenes += ("fork",)
 scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create")
+scenes += ("edit-branch", "rewind-checkpoint", "rename-session")
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

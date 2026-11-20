@@ -5,6 +5,7 @@ const TURN_INTERVAL: u8 = 3;
 
 #[derive(Default)]
 pub(super) struct TitleState {
+    pub(super) manual: bool,
     /// Successful executions since the last request, capped to coalesce work.
     pub(super) turns: u8,
     /// Snapshots requested before a live rename must not restore an old title.
@@ -13,7 +14,9 @@ pub(super) struct TitleState {
 
 impl TitleState {
     pub(super) fn completed_turn(&mut self) {
-        self.turns = self.turns.saturating_add(1).min(TURN_INTERVAL);
+        if !self.manual {
+            self.turns = self.turns.saturating_add(1).min(TURN_INTERVAL);
+        }
     }
 }
 
@@ -21,6 +24,7 @@ impl Workspace {
     pub(super) fn refresh_title(&mut self, index: usize) {
         let session = &mut self.sessions[index];
         if session.scope.provider != Provider::OpenCode
+            || session.title_state.manual
             || session.title_state.turns < TURN_INTERVAL
             || session.archived
             || session.archiving
@@ -36,7 +40,7 @@ impl Workspace {
         if self
             .pending
             .values()
-            .any(|pending| matches!(pending, Pending::RegenerateTitle(_, owner) if *owner == key))
+            .any(|pending| matches!(pending, Pending::RegenerateTitle(_, owner) | Pending::ConversationControl(_,owner,super::controls::Operation::Rename(_)) if *owner == key))
         {
             return;
         }
