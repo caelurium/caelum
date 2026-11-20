@@ -8,6 +8,46 @@ use caelum_core::application::{ProjectMove, Task};
 use rune::El;
 use rune_kit::glyphs;
 
+pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
+    el.on_secondary_press(move |s: &mut Workspace, at, _| {
+        let id = id.clone();
+        let menu = Menu::new()
+            .item(Item::new("open", "Open VM conversation").icon(&ui::SERVER))
+            .item(
+                Item::new("new", "New session on this VM")
+                    .icon(&crate::PLUS)
+                    .enabled(live(s).app.can_start_vm_session(&id)),
+            )
+            .separator()
+            .item(
+                Item::new(
+                    "remove",
+                    if live(s)
+                        .app
+                        .remote
+                        .saved
+                        .checkouts
+                        .get(&id)
+                        .and_then(|c| c.machine())
+                        .is_some()
+                    {
+                        "Delete VM on Boat…"
+                    } else {
+                        "Remove from project…"
+                    },
+                )
+                .icon(&glyphs::CLOSE)
+                .enabled(live(s).app.can_remove_remote(&id)),
+            );
+        show(s, at, origin.clone(), menu, move |s, pick, _| match pick {
+            "open" => crate::remote::select(s, &id),
+            "new" => crate::remote::new_session(s, &id),
+            "remove" => crate::remote::request_removal(s, &id),
+            _ => {}
+        });
+    })
+}
+
 pub(crate) fn project(el: El, project: String) -> El {
     el.on_secondary_press(move |s: &mut Workspace, at, _| {
         let project = project.clone();
@@ -16,6 +56,7 @@ pub(crate) fn project(el: El, project: String) -> El {
         let menu = Menu::new()
             .item(Item::new("new", "New session").icon(&crate::PLUS))
             .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
+            .item(Item::new("remote", "Open on remote machine…").icon(&ui::SERVER))
             .separator()
             .item(
                 Item::new("up", "Move project up")
@@ -43,6 +84,7 @@ pub(crate) fn project(el: El, project: String) -> El {
                 tx.scroll_into_view(&origin);
             }
             "copy" => tx.copy(project.clone()),
+            "remote" => crate::remote::open(s, project.clone()),
             "close" => live_mut(s).close_project(&project),
             "reveal" => live_mut(s).app.task(Task::Reveal {
                 project: project.clone(),

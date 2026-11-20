@@ -22,6 +22,7 @@ pub use composer::{
 };
 pub use conversation::{Conversation, Entry, EntryKind};
 pub use export::ExportFormat;
+pub use feed::FeedSession;
 pub use feed::SessionScope;
 pub use inbox::{Inbox, InboxPrompt};
 pub use notifications::Notification;
@@ -32,11 +33,15 @@ pub use workspace::FilePreview;
 pub use workspace::ForkBoundary;
 pub use workspace::ForkPicker;
 pub use workspace::ForkPoint;
+pub use workspace::HandoffPhase;
+pub use workspace::HandoffSource;
 pub use workspace::HistoryAction;
 pub use workspace::Home;
 pub use workspace::HomeDraft;
 pub use workspace::ProjectMove;
 pub use workspace::Session;
+pub use workspace::VmDestination;
+pub use workspace::VmHandoff;
 pub use workspace::Workspace;
 
 use serde::{Deserialize, Serialize};
@@ -51,6 +56,13 @@ pub enum Provider {
 
 impl Provider {
     pub const ALL: [Self; 2] = [Self::Codex, Self::OpenCode];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::OpenCode => "OpenCode",
+        }
+    }
 
     pub fn as_str(self) -> &'static str {
         match self {

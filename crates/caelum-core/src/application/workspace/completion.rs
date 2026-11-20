@@ -10,6 +10,10 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::Remote(lane) = pending {
+            self.complete_remote(request, lane, result);
+            return;
+        }
         if let Pending::ConversationControl(i, owner, operation) = pending {
             self.finish_control(i, owner, operation, result);
             return;
@@ -162,7 +166,8 @@ impl Workspace {
                         self.durable_outgoing = commands;
                         self.persistence_error = Some(error);
                     }
-                    Pending::Home(_)
+                    Pending::Remote(_)
+                    | Pending::Home(_)
                     | Pending::ConversationControl(..)
                     | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
@@ -325,6 +330,7 @@ impl Workspace {
                     let snapshot = *snapshot;
                     self.saved = Some(snapshot.clone());
                     self.home.restore(snapshot.home);
+                    self.remote.saved = snapshot.remote;
                     self.managed_worktrees = snapshot.managed_worktrees;
                     self.preferences = snapshot.preferences;
                     for (project, saved) in &self.preferences.files {
@@ -356,6 +362,7 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
+                                session.vm_link = saved.vm_link;
                                 session.loaded = saved.remote_id.is_none();
                                 session.remote_id = saved.remote_id;
                                 session.title = saved.title;

@@ -160,7 +160,9 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
             .as_ref()
             .is_some_and(|f| f == &key || f == &close_key);
         let name = path.rsplit('/').next().unwrap_or(&path);
-        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0).clamp(100.0, 210.0);
+        // Keep tabs narrower than the inspector's compact viewport. Scroll rows
+        // report their content extent here, which can exceed the visible clip.
+        let width = (rune::text::measure(name, &[], k.ty.ui, None).0 + 62.0).clamp(80.0, 120.0);
         let close = quiet_button(&glyphs::CLOSE, "Close file")
             .on_press(move |s: &mut Workspace| {
                 let c = live_mut(s)
@@ -246,6 +248,9 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
         ));
     }
     if !checkout.tabs.is_empty() {
+        // Keep a little scroll room after the last tab so focus-reveal can
+        // bring it fully inside the viewport on fractional-scale layouts.
+        tabs = tabs.child(rune::el().w(12.0));
         browser = browser.child(tabs).child(ui::divider(k));
     }
     let Some(path) = &checkout.selected_file else {

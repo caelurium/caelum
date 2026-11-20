@@ -15,6 +15,7 @@ mod navigation;
 mod provider_errors;
 mod questions;
 mod redraw;
+mod remote;
 mod review;
 mod session_feed;
 mod sessions;

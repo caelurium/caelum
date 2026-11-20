@@ -1,10 +1,8 @@
 use super::live;
 use crate::{Workspace, quiet_button, ui};
 use caelum_core::application::presentation::ActivityKind;
-use rune::{El, col, icon, row, text};
+use rune::{El, icon, row, text};
 use rune_kit::{Kit, glyphs};
-
-pub(super) const HEIGHT: f32 = 88.0;
 
 pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count: usize) -> El {
     let l = live(s);
@@ -146,65 +144,23 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
                 .group_opacity(0.0, 1.0),
         );
     }
-    let item = k
-        .interactive(
-            col()
-                .w_full()
-                .h(HEIGHT - 4.0)
-                .px(10.0)
-                .py(8.0)
-                .gap(3.0)
-                .hover_group()
-                .child(
-                    row()
-                        .w_full()
-                        .gap(5.0)
-                        .center_y()
-                        .child(l.feed.badges.view(app, &session.scope.project, k))
-                        .child(
-                            text(project)
-                                .font(k.ty.small)
-                                .color(k.c.text_muted)
-                                .truncate()
-                                .min_w(0.0)
-                                .grow(1.0),
-                        )
-                        .children((!status.is_empty()).then_some(mark.a11y_hidden()))
-                        .child(
-                            text(provider)
-                                .font(rune::TextStyle::new(10.0, 400.0))
-                                .color(ink),
-                        )
-                        .child(
-                            text(&age)
-                                .key("session-age")
-                                .font(k.ty.small)
-                                .color(k.c.text_faint),
-                        ),
-                )
-                .child(
-                    text(&session.title)
-                        .font(k.ty.ui_medium)
-                        .color(k.c.text_base)
-                        .truncate()
-                        .w_full(),
-                )
-                .child(bottom),
-        )
-        .role("listitem")
-        .label(&session.title)
-        .description(format!("{project}, {branch}, {provider}, {status}, {age}"))
-        .help(format!(
-            "{}\n{branch}\n{provider} · {status}\n{}",
-            session.scope.project,
-            error.unwrap_or("")
-        ))
-        .focusable(true)
-        .focus_selected(selected)
-        .focus_group()
-        .focus_ring(1.0, 0.0, k.c.border_focus)
-        .position_in_set(position + 1, count)
-        .key(format!("live-session-{index}"))
-        .on_press(move |s: &mut Workspace| super::select(s, index));
+    let item = super::row::Card {
+        badge: l.feed.badges.view(app, &session.scope.project, k),
+        project,
+        title: &session.title,
+        provider,
+        age: &age,
+        ink,
+        mark: (!status.is_empty()).then_some(mark.a11y_hidden()),
+    }
+    .build(k, bottom, selected, position, count)
+    .description(format!("{project}, {branch}, {provider}, {status}, {age}"))
+    .help(format!(
+        "{}\n{branch}\n{provider} · {status}\n{}",
+        session.scope.project,
+        error.unwrap_or("")
+    ))
+    .key(format!("live-session-{index}"))
+    .on_press(move |s: &mut Workspace| super::select(s, index));
     crate::context::session(ui::selected_row(item, selected, k).mb(4.0), index)
 }

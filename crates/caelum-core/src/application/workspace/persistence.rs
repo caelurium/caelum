@@ -26,6 +26,7 @@ impl Workspace {
                     Command::Load(_)
                         | Command::Task(Task::Updates | Task::Update(_))
                         | Command::Cancel(_)
+                        | Command::Remote(crate::remote::Operation::Interrupt(..))
                         | Command::Task(
                             Task::Shell { .. }
                                 | Task::Git { .. }
@@ -118,6 +119,7 @@ impl Workspace {
                 let saved_index = session_indices.len();
                 session_indices.insert(index, saved_index);
                 Some(SavedSession {
+                    vm_link: s.vm_link.clone(),
                     last_activity: s.last_activity,
                     scope: s.scope.clone(),
                     remote_id: s.remote_id.clone(),
@@ -142,6 +144,7 @@ impl Workspace {
             .collect();
         Snapshot {
             version: 1,
+            remote: self.remote.saved.clone(),
             home: self.home.draft.clone(),
             projects: self.projects.clone(),
             selected: self

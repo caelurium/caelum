@@ -2,7 +2,7 @@ use rune::{El, TextStyle, col, row, text_input};
 use rune_kit::{ButtonVariant, Kit, Placement};
 
 use crate::context::EditMenu;
-use crate::select::{Choice, Select};
+use crate::select::{Choice, Select, choice_label};
 use crate::ui::Button;
 use crate::{SEND, STOP, Workspace, on_key, ui};
 
@@ -123,14 +123,20 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .child(submit);
     let pickers = pickers(s, k, layers).min_w(0.0);
     let usage_label = wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0);
-    let usage = crate::activity::context(s, k, index, usage_label);
+    let usage = row()
+        .center_y()
+        .gap(4.0)
+        .child(crate::remote::handoff_button(s, k, Some(index)))
+        .child(crate::activity::context(s, k, index, usage_label));
     let controls = if wide {
-        row()
-            .center_y()
-            .gap(12.0)
-            .child(pickers.grow(1.0))
-            .child(usage)
-            .child(actions)
+        row().center_y().gap(12.0).child(pickers.grow(1.0)).child(
+            row()
+                .center_y()
+                .self_end()
+                .gap(12.0)
+                .child(usage)
+                .child(actions),
+        )
     } else {
         col().gap(8.0).child(pickers.w_full()).child(
             row()
@@ -298,24 +304,6 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         }
     }
     content
-}
-
-fn choice_label(choice: &caelum_protocol::ProviderChoice) -> &str {
-    if choice.name != choice.id {
-        return &choice.name;
-    }
-    match choice.name.as_str() {
-        "none" => "None",
-        "minimal" => "Minimal",
-        "low" => "Low",
-        "medium" => "Medium",
-        "high" => "High",
-        "xhigh" => "Extra high",
-        "max" => "Maximum",
-        "build" => "Build",
-        "plan" => "Plan",
-        _ => &choice.name,
-    }
 }
 
 fn effort_choice(effort: &caelum_protocol::ProviderChoice) -> Choice {

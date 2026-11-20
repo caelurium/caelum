@@ -9,6 +9,7 @@ use caelum_protocol::{
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    Remote(crate::remote::Operation),
     Inbox(SessionKey),
     Enqueue(SessionKey, String, String),
     RemoveQueued(SessionKey, String),
@@ -56,6 +57,7 @@ pub enum Command {
         destination: String,
     },
     History(SessionKey, Option<String>),
+    HandoffChat(SessionKey),
     CodexControlHistory(SessionKey, crate::application::HistoryAction),
     Send(SessionKey, String, Options),
     Cancel(SessionKey),
@@ -74,6 +76,7 @@ pub struct OpenCodeMove {
 
 #[derive(Debug)]
 pub enum Reply {
+    Remote(crate::remote::Outcome),
     CheckpointFiles(Vec<String>),
     Inbox(Vec<serde_json::Value>),
     Generated(String),
@@ -99,6 +102,7 @@ pub enum Reply {
     SessionMoved(OpenCodeMove),
     Choices(ProviderChoices),
     History(SessionHistoryPage),
+    HandoffChat(crate::remote::Chat),
     Done,
 }
 

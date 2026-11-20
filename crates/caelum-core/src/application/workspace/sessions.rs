@@ -129,6 +129,7 @@ impl Workspace {
         if index >= self.sessions.len() || self.sessions[index].forgotten {
             return;
         }
+        self.remote.saved.selected = None;
         if self.selected != Some(index) {
             if let Some(previous) = self.selected {
                 self.dismiss_side_question(previous);

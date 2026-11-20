@@ -18,6 +18,7 @@ use super::{Options, Provider, SessionKey, Summary, Task};
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
 mod conversation;
+mod handoff;
 mod messages;
 mod opencode;
 
@@ -34,6 +35,7 @@ pub struct ProviderRuntime {
     pub approvals: ApprovalBroker,
     pub questions: QuestionBroker,
     pub processes: Arc<ProcessRegistry>,
+    remote: Arc<crate::remote::Backend>,
     pub worktrees: crate::worktrees::WorktreeClient,
     pub branches: Arc<Mutex<crate::session_branches::SessionBranches>>,
     pub(super) review_cache: Arc<Mutex<Option<crate::github::cache::Cache>>>,
@@ -53,6 +55,7 @@ impl Default for ProviderRuntime {
                 questions.clone(),
             ),
             processes,
+            remote: Arc::default(),
             approvals,
             questions,
             worktrees: crate::worktrees::WorktreeClient::new(
@@ -69,6 +72,7 @@ impl Default for ProviderRuntime {
 
 impl ProviderRuntime {
     pub fn shutdown(&self) {
+        self.remote.shutdown();
         self.updates.shutdown();
         self.approvals.shutdown();
         // Close registration first: an in-flight connection cannot leak a child
@@ -80,6 +84,7 @@ impl ProviderRuntime {
 
     fn execute(&self, command: &Command) -> Result<Reply, String> {
         let result = match command {
+            Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
                 return self
                     .opencode
@@ -417,6 +422,9 @@ impl ProviderRuntime {
                     .history_page(key, cursor.as_deref())
                     .map(Reply::History);
             }
+            Command::HandoffChat(key) => {
+                return self.handoff_chat(key).map(Reply::HandoffChat);
+            }
             Command::CodexControlHistory(key, action) => {
                 if key.scope.provider != Provider::Codex {
                     return Err("Expected a Codex session".into());
@@ -703,6 +711,7 @@ impl Runtime {
         let queue = if matches!(
             command,
             Command::Cancel(_)
+                | Command::Remote(crate::remote::Operation::Interrupt(..))
                 | Command::Task(Task::Shell { stop: true, .. })
                 | Command::Approve(..)
                 | Command::Answer(..)
@@ -714,6 +723,7 @@ impl Runtime {
             command,
             Command::Resume(_)
                 | Command::History(..)
+                | Command::HandoffChat(_)
                 | Command::CodexControlHistory(..)
                 | Command::Inbox(_)
         ) {

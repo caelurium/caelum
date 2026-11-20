@@ -17,6 +17,7 @@ use rune_kit::{Kit, MenuItem, glyphs};
 
 mod project;
 pub(crate) use project::project;
+pub(crate) use project::remote_checkout;
 
 type Choose = Box<dyn FnOnce(&mut Workspace, &str, &mut Tx)>;
 
@@ -39,6 +40,7 @@ struct Opened {
 #[derive(PartialEq, Eq)]
 struct Scope {
     session: Option<usize>,
+    remote: Option<(String, String)>,
     project: Option<String>,
     screen: panels::Screen,
     inspector: panels::Screen,
@@ -56,6 +58,14 @@ impl Scope {
     fn of(l: &Live) -> Self {
         Self {
             session: l.app.selected,
+            remote: l.app.remote.saved.selected.as_ref().and_then(|id| {
+                l.app
+                    .remote
+                    .saved
+                    .checkouts
+                    .get(id)
+                    .map(|c| (id.clone(), c.thread.editor_key(id).to_owned()))
+            }),
             project: l.app.active_project.clone(),
             screen: l.panels.screen,
             inspector: l.panels.inspector,
