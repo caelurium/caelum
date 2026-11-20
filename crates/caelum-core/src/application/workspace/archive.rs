@@ -156,6 +156,7 @@ impl Workspace {
         });
         let session = &mut self.sessions[index];
         if needs_answer
+            || session.control_busy()
             || session.working()
             || session.archiving
             || !session.queue.is_empty()
