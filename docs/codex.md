@@ -26,4 +26,13 @@ Archiving uses `thread/archive`; Undo uses `thread/unarchive`. Both validate the
 `lastTurnId`. The app checks the server version reported by `initialize` first:
 older CLIs can ignore unknown parameters and copy more history than requested.
 
+`/rename` uses `thread/name/set`. `/edit` requires Codex 0.145.0+ for the
+exclusive `beforeTurnId` fork boundary. `/rewind` uses `thread/revert` on
+paginated threads with Codex 0.148.0+; Caelum requests paginated history when
+creating threads on these versions. Older threads or unsupported servers may
+reject rewind; `/fork` remains available. Rewind verifies the checkout, idle
+state and the previewed history tip before acting on a turn ID. It changes
+conversation history only, never files. Export uses full `thread/turns/list`
+pages and can include only the items Codex persisted.
+
 The app-server command and protocol can change with Codex CLI releases. Live CLI/auth behavior should be checked with an installed Codex CLI in addition to the fake-server protocol and lifecycle tests.
