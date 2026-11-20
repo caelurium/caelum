@@ -7,23 +7,6 @@ use caelum_protocol::SessionHistoryPage;
 use std::collections::HashSet;
 
 impl ProviderRuntime {
-    pub(super) fn history_page(
-        &self,
-        key: &SessionKey,
-        cursor: Option<&str>,
-    ) -> Result<SessionHistoryPage, String> {
-        match key.scope.provider {
-            Provider::Codex => self
-                .codex
-                .session_history(&key.scope.project, &key.id, cursor)
-                .map_err(|e| e.to_string()),
-            Provider::OpenCode => self
-                .opencode
-                .session_history(&key.scope.project, &key.id, cursor)
-                .map_err(|e| e.to_string()),
-        }
-    }
-
     pub(super) fn handoff_chat(&self, key: &SessionKey) -> Result<Chat, String> {
         collect(key.scope.provider, |cursor| self.history_page(key, cursor))
     }
