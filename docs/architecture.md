@@ -48,18 +48,20 @@ filesystem registries. Settings owns the Boat connection; a checkout captures
 its account, machine ID, GitHub repository and branch. The local project path
 only groups the sidebar row. A saved creation attempt carries its idempotency
 key through provisioning; once Boat returns a machine, retries prepare that
-same machine. A one-repository environment puts the agent and remote Git in
-`/home/user/<repository>`. Caelum can create a dedicated environment and never
+same machine. In a single-repository environment Caelum resolves the physical
+Git worktree on the VM, verifies its GitHub origin and saves the directory for
+managed Git and native SSH. A new VM can fill a missing clone from its published
+base; attaching to an existing VM only verifies it. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
-On explicit Send, the remote composer captures the thread’s provider (`codex`
+On explicit Send, the managed Boat composer captures the thread’s provider (`codex`
 or `opencode`), optional Boat model ID and optional `reasoningEffort`.
 The pickers share the public SDK catalogue; only a concrete model’s advertised
 levels are selectable. Each default omits its request field. The public harness
 default does not identify the account’s configured model. Changing models
 clears effort; switching providers clears both overrides but keeps the conversation ID and event cursor;
-the accepted run records which provider authored its replies. Caelum does not
-install a VM bridge or connect to a native OpenCode session in the checkout.
+the accepted run records which provider authored its replies. This managed
+composer uses Boat’s integrated-agent API.
 Each send explicitly targets a new conversation or its saved Boat conversation ID.
 The core follows ascending event
 pages and uses `promptRun.done` to finish only after the last page. The account,
@@ -83,7 +85,24 @@ edits after review stay in the working directory. Push sends the reviewed
 commit to the verified GitHub origin without force. To bring it back to the
 laptop, fetch the branch in the local checkout.
 
-Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
+VM sessions use the same workspace, session slots, editors and sidebar as local
+sessions. The desktop resolves a saved checkout ID to its Boat account, machine,
+repository and verified Git root. It translates project ownership at the SSH
+boundary, leaving provider IDs and transcript content untouched. OpenSSH pins
+the host key returned by Boat each time it authorizes the workspace’s public key.
+One SSH master per checkout forwards the installed Codex WebSocket app-server
+on demand. SFTP reads files; SSH runs Git and `gh` on the VM.
+
+The Codex server survives detaching the desktop. A new connection verifies the
+checkout, subscribes again, restores pending provider requests and
+refreshes native histories. Only completions for that attachment are delivered;
+no prompt is replayed. Native IDs and drafts live in the main snapshot under
+their checkout identities. New handoffs populate a regular VM session, including
+the bounded chat on its first explicit send after rechecking the published base.
+Restored native OpenCode sessions retain their IDs and drafts without connecting
+a provider. Existing managed Boat chats retain their own conversation IDs.
+
+Local Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery
 for one checkout do not lock other checkouts. Release/shutdown retires in-flight

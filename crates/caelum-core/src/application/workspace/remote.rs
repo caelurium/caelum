@@ -6,6 +6,7 @@ mod harness;
 mod lifetime;
 mod link;
 mod models;
+mod native;
 mod removal;
 mod stats;
 #[cfg(test)]
@@ -25,6 +26,7 @@ pub(super) enum Lane {
     Handoff,
     ConfirmHandoff(Box<(crate::remote::Source, handoff::VmDestination)>),
     Checkout(String),
+    MatchCheckout(String, String),
     Delete(String, crate::remote::MachineId),
     Feed(String),
     Tool,
@@ -88,6 +90,15 @@ impl Workspace {
             Lane::Lifetime(id) => self.complete_lifetime(&id, request, result),
             Lane::Interrupt(id, run) => self.complete_interrupt(&id, request, &run, result),
             Lane::Checkout(id) => self.complete_checkout(&id, request, result),
+            Lane::MatchCheckout(id, project) => {
+                if matches!(self.remote.jobs.get(&id), Some(crate::remote::Job::Busy(active)) if *active==request)
+                    && self.remote.branch_checks.get(&id) == Some(&project)
+                    && matches!(result, Ok(Outcome::Prepared { .. }))
+                {
+                    self.remote.branch_checks.remove(&id);
+                }
+                self.complete_checkout(&id, request, result);
+            }
             Lane::Connection if matches!(self.remote.connection, Connection::Loading(id) if id == request) =>
             {
                 self.remote.connection = match result {
@@ -115,7 +126,7 @@ impl Workspace {
                     Ok(Outcome::Disconnected) => {
                         self.remote.inventory = None;
                         self.remote.tool = None;
-                        Connection::Idle
+                        Connection::SignedOut
                     }
                     Err(error) => Connection::Failed(error),
                     _ => Connection::Failed("Unexpected connection response".into()),

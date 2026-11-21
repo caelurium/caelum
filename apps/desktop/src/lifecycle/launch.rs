@@ -70,7 +70,8 @@ pub(crate) fn run() {
     let production = !fixtures && !evaluation && !design && latency_workload.is_none();
     #[cfg(target_os = "linux")]
     let _instance = if production {
-        match super::linux::start(handle.clone(), project.clone()) {
+        let store = caelum_core::application::Store::default_path();
+        match super::linux::start_for_state(handle.clone(), project.clone(), &store) {
             Ok(super::linux::Launch::Primary(instance)) => Some(instance),
             Ok(super::linux::Launch::Forwarded) => return,
             Err(error) => fail(&error),

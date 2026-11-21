@@ -88,8 +88,13 @@ pub(super) fn view(
         .min_h(0.0)
         .items_center()
         .scroll(ScrollSpec { stick_bottom: true });
+    let l = live(s);
+    if matches!(&l.remote.open_when_ready, Some((owner, caelum_core::remote::native::SessionIntent::New)) if owner == id)
+    {
+        return viewport;
+    }
     if count == 0 && pending.is_none() {
-        if super::setup::Dock::for_checkout(c) == super::setup::Dock::Setup {
+        if super::setup::Dock::for_checkout(l, id, c) == super::setup::Dock::Setup {
             return viewport;
         }
         return viewport.child(
@@ -117,7 +122,6 @@ pub(super) fn view(
     let thread = owner.to_owned();
     let rows_owner = thread.clone();
     let mut viewport = viewport;
-    let l = live(s);
     if l.remote
         .mounted
         .as_ref()

@@ -20,6 +20,7 @@ mod checkout_watch;
 mod conversation;
 mod handoff;
 mod messages;
+mod native;
 mod opencode;
 
 pub use messages::Command;
@@ -30,6 +31,7 @@ pub use messages::Reply;
 /// Shared by desktop adapters; constructing this does not start a provider.
 #[derive(Clone)]
 pub struct ProviderRuntime {
+    vm: Option<Arc<crate::remote::native::Access>>,
     pub codex: CodexProvider,
     pub opencode: OpenCodeProvider,
     pub approvals: ApprovalBroker,
@@ -48,6 +50,7 @@ impl Default for ProviderRuntime {
         let approvals = ApprovalBroker::default();
         let questions = QuestionBroker::default();
         Self {
+            vm: None,
             codex: CodexProvider::new(processes.clone(), approvals.clone(), questions.clone()),
             opencode: OpenCodeProvider::new(
                 processes.clone(),
@@ -71,7 +74,24 @@ impl Default for ProviderRuntime {
 }
 
 impl ProviderRuntime {
+    /// Persist Git attribution and review metadata beside the workspace that owns the reads.
+    pub(crate) fn open_metadata(&self, path: &std::path::Path) -> Result<(), String> {
+        *self.review_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(crate::github::cache::Cache::for_store(path));
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            let db = crate::database::WorkspaceDatabase::open(parent.join("branches.sqlite3"))
+                .map_err(|e| e.to_string())?;
+            *self.branches.lock().unwrap_or_else(|e| e.into_inner()) =
+                crate::session_branches::SessionBranches::new(Some(db));
+        }
+        Ok(())
+    }
+
     pub fn shutdown(&self) {
+        if let Some(vm) = &self.vm {
+            vm.live.store(false, Ordering::Release);
+        }
         self.remote.shutdown();
         self.updates.shutdown();
         self.approvals.shutdown();
@@ -82,6 +102,11 @@ impl ProviderRuntime {
     }
 
     fn execute(&self, command: &Command) -> Result<Reply, String> {
+        if let Some(vm) = &self.vm {
+            if let Some(result) = vm.checkout_command(command, &self.branches) {
+                return result;
+            }
+        }
         let result = match command {
             Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
@@ -166,18 +191,9 @@ impl ProviderRuntime {
             Command::Notify(_) => Err("Desktop notifications require a desktop handler".into()),
             Command::Task(task) => return task.execute(self).map(Reply::Task),
             Command::Load(store) => {
-                *self.review_cache.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some(crate::github::cache::Cache::for_store(&store.0));
                 store.migrate_default()?;
-                let snapshot = store.load()?;
-                if let Some(parent) = store.0.parent().filter(|p| !p.as_os_str().is_empty()) {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                    let database =
-                        crate::database::WorkspaceDatabase::open(parent.join("branches.sqlite3"))
-                            .map_err(|e| e.to_string())?;
-                    *self.branches.lock().unwrap_or_else(|e| e.into_inner()) =
-                        crate::session_branches::SessionBranches::new(Some(database));
-                }
+                let snapshot = store.load_workspace()?;
+                self.open_metadata(&store.0)?;
                 return Ok(Reply::Snapshot(snapshot.map(Box::new)));
             }
             Command::Save(store, state) => return store.save(state).map(|()| Reply::Done),
@@ -549,9 +565,12 @@ impl Runtime {
             Arc::new(move |command| backend.execute(command)),
             Arc::new(wake),
         );
-        providers
-            .updates
-            .observe(runtime.sender.clone(), runtime.wake.clone());
+        let local = providers.vm.is_none();
+        if local {
+            providers
+                .updates
+                .observe(runtime.sender.clone(), runtime.wake.clone());
+        }
         let branches = providers.branches.clone();
         runtime.forward(providers.codex.subscribe(), move |event| {
             let update = branches
@@ -562,16 +581,18 @@ impl Runtime {
                 .chain(update.map(Event::Branch))
                 .collect()
         });
-        let branches = providers.branches.clone();
-        runtime.forward(providers.opencode.subscribe(), move |event| {
-            let update = branches
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .opencode_event(&event);
-            std::iter::once(Event::OpenCode(event))
-                .chain(update.map(Event::Branch))
-                .collect()
-        });
+        if local {
+            let branches = providers.branches.clone();
+            runtime.forward(providers.opencode.subscribe(), move |event| {
+                let update = branches
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .opencode_event(&event);
+                std::iter::once(Event::OpenCode(event))
+                    .chain(update.map(Event::Branch))
+                    .collect()
+            });
+        }
         runtime.forward(providers.approvals.subscribe(), |value| {
             vec![Event::Approvals(value)]
         });
@@ -579,43 +600,8 @@ impl Runtime {
             vec![Event::Questions(value)]
         });
         runtime.providers = Some(providers);
-        {
-            let (updates, receiver) = mpsc::channel::<Vec<String>>();
-            let closed = runtime.closed.clone();
-            let sender = runtime.sender.clone();
-            let wake = runtime.wake.clone();
-            runtime.forwarders.push(thread::spawn(move || {
-                let Ok(mut watch) = checkout_watch::CheckoutWatch::new() else {
-                    return;
-                };
-                while !closed.load(Ordering::Acquire) {
-                    match receiver.recv_timeout(Duration::from_millis(350)) {
-                        Ok(mut projects) => {
-                            for latest in receiver.try_iter() {
-                                projects = latest;
-                            }
-                            watch.sync(projects.iter().cloned());
-
-                            watch
-                                .dirty
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .extend(projects);
-                        }
-                        Err(RecvTimeoutError::Timeout) => {}
-                        Err(RecvTimeoutError::Disconnected) => return,
-                    }
-                    let projects =
-                        std::mem::take(&mut *watch.dirty.lock().unwrap_or_else(|e| e.into_inner()));
-                    for project in projects {
-                        if sender.send(Event::Checkout(project)).is_err() {
-                            return;
-                        }
-                        wake();
-                    }
-                }
-            }));
-            runtime.checkout_watch = Some(updates);
+        if local {
+            runtime.start_checkout_watch();
         }
         runtime
     }
@@ -702,7 +688,13 @@ impl Runtime {
         }));
     }
 
-    pub fn submit(&mut self, id: u64, command: Command) -> Result<(), String> {
+    pub fn submit(&mut self, id: u64, mut command: Command) -> Result<(), String> {
+        if crate::remote::native::Binding::owner(&mut command)
+            .and_then(|p| crate::remote::native::checkout_id(p))
+            .is_some()
+        {
+            return Err("A VM checkout action requires its SSH connection.".into());
+        }
         if self.closed.load(Ordering::Acquire) {
             return Err("Application is shutting down".into());
         }

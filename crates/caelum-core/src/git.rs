@@ -20,7 +20,7 @@ use paths::{
     git_path_string, project_relative_prefix, validate_project_relative_path, validate_scoped_file,
 };
 
-const PORCELAIN_STATUS_ARGS: &[&str] = &[
+pub(crate) const PORCELAIN_STATUS_ARGS: &[&str] = &[
     "status",
     "--porcelain=v2",
     "-z",
@@ -103,7 +103,7 @@ impl GitClient {
         }))
     }
 
-    pub(crate) fn published_source(&self, path: &str) -> Result<(String, String), String> {
+    pub(crate) fn github_origin(&self, path: &str) -> Result<String, String> {
         let project = Project::open(path).map_err(|e| e.to_string())?;
         let read = |args: &[&str]| {
             self.run(&project, args)
@@ -111,13 +111,9 @@ impl GitClient {
                 .filter(|o| o.status.success())
                 .map(|o| output_text(&o.stdout).trim().to_owned())
         };
-        let repo = read(&["remote", "get-url", "origin"])
+        read(&["remote", "get-url", "origin"])
             .and_then(|url| crate::remote::github_slug(&url))
-            .ok_or("A GitHub origin is required to open this project on Boat")?;
-        let base = read(&["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
-            .and_then(|r| r.strip_prefix("origin/").map(str::to_owned))
-            .unwrap_or_else(|| "main".into());
-        Ok((repo, base))
+            .ok_or_else(|| "A GitHub origin is required to open this project on Boat".into())
     }
 
     pub fn file_diff(
@@ -432,7 +428,7 @@ impl GitClient {
     }
 }
 
-fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError> {
+pub(crate) fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError> {
     let mut changes = Vec::new();
     let mut offset = 0;
     while offset < output.len() {

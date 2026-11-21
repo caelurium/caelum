@@ -29,10 +29,15 @@ impl Backend {
         });
         rt.as_ref().map_err(Clone::clone)?.block_on(async {
             let mut closed = self.closed.subscribe();
+            let timeout = if matches!(op, Operation::Prepare(_, _, Some(_))) {
+                390
+            } else {
+                90
+            };
             tokio::select! {
                 biased;
                 _ = closed.wait_for(|v| *v) => Err("Remote connection closed".into()),
-                result = tokio::time::timeout(Duration::from_secs(90), self.perform(op)) =>
+                result = tokio::time::timeout(Duration::from_secs(timeout), self.perform(op)) =>
                     result.map_err(|_| "Boat did not respond in time".to_owned())?,
             }
         })
@@ -57,7 +62,17 @@ impl Backend {
                 .map(super::models::model_lists)
                 .map(Outcome::Models)
                 .map_err(api),
-            Operation::Delete(key) => self.connected().await?.delete(key).await,
+            Operation::Delete(key) => {
+                let confirmed = self.connected().await?.delete(key).await?;
+                if let Outcome::Deleted(id) = &confirmed {
+                    if let Err(e) =
+                        super::native::retire(&crate::application::Store::default_path(), id)
+                    {
+                        eprintln!("Could not retire the deleted VM's native workspace: {e}");
+                    }
+                }
+                Ok(confirmed)
+            }
             Operation::Stats(key) => self.connected().await?.stats(key).await.map(Outcome::Stats),
             Operation::Git(target, action) => self
                 .connected()
@@ -96,21 +111,52 @@ impl Backend {
             Operation::Discover(project) | Operation::DiscoverHandoff(project) => self
                 .connected()
                 .await?
-                .discover(project, matches!(op, Operation::DiscoverHandoff(_)))
+                .discover(project)
                 .await
                 .map(Outcome::Source),
+            Operation::MatchCheckout(project, target) => {
+                let git = crate::git::GitClient::new();
+                if !git
+                    .github_origin(project)?
+                    .eq_ignore_ascii_case(&target.repository)
+                {
+                    return Err("The VM checkout has a different GitHub origin.".into());
+                }
+                let base = git.handoff_base(project).await?;
+                let mut target = target.clone();
+                target.required_base = Some(base.clone());
+                self.connected()
+                    .await?
+                    .prepare(&target, &base.branch, None)
+                    .await
+            }
             Operation::Lifetime(key, lifetime) => self
                 .connected()
                 .await?
                 .lifetime(key, *lifetime)
                 .await
                 .map(Outcome::Lifetime),
-            Operation::Create(source, plan) => self
-                .connected()
-                .await?
-                .create(source, plan)
-                .await
-                .map(Outcome::Machine),
+            Operation::Create(source, plan) => {
+                if let Some(tip) = &source.published_tip {
+                    let git = crate::git::GitClient::new();
+                    let actual = git.handoff_base(&source.project).await?;
+                    if actual.branch != source.base
+                        || actual.tip != *tip
+                        || !git
+                            .github_origin(&source.project)?
+                            .eq_ignore_ascii_case(&source.repository)
+                    {
+                        return Err(
+                            "The checkout or its published branch changed. Reopen VM setup.".into(),
+                        );
+                    }
+                }
+                self.connected()
+                    .await?
+                    .create(source, plan)
+                    .await
+                    .map(Outcome::Machine)
+            }
             Operation::Prepare(target, base, branch) => {
                 self.connected()
                     .await?

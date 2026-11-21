@@ -40,11 +40,7 @@ pub(super) fn all(s: &Workspace) -> Vec<Model> {
         return Vec::new();
     };
     let scope = owner.scope();
-    let favorites = l
-        .app
-        .preferences
-        .favorite_models
-        .get(scope.provider.as_str());
+    let favorites = l.app.favorite_models(scope);
     let mut models: Vec<_> = l
         .app
         .choices
@@ -89,12 +85,7 @@ pub(super) fn all(s: &Workspace) -> Vec<Model> {
     let current = match owner {
         Owner::Home(_) => home_options.model.as_ref(),
         Owner::Session(index, _) => l.app.sessions[*index].options.model.as_ref(),
-        Owner::Defaults(scope) => l
-            .app
-            .preferences
-            .providers
-            .get(scope.provider.as_str())
-            .and_then(|o| o.model.as_ref()),
+        Owner::Defaults(scope) => l.app.provider_options(scope).and_then(|o| o.model.as_ref()),
     };
     for id in favorites.into_iter().flatten().chain(current) {
         if !models.iter().any(|m| &m.id == id) {

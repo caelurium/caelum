@@ -1,13 +1,14 @@
 mod handoff;
+mod native;
 
 use crate::{
     application::{Command, Event, Reply, Workspace},
-    remote::*,
+    remote::{native::SessionIntent, *},
 };
 
 fn source() -> Source {
     Source {
-        published_tip: None,
+        published_tip: Some("a".repeat(40)),
         project: "/local/project".into(),
         repository: "example/project".into(),
         account: "owner".into(),
@@ -17,15 +18,7 @@ fn source() -> Source {
 }
 fn created(app: &mut Workspace) -> (String, u64, Plan) {
     app.remote.picker = Some(Picker::Ready(source()));
-    let id = app
-        .create_remote(
-            "main",
-            "feat/new",
-            Size::Small,
-            Lifetime::HalfHour,
-            crate::application::Provider::OpenCode,
-        )
-        .unwrap();
+    let id = app.create_remote(Size::Small, Lifetime::HalfHour).unwrap();
     let (req, Command::Remote(Operation::Create(_, plan))) = app.commands().pop().unwrap() else {
         panic!()
     };
@@ -41,6 +34,14 @@ fn machine(id: &str) -> Machine {
         name: "dev".into(),
         state: "idle".into(),
         auto_stop_unix: None,
+    }
+}
+
+fn prepared_vm(machine: Machine, branch: impl Into<String>) -> Outcome {
+    Outcome::Prepared {
+        machine,
+        branch: branch.into(),
+        root: "/workspace/checkout".into(),
     }
 }
 
@@ -64,10 +65,7 @@ fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_swi
     let (id, req, _) = created(&mut app);
     app.apply(Event::Completed(
         req,
-        Ok(Reply::Remote(Outcome::Prepared(
-            machine("vm"),
-            "feat/boat".into(),
-        ))),
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "feat/boat"))),
     ));
     let prior = app.selected_feed_session().unwrap();
     let c = app.remote.saved.checkouts.get_mut(&id).unwrap();
@@ -118,9 +116,9 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         account: vm.key.account.clone(),
         machines: vec![vm.clone()],
     });
-    let attach = |app: &mut Workspace, provider| {
+    let attach = |app: &mut Workspace, intent| {
         app.remote.picker = Some(Picker::Ready(source()));
-        app.attach_remote(vm.clone(), provider)
+        app.attach_remote(vm.clone(), intent)
     };
     let prepared = |app: &mut Workspace| {
         let cmds = app.commands();
@@ -130,18 +128,11 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         assert_eq!(t.machine, vm.key);
         app.apply(Event::Completed(
             *req,
-            Ok(Reply::Remote(Outcome::Prepared(
-                vm.clone(),
-                "existing".into(),
-            ))),
+            Ok(Reply::Remote(prepared_vm(vm.clone(), "existing"))),
         ));
     };
-    let id = attach(&mut app, Some(Provider::Codex)).unwrap();
-    assert_eq!(
-        app.remote.saved.checkouts[&id].thread.provider,
-        Provider::Codex
-    );
-    assert!(attach(&mut app, Some(Provider::OpenCode)).is_none());
+    let id = attach(&mut app, SessionIntent::New).unwrap();
+    assert!(attach(&mut app, SessionIntent::New).is_none());
     prepared(&mut app);
     app.remote
         .saved
@@ -150,7 +141,7 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         .unwrap()
         .thread
         .draft = "Unsent".into();
-    assert_eq!(attach(&mut app, None), Some(id.clone()));
+    assert_eq!(attach(&mut app, SessionIntent::Reopen), Some(id.clone()));
     prepared(&mut app);
     let original = app.remote.saved.checkouts[&id].thread.clone();
     assert_eq!(original.draft, "Unsent");
@@ -159,14 +150,26 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         repository: "example/different".into(),
         ..source()
     }));
-    assert!(app
-        .attach_remote(vm.clone(), Some(Provider::OpenCode))
-        .is_none());
-    assert_eq!(attach(&mut app, Some(Provider::OpenCode)), Some(id.clone()));
+    assert!(app.attach_remote(vm.clone(), SessionIntent::New).is_none());
+    assert_eq!(attach(&mut app, SessionIntent::New), Some(id.clone()));
+    assert!(app.open_vm_session(&id, SessionIntent::New).is_none());
+    let cmds = app.commands();
+    let [(req, Command::Remote(Operation::MatchCheckout(project, target)))] = cmds.as_slice()
+    else {
+        panic!("{cmds:?}")
+    };
+    assert_eq!(project, &source().project);
+    assert_eq!(target.machine, vm.key);
+    app.apply(Event::Completed(
+        *req,
+        Ok(Reply::Remote(prepared_vm(vm.clone(), "main"))),
+    ));
+    let index = app.open_vm_session(&id, SessionIntent::New).unwrap();
     let c = &app.remote.saved.checkouts[&id];
-    assert_eq!(c.thread.provider, Provider::OpenCode);
-    assert!(c.thread.draft.is_empty() && c.thread.conversation.is_none());
-    assert_eq!(c.other_threads, vec![original]);
+    assert_eq!(c.thread, original);
+    assert!(c.other_threads.is_empty());
+    assert_eq!(app.sessions[index].scope.provider, Provider::Codex);
+    assert!(app.sessions[index].remote_id.is_none() && app.sessions[index].draft.is_empty());
     assert!(app.commands().is_empty());
 }
 
@@ -185,6 +188,29 @@ fn pending_vm_plans_preserve_old_timers_and_require_explicit_manual_stop() {
 }
 
 #[test]
+fn a_late_branch_match_cannot_admit_a_new_launch_or_block_reopening_saved_work() {
+    let mut app = Workspace::default();
+    let (id, r, _) = created(&mut app);
+    app.apply(Event::Completed(
+        r,
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "main"))),
+    ));
+    app.check_vm_destination(&id, "/tree/a".into());
+    let (old, _) = app.commands().pop().unwrap();
+    app.check_vm_destination(&id, "/tree/b".into());
+    let (new, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(
+        old,
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "main"))),
+    ));
+    assert!(app.open_vm_session(&id, SessionIntent::New).is_none());
+    app.apply(Event::Completed(new, Err("VM is on main".into())));
+    app.dismiss_vm_destination(&id);
+    assert!(app.open_vm_session(&id, SessionIntent::Reopen).is_some());
+    assert!(app.sessions.iter().all(|s| s.remote_id.is_none()));
+}
+
+#[test]
 fn the_vm_folder_chooser_discovers_only_the_current_validated_project_without_starting_a_local_session(
 ) {
     use caelum_protocol::ProjectInfo;
@@ -197,6 +223,8 @@ fn the_vm_folder_chooser_discovers_only_the_current_validated_project_without_st
             .unwrap()
     };
     let old = choose(&mut app, "/alias/old");
+    app.project_roots
+        .insert("/projects/new".into(), "/projects/main".into());
     let new = choose(&mut app, "/alias/new");
     let resolved = |req, path: &str| {
         Event::Completed(
@@ -246,12 +274,12 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
     };
     assert_eq!(
         (target.machine.id.as_str(), base.as_str(), branch.as_str()),
-        ("vm-a", "main", "feat/new")
+        ("vm-a", "main", "main")
     );
     let (other, _, _) = created(&mut restored);
     restored.apply(Event::Completed(
         prepare,
-        Ok(Reply::Remote(Outcome::Prepared(machine("vm-a"), branch))),
+        Ok(Reply::Remote(prepared_vm(machine("vm-a"), branch))),
     ));
     assert_eq!(restored.remote.saved.selected.as_ref(), Some(&other));
     assert!(matches!(
@@ -264,6 +292,14 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
     ));
     assert!(restored.active_project.is_none());
     assert!(restored.sessions.is_empty());
+    let mut reopened = Workspace::default();
+    reopened.remote.saved = restored.snapshot().remote;
+    reopened.select_remote(&id);
+    assert!(matches!(
+        reopened.commands().as_slice(),
+        [(_, Command::Remote(Operation::Prepare(target, _, None)))]
+            if target.machine.id == "vm-a" && target.root.as_deref() == Some("/workspace/checkout")
+    ));
 }
 
 #[test]
@@ -275,12 +311,11 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         |app: &mut Workspace, req, out| app.apply(Event::Completed(req, Ok(Reply::Remote(out))));
     finish(&mut app, req, Outcome::Machine(machine("vm-a")));
     let (req, _) = app.commands().pop().unwrap();
-    finish(
-        &mut app,
-        req,
-        Outcome::Prepared(machine("vm-a"), "feat/new".into()),
+    finish(&mut app, req, prepared_vm(machine("vm-a"), "feat/new"));
+    assert_eq!(
+        app.remote.saved.checkouts[&id].thread.provider,
+        Provider::Codex
     );
-    assert!(app.set_vm_provider(&id, &id, Provider::Codex));
     assert!(app.send_remote(&id, "Edit a file"));
     let saved_before_ack = app.snapshot();
     let (
@@ -329,11 +364,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             serde_json::from_value(serde_json::to_value(snapshot.remote).unwrap()).unwrap();
         reopened.select_remote(&id);
         let (req, _) = reopened.commands().pop().unwrap();
-        finish(
-            &mut reopened,
-            req,
-            Outcome::Prepared(machine("vm-a"), "feat/new".into()),
-        );
+        finish(&mut reopened, req, prepared_vm(machine("vm-a"), "feat/new"));
         let mut work = reopened.commands();
         assert!(!reopened.set_vm_provider(&id, &id, Provider::OpenCode));
         if known {
@@ -395,10 +426,7 @@ fn only_the_visible_monitor_polls_and_stale_samples_cannot_stop_a_new_attempt() 
     let (req, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(
         req,
-        Ok(Reply::Remote(Outcome::Prepared(
-            machine("vm-a"),
-            "feat/new".into(),
-        ))),
+        Ok(Reply::Remote(prepared_vm(machine("vm-a"), "feat/new"))),
     ));
     let now = Instant::now();
     assert!(app.monitor_remote(None, now).is_none() && app.commands().is_empty());

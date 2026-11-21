@@ -8,7 +8,7 @@ use crate::{files, git::GitClient, github};
 use caelum_protocol::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Task {
     Shell {
         project: String,
@@ -16,6 +16,7 @@ pub enum Task {
         id: String,
         stop: bool,
     },
+    #[serde(skip)]
     Reveal {
         project: String,
         path: String,
@@ -24,7 +25,9 @@ pub enum Task {
         project: String,
         bytes: Vec<u8>,
     },
+    #[serde(skip)]
     Updates,
+    #[serde(skip)]
     Update(crate::updates::Job),
     Image {
         project: String,
@@ -131,15 +134,18 @@ pub enum Task {
         url: String,
         head: String,
     },
+    #[serde(skip)]
     ImportSettings {
         path: String,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum TaskReply {
     Shell(String),
+    #[serde(skip)]
     Updates(UpdateCheck),
+    #[serde(skip)]
     Update(crate::updates::Reply),
     Image(String),
     Usage(serde_json::Value),
@@ -157,8 +163,42 @@ pub enum TaskReply {
     ReviewFiles(GitHubPullRequestFiles),
     Feedback(GitHubPullRequestFeedback),
     AutoMerge(GitHubAutoMergeResult),
+    #[serde(skip)]
     Preferences(Preferences),
     Done,
+}
+
+macro_rules! project_field {
+    ($task:expr) => {
+        match $task {
+            Task::Shell { project, .. }
+            | Task::Completions { project, .. }
+            | Task::Image { project, .. }
+            | Task::EncodeImage { project, .. }
+            | Task::Reveal { project, .. }
+            | Task::Usage { project }
+            | Task::Stats { project, .. }
+            | Task::AttachPullRequest { project, .. }
+            | Task::Directory { project, .. }
+            | Task::File { project, .. }
+            | Task::Search { project, .. }
+            | Task::Git { project }
+            | Task::Diff { project, .. }
+            | Task::Worktrees { project, .. }
+            | Task::CreateWorktree { project, .. }
+            | Task::RemoveWorktree { project, .. }
+            | Task::RenameWorktree { project, .. }
+            | Task::Discover { project, .. }
+            | Task::Details { project, .. }
+            | Task::ReviewCache { project, .. }
+            | Task::ReviewFiles { project, .. }
+            | Task::Feedback { project, .. }
+            | Task::Merge { project, .. }
+            | Task::SetAutoMerge { project, .. }
+            | Task::UpdateBranch { project, .. } => Some(project),
+            Task::ImportSettings { .. } | Task::Updates | Task::Update(_) => None,
+        }
+    };
 }
 
 impl Task {
@@ -169,34 +209,10 @@ impl Task {
         )
     }
     pub fn project(&self) -> &str {
-        match self {
-            Self::Shell { project, .. } => project,
-            Self::Completions { project, .. }
-            | Self::Image { project, .. }
-            | Self::EncodeImage { project, .. }
-            | Self::Reveal { project, .. } => project,
-            Self::Usage { project }
-            | Self::Stats { project, .. }
-            | Self::AttachPullRequest { project, .. } => project,
-            Self::Directory { project, .. }
-            | Self::File { project, .. }
-            | Self::Search { project, .. }
-            | Self::Git { project }
-            | Self::Diff { project, .. }
-            | Self::Worktrees { project, .. }
-            | Self::CreateWorktree { project, .. }
-            | Self::RemoveWorktree { project, .. }
-            | Self::RenameWorktree { project, .. }
-            | Self::Discover { project, .. }
-            | Self::Details { project, .. }
-            | Self::ReviewCache { project, .. }
-            | Self::ReviewFiles { project, .. }
-            | Self::Feedback { project, .. }
-            | Self::Merge { project, .. }
-            | Self::SetAutoMerge { project, .. }
-            | Self::UpdateBranch { project, .. } => project,
-            Self::ImportSettings { .. } | Self::Updates | Self::Update(_) => "",
-        }
+        project_field!(self).map_or("", String::as_str)
+    }
+    pub(crate) fn project_mut(&mut self) -> Option<&mut String> {
+        project_field!(self)
     }
     pub fn review(&self) -> Option<(&str, Option<&str>)> {
         match self {

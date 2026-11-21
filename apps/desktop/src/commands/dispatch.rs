@@ -11,6 +11,9 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     let Some(index) = live(s).app.selected else {
         return false;
     };
+    if !live(s).app.sessions[index].scope.provider_available() {
+        return false;
+    }
     let input = live(s).drafts[index].text.clone();
     let command = match LocalCommand::parse(&input, live(s).app.sessions[index].scope.provider) {
         Ok(Some(command)) => command,

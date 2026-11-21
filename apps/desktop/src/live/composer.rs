@@ -74,7 +74,8 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .icon(if queued { &ui::QUEUE } else { &SEND })
         .variant(ButtonVariant::Contrast)
         .disabled(
-            !session.can_submit()
+            !crate::remote::native::ready(live)
+                || !session.can_submit()
                 || (!queued && !session.can_send())
                 || (draft.text.trim().is_empty() && session.attachments.is_empty()),
         )
@@ -208,7 +209,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .prominent()
             .placement(Placement::TopStart)
             .open(live.models.is_open())
-            .disabled(session.archived || session.archiving)
+            .disabled(session.archived || session.archiving || !session.scope.provider_available())
             .on_toggle(|s: &mut Workspace| crate::models::open(s, None))
             .trigger(k)
             .max_w(maximum.min(220.0))

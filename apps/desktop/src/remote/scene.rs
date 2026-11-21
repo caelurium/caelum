@@ -4,6 +4,10 @@ use caelum_core::remote::*;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) fn scene(s: &mut Workspace, name: &str) {
+    if matches!(name, "native-connected" | "native-offline") {
+        super::native::scene(s, name == "native-offline");
+        return;
+    }
     let l = live_mut(s);
     let source = Source {
         project: l.app.projects[0].path.clone(),
@@ -17,7 +21,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             "main"
         }
         .into(),
-        published_tip: (name == "remote-handoff").then(|| "a".repeat(40)),
+        published_tip: Some("a".repeat(40)),
         environment: (name != "remote-create").then(|| "project".into()),
     };
     let machine = Machine {
@@ -83,7 +87,9 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     l.app.active_project = None;
     l.app.remote.saved.selected = Some(id.clone());
     let mut c = Checkout {
+        defaults: None,
         source,
+        root: Some("/home/user/project".into()),
         phase: Phase::Ready {
             machine: machine.clone(),
             branch: "feat/remote-checkout".into(),

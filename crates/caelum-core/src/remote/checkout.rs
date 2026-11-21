@@ -9,14 +9,14 @@ pub struct Source {
     pub account: String,
     pub repository: String,
     pub base: String,
-    /// The published tip captured from the session's exact worktree for a handoff.
+    /// The published tip captured from the selected worktree before provisioning.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_tip: Option<String>,
     pub environment: Option<String>,
 }
 
 impl Source {
-    /// Standalone creates use a new name. Only a confirmed handoff can reuse the base name.
+    /// Older persisted plans may name a separate working branch.
     pub(crate) fn valid_plan_branch(&self, branch: &str) -> bool {
         valid_branch(&self.base)
             && valid_branch(branch)
@@ -62,6 +62,11 @@ pub enum Phase {
 pub struct Checkout {
     pub source: Source,
     pub phase: Phase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defaults: Option<ProviderDefaults>,
+    /// Canonical Git worktree on this VM. Older snapshots resolve it on refresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
     #[serde(default)]
     pub thread: super::Thread,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -70,7 +75,25 @@ pub struct Checkout {
     pub pinned_stats: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProviderDefaults {
+    pub(crate) provider: crate::application::Provider,
+    pub(crate) options: BTreeMap<String, crate::application::Options>,
+    pub(crate) favorites: BTreeMap<String, Vec<String>>,
+}
+
 impl Checkout {
+    pub fn native_target(&self) -> Option<super::native::NativeTarget> {
+        let target = super::native::NativeTarget {
+            machine: self.machine()?.key.clone(),
+            repository: self.source.repository.clone(),
+            checkout_root: self.root.clone()?,
+        };
+        target.root().ok()?;
+        Some(target)
+    }
+
     pub(crate) fn open_thread(&mut self, mut thread: super::Thread) {
         thread.record_activity();
         let prior = std::mem::replace(&mut self.thread, thread);
@@ -103,12 +126,22 @@ impl Checkout {
         Some(Target {
             machine: self.machine()?.key.clone(),
             repository: self.source.repository.clone(),
+            root: self.root.clone(),
             required_base: self
                 .thread
                 .continued
                 .as_ref()
                 .filter(|_| self.thread.conversation.is_none())
-                .and_then(|c| c.base.clone()),
+                .and_then(|c| c.base.clone())
+                .or_else(|| {
+                    if self.root.is_some() || !matches!(self.phase, Phase::Prepare { .. }) {
+                        return None;
+                    }
+                    Some(PublishedBase {
+                        branch: self.source.base.clone(),
+                        tip: self.source.published_tip.clone()?,
+                    })
+                }),
         })
     }
 }
@@ -117,7 +150,16 @@ impl Checkout {
 pub struct Target {
     pub machine: MachineId,
     pub repository: String,
+    pub root: Option<String>,
     pub required_base: Option<PublishedBase>,
+}
+
+pub(super) fn valid_root(path: &str) -> bool {
+    path.len() <= 4096
+        && !path.chars().any(char::is_control)
+        && path
+            .strip_prefix('/')
+            .is_some_and(|p| p.split('/').all(|part| !matches!(part, "" | "." | "..")))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -154,6 +196,8 @@ impl VmLink {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Saved {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub(crate) imported_profiles: std::collections::BTreeSet<String>,
     pub checkouts: BTreeMap<String, Checkout>,
     pub selected: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

@@ -5,6 +5,7 @@ use serde_json::Value;
 use super::Provider;
 
 mod failure;
+mod handoff;
 mod opencode;
 mod reconciliation;
 pub(super) mod shells;
@@ -82,6 +83,7 @@ pub struct Conversation {
     pub used_tokens: Option<u64>,
     pub context_window: Option<u64>,
     pub usage_model: Option<String>,
+    handoff_prefix: Option<String>,
     usage_at: u64,
     step_started: Option<(String, u64)>,
     step_model: Option<String>,

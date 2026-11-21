@@ -56,12 +56,15 @@ pub(crate) fn group(
                 else {
                     return col();
                 };
-                let ready = app.can_start_vm_session(id);
+                let ready = !matches!(
+                    app.remote.jobs.get(id),
+                    Some(caelum_core::remote::Job::Deleting(_))
+                );
                 let owner = id.clone();
-                ui::choice(&machine.name, branch, false, &kit)
+                ui::choice(&machine.name, &format!("Codex · {branch}"), false, &kit)
                     .disabled(!ready)
                     .focusable(ready)
-                    .label(format!("New session on VM {}", machine.name))
+                    .label(format!("New Codex session on VM {}", machine.name))
                     .on_press(move |s: &mut Workspace| super::new_session(s, &owner))
             },
         )

@@ -4,17 +4,71 @@ use crate::{
     panels::Screen,
     ui,
 };
-use caelum_core::remote::VmLink;
+use caelum_core::remote::{VmLink, native::SessionIntent};
 use rune::{El, Tx};
 use rune_kit::Kit;
 use std::time::Instant;
 
+/// Home's chosen worktree can differ from the conversation behind it.
+pub(super) fn launch_source(l: &Live) -> Option<&str> {
+    let project = match l.panels.screen {
+        Screen::Home => l.app.home.draft.project.as_deref()?,
+        Screen::Remote => {
+            let id = l.app.remote.saved.selected.as_ref()?;
+            return Some(&l.app.remote.saved.checkouts.get(id)?.source.project);
+        }
+        _ => l.app.active_project.as_deref()?,
+    };
+    Some(
+        l.app
+            .native_checkout(project)
+            .map_or(project, |c| &c.source.project),
+    )
+}
+
+fn dismiss_wait(l: &mut Live) {
+    if let Some((id, _)) = l.remote.open_when_ready.take() {
+        l.app.dismiss_vm_destination(&id);
+    }
+}
+
+pub(crate) fn launch_source_for<'a>(l: &'a Live, project: &'a str) -> &'a str {
+    launch_source(l)
+        .filter(|p| l.app.group_path(p) == l.app.group_path(project))
+        .unwrap_or(project)
+}
+
 pub(crate) fn enter(s: &mut Workspace) {
+    dismiss_wait(live_mut(s));
+    if live(s).app.selected.is_some() && super::native::selected(live(s)).is_some() {
+        let l = live_mut(s);
+        l.panels.screen = Screen::Conversation;
+        l.panels.overlay = None;
+        l.sync_editors();
+        l.focus();
+        return;
+    }
+    if let Some(id) = live(s).app.remote.saved.selected.clone()
+        && live(s).app.remote.saved.checkouts[&id]
+            .thread
+            .awaiting_native
+    {
+        session(s, &id, SessionIntent::Reopen);
+        return;
+    }
     show(s, true);
 }
 
 pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
+    dismiss_wait(live_mut(s));
     if live_mut(s).app.open_vm_thread(link) {
+        if live(s).app.remote.saved.checkouts[&link.checkout]
+            .thread
+            .awaiting_native
+        {
+            session(s, &link.checkout, SessionIntent::Reopen);
+            return;
+        }
         // The Sessions list keeps keyboard focus so the next arrow selects the next row.
         show(s, false);
     }
@@ -38,8 +92,26 @@ pub(crate) fn enter_new(s: &mut Workspace) {
 }
 
 pub(crate) fn select(s: &mut Workspace, id: &str) {
+    live_mut(s).app.dismiss_vm_destination(id);
+    session(s, id, SessionIntent::Reopen);
+}
+
+pub(super) fn session(s: &mut Workspace, id: &str, intent: SessionIntent) {
+    if super::native::open(live_mut(s), id, intent) {
+        return;
+    }
+    if live(s).app.remote.saved.selected.as_deref() != Some(id) {
+        live_mut(s).app.select_remote(id);
+    }
+    show(s, true);
+    live_mut(s).remote.open_when_ready = Some((id.into(), intent));
+}
+
+pub(crate) fn manage(s: &mut Workspace, id: &str) {
+    live_mut(s).app.dismiss_vm_destination(id);
+    dismiss_wait(live_mut(s));
     live_mut(s).app.select_remote(id);
-    enter(s);
+    show(s, true);
 }
 
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
@@ -59,11 +131,29 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         {
             l.app.select_remote(&id);
             l.panels.screen = Screen::Remote;
+            if l.app.remote.saved.checkouts[&id].thread.is_blank()
+                || l.app.remote.saved.checkouts[&id].thread.awaiting_native
+            {
+                l.remote.open_when_ready = Some((id, SessionIntent::Reopen));
+            }
             changed = true;
         }
     }
     if l.panels.screen != Screen::Remote && l.remote.restored {
         l.app.remote.saved.selected = None;
+    }
+    if let Some((id, intent)) = l.remote.open_when_ready.clone() {
+        if l.app.remote.saved.selected.as_deref() != Some(&id) || l.panels.screen != Screen::Remote
+        {
+            l.app.dismiss_vm_destination(&id);
+            l.remote.open_when_ready = None;
+        } else if l.panels.overlay.is_none()
+            && !l.app.remote.jobs.contains_key(&id)
+            && super::native::open(l, &id, intent)
+        {
+            l.remote.open_when_ready = None;
+            changed = true;
+        }
     }
     changed |= super::provider::sync(l);
     changed |= l.app.dismiss_other_vm_tool();

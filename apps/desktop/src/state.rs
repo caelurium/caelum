@@ -169,7 +169,7 @@ impl Workspace {
             if live.panels.screen == crate::panels::Screen::Remote {
                 if let Some(id) = live.app.remote.saved.selected.clone()
                     && live.panels.overlay.is_none()
-                    && live.app.can_start_vm_session(&id)
+                    && live.app.can_open_vm_session(&id)
                 {
                     crate::remote::new_session(self, &id);
                 } else {

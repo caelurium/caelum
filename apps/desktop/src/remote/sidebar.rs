@@ -83,7 +83,7 @@ pub(crate) fn section(s: &Workspace, k: &Kit, project: &str) -> Option<(El, f32)
             );
             let key = format!("remote-checkout-{id}");
             let remove_key = format!("remove-remote-{id}");
-            let is_current = Some(id) == selected;
+            let is_current = Some(id) == selected || super::native::selected(l) == Some(id);
             let show_action = is_current
                 || l.focus_key
                     .as_ref()
@@ -257,7 +257,11 @@ pub(crate) fn finish_removals(s: &mut Workspace) -> bool {
             l.panels.overlay = None;
         }
     }
-    if l.panels.screen == Screen::Remote && l.app.remote.saved.selected.is_none() {
+    if (l.panels.screen == Screen::Remote && l.app.remote.saved.selected.is_none())
+        || (l.panels.screen == Screen::Conversation
+            && l.app.selected.is_none()
+            && l.app.active_project.is_none())
+    {
         if l.app.selected.is_some() {
             l.panels.screen = Screen::Conversation;
             l.sync_editors();
