@@ -1,4 +1,5 @@
 use super::{OpenCodeError, OpenCodeProvider};
+use crate::projects::Project;
 use reqwest::Method;
 use serde_json::json;
 use std::path::Path;
@@ -16,7 +17,7 @@ impl OpenCodeProvider {
                 "side question must not be empty".into(),
             ));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(

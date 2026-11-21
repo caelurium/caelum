@@ -37,11 +37,10 @@ impl Metadata {
 pub(crate) struct Access {
     socket: PathBuf,
     host: String,
-    forwards: tokio::sync::Mutex<HashMap<(String, u16), u16>>,
+    forwards: tokio::sync::Mutex<HashMap<u16, u16>>,
     pub(crate) root: String,
     pub(crate) io: Handle,
     pub(crate) metadata: Option<Metadata>,
-    pub(crate) opencode_used: std::sync::atomic::AtomicBool,
     pub(crate) codex_used: std::sync::atomic::AtomicBool,
     pub(crate) live: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -55,7 +54,6 @@ impl Access {
             root,
             io: Handle::current(),
             metadata: None,
-            opencode_used: Default::default(),
             codex_used: Default::default(),
             live: std::sync::Arc::new(true.into()),
         }
@@ -112,70 +110,46 @@ impl Access {
         .map_err(|_| "VM command timed out.")?
     }
 
-    async fn forward(&self, host: &str, remote: u16) -> Result<u16, String> {
-        let key = (host.to_owned(), remote);
+    async fn forward(&self, remote: u16) -> Result<u16, String> {
         let mut forwards = self.forwards.lock().await;
-        if let Some(port) = forwards.get(&key) {
+        if let Some(port) = forwards.get(&remote) {
             return Ok(*port);
         }
         if forwards.len() >= 8 {
-            return Err(
-                "VM provider endpoints changed repeatedly. Reconnect to refresh them.".into(),
-            );
+            return Err("The Codex listener has changed repeatedly. Reconnect to the VM.".into());
         }
         let local = TcpListener::bind(("127.0.0.1", 0))
             .and_then(|l| l.local_addr())
             .map_err(|e| e.to_string())?
             .port();
-        let spec = format!("127.0.0.1:{local}:{host}:{remote}");
+        let spec = format!("127.0.0.1:{local}:127.0.0.1:{remote}");
         let status = self
             .channel(&["-O", "forward", "-L", &spec])
             .status()
             .await
             .map_err(|e| e.to_string())?;
         if !status.success() {
-            return Err("Could not forward the native provider over SSH.".into());
+            return Err("Could not forward the Codex listener over SSH.".into());
         }
-        forwards.insert(key, local);
+        forwards.insert(remote, local);
         Ok(local)
     }
 
-    fn start(&self, script: &str, limit: usize) -> Result<Vec<u8>, String> {
-        let cmd = format!("cd -P {} && sh -c {}", quote(&self.root), quote(script));
-        self.io.block_on(self.run(&cmd, limit, &[0]))
-    }
-    pub(crate) fn opencode(&self) -> Result<(String, Option<String>, u64), String> {
-        #[derive(serde::Deserialize)]
-        struct Registration {
-            url: String,
-            password: Option<String>,
-            pid: u64,
-        }
-        let bytes=self.start(include_str!("opencode.sh"),16384).map_err(|_|
-            "Could not start or discover OpenCode on the VM. Check `opencode service status` on the machine.")?;
-        let reg: Registration = serde_json::from_slice(&bytes)
-            .map_err(|_| "Invalid VM OpenCode service registration.")?;
-        let url = reqwest::Url::parse(&reg.url).map_err(|_| "Invalid VM OpenCode endpoint.")?;
-        let host = match (url.scheme(), url.host_str()) {
-            ("http", Some("127.0.0.1" | "localhost")) => "127.0.0.1",
-            ("http", Some("[::1]")) => "[::1]",
-            _ => return Err("The VM OpenCode service must listen on loopback.".into()),
-        };
-        let remote = url
-            .port_or_known_default()
-            .ok_or("Missing OpenCode port.")?;
-        let port = self.io.block_on(self.forward(host, remote))?;
-        Ok((format!("http://127.0.0.1:{port}"), reg.password, reg.pid))
-    }
-
     pub(crate) fn codex(&self) -> Result<String, String> {
-        let bytes=self.start(include_str!("codex.sh"),16).map_err(|_|"Codex on the VM could not serve WebSocket app-server. Check `codex app-server --help` and its loopback listener.")?;
+        let cmd = format!(
+            "cd -P {} && sh -c {}",
+            quote(&self.root),
+            quote(include_str!("codex.sh"))
+        );
+        let bytes = self.io.block_on(self.run(&cmd, 16, &[0])).map_err(|_| {
+            "Could not connect to Codex on the VM. Check `codex app-server --help` and its loopback listener."
+        })?;
         let remote = std::str::from_utf8(&bytes)
             .ok()
             .and_then(|s| s.trim().parse::<u16>().ok())
             .filter(|p| *p > 0)
             .ok_or("Invalid Codex listener port.")?;
-        let port = self.io.block_on(self.forward("127.0.0.1", remote))?;
+        let port = self.io.block_on(self.forward(remote))?;
         Ok(format!("ws://127.0.0.1:{port}"))
     }
 

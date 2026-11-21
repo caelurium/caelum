@@ -59,7 +59,6 @@ pub struct OpenCodeProvider {
 }
 
 struct ProviderInner {
-    remote: Option<Arc<crate::remote::native::Access>>,
     executable: Option<PathBuf>,
     service_file: Option<PathBuf>,
     processes: Arc<ProcessRegistry>,
@@ -71,8 +70,6 @@ struct ProviderInner {
 }
 
 struct OpenCodeServer {
-    permission_revision: Arc<Mutex<u64>>,
-    remote: Option<Arc<crate::remote::native::Access>>,
     process_id: Option<ProcessId>,
     base_url: String,
     client: Client,
@@ -84,16 +81,6 @@ struct OpenCodeServer {
 }
 
 impl OpenCodeProvider {
-    pub(crate) fn forwarded(mut self, access: Arc<crate::remote::native::Access>) -> Self {
-        Arc::get_mut(&mut self.inner).expect("new provider").remote = Some(access);
-        self
-    }
-    fn project(&self, path: impl AsRef<Path>) -> Result<Project, ProjectError> {
-        Project::for_provider(path, self.inner.remote.as_deref())
-    }
-    pub(crate) fn attach(&self, path: &str) -> Result<(), OpenCodeError> {
-        self.server(&self.project(path)?).map(drop)
-    }
     pub fn new(
         processes: Arc<ProcessRegistry>,
         approvals: ApprovalBroker,
@@ -121,7 +108,6 @@ impl OpenCodeProvider {
     ) -> Self {
         Self {
             inner: Arc::new(ProviderInner {
-                remote: None,
                 service_file: executable.is_none().then(service_file).flatten(),
                 executable,
                 processes,
@@ -147,7 +133,7 @@ impl OpenCodeProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<ProviderChoices, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let query = [(
             "location[directory]",
@@ -243,7 +229,7 @@ impl OpenCodeProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<Vec<OpenCodeCommandInfo>, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let query = [(
             "location[directory]",
@@ -255,7 +241,7 @@ impl OpenCodeProvider {
     }
 
     pub fn usage_limits(&self, project_path: impl AsRef<Path>) -> Result<Value, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let query = [(
             "location[directory]",
@@ -282,7 +268,7 @@ impl OpenCodeProvider {
                 "command name must not be empty".into(),
             ));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let session = self.session_metadata(&server, &project, session_id)?;
         select_model(&server, &project, &session, model, effort)?;
@@ -318,7 +304,7 @@ impl OpenCodeProvider {
         if agent.trim().is_empty() {
             return Err(OpenCodeError::Protocol("agent ID must not be empty".into()));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let session = self.session_metadata(&server, &project, session_id)?;
         if session.agent.as_deref() != Some(agent) {
@@ -354,7 +340,7 @@ impl OpenCodeProvider {
         if prompt.trim().is_empty() {
             return Err(OpenCodeError::EmptyPrompt);
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let session = self.session_metadata(&server, &project, session_id)?;
         select_model(&server, &project, &session, model, effort)?;
@@ -381,7 +367,7 @@ impl OpenCodeProvider {
         if prompt.trim().is_empty() {
             return Err(OpenCodeError::EmptyPrompt);
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         let (text, images) = crate::application::provider_prompt(prompt);
@@ -406,7 +392,7 @@ impl OpenCodeProvider {
         project_path: impl AsRef<Path>,
         session_id: &str,
     ) -> Result<Vec<Value>, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(
@@ -435,7 +421,7 @@ impl OpenCodeProvider {
         {
             return Err(OpenCodeError::Protocol("Invalid inbox message ID".into()));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         server.request_json(
@@ -455,7 +441,7 @@ impl OpenCodeProvider {
         if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(OpenCodeError::Protocol("Invalid media hash".into()));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let url = api_url(
             &server.base_url,
@@ -471,7 +457,7 @@ impl OpenCodeProvider {
     }
 
     pub fn refresh_questions(&self, project_path: impl AsRef<Path>) -> Result<(), OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         sync_questions(&server, &self.inner.questions, project.path())
     }
@@ -488,7 +474,7 @@ impl OpenCodeProvider {
             let Some(server) = slot.current() else {
                 continue;
             };
-            if Self::list_sessions_on(&self.project(&path)?, &server, false)?
+            if Self::list_sessions_on(&Project::open(&path)?, &server, false)?
                 .sessions
                 .iter()
                 .any(|session| session.is_working)

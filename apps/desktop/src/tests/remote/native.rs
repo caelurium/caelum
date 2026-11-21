@@ -12,7 +12,7 @@ fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_a
     let options = Options {
         model: Some("on-vm".into()),
         effort: Some("high".into()),
-        agent: Some("plan".into()),
+        agent: None,
     };
     rt.update(|s, _| {
         let app = &mut live_mut(s).app;
@@ -43,7 +43,10 @@ fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_a
         preferences.default_provider
     );
     let other = app
-        .open_vm_session("other-checkout", Some(scope.provider))
+        .open_vm_session(
+            "other-checkout",
+            caelum_core::remote::native::SessionIntent::New,
+        )
         .unwrap();
     assert_eq!(app.sessions[other].options, Options::default());
     assert!(app.favorite_models(&app.sessions[other].scope).is_none());
@@ -85,6 +88,7 @@ fn first_send_keeps_its_vm_and_options_when_the_user_switches_back_to_a_boat_cha
         panic!("{commands:?}")
     };
     assert_eq!(scope.project, "boat://checkout/checkout-example");
+    assert_eq!(scope.provider, Provider::Codex);
     assert_eq!(options.effort.as_deref(), Some("high"));
     let key = SessionKey {
         scope: scope.clone(),
@@ -168,4 +172,43 @@ fn going_offline_preserves_the_editor_and_recovery_only_reads_the_native_session
         Command::Send(..) | Command::Start(..) | Command::Enqueue(..) | Command::Remote(_)
     )));
     assert_eq!(app.sessions[i].key().as_ref(), Some(&key));
+}
+
+#[test]
+fn saved_opencode_vm_draft_opens_a_separate_codex_session_without_submitting() {
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| {
+        crate::remote::scene(s, "native-connected");
+        let l = live_mut(s);
+        let i = l.app.selected.unwrap();
+        l.app.sessions[i].scope.provider = Provider::OpenCode;
+        l.app.sessions[i].remote_id = Some("ses_old".into());
+        l.app.sessions[i].options.model = Some("earlier/model".into());
+    });
+    advance(&mut rt, 0.2);
+    let i = live(&rt.state).app.selected.unwrap();
+    let old = live(&rt.state).app.sessions[i].key();
+    fill(&mut rt, &format!("live-draft-{i}"), "/stats");
+    key(&mut rt, Key::Enter, Mods::default());
+    assert_eq!(live(&rt.state).drafts[i].text, "/stats");
+    assert!(live(&rt.state).panels.overlay.is_none());
+    click(&mut rt, "native-new-codex");
+    let l = live_mut(&mut rt.state);
+    let fresh = l.app.selected.unwrap();
+    assert_ne!(fresh, i);
+    assert_eq!(l.app.sessions[i].key(), old);
+    assert_eq!(
+        l.app.sessions[i].options.model.as_deref(),
+        Some("earlier/model")
+    );
+    assert_eq!(l.drafts[i].text, "/stats");
+    assert_eq!(l.app.sessions[fresh].scope.provider, Provider::Codex);
+    assert!(l.drafts[fresh].text.is_empty() && l.app.sessions[fresh].key().is_none());
+    assert!(!l.app.commands().iter().any(|(_, c)| matches!(
+        c,
+        Command::Start(..)
+            | Command::Send(..)
+            | Command::Enqueue(..)
+            | Command::Task(caelum_core::application::Task::Stats { .. })
+    )));
 }

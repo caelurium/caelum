@@ -209,7 +209,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .prominent()
             .placement(Placement::TopStart)
             .open(live.models.is_open())
-            .disabled(session.archived || session.archiving)
+            .disabled(session.archived || session.archiving || !session.scope.provider_available())
             .on_toggle(|s: &mut Workspace| crate::models::open(s, None))
             .trigger(k)
             .max_w(maximum.min(220.0))

@@ -15,7 +15,7 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
             .item(Item::new("open", "Open session").icon(&ui::SERVER))
             .item(Item::new("manage", "Manage VM and Boat conversations…").icon(&ui::SERVER))
             .item(
-                Item::new("new", "New session on this VM")
+                Item::new("new", "New Codex session on this VM")
                     .icon(&crate::PLUS)
                     .enabled(live(s).app.can_open_vm_session(&id)),
             )

@@ -1,4 +1,5 @@
 use super::{OpenCodeError, OpenCodeProvider};
+use crate::projects::Project;
 use caelum_protocol::OpenCodeBackgroundShell;
 use reqwest::Method;
 use serde_json::json;
@@ -13,7 +14,7 @@ impl OpenCodeProvider {
         id: &str,
         stop: bool,
     ) -> Result<String, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         if id.is_empty()
@@ -75,7 +76,7 @@ impl OpenCodeProvider {
         project_path: impl AsRef<Path>,
         session_id: &str,
     ) -> Result<Vec<OpenCodeBackgroundShell>, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
         let response = server.request_json(

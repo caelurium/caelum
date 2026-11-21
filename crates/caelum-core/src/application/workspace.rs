@@ -194,7 +194,8 @@ impl Session {
     }
 
     pub fn can_send(&self) -> bool {
-        !self.rewinding()
+        self.scope.provider_available()
+            && !self.rewinding()
             && !self.relocation.pending()
             && !self.working()
             && self.loaded
@@ -209,7 +210,8 @@ impl Session {
 
     /// Whether a draft may be submitted, including to the queue while working.
     pub fn can_submit(&self) -> bool {
-        !self.rewinding()
+        self.scope.provider_available()
+            && !self.rewinding()
             && !self.relocation.pending()
             && !self.archived
             && !self.forgotten

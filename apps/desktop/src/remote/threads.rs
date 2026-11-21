@@ -20,41 +20,17 @@ pub(crate) fn start(s: &mut Workspace, id: &str) {
     if !l.app.remote.saved.checkouts.contains_key(id) {
         return;
     }
-    let provider = if l.panels.overlay == Some(Screen::Launcher) {
-        l.panels.launch_provider
-    } else {
-        let project = caelum_core::remote::native::project_key(id);
-        l.app
-            .selected
-            .map(|i| &l.app.sessions[i])
-            .filter(|s| s.scope.project == project)
-            .map_or_else(
-                || l.app.default_provider_for(Some(&project)),
-                |s| s.scope.provider,
-            )
+    let current_vm = match l.panels.screen {
+        Screen::Home => None,
+        Screen::Remote => l.app.remote.saved.selected.as_deref(),
+        _ => super::native::selected(l),
     };
-    if l.panels.overlay == Some(Screen::Launcher)
-        && l.app.remote.saved.selected.as_deref() != Some(id)
-        && l.app
-            .active_project
-            .as_deref()
-            .and_then(caelum_core::remote::native::checkout_id)
-            != Some(id)
-    {
+    if l.panels.overlay == Some(Screen::Launcher) && current_vm != Some(id) {
         let source = &l.app.remote.saved.checkouts[id].source.project;
-        let project = l
-            .app
-            .active_project
-            .as_deref()
-            .filter(|p| {
-                caelum_core::remote::native::checkout_id(p).is_none()
-                    && l.app.group_path(p) == l.app.group_path(source)
-            })
-            .unwrap_or(source)
-            .to_owned();
+        let project = super::launch_source_for(l, source).to_owned();
         l.app.check_vm_destination(id, project);
     }
-    super::checkout::session(s, id, Some(provider));
+    super::checkout::session(s, id, caelum_core::remote::native::SessionIntent::New);
 }
 
 pub(crate) fn view(s: &Workspace, k: &Kit) -> El {

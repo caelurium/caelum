@@ -138,6 +138,11 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         && !l.app.home.opening()
         && let Some(project) = l.app.active_project.clone()
     {
+        let project = l
+            .app
+            .native_checkout(&project)
+            .map(|c| c.source.project.clone())
+            .unwrap_or(project);
         l.app.home_select_project(project);
         changed = true;
     }

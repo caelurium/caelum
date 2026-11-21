@@ -7,33 +7,19 @@ use crate::{
 impl Workspace {
     fn vm_defaults_mut(&mut self, id: &str) -> Option<&mut ProviderDefaults> {
         let checkout = self.remote.saved.checkouts.get_mut(id)?;
-        Some(checkout.defaults.get_or_insert_with(|| ProviderDefaults {
-            provider: checkout.thread.provider,
-            ..Default::default()
-        }))
+        Some(checkout.defaults.get_or_insert_default())
     }
 
     pub fn default_provider_for(&self, project: Option<&str>) -> Provider {
-        let Some(id) = project.and_then(checkout_id) else {
-            return self.preferences.default_provider;
-        };
-        self.remote
-            .saved
-            .checkouts
-            .get(id)
-            .map_or(Provider::OpenCode, |c| {
-                c.defaults
-                    .as_ref()
-                    .map_or(c.thread.provider, |d| d.provider)
-            })
+        if project.and_then(checkout_id).is_some() {
+            Provider::Codex
+        } else {
+            self.preferences.default_provider
+        }
     }
 
     pub fn set_default_provider_for(&mut self, project: Option<&str>, provider: Provider) {
-        if let Some(id) = project.and_then(checkout_id) {
-            if let Some(d) = self.vm_defaults_mut(id) {
-                d.provider = provider;
-            }
-        } else {
+        if project.and_then(checkout_id).is_none() {
             self.preferences.default_provider = provider;
         }
     }

@@ -54,7 +54,7 @@ managed Git and native SSH. A new VM can fill a missing clone from its published
 base; attaching to an existing VM only verifies it. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
-On explicit Send, the remote composer captures the thread’s provider (`codex`
+On explicit Send, the managed Boat composer captures the thread’s provider (`codex`
 or `opencode`), optional Boat model ID and optional `reasoningEffort`.
 The pickers share the public SDK catalogue; only a concrete model’s advertised
 levels are selectable. Each default omits its request field. The public harness
@@ -90,16 +90,17 @@ sessions. The desktop resolves a saved checkout ID to its Boat account, machine,
 repository and verified Git root. It translates project ownership at the SSH
 boundary, leaving provider IDs and transcript content untouched. OpenSSH pins
 the host key returned by Boat each time it authorizes the workspace’s public key.
-One master per checkout forwards the OpenCode HTTP service and Codex WebSocket
-app-server on demand. SFTP reads files; SSH runs Git and `gh` on the VM.
+One SSH master per checkout forwards the installed Codex WebSocket app-server
+on demand. SFTP reads files; SSH runs Git and `gh` on the VM.
 
-The provider servers survive detaching the desktop. A new connection verifies the
+The Codex server survives detaching the desktop. A new connection verifies the
 checkout, subscribes again, restores pending provider requests and
 refreshes native histories. Only completions for that attachment are delivered;
 no prompt is replayed. Native IDs and drafts live in the main snapshot under
 their checkout identities. New handoffs populate a regular VM session, including
 the bounded chat on its first explicit send after rechecking the published base.
-Existing managed Boat chats retain their own conversation IDs.
+Restored native OpenCode sessions retain their IDs and drafts without connecting
+a provider. Existing managed Boat chats retain their own conversation IDs.
 
 Local Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.

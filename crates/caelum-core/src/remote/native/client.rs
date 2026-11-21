@@ -73,21 +73,15 @@ impl Client {
         wake: impl Fn() + Send + Sync + 'static,
         mut open: impl AsyncFnMut() -> Result<ssh::Tunnel, String> + Send + 'static,
     ) -> Result<Self, String> {
-        let mut recover_open = false;
         Self::with_connection(root, wake, async move |link, out| {
             let mut tunnel = match open().await {
                 Ok(tunnel) => tunnel,
                 Err(e) => return e,
             };
-            let access = tunnel.access.clone();
-            let problem = tokio::select! {
+            tokio::select! {
                 _=tunnel.child.wait()=>"SSH disconnected. Reconnect to verify the VM’s address and host key.".to_owned(),
-                e=session(access.clone(),recover_open,link,out)=>e,
-            };
-            recover_open = access
-                .opencode_used
-                .load(std::sync::atomic::Ordering::Acquire);
-            problem
+                e=session(tunnel.access.clone(),link,out)=>e,
+            }
         })
     }
 
@@ -260,7 +254,7 @@ async fn deliver(link: &Link, out: &Output, event: Event) {
         }
     }
 }
-async fn session(access: Arc<super::Access>, recover: bool, link: &Link, out: &Output) -> String {
+async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> String {
     let wake = Arc::new(Notify::new());
     let notify = wake.clone();
     let providers = ProviderRuntime::forwarded(access.clone());
@@ -271,33 +265,23 @@ async fn session(access: Arc<super::Access>, recover: bool, link: &Link, out: &O
         access.clone(),
     );
     let rt = workers.0.as_mut().unwrap();
-    if recover {
-        let opencode = providers.opencode.clone();
-        let root = access.root.clone();
-        match tokio::task::spawn_blocking(move || opencode.attach(&root)).await {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => return e.to_string(),
-            Err(e) => return e.to_string(),
-        }
-    }
-    out.send(Notice::Event(Box::new(Event::Approvals(
-        providers.approvals.pending(),
-    ))))
-    .await;
-    out.send(Notice::Event(Box::new(Event::Questions(
-        providers.questions.pending(),
-    ))))
-    .await;
+    let mut brokers_attached = false;
     let mut requests = activate(link);
     out.publish(Message::Connected(link.clone())).await;
     loop {
         tokio::select! {
             _ = wake.notified() => for event in rt.drain() {
+                // An empty, newly constructed broker isn't a snapshot of the VM.
+                // Keep visible questions and answer drafts until Codex has resubscribed.
+                if !brokers_attached && access.codex_used.load(std::sync::atomic::Ordering::Acquire) {
+                    brokers_attached = true;
+                    deliver(link, out, Event::Approvals(providers.approvals.pending())).await;
+                    deliver(link, out, Event::Questions(providers.questions.pending())).await;
+                }
                 let event = match event {
-                    Event::OpenCode(ref e) if e.event_type == "server.disconnected"
-                        && access.opencode_used.load(std::sync::atomic::Ordering::Acquire) => return "VM OpenCode event stream disconnected.".into(),
                     Event::Codex(ref e) if e.method == "codex/processExited"
-                        && access.codex_used.load(std::sync::atomic::Ordering::Acquire) => return "VM Codex WebSocket disconnected.".into(),
+                        && brokers_attached => return "VM Codex WebSocket disconnected.".into(),
+                    Event::Approvals(_) | Event::Questions(_) if !brokers_attached => continue,
                     Event::Approvals(_) => Event::Approvals(providers.approvals.pending()),
                     Event::Questions(_) => Event::Questions(providers.questions.pending()),
                     e => e,

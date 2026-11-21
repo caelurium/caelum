@@ -6,7 +6,7 @@ import threading
 
 
 @contextmanager
-def model(approval=False, reconnect_marker=None):
+def model(approval, checkout):
     calls = []
 
     class Endpoint(BaseHTTPRequestHandler):
@@ -18,7 +18,8 @@ def model(approval=False, reconnect_marker=None):
                 self.send_error(404)
                 return
             raw = self.rfile.read(int(self.headers["Content-Length"]))
-            calls.append(reconnect_marker is not None and reconnect_marker.exists())
+            calls.append("reconnect" if (checkout / "reconnecting").exists() else
+                         "turn" if (checkout / "first-send").exists() else "before-send")
             answer = "Confirmed in the VM checkout."
             message = {"type": "message", "role": "assistant", "id": "msg_fixture", "status": "completed",
                        "content": [{"type": "output_text", "text": answer, "annotations": []}]}

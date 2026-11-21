@@ -10,7 +10,7 @@ use caelum_core::{
     application::Provider,
     remote::{
         Job,
-        native::{Status, checkout_id},
+        native::{SessionIntent, Status, checkout_id},
     },
 };
 pub(crate) use connections::Connections;
@@ -64,6 +64,12 @@ pub(crate) fn ready(l: &Live) -> bool {
     let project = if l.panels.screen == Screen::Home {
         l.app.home.draft.project.as_deref()
     } else {
+        if l.app
+            .selected
+            .is_some_and(|i| !l.app.sessions[i].scope.provider_available())
+        {
+            return false;
+        }
         l.app.active_project.as_deref()
     };
     project.and_then(checkout_id).is_none_or(|id| {
@@ -73,8 +79,8 @@ pub(crate) fn ready(l: &Live) -> bool {
     })
 }
 
-pub(crate) fn open(l: &mut Live, id: &str, new: Option<Provider>) -> bool {
-    if l.app.open_vm_session(id, new).is_none() {
+pub(crate) fn open(l: &mut Live, id: &str, intent: SessionIntent) -> bool {
+    if l.app.open_vm_session(id, intent).is_none() {
         return false;
     }
     if l.fixture && l.native.status(id).is_none() {
@@ -153,6 +159,7 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
         Resume,
         Refresh,
         Reconnect,
+        NewCodex,
     }
     let stopped = checkout
         .machine()
@@ -163,6 +170,16 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
             block.reason(),
             (stopped && matches!(block, Blocked::Stopped)).then_some(Action::Resume),
         ),
+        _ if l
+            .app
+            .selected
+            .is_some_and(|i| !l.app.sessions[i].scope.provider_available()) =>
+        {
+            (
+                "OpenCode is unavailable for native VM sessions. Your draft is saved.",
+                l.app.can_open_vm_session(id).then_some(Action::NewCodex),
+            )
+        }
         (_, _, Some(Status::Connected)) => return None,
         (_, _, Some(Status::Disconnected(e))) => (e.as_str(), Some(Action::Reconnect)),
         (_, Some(Job::Failed(e)), _) => (e.as_str(), Some(Action::Refresh)),
@@ -198,6 +215,7 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
                     Action::Resume => ("Resume VM", "resume-inline-vm"),
                     Action::Refresh => ("Refresh checkout", "refresh-inline-vm"),
                     Action::Reconnect => ("Reconnect", "native-workspace-reconnect"),
+                    Action::NewCodex => ("New Codex session", "native-new-codex"),
                 };
                 ui::Button::new(label)
                     .variant(ButtonVariant::GhostMuted)
@@ -206,6 +224,7 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
                         Action::Reconnect => live_mut(s).native.retry(&id),
                         Action::Refresh => live_mut(s).app.refresh_remote(&id),
                         Action::Resume => live_mut(s).app.power_remote(&id, true),
+                        Action::NewCodex => super::new_session(s, &id),
                     })
                     .build(k)
                     .key(key)
@@ -217,16 +236,18 @@ pub(super) fn scene(s: &mut Workspace, offline: bool) {
     super::scene::scene(s, "remote");
     let l = live_mut(s);
     let id = "checkout-example";
-    open(l, id, Some(Provider::OpenCode));
+    open(l, id, SessionIntent::New);
     let i = l.app.selected.unwrap();
-    l.app.sessions[i].remote_id = Some("ses_example".into());
+    l.app.sessions[i].remote_id = Some("codex-thread-example".into());
     l.app.sessions[i].title = "Review the VM checkout".into();
     l.app.sessions[i].draft = "Check the tests for this change.".into();
     l.drafts[i].replace_text(&l.app.sessions[i].draft);
-    l.app.sessions[i].conversation.history(Provider::OpenCode,&[
-        serde_json::json!({"type":"user","id":"user-example","text":"Which branch is checked out on the VM?"}),
-        serde_json::json!({"type":"assistant","id":"assistant-example","finish":"stop","agent":"build","content":[{"type":"text","text":"The VM is on `feat/remote-checkout`. The changes are in `src/server.rs`."}]}),
-    ],false);
+    l.app.sessions[i].conversation.history(Provider::Codex, &[serde_json::json!({
+        "id":"turn-example","status":"completed","items":[
+            {"type":"userMessage","id":"user-example","content":[{"type":"text","text":"Which branch is checked out on the VM?"}]},
+            {"type":"agentMessage","id":"assistant-example","text":"The VM is on `feat/remote-checkout`. The changes are in `src/server.rs`."}
+        ]
+    })],false);
     l.native.fixture(
         id,
         l.app.remote.saved.checkouts[id].native_target().unwrap(),

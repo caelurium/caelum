@@ -27,6 +27,9 @@ impl Workspace {
 
     /// Refresh both active and archived provider sessions for a picker.
     pub fn discover_sessions(&mut self, scope: Scope) {
+        if !scope.provider_available() {
+            return;
+        }
         self.notices.remove(&scope);
         if !self
             .pending
@@ -55,10 +58,11 @@ impl Workspace {
     }
 
     pub fn refresh_choices_for(&mut self, scope: Scope) {
-        if self
-            .pending
-            .values()
-            .any(|p| matches!(p, Pending::Choices(s) if s == &scope))
+        if !scope.provider_available()
+            || self
+                .pending
+                .values()
+                .any(|p| matches!(p, Pending::Choices(s) if s == &scope))
         {
             return;
         }
@@ -80,6 +84,10 @@ impl Workspace {
     }
 
     pub fn new_session(&mut self, scope: Scope) -> usize {
+        self.new_session_slot(scope.for_new_session())
+    }
+
+    pub(super) fn new_session_slot(&mut self, scope: Scope) -> usize {
         let mut session = Session::new(scope.clone());
         session.record_activity(crate::application::presentation::now());
         session.options = self.provider_options(&scope).cloned().unwrap_or_default();
@@ -95,6 +103,7 @@ impl Workspace {
     }
 
     pub fn project_draft(&mut self, scope: Scope) -> usize {
+        let scope = scope.for_new_session();
         if let Some(i) = self.sessions.iter().rposition(|s| {
             s.scope == scope && s.remote_id.is_none() && !s.archived && !s.forgotten && !s.working()
         }) {
@@ -149,7 +158,8 @@ impl Workspace {
 
     pub fn refresh(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading
+        if !session.scope.provider_available()
+            || session.loading
             || session.submitting
             || session.relocation.pending()
             || session.rewinding()
@@ -167,7 +177,7 @@ impl Workspace {
 
     pub fn older(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading || session.rewinding() {
+        if !session.scope.provider_available() || session.loading || session.rewinding() {
             return;
         }
         let (Some(key), Some(cursor)) = (session.key(), session.next_cursor.clone()) else {
@@ -252,7 +262,10 @@ impl Workspace {
             let Some(index) = self.detail_queue.pop() else {
                 break;
             };
-            if let Some(key) = self.sessions[index].key() {
+            if let Some(key) = self.sessions[index]
+                .key()
+                .filter(|k| k.scope.provider_available())
+            {
                 self.request(Command::Details(key), Pending::Details(index));
             }
         }

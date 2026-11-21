@@ -187,7 +187,11 @@ pub(super) fn timeline_row(
                 && p.project_path == session.scope.project
                 && Some(&p.session_id) == session.remote_id.as_ref()
         });
-        if session.conversation.entries.is_empty() && !session.loading && !needs_input {
+        if session.scope.provider_available()
+            && session.conversation.entries.is_empty()
+            && !session.loading
+            && !needs_input
+        {
             content = content.child(ui::empty(
                 "A little room to think",
                 "Ask a question, describe a change, or @mention a file.",

@@ -269,7 +269,7 @@ impl Workspace {
                     branch,
                 });
             }
-            for provider in Provider::ALL {
+            for &provider in Provider::for_project(Some(&path)) {
                 let scope = Scope {
                     project: path.clone(),
                     provider,

@@ -47,7 +47,6 @@ pub struct VmHandoff {
     navigation: u64,
     home_generation: Option<u64>,
     pub project: String,
-    pub provider: Provider,
     pub title: String,
     draft: String,
     pub phase: HandoffPhase,
@@ -147,9 +146,6 @@ impl Workspace {
             },
         );
         self.handoff = Some(VmHandoff {
-            provider: source
-                .session()
-                .map_or_else(|| self.home_provider(), |i| self.sessions[i].scope.provider),
             origin,
             navigation: self.navigation,
             home_generation: (!matches!(source, HandoffSource::Composer(_)))
@@ -359,7 +355,7 @@ impl Workspace {
         }
         let c = self.remote.saved.checkouts.get_mut(&id).unwrap();
         c.open_thread(Thread {
-            provider: h.provider,
+            provider: Provider::Codex,
             continued: Some(Continuation {
                 id: thread,
                 title: h.title,

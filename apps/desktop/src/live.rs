@@ -163,13 +163,7 @@ impl Live {
             return;
         };
         if let Some(id) = caelum_core::remote::native::checkout_id(&project) {
-            let provider = self
-                .app
-                .selected
-                .map_or(self.app.preferences.default_provider, |i| {
-                    self.app.sessions[i].scope.provider
-                });
-            crate::remote::native::open(self, id, Some(provider));
+            crate::remote::native::open(self, id, caelum_core::remote::native::SessionIntent::New);
             return;
         }
         let provider = self.app.preferences.default_provider;

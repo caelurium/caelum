@@ -34,10 +34,11 @@ impl Access {
                 .io
                 .block_on(self.directory(path, *offset))
                 .map(TaskReply::Directory),
-            Task::Image { source, .. }
-                if source.starts_with("opencode-media:") || source.starts_with("data:image/") =>
-            {
-                return None
+            Task::EncodeImage { bytes, .. } => {
+                crate::images::data_url(bytes.as_slice()).map(TaskReply::Image)
+            }
+            Task::Image { source, .. } if source.starts_with("data:image/") => {
+                Ok(TaskReply::Image(source.clone()))
             }
             Task::Image { source, .. } => {
                 self.io.block_on(self.image(source)).map(TaskReply::Image)
@@ -59,10 +60,6 @@ impl Access {
             }),
             Task::Diff { path, .. } => self.io.block_on(self.diff(path)).map(TaskReply::Diff),
             Task::Worktrees { .. } => Ok(TaskReply::Worktrees(None)),
-            Task::Usage { .. }
-            | Task::Stats { .. }
-            | Task::Shell { .. }
-            | Task::EncodeImage { .. } => return None,
             _ => self.github_task(task),
         };
         Some(reply.map(Reply::Task))

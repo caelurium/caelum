@@ -1,7 +1,7 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
     application::{Command, Provider, Reply},
-    remote::*,
+    remote::{native::SessionIntent, *},
 };
 use std::time::{Duration, Instant};
 
@@ -94,19 +94,14 @@ impl Workspace {
         });
     }
 
-    pub fn create_remote(
-        &mut self,
-        size: Size,
-        lifetime: Lifetime,
-        provider: Provider,
-    ) -> Option<String> {
+    pub fn create_remote(&mut self, size: Size, lifetime: Lifetime) -> Option<String> {
         let Some(Picker::Ready(source)) = self.remote.picker.clone() else {
             return None;
         };
         source.published_tip.as_ref()?;
         let branch = source.base.clone();
         let id = self.register_vm(source, &branch, size, lifetime)?;
-        self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
+        self.remote.saved.checkouts.get_mut(&id)?.thread.provider = Provider::Codex;
         self.select_remote(&id);
         Some(id)
     }
@@ -153,11 +148,7 @@ impl Workspace {
     }
 
     /// The launcher asks for a new session; an ordinary attachment reopens the saved one.
-    pub fn attach_remote(
-        &mut self,
-        machine: Machine,
-        new_session: Option<Provider>,
-    ) -> Option<String> {
+    pub fn attach_remote(&mut self, machine: Machine, intent: SessionIntent) -> Option<String> {
         if !self
             .remote
             .inventory
@@ -166,7 +157,7 @@ impl Workspace {
         {
             return None;
         }
-        if new_session.is_some() && self.vm_session_machine_blocker(&machine).is_some() {
+        if intent == SessionIntent::New && self.vm_session_machine_blocker(&machine).is_some() {
             return None;
         }
         let existing = self.registered_checkout(&machine.key).is_some();
@@ -175,12 +166,12 @@ impl Workspace {
             _ => return None,
         };
         let id = self.register_machine(machine)?;
-        if existing && new_session.is_some() {
+        if existing && intent == SessionIntent::New {
             self.check_vm_destination(&id, project);
             return Some(id);
         }
-        if let Some(provider) = new_session {
-            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
+        if !existing {
+            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = Provider::Codex;
         }
         self.select_remote(&id);
         Some(id)

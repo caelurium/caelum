@@ -1,21 +1,19 @@
-use crate::application::{Command, Task};
+use crate::application::{Command, Provider, Task};
 
 /// Commands owned by this exact VM checkout.
 pub(super) fn admitted(command: &Command, root: &str) -> bool {
     let project = match command {
         Command::Open(path) => path,
-        Command::Commands(s)
-        | Command::List(s)
+        Command::List(s)
         | Command::ListArchived(s)
         | Command::Choices(s)
-        | Command::Start(s, _) => &s.project,
-        Command::Inbox(k)
-        | Command::Generate(k, _)
-        | Command::RegenerateTitle(k)
-        | Command::Rename(k, _)
-        | Command::CheckpointFiles(k, ..)
+        | Command::Start(s, _)
+            if s.provider == Provider::Codex =>
+        {
+            &s.project
+        }
+        Command::Rename(k, _)
         | Command::Rewind { key: k, .. }
-        | Command::Shells(k)
         | Command::Archive(k, _)
         | Command::DeleteSession(k)
         | Command::Details(k)
@@ -24,18 +22,21 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         | Command::Resume(k)
         | Command::History(k, _)
         | Command::CodexControlHistory(k, _)
-        | Command::Enqueue(k, ..)
-        | Command::RemoveQueued(k, _)
         | Command::Send(k, ..)
-        | Command::Cancel(k) => &k.scope.project,
-        Command::Approve(p, _) => &p.project_path,
-        Command::Answer(p, _) => &p.project_path,
+        | Command::Cancel(k)
+            if k.scope.provider == Provider::Codex =>
+        {
+            &k.scope.project
+        }
+        Command::Approve(p, _) if p.provider == Provider::Codex.as_str() => &p.project_path,
+        Command::Answer(p, _) if p.provider == Provider::Codex.as_str() => &p.project_path,
+        Command::Task(Task::Image { project, source })
+            if !source.starts_with("opencode-media:") =>
+        {
+            project
+        }
         Command::Task(
-            t @ (Task::Shell { .. }
-            | Task::Image { .. }
-            | Task::EncodeImage { .. }
-            | Task::Usage { .. }
-            | Task::Stats { .. }
+            t @ (Task::EncodeImage { .. }
             | Task::Completions { .. }
             | Task::Directory { .. }
             | Task::File { .. }

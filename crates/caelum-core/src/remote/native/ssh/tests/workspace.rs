@@ -6,7 +6,7 @@ use crate::{
         Host, MachineId,
     },
 };
-use caelum_protocol::{ApprovalDecision, ApprovalPrompt, QuestionPrompt};
+use caelum_protocol::ApprovalPrompt;
 use std::{
     collections::VecDeque,
     fs,
@@ -21,7 +21,6 @@ struct Desktop {
     wake: mpsc::Receiver<()>,
     notices: VecDeque<Notice>,
     approvals: Vec<ApprovalPrompt>,
-    questions: Vec<QuestionPrompt>,
     id: u64,
     tunnels: mpsc::Receiver<u32>,
 }
@@ -54,10 +53,8 @@ impl Desktop {
                     other => other,
                 };
                 if let Notice::Event(e) = &n {
-                    match e.as_ref() {
-                        Event::Approvals(a) => self.approvals.clone_from(a),
-                        Event::Questions(q) => self.questions.clone_from(q),
-                        _ => {}
+                    if let Event::Approvals(a) = e.as_ref() {
+                        self.approvals.clone_from(a);
                     }
                 }
                 if let Some(value) = accept(n) {
@@ -156,7 +153,6 @@ fn attach() -> (Desktop, PathBuf) {
         wake: events,
         notices: VecDeque::new(),
         approvals: vec![],
-        questions: vec![],
         id: 0,
         tunnels: pids,
     };
@@ -169,107 +165,26 @@ fn attach() -> (Desktop, PathBuf) {
 #[test]
 #[ignore = "run scripts/dev/smoke_native_workspace.py with the loopback SSH fixture"]
 fn native_workspace_over_openssh() {
-    let (mut desktop, fixture) = attach();
-    let root = desktop.binding.project.clone();
-    let scope = |provider| Scope {
-        project: root.clone(),
-        provider,
-    };
-    let Reply::Sessions(mut list) = desktop.request(Command::List(scope(Provider::OpenCode)))
-    else {
-        panic!("no session list")
-    };
-    let key = list.remove(0).key;
-    assert_eq!(key.id, "ses_fake");
-    assert!(matches!(
-        desktop.request(Command::Choices(key.scope.clone())),
-        Reply::Choices(_)
-    ));
-    assert!(
-        matches!(desktop.request(Command::Resume(key.clone())),Reply::Resumed(_,page) if !page.data.is_empty())
-    );
-    let path = fixture.join("requests.jsonl");
-    assert!(
-        !path.exists(),
-        "opening or selecting a session sent a provider mutation"
-    );
-    let options = Options {
-        model: Some("local/model/a".into()),
-        effort: Some("high".into()),
-        agent: Some("plan".into()),
-    };
-    desktop.id += 1;
-    desktop
-        .submit(
-            desktop.id,
-            Command::Send(key.clone(), "SSH smoke turn".into(), options),
-        )
-        .unwrap();
-    desktop.until(|n|matches!(n,Notice::Event(e) if matches!(*e,Event::OpenCode(ref e) if e.data["delta"]=="SSH smoke answer")).then_some(()));
+    let (mut desktop, _) = attach();
+    parity::checkout(&mut desktop);
     desktop.interrupt_link();
-    let form = desktop
-        .questions
-        .iter()
-        .find(|q| q.request_id == "frm_saved" && q.session_id == key.id)
-        .expect("restored question")
-        .clone();
-    let approval = desktop
-        .approvals
-        .iter()
-        .find(|a| a.session_id.as_ref() == Some(&key.id))
-        .expect("restored permission")
-        .clone();
-    let Reply::Resumed(summary, page) = desktop.request(Command::Resume(key.clone())) else {
-        panic!("no recovered history")
-    };
-    assert_eq!(summary.key, key);
-    assert!(page.data.iter().any(|m| m["text"] == "SSH smoke turn"));
-    assert!(page
-        .data
-        .iter()
-        .any(|m| m["content"][0]["text"] == "SSH smoke answer"));
-    assert!(matches!(
-        desktop.request(Command::Answer(
-            form,
-            Some(
-                serde_json::from_value(serde_json::json!({"q0":["macOS","custom target"]}))
-                    .unwrap()
-            )
-        )),
-        Reply::Done
-    ));
-    assert!(matches!(
-        desktop.request(Command::Approve(approval, ApprovalDecision::AllowOnce)),
-        Reply::Done
-    ));
-    assert_eq!(
-        fs::read_to_string(path)
-            .unwrap()
-            .lines()
-            .filter(|l| l.contains("/prompt\""))
-            .count(),
-        1
-    );
-    parity::checkout(&mut desktop, &key);
+    parity::checkout(&mut desktop);
 }
 
 mod parity;
 
 #[test]
-#[ignore = "run scripts/dev/smoke_native_workspace.py --approval with a real provider"]
+#[ignore = "run scripts/dev/smoke_native_workspace.py --real-codex BINARY --approval"]
 fn native_pending_approval_over_openssh() {
     let (mut desktop, fixture) = attach();
     let scope = Scope {
         project: desktop.binding.project.clone(),
-        provider: if std::env::var("CAELUM_NATIVE_SMOKE_PROVIDER").as_deref() == Ok("codex") {
-            Provider::Codex
-        } else {
-            Provider::OpenCode
-        },
+        provider: Provider::Codex,
     };
     let Reply::Session(s) = desktop.request(Command::Start(scope, Options::default())) else {
         panic!()
     };
+    fs::write(fixture.join("first-send"), "").unwrap();
     desktop.id += 1;
     desktop
         .submit(
@@ -292,6 +207,7 @@ fn native_pending_approval_over_openssh() {
     let before = desktop.until(pending);
     fs::write(fixture.join("reconnecting"), "").unwrap();
     desktop.interrupt_link();
+    desktop.approvals.clear(); // Require the new Codex connection to produce the approval.
     desktop.request(Command::Resume(s.key.clone()));
     let after = desktop
         .approvals
@@ -305,18 +221,18 @@ fn native_pending_approval_over_openssh() {
 }
 
 #[test]
-#[ignore = "run scripts/dev/smoke_native_workspace.py --real-opencode BINARY"]
+#[ignore = "run scripts/dev/smoke_native_workspace.py --real-codex BINARY"]
 fn native_new_session_over_openssh() {
     let (mut desktop, fixture) = attach();
-    let provider = if std::env::var("CAELUM_NATIVE_SMOKE_PROVIDER").as_deref() == Ok("codex") {
-        Provider::Codex
-    } else {
-        Provider::OpenCode
-    };
     let scope = Scope {
         project: desktop.binding.project.clone(),
-        provider,
+        provider: Provider::Codex,
     };
+    parity::checkout(&mut desktop);
+    assert!(matches!(
+        desktop.request(Command::Choices(scope.clone())),
+        Reply::Choices(_)
+    ));
     let Reply::Sessions(before) = desktop.request(Command::List(scope.clone())) else {
         panic!("could not list sessions")
     };
@@ -328,6 +244,7 @@ fn native_new_session_over_openssh() {
         panic!("could not create a native session")
     };
     {
+        fs::write(fixture.join("first-send"), "").unwrap();
         desktop.id += 1;
         desktop
             .submit(
@@ -342,17 +259,9 @@ fn native_new_session_over_openssh() {
         let mut text = String::new();
         desktop.until(|n| match n {
             Notice::Event(e) => match *e {
-                Event::OpenCode(e) if e.event_type == "session.text.delta" => {
-                    text.push_str(e.data["delta"].as_str().unwrap());
-                    None
-                }
                 Event::Codex(e) if e.method == "item/agentMessage/delta" => {
                     text.push_str(e.params["delta"].as_str().unwrap());
                     None
-                }
-                Event::OpenCode(e) if e.event_type == "session.execution.succeeded" => Some(()),
-                Event::OpenCode(e) if e.event_type == "session.execution.failed" => {
-                    panic!("OpenCode turn failed: {}", e.data)
                 }
                 Event::Codex(e) if e.method == "turn/completed" => {
                     assert_eq!(
@@ -385,7 +294,7 @@ fn native_new_session_over_openssh() {
 }
 
 #[test]
-#[ignore = "run scripts/dev/smoke_native_workspace.py --real-opencode BINARY"]
+#[ignore = "run scripts/dev/smoke_native_workspace.py --real-codex BINARY"]
 fn native_resume_after_vm_stop() {
     let (mut desktop, fixture) = attach();
     let key: SessionKey =
@@ -393,29 +302,17 @@ fn native_resume_after_vm_stop() {
     assert!(
         matches!(desktop.request(Command::List(key.scope.clone())),Reply::Sessions(s) if s.len()==1 && s[0].key==key)
     );
-    match desktop.request(Command::Resume(key.clone())) {
-        Reply::Resumed(s, p) => {
-            assert_eq!(s.key, key);
-            assert!(p
-                .data
-                .iter()
-                .any(|m| m["content"].as_array().is_some_and(|parts| parts
-                    .iter()
-                    .any(|part| part["text"] == "Confirmed in the VM checkout."))));
-        }
-        Reply::Session(s) if key.scope.provider == Provider::Codex => {
-            assert_eq!(s.key, key);
-            let Reply::History(p) = desktop.request(Command::History(key, None)) else {
-                panic!("missing Codex history")
-            };
-            assert!(p
-                .data
-                .iter()
-                .any(|turn| turn["items"].as_array().is_some_and(|items| items
-                    .iter()
-                    .any(|item| item["type"] == "agentMessage"
-                        && item["text"] == "Confirmed in the VM checkout."))));
-        }
-        _ => panic!("cold resume did not recover the native session"),
-    }
+    assert!(
+        matches!(desktop.request(Command::Resume(key.clone())), Reply::Session(s) if s.key == key)
+    );
+    let Reply::History(p) = desktop.request(Command::History(key, None)) else {
+        panic!("missing Codex history")
+    };
+    assert!(p
+        .data
+        .iter()
+        .any(|turn| turn["items"].as_array().is_some_and(|items| items
+            .iter()
+            .any(|item| item["type"] == "agentMessage"
+                && item["text"] == "Confirmed in the VM checkout."))));
 }

@@ -582,16 +582,18 @@ impl Runtime {
                 .chain(update.map(Event::Branch))
                 .collect()
         });
-        let branches = providers.branches.clone();
-        runtime.forward(providers.opencode.subscribe(), move |event| {
-            let update = branches
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .opencode_event(&event);
-            std::iter::once(Event::OpenCode(event))
-                .chain(update.map(Event::Branch))
-                .collect()
-        });
+        if local {
+            let branches = providers.branches.clone();
+            runtime.forward(providers.opencode.subscribe(), move |event| {
+                let update = branches
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .opencode_event(&event);
+                std::iter::once(Event::OpenCode(event))
+                    .chain(update.map(Event::Branch))
+                    .collect()
+            });
+        }
         runtime.forward(providers.approvals.subscribe(), |value| {
             vec![Event::Approvals(value)]
         });

@@ -79,7 +79,7 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
 }
 
 #[test]
-fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
+fn new_session_shortcuts_use_codex_on_the_vm_even_with_opencode_selected_for_local_sessions() {
     let mut rt = design_runtime("", (800., 620.));
     let id = "checkout-example";
     rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
@@ -99,11 +99,10 @@ fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
         advance(rt, 0.2);
     };
     shortcut(&mut rt, true);
-    assert_eq!(live(&rt.state).panels.launch_provider, Provider::OpenCode);
     fill(&mut rt, "launch-search", "no-such-machine");
     assert!(rt.find("launch-vm-checkout-example").is_none());
     fill(&mut rt, "launch-search", "feat/remote-checkout");
-    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "launch-provider-opencode");
     click(&mut rt, "launch-vm-checkout-example");
     let l = live(&rt.state);
     assert_eq!(l.panels.screen, Screen::Conversation);
@@ -131,6 +130,54 @@ fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
             .iter()
             .all(|(_, op)| !matches!(op, Command::Remote(_)))
     );
+}
+
+#[test]
+fn a_vm_launch_from_home_checks_its_chosen_worktree_and_keeps_the_boat_chat_parked_on_mismatch() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    let tree = "/worktrees/selected";
+    rt.update(|s, _| {
+        crate::remote::scene(s, "native-connected");
+        crate::home::open(s);
+        let app = &mut live_mut(s).app;
+        let source = app.remote.saved.checkouts[id].source.project.clone();
+        app.projects.push(caelum_protocol::ProjectInfo {
+            name: "selected".into(),
+            path: tree.into(),
+        });
+        app.project_roots.insert(tree.into(), source);
+        app.home_select_project(tree.into());
+        crate::panels::open_launcher(s);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "launch-vm-checkout-example");
+    assert!(rt.find("remote-setup-composer").is_some());
+    let commands = live_mut(&mut rt.state).app.commands();
+    let check = commands.iter().find_map(|(r,c)| matches!(c, Command::Remote(Operation::MatchCheckout(p,t)) if p == tree && t.machine.id == "vm-example").then_some(*r)).unwrap();
+    rt.update(|s, _| {
+        live_mut(s).apply(Event::Completed(
+            check,
+            Err("The VM is on a different branch.".into()),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.find("refresh-remote-checkout").is_some());
+    assert!(rt.find("vm-provider-trigger").is_none());
+    assert!(rt.find("remote-draft-checkout-example").is_none());
+    let l = live_mut(&mut rt.state);
+    assert!(l.app.selected.is_none());
+    assert_eq!(
+        l.app.remote.saved.checkouts[id]
+            .thread
+            .conversation
+            .as_deref(),
+        Some("thread-example")
+    );
+    assert!(l.app.commands().iter().all(|(_, c)| !matches!(
+        c,
+        Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+    )));
 }
 
 #[test]

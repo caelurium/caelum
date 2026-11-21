@@ -85,8 +85,14 @@ fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_
     let (req, _) = app.commands().pop().unwrap();
     let verified = || Reply::Remote(prepared_vm(machine("vm"), "feature/local"));
     app.apply(Event::Completed(req, Ok(verified())));
-    let slot = app.open_vm_session(&id, None).unwrap();
+    let slot = app.open_vm_session(&id, SessionIntent::Reopen).unwrap();
     assert_ne!(slot, local);
+    assert_eq!(app.sessions[slot].scope.provider, Provider::Codex);
+    assert_eq!(app.sessions[local].scope.provider, Provider::OpenCode);
+    assert_eq!(
+        app.sessions[local].remote_id.as_deref(),
+        Some("local-session")
+    );
     assert_eq!(app.sessions[slot].draft, app.sessions[local].draft);
     assert!(app.commands().is_empty());
     assert!(app.send(slot, "Continue work".into()));
@@ -148,8 +154,8 @@ fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_
     ));
     let conversation = &mut restored.sessions[slot].conversation;
     conversation.history(
-        Provider::OpenCode,
-        &[serde_json::json!({"type":"user","id":"msg_first","text":text})],
+        Provider::Codex,
+        &[serde_json::json!({"id":"turn-first","items":[{"type":"userMessage","id":"msg_first","content":[{"type":"text","text":text}]}]})],
         true,
     );
     assert_eq!(
@@ -188,7 +194,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
-            provider: Provider::OpenCode,
+            provider: Provider::Codex,
             conversation: "c".into(),
             prompt: "p".into(),
             id: "r".into(),
@@ -604,7 +610,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     let i = local(&mut app);
     let m = machine("vm");
     app.remote.picker = Some(Picker::Ready(source()));
-    let id = app.attach_remote(m.clone(), None).unwrap();
+    let id = app.attach_remote(m.clone(), SessionIntent::Reopen).unwrap();
     let (req, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(
         req,
@@ -618,7 +624,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     app.remote.saved.checkouts.get_mut(&id).unwrap().thread = original.clone();
     app.home_select_project(source().project);
     app.home.draft.text = "From Home".into();
-    app.home_set_provider(Provider::Codex);
+    app.home_set_provider(Provider::OpenCode);
     assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
     app.home_select_project(source().project);
     app.remote.picker = Some(Picker::Ready(source()));

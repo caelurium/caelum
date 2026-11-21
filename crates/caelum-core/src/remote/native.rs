@@ -23,6 +23,14 @@ use super::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+/// Reopening keeps the saved session's identity. Only a new draft chooses today's VM provider.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SessionIntent {
+    #[default]
+    Reopen,
+    New,
+}
+
 /// Stable across SSH reauthorization and VM resume. Never use an IP as workspace identity.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NativeTarget {

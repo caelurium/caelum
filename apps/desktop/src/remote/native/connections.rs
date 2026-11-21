@@ -68,14 +68,11 @@ impl Connections {
             && matches!(
                 &command,
                 Command::Choices(_)
-                    | Command::Commands(_)
                     | Command::Details(_)
-                    | Command::Shells(_)
                     | Command::Resume(_)
                     | Command::List(_)
                     | Command::ListArchived(_)
                     | Command::History(..)
-                    | Command::Inbox(_)
                     | Command::Task(
                         Task::Directory { .. }
                             | Task::Git { .. }

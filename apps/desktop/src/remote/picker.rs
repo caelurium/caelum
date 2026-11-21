@@ -7,15 +7,15 @@ use crate::{
     ui,
 };
 use caelum_core::{
-    application::{Provider, VmDestination},
-    remote::{Lifetime, Picker, Size, Source, valid_branch},
+    application::VmDestination,
+    remote::{Lifetime, Picker, Size, Source, native::SessionIntent, valid_branch},
 };
 use rune::{El, ScrollSpec, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
 #[derive(Default)]
 pub(super) struct Form {
-    launcher_provider: Option<Provider>,
+    intent: SessionIntent,
     size: Size,
     lifetime: Lifetime,
     tab: Tab,
@@ -31,21 +31,20 @@ enum Tab {
 impl Form {
     pub(super) fn for_entry(l: &Live) -> Self {
         Self {
-            launcher_provider: (l.panels.overlay == Some(Screen::Launcher))
-                .then_some(l.panels.launch_provider),
+            intent: if l.panels.overlay == Some(Screen::Launcher) {
+                SessionIntent::New
+            } else {
+                SessionIntent::Reopen
+            },
             ..Self::default()
         }
     }
 
     pub(super) fn reset_project(&mut self) {
         *self = Self {
-            launcher_provider: self.launcher_provider,
+            intent: self.intent,
             ..Self::default()
         };
-    }
-
-    fn provider(&self) -> Provider {
-        self.launcher_provider.unwrap_or(Provider::OpenCode)
     }
 
     fn ready(&self, source: &Source) -> bool {
@@ -162,10 +161,6 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     }
 
     let owner = source.clone();
-    let provider = l
-        .app
-        .vm_handoff()
-        .map_or(l.remote.form.provider(), |h| h.provider);
     pane.child(ui::divider(k)).child(
         row()
             .key("vm-create-footer")
@@ -174,7 +169,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
             .center_y()
             .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted))
             .child(
-                ui::caption(format!("{} · VM provider settings", provider.name()), k)
+                ui::caption("Codex on VM", k)
                     .truncate()
                     .min_w(0.0)
                     .grow(1.0)
@@ -207,9 +202,8 @@ fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
             lifetime: f.lifetime,
         });
         l.schedule();
-    } else if let Some(id) = l.app.create_remote(f.size, f.lifetime, f.provider()) {
-        let provider = f.provider();
-        super::checkout::session(s, &id, Some(provider));
+    } else if let Some(id) = l.app.create_remote(f.size, f.lifetime) {
+        super::checkout::session(s, &id, SessionIntent::New);
     }
 }
 
@@ -298,11 +292,15 @@ pub(crate) fn handoff_height(s: &Workspace) -> f32 {
 fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
     let l = live(s);
     let app = &l.app;
-    let new_session = l.remote.form.launcher_provider;
-    let detail = format!(
-        "The VM checkout must be on {} and contain its published commit.",
-        source.base
-    );
+    let intent = l.remote.form.intent;
+    let detail = if handoff || intent == SessionIntent::New {
+        format!(
+            "Codex needs the VM checkout on {} with its published commit.",
+            source.base
+        )
+    } else {
+        "Choose a VM to reopen its checkout.".into()
+    };
     let mut list = col().w_full().gap(6.0).child(ui::caption(detail, k).wrap());
     for machine in app
         .remote
@@ -313,7 +311,7 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
     {
         let blocker = if handoff {
             app.handoff_machine_blocker(machine)
-        } else if new_session.is_some() {
+        } else if intent == SessionIntent::New {
             app.vm_session_machine_blocker(machine)
         } else {
             None
@@ -362,8 +360,8 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
                     l.app
                         .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
                     l.schedule();
-                } else if let Some(id) = l.app.attach_remote(owner.clone(), new_session) {
-                    super::checkout::session(s, &id, new_session);
+                } else if let Some(id) = l.app.attach_remote(owner.clone(), intent) {
+                    super::checkout::session(s, &id, intent);
                 }
             }),
         );

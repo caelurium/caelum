@@ -1,4 +1,5 @@
 use super::{OpenCodeError, OpenCodeProvider};
+use crate::projects::Project;
 use caelum_protocol::{OpenCodeStats, OpenCodeStatsFilter, OpenCodeStatsProject};
 use reqwest::Method;
 use std::path::Path;
@@ -8,7 +9,7 @@ impl OpenCodeProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<Vec<OpenCodeStatsProject>, OpenCodeError> {
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let response = server.request_json(
             Method::GET,
@@ -30,7 +31,7 @@ impl OpenCodeProvider {
                 "stats end must be after start".into(),
             ));
         }
-        let project = self.project(project_path)?;
+        let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         let mut query = vec![("tools", "none".to_owned())];
         if let Some(from) = filter.from {

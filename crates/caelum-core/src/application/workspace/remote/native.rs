@@ -5,7 +5,7 @@ use super::{Pending, Workspace};
 use crate::{
     application::{Command, Event, Provider, Reply, Scope},
     remote::{
-        native::{checkout_id, project_key},
+        native::{checkout_id, project_key, SessionIntent},
         Job, Operation, Outcome, Phase, VmLink,
     },
 };
@@ -30,7 +30,7 @@ impl Workspace {
 
     /// A VM conversation is a normal stable session slot. The URI is local state;
     /// the provider receives the verified physical directory on its VM.
-    pub fn open_vm_session(&mut self, id: &str, new: Option<Provider>) -> Option<usize> {
+    pub fn open_vm_session(&mut self, id: &str, intent: SessionIntent) -> Option<usize> {
         let checkout = self.remote.saved.checkouts.get(id)?;
         if matches!(self.remote.jobs.get(id), Some(Job::Deleting(_)))
             || self.remote.branch_checks.contains_key(id)
@@ -39,7 +39,7 @@ impl Workspace {
         }
         let ready = self.can_open_vm_session(id);
         let project = project_key(id);
-        if new.is_none() && checkout.thread.awaiting_native {
+        if intent == SessionIntent::Reopen && checkout.thread.awaiting_native {
             if !ready || self.remote.jobs.contains_key(id) {
                 return None;
             }
@@ -50,11 +50,15 @@ impl Workspace {
             let previous = c.other_threads.pop().unwrap_or_default();
             let thread = std::mem::replace(&mut c.thread, previous);
             let h = thread.continued?;
-            let i = self.new_session(Scope {
+            let i = self.new_session_slot(Scope {
                 project,
                 provider: thread.provider,
             });
             let s = &mut self.sessions[i];
+            if thread.model.is_some() {
+                s.options.model = thread.model;
+                s.options.effort = thread.effort;
+            }
             s.title.clone_from(&h.title);
             s.draft = thread.draft;
             s.conversation.handoff(&h.chat);
@@ -66,14 +70,15 @@ impl Workspace {
             s.scope.project == project
                 && !s.forgotten
                 && !s.archived
-                && new.is_none_or(|p| {
-                    ready
-                        && s.scope.provider == p
+                && (intent == SessionIntent::Reopen
+                    || (ready
+                        && s.scope.provider == Provider::Codex
                         && !s.has_context()
+                        && s.native_handoff.is_none()
+                        && s.failed_prompt.is_none()
                         && !s.options_dirty
                         && !s.working()
-                        && s.attaching == 0
-                })
+                        && s.attaching == 0))
         };
         let existing = self
             .remembered_checkouts
@@ -88,9 +93,10 @@ impl Workspace {
         if !ready {
             return None;
         }
-        let provider = new.unwrap_or_else(|| self.default_provider_for(Some(&project)));
-        let i = self.new_session(Scope { project, provider });
-        Some(i)
+        Some(self.new_session(Scope {
+            project,
+            provider: Provider::Codex,
+        }))
     }
 
     pub(super) fn inline_link(&self, link: &VmLink) -> Option<usize> {
@@ -152,18 +158,13 @@ impl Workspace {
     }
 
     pub fn native_connected(&mut self, project: &str) {
-        for provider in Provider::ALL {
-            let scope = Scope {
-                project: project.to_owned(),
-                provider,
-            };
-            self.discover_sessions(scope.clone());
-            self.refresh_choices_for(scope);
-        }
-        if let Some(i) = self
-            .selected
-            .filter(|&i| self.sessions[i].scope.project == project)
-        {
+        let scope = Scope {
+            project: project.to_owned(),
+            provider: Provider::Codex,
+        };
+        self.discover_sessions(scope.clone());
+        self.refresh_choices_for(scope.clone());
+        if let Some(i) = self.selected.filter(|&i| self.sessions[i].scope == scope) {
             self.refresh(i);
             if let Some(key) = self.sessions[i].key() {
                 self.request(Command::Details(key), Pending::Details(i));
@@ -178,23 +179,28 @@ impl Workspace {
     /// Brokers publish complete snapshots of their own requests, not those of
     /// the laptop and every other connected VM.
     pub fn merge_broker_event(&self, project: Option<&str>, event: &mut Event) {
-        let other = |path: &str| project.map_or_else(|| checkout_id(path).is_some(), |p| p != path);
+        let other = |path: &str, provider: &str| {
+            project.map_or_else(
+                || checkout_id(path).is_some(),
+                |p| p != path || provider != Provider::Codex.as_str(),
+            )
+        };
         match event {
             Event::Approvals(items) => {
-                items.retain(|p| !other(&p.project_path));
+                items.retain(|p| !other(&p.project_path, &p.provider));
                 items.extend(
                     self.approvals
                         .iter()
-                        .filter(|p| other(&p.project_path))
+                        .filter(|p| other(&p.project_path, &p.provider))
                         .cloned(),
                 );
             }
             Event::Questions(items) => {
-                items.retain(|p| !other(&p.project_path));
+                items.retain(|p| !other(&p.project_path, &p.provider));
                 items.extend(
                     self.questions
                         .iter()
-                        .filter(|p| other(&p.project_path))
+                        .filter(|p| other(&p.project_path, &p.provider))
                         .cloned(),
                 );
             }

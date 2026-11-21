@@ -108,15 +108,9 @@ impl Binding {
             Event::Checkout(path) => self.bind(path).ok()?,
             Event::Branch(b) => self.bind(&mut b.project_path).ok()?,
             Event::Codex(e) => self.bind(&mut e.project_path).ok()?,
-            Event::OpenCode(e) => {
-                self.bind(&mut e.project_path).ok()?;
-                if e.event_type == "session.moved" {
-                    return None;
-                }
-            }
             Event::Approvals(items) => items.retain_mut(|p| self.bind(&mut p.project_path).is_ok()),
             Event::Questions(items) => items.retain_mut(|p| self.bind(&mut p.project_path).is_ok()),
-            Event::UpdateProgress(..) => return None,
+            Event::OpenCode(_) | Event::UpdateProgress(..) => return None,
         }
         Some(event)
     }

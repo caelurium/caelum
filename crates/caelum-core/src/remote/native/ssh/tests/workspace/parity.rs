@@ -1,9 +1,9 @@
-use super::{Command, Desktop, Reply, SessionKey};
+use super::{Command, Desktop, Reply};
 use crate::application::{Task, TaskReply};
 use caelum_protocol::ProjectSearchMode;
 
-pub(super) fn checkout(desktop: &mut Desktop, key: &SessionKey) {
-    let project = &key.scope.project;
+pub(super) fn checkout(desktop: &mut Desktop) {
+    let project = desktop.binding.project.clone();
     let task = |desktop: &mut Desktop, t| match desktop.request(Command::Task(t)) {
         Reply::Task(reply) => reply,
         _ => panic!("expected a checkout reply"),
@@ -70,20 +70,4 @@ pub(super) fn checkout(desktop: &mut Desktop, key: &SessionKey) {
         ),
         TaskReply::Discovered(None)
     ));
-    assert!(
-        matches!(desktop.request(Command::Shells(key.clone())),Reply::Shells(s) if s[0].id=="sh_example")
-    );
-    let output = task(
-        desktop,
-        Task::Shell {
-            project: project.clone(),
-            session: key.id.clone(),
-            id: "sh_example".into(),
-            stop: true,
-        },
-    );
-    assert!(matches!(output,TaskReply::Shell(s) if s.ends_with("latest café output")));
-    assert!(
-        matches!(desktop.request(Command::Shells(key.clone())),Reply::Shells(s) if s.is_empty())
-    );
 }

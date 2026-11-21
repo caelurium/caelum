@@ -1,13 +1,13 @@
-# Run Codex or OpenCode on Boat
+# Run Codex on Boat
 
 A Boat VM has its own Git checkout and disk. Choose it as the destination for
-a normal Codex or OpenCode session. Your composer, transcript and session list
-stay in the same Caelum window; the provider, files and Git run on the VM.
-Configure provider credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
+a normal Codex session. Your composer, transcript and session list stay in the
+same Caelum window; Codex, files and Git run on the VM.
+Configure Codex credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
 
 ## Create or attach a checkout
 
-1. Connect GitHub and credentials for the provider you want to use in your
+1. Connect GitHub and Codex credentials in your
    [Boat account](https://docs.boat.dev/integrated-agents/keys.md). In Caelum,
    open **Settings → Remote machines**, enter your Boat API key and click
    **Connect Boat**. The key is stored in Keychain or Linux Secret Service.
@@ -49,28 +49,32 @@ it at its saved path so the same sessions and files are reopened.
 ## Open a VM session
 
 Click a VM in the sidebar to return to its session, or open **New session**
-(**⇧⌘N**), choose a provider and pick the VM under the project. You can search
+(**⇧⌘N**) and pick the VM under the project. VM destinations use Codex regardless
+of the provider selected for local sessions. You can search
 by machine name, repository or branch. **⌘N** in a VM session
 starts another draft on that checkout. Select any local or VM row in **Sessions**
 to switch back, even while another session streams.
-The normal session list, model and effort pickers, transcript, questions,
-approvals and background-shell output use the provider installed on the VM.
+The normal session list, model and effort pickers, transcript, questions
+and approvals use Codex on the VM.
 **Files** and **Changes** read that checkout. Opening or switching
 sessions does not submit a message.
 
 ![A VM session open in the same window as local sessions](design/previews/rune-dark-native-connected-small.png)
 
-![New session with Codex selected and a ready Boat VM listed under its project](design/previews/rune-dark-vm-session-launcher-small.png)
+![New session with a Codex VM destination listed under its project](design/previews/rune-dark-vm-session-launcher-small.png)
 
 The Boat key needs the [`ssh` action](https://docs.boat.dev/ssh-access).
 No Caelum installation is needed on the VM. Caelum verifies its SSH host key,
-Git root and origin, then forwards a loopback port to the VM’s OpenCode V2
-service or Codex WebSocket `app-server`. It starts the installed provider if
-needed. The VM uses its own provider settings and credentials. Drafts and session settings are kept
+Git root and origin, then forwards a loopback port to the VM’s Codex WebSocket
+`app-server`. The installed `codex` must support `app-server --listen ws://…`
+(Codex CLI `0.171.0` does). Caelum starts the server if needed. It uses the VM’s
+Codex settings and credentials. Drafts and session settings are kept
 on this computer, scoped to their account, machine and repository. **Save as
-default** in a VM session sets the model, effort and agent for new sessions on
-that checkout. Provider defaults, favourite models and drafts from the earlier
-separate-window preview are imported on startup.
+default** sets the model and effort for new Codex sessions on that checkout.
+Earlier VM sessions, favourites and drafts are preserved. If you open a saved
+native OpenCode session, its ID, settings and draft stay with that session.
+Its provider history stays on the VM. **New Codex session** opens a separate
+draft on the same VM.
 
 If SSH drops, you can keep editing. Caelum tries to reconnect once; if the VM
 has stopped, **Resume** it from machine stats and reconnect in the same session.
@@ -79,7 +83,7 @@ restores questions and approvals that the provider still has pending. Check the 
 a message marked unconfirmed. Closing the window detaches; it does not stop
 the VM. SSH activity does **not** extend Boat’s auto-stop timer.
 
-![A disconnected native workspace with its OpenCode session and unsent draft still visible](design/previews/rune-light-native-offline-small.png)
+![A disconnected Codex VM session with its unsent draft still visible](design/previews/rune-light-native-offline-small.png)
 
 ## Connected, but Create VM returns 403
 
@@ -124,8 +128,8 @@ Your original session and draft stay on the laptop.
 If the VM already had a conversation, its row stays in **Sessions**.
 
 The first time you press **Send**, Caelum includes the local user and assistant
-messages as context for the native session on the VM. The VM composer starts with
-the provider from your local session or Home draft. Setup shows how much chat
+messages as context for a new Codex session on the VM, even when the local chat
+used OpenCode. Setup shows how much chat
 will travel: up to the most recent 200 messages or 64 KiB of text. Tool output,
 reasoning, attachments and unpublished Git work stay local.
 
@@ -199,11 +203,10 @@ effort setting alone doesn’t mean a summary is available.
 
 ### Resume or manage the machine
 
-If you used the earlier direct-OpenCode preview,
-its VM transcript and draft stay available for reference. Your next explicit
-send starts a managed conversation; opening the checkout does not replay a turn.
-Caelum no longer contacts the preview service. If one is still running on an
-old VM, stopping that VM ends its detached process.
+For chats migrated from the original hosted OpenCode preview into the **Boat
+composer**, the saved transcript and draft stay available for reference.
+Sending from that composer starts a managed conversation. Caelum no longer
+contacts the original preview service.
 
 Find the checkout under **Remote VMs** in the project sidebar. **Stop** in the
 composer interrupts just the selected turn. **Stop machine** keeps the disk

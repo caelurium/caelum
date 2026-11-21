@@ -52,14 +52,13 @@ Core tests use fake provider processes and local HTTP servers for deterministic
 protocol, recovery and lifecycle checks. Real-service smoke tests are opt-in;
 see the [desktop development guide](../apps/desktop/README.md).
 
-`nix develop -c python3 scripts/dev/smoke_native_workspace.py` exercises the
-desktop transport, SFTP and Git over a pinned loopback SSH connection, using
-a temporary Git checkout and provider fixtures. To stream a real provider turn
-and recover the history after a provider restart and host-key change, pass
-`--real-opencode /path/to/opencode` or `--real-codex /path/to/codex`. A loopback
-Responses fixture supplies the model output and checks that reconnecting does
-not ask for another answer. Add `--approval` to disconnect while the provider
-is waiting for permission. All modes use a temporary home with no Caelum binary.
+In the dev shell, `python3 scripts/dev/smoke_native_workspace.py` exercises
+SFTP and Git in a temporary checkout over pinned loopback SSH. The fixture
+requires Python with `asyncssh`. Pass `--real-codex /path/to/codex` to stream
+a turn and recover its history after restarting the server and changing the
+host key. Add `--approval` to drop SSH while Codex waits for permission.
+A loopback Responses fixture counts model requests before Send and after
+reconnect. The VM home has neither a Caelum binary nor OpenCode.
 
 Build the signed macOS Dev bundle with:
 

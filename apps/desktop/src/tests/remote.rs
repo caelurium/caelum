@@ -142,7 +142,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
 }
 
 #[test]
-fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
+fn changing_the_launch_project_opens_a_codex_vm_with_the_selected_branch() {
     use crate::live::{live, live_mut};
     let mut rt = design_runtime("", (800., 620.));
     rt.update(|s, _| {
@@ -150,7 +150,7 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
         crate::panels::open_launcher(s);
     });
     advance(&mut rt, 0.2);
-    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "launch-provider-opencode");
     click(&mut rt, "open-create-vm");
     let publish_source = |rt: &mut Runtime<Workspace>| {
         rt.update(|s, _| {
@@ -190,10 +190,31 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
     assert_eq!(c.thread.provider, Provider::Codex);
     assert_eq!(c.branch(), Some("feature/launcher"));
     assert!(c.thread.conversation.is_none());
-    assert!(matches!(
-        app.commands().as_slice(),
-        [(_, Command::Remote(Operation::Create(..)))]
-    ));
+    let commands = app.commands();
+    let [(req, Command::Remote(Operation::Create(..)))] = commands.as_slice() else {
+        panic!("{commands:?}")
+    };
+    let machine = app.remote.inventory.as_ref().unwrap().machines[0].clone();
+    rt.update(|s, _| {
+        live_mut(s).apply(Event::Completed(
+            *req,
+            Ok(Reply::Remote(Outcome::Prepared {
+                machine,
+                root: "/workspace/checkout".into(),
+                branch: "feature/launcher".into(),
+            })),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    let l = live_mut(&mut rt.state);
+    assert_eq!(l.panels.screen, crate::panels::Screen::Conversation);
+    let draft = &l.app.sessions[l.app.selected.unwrap()];
+    assert_eq!(draft.scope.provider, Provider::Codex);
+    assert!(draft.remote_id.is_none());
+    assert!(!l.app.commands().iter().any(|(_, c)| matches!(
+        c,
+        Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+    )));
 }
 
 #[test]

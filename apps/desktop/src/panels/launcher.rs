@@ -12,13 +12,10 @@ pub fn open_launcher(s: &mut Workspace) {
     let l = live_mut(s);
     l.panels.launch_provider = l
         .app
-        .remote
-        .saved
         .selected
-        .as_ref()
-        .and_then(|id| l.app.remote.saved.checkouts.get(id))
-        .map(|c| c.thread.provider)
-        .or_else(|| l.app.selected.map(|i| l.app.sessions[i].scope.provider))
+        .map(|i| &l.app.sessions[i].scope)
+        .filter(|scope| caelum_core::remote::native::checkout_id(&scope.project).is_none())
+        .map(|scope| scope.provider)
         .unwrap_or(l.app.preferences.default_provider);
     l.panels.overlay = Some(Screen::Launcher);
     l.commands.search.clear();
@@ -28,7 +25,10 @@ pub fn open_launcher(s: &mut Workspace) {
 pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
     let mut body = col().w_full().h_full().min_h(0.0).gap(12.0);
-    let mut providers = row().gap(8.0);
+    let mut providers = row()
+        .center_y()
+        .gap(8.0)
+        .child(ui::caption("Local sessions", k));
     for provider in caelum_core::application::Provider::ALL {
         providers = providers.child(
             ui::tab(
@@ -81,7 +81,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
         let path = project.path.clone();
         let tree_project = path.clone();
         let manage_project = path.clone();
-        let remote_project = path.clone();
+        let remote_project = crate::remote::launch_source_for(l, &path).to_owned();
         let mut group = col()
             .w_full()
             .gap(2.0)
@@ -107,7 +107,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
                         .key(crate::code_view::source_key(&project.path, "launch")),
                     )
                     .child(
-                        quiet_button(&ui::SERVER, "Run on remote machine…")
+                        quiet_button(&ui::SERVER, "Run Codex on remote machine…")
                             .on_press(move |s: &mut Workspace| {
                                 crate::remote::open(s, remote_project.clone())
                             })
