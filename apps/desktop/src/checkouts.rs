@@ -125,7 +125,7 @@ pub fn status(app: &Application, tree: &GitWorktree) -> String {
     let sessions: Vec<_> = app
         .sessions
         .iter()
-        .filter(|s| &s.scope.project == path && !s.archived && !s.forgotten)
+        .filter(|s| &s.scope.project == path && !s.archived() && !s.forgotten())
         .collect();
     let working = sessions
         .iter()

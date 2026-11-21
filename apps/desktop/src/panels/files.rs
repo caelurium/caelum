@@ -292,8 +292,8 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
         .icon(&crate::PLUS)
         .disabled(live.app.selected.is_none_or(|i| {
             live.app.sessions[i].scope.project != *project
-                || live.app.sessions[i].archived
-                || live.app.sessions[i].forgotten
+                || live.app.sessions[i].archived()
+                || live.app.sessions[i].forgotten()
         }))
         .on_press(move |s: &mut Workspace| {
             let live = live_mut(s);

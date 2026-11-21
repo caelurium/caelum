@@ -73,7 +73,7 @@ impl Workspace {
                     if t.is_blank()
                         && t.local_id.is_none()
                         && self.sessions.iter().any(|s| {
-                            !s.forgotten
+                            !s.forgotten()
                                 && crate::remote::native::checkout_id(&s.scope.project)
                                     == Some(id.as_str())
                         })

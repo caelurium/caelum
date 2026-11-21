@@ -1,7 +1,5 @@
 use super::{Pending, Session, Workspace};
-use crate::application::{
-    Attachment, Command, Provider, QueuedPrompt, Reply, Scope, Task, TaskReply,
-};
+use crate::application::{Attachment, Command, Provider, Reply, Scope, Task, TaskReply};
 
 impl Workspace {
     pub(super) fn complete(
@@ -10,10 +8,8 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
-        if let Pending::CheckHandoff(i, text) = pending {
-            if let Err(e) = self.checked_native_start(i, &text, result) {
-                self.complete(request, Pending::Start(i, text), Err(e));
-            }
+        if let Pending::CheckHandoff(i) = pending {
+            self.complete_handoff_check(i, request, result);
             return;
         }
         if let Pending::Remote(lane) = pending {
@@ -80,7 +76,7 @@ impl Workspace {
             let session = &mut self.sessions[index];
             session.attaching = session.attaching.saturating_sub(1);
             if self.selected != Some(index)
-                || session.archived
+                || session.archived()
                 || generation != session.completion_generation
                 || draft
                     != (if side {
@@ -144,17 +140,12 @@ impl Workspace {
                 match pending {
                     Pending::Inbox(index, _) => self.sessions[index].error = Some(error),
                     Pending::Enqueue(index, id) | Pending::RemoveQueued(index, id) => {
-                        let inbox = &mut self.sessions[index].inbox;
-                        inbox.revision += 1;
-                        if let Some(item) = inbox.items.iter_mut().find(|v| v.id == id) {
-                            item.pending = false;
-                            item.error = Some(error);
-                        }
+                        self.sessions[index]
+                            .inbox
+                            .complete_mutation(&id, request, Err(error));
                     }
-                    Pending::Control(index, prompt) => {
-                        self.sessions[index].commanding = false;
-                        self.sessions[index].error = Some(error);
-                        self.sessions[index].failed_prompt = Some(prompt);
+                    Pending::Control(index) => {
+                        self.complete_native_command(index, request, Err(error))
                     }
                     Pending::Generate(index, _, generation) => {
                         if self.sessions[index].side_generation == generation {
@@ -183,16 +174,9 @@ impl Workspace {
                         self.notices.insert(scope, error);
                     }
                     Pending::Shells(index, _) => self.sessions[index].error = Some(error),
-                    Pending::Archive(index, archived, _, _) => {
-                        self.sessions[index].archiving = false;
-                        self.sessions[index].error = Some(error);
-                        if !archived {
-                            self.reset_archive_notice(index);
-                        }
-                    }
+                    Pending::Archive(index) => self.complete_archive(index, request, Err(error)),
                     Pending::DeleteSession(index) => {
-                        self.sessions[index].deleting = false;
-                        self.sessions[index].error = Some(error);
+                        self.complete_delete(index, request, Err(error))
                     }
                     Pending::Details(_) => {}
                     Pending::Open(_, _) => {
@@ -209,61 +193,9 @@ impl Workspace {
                     Pending::Resume(index) | Pending::History(index) => {
                         self.fail_history(index, request, error);
                     }
-                    Pending::Start(index, prompt) => {
-                        let session = &mut self.sessions[index];
-                        session.inflight_prompt = None;
-                        session.queue_paused = true;
-                        session.submitting = false;
-                        session.stopping = false;
-                        session.conversation.working = false;
-                        session.conversation.remove_optimistic();
-                        session.error = Some(error);
-                        if session.inflight_queued {
-                            session.queue.insert(
-                                0,
-                                QueuedPrompt {
-                                    text: prompt,
-                                    options: session.inflight_options.clone(),
-                                },
-                            );
-                        } else {
-                            session.failed_prompt = Some(prompt);
-                        }
-                    }
-                    Pending::Send(index, prompt, revision) => {
-                        let session = &mut self.sessions[index];
-                        session.inflight_prompt = None;
-                        session.queue_paused = true;
-                        session.submitting = false;
-                        session.stopping = false;
-                        if session.revision == revision {
-                            session.conversation.working = false;
-                        }
-                        if session
-                            .conversation
-                            .entries
-                            .iter()
-                            .any(|entry| entry.optimistic)
-                        {
-                            session.conversation.remove_optimistic();
-                            if session.inflight_queued {
-                                session.queue.insert(
-                                    0,
-                                    QueuedPrompt {
-                                        text: prompt,
-                                        options: session.inflight_options.clone(),
-                                    },
-                                );
-                            } else {
-                                session.failed_prompt = Some(prompt);
-                            }
-                        }
-                        session.error = Some(error);
-                    }
-                    Pending::Cancel(index) => {
-                        self.sessions[index].stopping = false;
-                        self.sessions[index].error = Some(error);
-                    }
+                    Pending::Start(index) => self.complete_creation(index, request, Err(error)),
+                    Pending::Send(index) => self.complete_admission(index, request, Err(error)),
+                    Pending::Cancel(index) => self.complete_stop(index, request, Err(error)),
                     Pending::Request {
                         provider,
                         project,
@@ -292,20 +224,13 @@ impl Workspace {
             (Pending::Inbox(index, revision), Reply::Inbox(items)) => {
                 self.sessions[index].inbox.snapshot(revision, &items)
             }
-            (Pending::Enqueue(index, id), Reply::Done) => {
-                let inbox = &mut self.sessions[index].inbox;
-                inbox.revision += 1;
-                if let Some(item) = inbox.items.iter_mut().find(|v| v.id == id) {
-                    item.pending = false;
-                    item.error = None;
-                }
+            (Pending::Enqueue(index, id) | Pending::RemoveQueued(index, id), reply) => {
+                self.sessions[index]
+                    .inbox
+                    .complete_mutation(&id, request, done(reply));
             }
-            (Pending::RemoveQueued(index, id), Reply::Done) => {
-                self.sessions[index].inbox.settle(&id);
-            }
-            (Pending::Control(index, _), Reply::Done) => {
-                self.sessions[index].commanding = false;
-                self.refresh(index);
+            (Pending::Control(index), reply) => {
+                self.complete_native_command(index, request, done(reply));
             }
             (Pending::Generate(index, prompt, generation), Reply::Generated(text)) => {
                 if self.sessions[index].side_generation == generation {
@@ -382,21 +307,16 @@ impl Workspace {
                                 session.attachments = saved.attachments;
                                 session.failed_prompt = saved.failed_prompt;
                                 session.queue = saved.queue;
-                                session.inbox.items = saved.inbox;
-                                for item in &mut session.inbox.items {
-                                    if item.pending {
-                                        item.pending = false;
-                                        item.error = Some(
-                                            "Delivery needs reconciliation. Refresh or retry."
-                                                .into(),
-                                        );
-                                    }
-                                }
+                                session.inbox.items = saved
+                                    .inbox
+                                    .into_iter()
+                                    .map(super::super::SavedInboxPrompt::restore)
+                                    .collect();
                                 if let Some(pending) = saved.pending_submission {
                                     session.queue.insert(0, pending);
                                 }
                                 session.queue_paused = true;
-                                session.archived = saved.archived;
+                                session.restore_archive(saved.archived, 0);
                                 session.reading = saved.reading;
                                 session.unread = saved.unread;
                                 session
@@ -406,14 +326,14 @@ impl Workspace {
                             .sessions
                             .iter()
                             .enumerate()
-                            .filter(|(_, s)| !s.archived)
+                            .filter(|(_, s)| !s.archived())
                         {
                             self.remembered.insert(s.scope.project.clone(), i);
                             self.remembered_checkouts.insert(s.scope.project.clone(), i);
                         }
                         self.remembered
                             .extend(snapshot.remembered.into_iter().filter(|(_, i)| {
-                                *i < self.sessions.len() && !self.sessions[*i].archived
+                                *i < self.sessions.len() && !self.sessions[*i].archived()
                             }));
                         self.remembered_checkouts.extend(
                             self.remembered
@@ -428,7 +348,7 @@ impl Workspace {
                                 .filter(|(path, i)| {
                                     self.sessions
                                         .get(*i)
-                                        .is_some_and(|s| s.scope.project == *path && !s.archived)
+                                        .is_some_and(|s| s.scope.project == *path && !s.archived())
                                 }),
                         );
                         let details: Vec<_> = self
@@ -484,32 +404,9 @@ impl Workspace {
                     });
                 }
             }
-            (Pending::Archive(index, archived, select, revision), Reply::Done) => {
-                self.sessions[index].archiving = false;
-                self.sessions[index].archived = archived;
-
-                self.sessions[index].archive_barrier = self.next_request;
-                if archived {
-                    let owns_notice = self.archived_notice(index, revision);
-                    if self.selected == Some(index) {
-                        let replacement = self.select_archive_replacement(index);
-                        if owns_notice {
-                            self.set_notice_replacement(index, replacement);
-                        }
-                    }
-                } else {
-                    self.dismiss_archive(index);
-                    if !self.closed_since(&self.sessions[index].scope.project, request)
-                        && select.is_some_and(|(selected, navigation)| {
-                            self.selected == Some(selected) && self.navigation == navigation
-                        })
-                    {
-                        self.select(index);
-                    }
-                }
-            }
-            (Pending::DeleteSession(index), Reply::Done) => {
-                self.forget_deleted_session(index);
+            (Pending::Archive(index), reply) => self.complete_archive(index, request, done(reply)),
+            (Pending::DeleteSession(index), reply) => {
+                self.complete_delete(index, request, done(reply))
             }
             (Pending::Open(provider, navigation), Reply::Project(project)) => {
                 if self.closed_since(&project.path, request) {
@@ -567,7 +464,7 @@ impl Workspace {
                 for session in self
                     .sessions
                     .iter_mut()
-                    .filter(|s| s.scope == scope && s.remote_id.is_none() && !s.submitting)
+                    .filter(|s| s.scope == scope && s.remote_id.is_none() && !s.submitting())
                 {
                     if session.options.model.is_none() {
                         session.options.model = choices.default_model.clone();
@@ -590,47 +487,24 @@ impl Workspace {
             (Pending::Resume(index) | Pending::History(index), _) => {
                 self.fail_history(index, request, "Unexpected history response".into());
             }
-            (Pending::Start(index, prompt), Reply::Session(summary)) => {
-                let session = &mut self.sessions[index];
-                if session.scope != summary.key.scope {
-                    session.submitting = false;
-                    session.conversation.working = false;
-                    session.failed_prompt = Some(prompt);
-                    session.error =
-                        Some("Provider created a session in a different project".into());
-                    return;
-                }
-                session.remote_id = Some(summary.key.id);
-                if session.stopping {
-                    session.stopping = false;
-                    session.submitting = false;
-                    session.conversation.settle();
-                    session.conversation.remove_optimistic();
-                    session.failed_prompt = Some(prompt);
-                    session.inflight_prompt = None;
-                } else {
-                    self.send_first(index, prompt);
-                }
+            (Pending::Start(index), reply) => {
+                let result = match reply {
+                    Reply::Session(summary) => Ok(summary),
+                    _ => Err("Unexpected session creation response".into()),
+                };
+                self.complete_creation(index, request, result);
             }
-            (Pending::Send(index, _, _), Reply::Done) => {
-                let session = &mut self.sessions[index];
-                session.inflight_prompt = None;
-                session.submitting = false;
-                if session.stopping {
-                    let key = session.key().expect("submitted session");
-                    self.request(Command::Cancel(key), Pending::Cancel(index));
-                } else if !session.working() {
-                    self.refresh(index);
-                }
-            }
-            (Pending::Cancel(index), Reply::Done) => {
-                self.sessions[index].revision += 1;
-                self.sessions[index].stopping = false;
-                self.sessions[index].conversation.settle();
-                self.refresh(index);
-            }
+            (Pending::Send(index), reply) => self.complete_admission(index, request, done(reply)),
+            (Pending::Cancel(index), reply) => self.complete_stop(index, request, done(reply)),
             (Pending::Request { .. }, Reply::Done) => {}
             _ => self.error = Some("Unexpected application response".into()),
         }
+    }
+}
+
+fn done(reply: Reply) -> Result<(), String> {
+    match reply {
+        Reply::Done => Ok(()),
+        _ => Err("Unexpected application response".into()),
     }
 }

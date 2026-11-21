@@ -367,7 +367,7 @@ fn view(s: &Workspace, k: &Kit) -> (El, f32) {
                 .variant(ButtonVariant::GhostMuted)
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
-                    if l.app.sessions[index].scope == scope && !l.app.sessions[index].forgotten {
+                    if l.app.sessions[index].scope == scope && !l.app.sessions[index].forgotten() {
                         let options = l.app.sessions[index].options.clone();
                         l.app.edit_provider_options(&scope, |o| *o = options);
                         l.app

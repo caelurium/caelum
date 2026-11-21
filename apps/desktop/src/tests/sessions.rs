@@ -88,7 +88,7 @@ fn session_popover_roves_without_selecting_its_background_owner() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.2);
     assert!(element(&rt, "session-actions-1").focused);
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     click(&mut rt, "session-actions-1");
     click(&mut rt, "refresh-history");
     let commands = rt.state.live.as_mut().unwrap().app.commands();
@@ -124,7 +124,7 @@ fn archive_toast_pauses_for_presented_keyboard_focus_then_expires() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         assert!(l.tick_archive(now + 39_000));
-        assert!(l.app.sessions[1].archived);
+        assert!(l.app.sessions[1].archived());
     });
     advance(&mut rt, 0.2);
     assert!(
@@ -287,7 +287,7 @@ fn closing_local_sessions_and_undo_keep_the_workspace_editable() {
             close_session(&mut rt, 0);
         }
         let live = rt.state.live.as_ref().unwrap();
-        assert!(live.app.sessions[0].archived);
+        assert!(live.app.sessions[0].archived());
         assert_eq!(live.app.selected, Some(1));
         assert_eq!(live.app.sessions.len(), 2);
         assert!(live.panels.overlay.is_none());
@@ -305,7 +305,7 @@ fn closing_local_sessions_and_undo_keep_the_workspace_editable() {
         click(&mut rt, "undo-archive");
         let live = rt.state.live.as_ref().unwrap();
         assert_eq!(live.app.selected, Some(1));
-        assert!(!live.app.sessions[1].archived);
+        assert!(!live.app.sessions[1].archived());
         assert_eq!(live.drafts[1].text, "Independent background draft");
         assert_eq!(live.drafts[0].text, "Keep the archived draft café ☁️");
         assert_eq!(live.drafts[2].text, "Replacement draft");
@@ -326,7 +326,7 @@ fn closing_local_sessions_and_undo_keep_the_workspace_editable() {
         click(&mut rt, "archive-session");
         let live = rt.state.live.as_ref().unwrap();
         assert!(!live.panels.archived);
-        assert!(!live.app.sessions[0].archived);
+        assert!(!live.app.sessions[0].archived());
         assert_eq!(live.app.selected, Some(0));
         assert_eq!(live.drafts[0].text, "Keep the archived draft café ☁️");
     }
@@ -346,7 +346,7 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         rt.paste("Provider draft");
         close_session(&mut rt, 0);
         let live = rt.state.live.as_mut().unwrap();
-        assert!(live.app.sessions[0].archiving);
+        assert!(live.app.sessions[0].archiving());
         assert_eq!(live.app.selected, Some(0));
         let (request, command) = live.app.commands().pop().unwrap();
         assert!(matches!(command, Command::Archive(key, true)
@@ -358,7 +358,7 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
                 .apply(Event::Completed(request, Err("Offline".into())));
         });
         let session = &rt.state.live.as_ref().unwrap().app.sessions[0];
-        assert!(!session.archived && !session.archiving);
+        assert!(!session.archived() && !session.archiving());
         assert_eq!(session.error.as_deref(), Some("Offline"));
         element(&rt, "live-draft-0");
 
@@ -464,7 +464,7 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         });
         advance(&mut rt, 0.4);
         let live = rt.state.live.as_ref().unwrap();
-        assert!(!live.app.sessions[0].archived);
+        assert!(!live.app.sessions[0].archived());
         assert_eq!(live.app.selected, Some(0));
         assert!(!live.panels.archived);
     }
@@ -481,7 +481,17 @@ fn deleting_an_archived_session_requires_confirmation() {
         live.app.sessions[0].title =
             "A very long session title that must wrap inside the permanent deletion confirmation"
                 .into();
-        live.app.sessions[0].archived = true;
+        live.app.archive(0, true);
+        let request = live
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, command)| matches!(command, Command::Archive(..)))
+            .unwrap()
+            .0;
+        live.app.apply(Event::Completed(request, Ok(Reply::Done)));
+        live.app.dismiss_archive(0);
+        live.app.select(0);
         live.panels.archived = true;
     });
     advance(&mut rt, 0.3);
@@ -501,7 +511,7 @@ fn deleting_an_archived_session_requires_confirmation() {
             .iter()
             .all(|(_, command)| !matches!(command, Command::DeleteSession(_)))
     );
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].forgotten);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].forgotten());
 
     close_session(&mut rt, 0);
     element(&rt, "confirm-delete-session");
@@ -517,7 +527,7 @@ fn deleting_an_archived_session_requires_confirmation() {
         .find(|(_, command)| matches!(command, Command::DeleteSession(_)))
         .unwrap();
     assert!(matches!(command, Command::DeleteSession(key) if key.id == "remote-session"));
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].forgotten);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].forgotten());
 
     rt.update(|s, _| {
         s.live
@@ -527,7 +537,7 @@ fn deleting_an_archived_session_requires_confirmation() {
     });
     advance(&mut rt, 0.4);
     let live = rt.state.live.as_ref().unwrap();
-    assert!(live.app.sessions[0].forgotten);
+    assert!(live.app.sessions[0].forgotten());
     assert_ne!(live.app.selected, Some(0));
     assert!(!live.panels.archived);
 }

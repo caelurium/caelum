@@ -189,7 +189,7 @@ fn waiting_sessions_remain_visible_until_their_last_background_command_finishes(
 
 #[test]
 fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes() {
-    use caelum_core::application::EntryKind;
+    use caelum_core::application::{Command, EntryKind, Event, Reply};
 
     for state in [
         "responding",
@@ -223,7 +223,10 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
                         .unwrap()
                         .complete = false
                 }
-                "submitting" => session.submitting = true,
+                "submitting" => {
+                    session.conversation.working = false;
+                    assert!(l.app.send(0, "Start turn".into()));
+                }
                 "retrying" => session.conversation.retrying = true,
                 "input" => l.app.approvals.push(caelum_protocol::ApprovalPrompt {
                     provider: "opencode".into(),
@@ -233,10 +236,26 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
                     summary: "Run checks?".into(),
                     description: "cargo test".into(),
                 }),
-                "stopping" => session.stopping = true,
+                "stopping" => l.app.cancel(0),
                 "disconnected" => session.disconnected = true,
-                "archiving" => session.archiving = true,
-                "deleting" => session.deleting = true,
+                "archiving" => {
+                    session.conversation.working = false;
+                    l.app.archive(0, true);
+                    assert!(l.app.sessions[0].archiving());
+                }
+                "deleting" => {
+                    session.conversation.working = false;
+                    l.app.archive(0, true);
+                    let request = l
+                        .app
+                        .commands()
+                        .into_iter()
+                        .find(|(_, command)| matches!(command, Command::Archive(..)))
+                        .unwrap()
+                        .0;
+                    l.app.apply(Event::Completed(request, Ok(Reply::Done)));
+                    assert!(l.app.delete_archived_session(0));
+                }
                 _ => unreachable!(),
             }
         });

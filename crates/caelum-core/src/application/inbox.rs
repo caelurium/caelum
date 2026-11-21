@@ -2,16 +2,92 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InboxPrompt {
     pub id: String,
     pub text: String,
+    phase: Phase,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Phase {
+    Enqueuing(u64),
+    Queued,
+    EnqueueFailed(String),
+    Removing(u64),
+    RemoveFailed(String),
+}
+
+pub(super) enum Mutation {
+    Enqueue,
+    Remove,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedInboxPrompt {
+    id: String,
+    text: String,
     #[serde(default)]
-    pub pending: bool,
+    pending: bool,
     #[serde(default)]
-    pub removing: bool,
+    removing: bool,
     #[serde(default)]
-    pub error: Option<String>,
+    error: Option<String>,
+}
+
+impl InboxPrompt {
+    pub fn pending(&self) -> bool {
+        matches!(self.phase, Phase::Enqueuing(_) | Phase::Removing(_))
+    }
+
+    pub fn removing(&self) -> bool {
+        matches!(self.phase, Phase::Removing(_) | Phase::RemoveFailed(_))
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        match &self.phase {
+            Phase::EnqueueFailed(error) | Phase::RemoveFailed(error) => Some(error),
+            _ => None,
+        }
+    }
+
+    pub(super) fn saved(&self) -> SavedInboxPrompt {
+        SavedInboxPrompt {
+            id: self.id.clone(),
+            text: self.text.clone(),
+            pending: self.pending(),
+            removing: self.removing(),
+            error: self.error().map(str::to_owned),
+        }
+    }
+
+    pub(super) fn matches_saved(&self, saved: &SavedInboxPrompt) -> bool {
+        self.id == saved.id
+            && self.text == saved.text
+            && self.pending() == saved.pending
+            && self.removing() == saved.removing
+            && self.error() == saved.error.as_deref()
+    }
+}
+
+impl SavedInboxPrompt {
+    pub(super) fn restore(self) -> InboxPrompt {
+        let error = if self.pending {
+            Some("Delivery needs reconciliation. Refresh or retry.".into())
+        } else {
+            self.error
+        };
+        let phase = match (self.removing, error) {
+            (true, Some(error)) => Phase::RemoveFailed(error),
+            (false, Some(error)) => Phase::EnqueueFailed(error),
+            (_, None) => Phase::Queued,
+        };
+        InboxPrompt {
+            id: self.id,
+            text: self.text,
+            phase,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -22,6 +98,59 @@ pub struct Inbox {
 }
 
 impl Inbox {
+    pub(super) fn enqueue(&mut self, id: String, text: String, request: u64) {
+        self.items.push(InboxPrompt {
+            id,
+            text,
+            phase: Phase::Enqueuing(request),
+        });
+        self.revision += 1;
+    }
+
+    pub(super) fn start_mutation(&mut self, id: &str, request: u64, mutation: Mutation) {
+        let Some(item) = self
+            .items
+            .iter_mut()
+            .find(|item| item.id == id && !item.pending())
+        else {
+            return;
+        };
+        item.phase = match mutation {
+            Mutation::Enqueue => Phase::Enqueuing(request),
+            Mutation::Remove => Phase::Removing(request),
+        };
+        self.revision += 1;
+    }
+
+    pub(super) fn complete_mutation(&mut self, id: &str, request: u64, result: Result<(), String>) {
+        let Some(item) = self.items.iter_mut().find(|item| item.id == id) else {
+            return;
+        };
+        let next = match (&item.phase, result) {
+            (Phase::Enqueuing(owner), Ok(())) if *owner == request => Phase::Queued,
+            (Phase::Enqueuing(owner), Err(error)) if *owner == request => {
+                Phase::EnqueueFailed(error)
+            }
+            (Phase::Removing(owner), Err(error)) if *owner == request => Phase::RemoveFailed(error),
+            (Phase::Removing(owner), Ok(())) if *owner == request => {
+                self.settle(id);
+                return;
+            }
+            _ => return,
+        };
+        item.phase = next;
+        self.revision += 1;
+    }
+
+    pub(super) fn matches_saved(&self, saved: &[SavedInboxPrompt]) -> bool {
+        self.items.len() == saved.len()
+            && self
+                .items
+                .iter()
+                .zip(saved)
+                .all(|(item, saved)| item.matches_saved(saved))
+    }
+
     pub fn settle(&mut self, id: &str) -> Option<InboxPrompt> {
         if !self.settled.iter().any(|v| v == id) {
             self.settled.push_back(id.into());
@@ -45,14 +174,13 @@ impl Inbox {
             .filter(|v| !self.settled.contains(&v.id))
             .collect();
         for item in &self.items {
-            if item.removing {
+            if item.removing() {
                 if let Some(remote) = items.iter_mut().find(|v| v.id == item.id) {
-                    remote.removing = true;
-                    remote.pending = item.pending;
-                    remote.error.clone_from(&item.error);
+                    remote.phase.clone_from(&item.phase);
                 }
             }
-            if (item.pending || item.error.is_some()) && !items.iter().any(|v| v.id == item.id) {
+            if (item.pending() || item.error().is_some()) && !items.iter().any(|v| v.id == item.id)
+            {
                 items.push(item.clone());
             }
         }
@@ -69,7 +197,7 @@ impl Inbox {
                     item["id"] = id.into();
                     if let Some(item) = parse(&item) {
                         if let Some(previous) = self.items.iter_mut().find(|v| v.id == id) {
-                            if previous.removing {
+                            if previous.removing() {
                                 previous.text = item.text;
                             } else {
                                 *previous = item;
@@ -110,8 +238,6 @@ fn parse(value: &Value) -> Option<InboxPrompt> {
     Some(InboxPrompt {
         id: value["id"].as_str()?.into(),
         text: super::composer::with_context(text, &attachments),
-        pending: false,
-        removing: false,
-        error: None,
+        phase: Phase::Queued,
     })
 }

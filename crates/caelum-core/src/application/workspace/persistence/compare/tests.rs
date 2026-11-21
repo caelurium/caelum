@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::{Attachment, Command, Event, Provider, Reply, Scope};
+use crate::application::{ArchiveFixture, Attachment, Command, Event, Provider, Reply, Scope};
 use serde_json::{json, Value};
 
 fn workspace() -> Workspace {
@@ -106,7 +106,7 @@ fn every_persisted_field_participates_in_change_detection() {
 #[test]
 fn projection_handles_forgotten_indices_and_live_file_overrides() {
     let mut app = workspace();
-    app.sessions[1].forgotten = true;
+    app.sessions[1].archive_fixture(ArchiveFixture::Forgotten);
     app.remembered.insert("/forgotten".into(), 1);
     app.remembered.insert("/invalid".into(), usize::MAX);
     app.remembered_checkouts.insert("/forgotten".into(), 1);

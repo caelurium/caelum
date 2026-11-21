@@ -93,10 +93,10 @@ impl Workspace {
         let session = &mut self.sessions[index];
         if !session.scope.provider_available()
             || session.loading()
-            || session.submitting
+            || session.submitting()
             || session.relocation.pending()
             || session.rewinding()
-            || session.forgotten
+            || session.forgotten()
         {
             return;
         }
@@ -117,7 +117,7 @@ impl Workspace {
         if !session.scope.provider_available()
             || session.rewinding()
             || session.relocation.pending()
-            || session.forgotten
+            || session.forgotten()
         {
             return;
         }

@@ -14,7 +14,7 @@ impl Workspace {
     ) {
         let project = match pending {
             // Boat checks the base before the VM provider starts a thread.
-            Pending::CheckHandoff(i, _) => Some(self.sessions[*i].scope.project.as_str()),
+            Pending::CheckHandoff(i) => Some(self.sessions[*i].scope.project.as_str()),
             _ => Binding::owner(command).map(|p| p.as_str()),
         };
         if let Some(project) = project.filter(|p| checkout_id(p).is_some()) {

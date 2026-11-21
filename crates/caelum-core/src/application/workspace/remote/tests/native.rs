@@ -212,7 +212,7 @@ fn confirmed_deletion_retires_an_inflight_native_start_and_late_discovery() {
     assert!(app.remove_remote(&id, Some(&vm.key)));
     let delete = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(delete, Err("Boat refused".into())));
-    assert!(!app.sessions[i].forgotten && app.sessions[i].working());
+    assert!(!app.sessions[i].forgotten() && app.sessions[i].working());
     assert!(app.remove_remote(&id, Some(&vm.key)));
     let delete = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(

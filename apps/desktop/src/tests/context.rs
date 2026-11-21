@@ -67,13 +67,13 @@ fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
     assert!(element(&rt, "session-actions-1").focused);
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     secondary(&mut rt, "live-session-0");
     assert!(!context_item(&rt, "Archive session").focusable);
     let archive = context_item(&rt, "Archive session").key.unwrap();
     click(&mut rt, &archive);
     assert!(crate::context::is_open(&rt.state));
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].archived);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].archived());
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
     secondary(&mut rt, "live-session-1");

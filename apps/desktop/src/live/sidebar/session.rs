@@ -23,8 +23,8 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         .map_or_else(|| branch.to_owned(), |tree| format!("{tree} · {branch}"));
     let pending = app.needs_input(session);
     let activity = crate::activity::session_activity(s, index);
-    let waiting = !session.archiving
-        && !session.deleting
+    let waiting = !session.archiving()
+        && !session.deleting()
         && activity
             .as_ref()
             .is_some_and(|activity| activity.kind == ActivityKind::Background);
@@ -32,11 +32,11 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         waiting && caelum_core::application::subagents::running(&session.conversation.entries) > 0;
     let status = if pending {
         "Needs input"
-    } else if session.archiving {
+    } else if session.archiving() {
         "Archiving…"
-    } else if session.deleting {
+    } else if session.deleting() {
         "Deleting…"
-    } else if session.stopping {
+    } else if session.stopping() {
         "Stopping…"
     } else if waiting {
         activity.as_ref().unwrap().label.as_str()
@@ -131,7 +131,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             quiet_button(&glyphs::CLOSE, "Close")
                 .on_press(move |s: &mut Workspace| {
                     let l = super::live_mut(s);
-                    if l.app.sessions[index].archived {
+                    if l.app.sessions[index].archived() {
                         l.request_delete_session(index);
                     } else {
                         l.archive(index, true);

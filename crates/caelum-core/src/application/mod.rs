@@ -24,11 +24,13 @@ pub use conversation::{Conversation, Entry, EntryKind};
 pub use export::ExportFormat;
 pub use feed::FeedSession;
 pub use feed::SessionScope;
-pub use inbox::{Inbox, InboxPrompt};
+pub use inbox::{Inbox, InboxPrompt, SavedInboxPrompt};
 pub use notifications::Notification;
 pub use persistence::{Preferences, SavedSession, Snapshot, Store, StoreLock};
 pub use runtime::{Command, Event, OpenCodeMove, ProviderRuntime, Reply, Runtime};
 pub use services::{Checkout, Review, Services, Task, TaskReply};
+#[cfg(test)]
+use workspace::ArchiveFixture;
 pub use workspace::FilePreview;
 pub use workspace::ForkBoundary;
 pub use workspace::ForkPicker;

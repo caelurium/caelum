@@ -27,7 +27,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     .and_then(|(project, url)| l.app.pull_request_session(project, url))
                 {
                     l.app.select(index);
-                    l.panels.archived = l.app.sessions[index].archived;
+                    l.panels.archived = l.app.sessions[index].archived();
                 }
                 l.panels.screen = Screen::Conversation;
                 l.sync_editors();

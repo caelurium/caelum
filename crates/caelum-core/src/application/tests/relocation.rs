@@ -304,7 +304,7 @@ fn archive_state_comes_from_fresh_destination_metadata_even_if_an_older_list_arr
         Ok(Reply::Sessions(vec![summary(scope, "ses_moved")])),
     ));
     assert_eq!(app.sessions[index].scope.project, "/new");
-    assert!(app.sessions[index].archived);
+    assert!(app.sessions[index].archived());
     assert!(!app.session_feed(Some("/new"), "", false).contains(&index));
 }
 
@@ -328,9 +328,9 @@ fn reconnect_waits_for_local_mutations_and_retains_their_failure_before_retry() 
         Err("OpenCode session does not belong to this project".into()),
     ));
     assert_eq!(app.sessions[index].scope.project, "/new");
-    assert!(!app.sessions[index].forgotten);
-    assert!(!app.sessions[index].archived);
-    assert!(!app.sessions[index].archiving);
+    assert!(!app.sessions[index].forgotten());
+    assert!(!app.sessions[index].archived());
+    assert!(!app.sessions[index].archiving());
     assert_eq!(app.sessions[index].draft, "Keep the draft");
     assert!(app
         .commands()

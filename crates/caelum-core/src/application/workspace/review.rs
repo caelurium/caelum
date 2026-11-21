@@ -51,9 +51,9 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter(|(_, session)| {
-                !session.forgotten
-                    && !session.deleting
-                    && !session.archiving
+                !session.forgotten()
+                    && !session.deleting()
+                    && !session.archiving()
                     && self.group_path(&session.scope.project) == group
                     && self
                         .projects
@@ -65,7 +65,7 @@ impl Workspace {
             })
             .max_by_key(|(index, session)| {
                 (
-                    !session.archived,
+                    !session.archived(),
                     self.selected == Some(*index),
                     session.last_activity,
                     std::cmp::Reverse(*index),

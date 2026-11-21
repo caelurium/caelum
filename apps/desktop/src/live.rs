@@ -199,7 +199,7 @@ impl Live {
         self.menu = None;
         self.panels.overlay = None;
         self.session_menu = None;
-        if self.app.selected != selected || (!archived && !self.app.sessions[index].archived) {
+        if self.app.selected != selected || (!archived && !self.app.sessions[index].archived()) {
             self.panels.archived = false;
             self.panels.screen = crate::panels::Screen::Conversation;
             self.focus();
@@ -208,7 +208,7 @@ impl Live {
 
     pub(crate) fn request_delete_session(&mut self, index: usize) {
         if self.app.sessions.get(index).is_some_and(|session| {
-            session.archived && !session.forgotten && !archive_disabled(self, index)
+            session.archived() && !session.forgotten() && !archive_disabled(self, index)
         }) {
             self.menu = None;
             self.session_menu = None;
@@ -268,7 +268,7 @@ impl Live {
             panel.sync(&self.app);
         }
         let selected = self.app.selected;
-        let was_archived = selected.is_some_and(|i| self.app.sessions[i].archived);
+        let was_archived = selected.is_some_and(|i| self.app.sessions[i].archived());
         let restoring = matches!(
             &event,
             Event::Completed(_, Ok(caelum_core::application::Reply::Snapshot(_)))
@@ -326,7 +326,7 @@ impl Live {
                     && self
                         .app
                         .selected
-                        .is_some_and(|i| !self.app.sessions[i].archived)))
+                        .is_some_and(|i| !self.app.sessions[i].archived())))
         {
             if matches!(
                 self.panels.overlay,

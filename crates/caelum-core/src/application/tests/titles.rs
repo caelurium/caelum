@@ -141,7 +141,7 @@ fn titles_regenerate_every_three_successes_and_apply_live_renames() {
 fn titles_count_success_events_once_even_before_admission_or_after_idle() {
     let mut app = Workspace::default();
     let index = connected(&mut app, Provider::OpenCode, "/a", "one");
-    app.sessions[index].submitting = true;
+    assert!(app.send(index, "Start turn".into()));
     succeeded(&mut app, index, 1);
     succeeded(&mut app, index, 1);
     for (i, method) in [
@@ -282,10 +282,10 @@ fn title_followups_do_not_target_archived_forgotten_disconnected_or_replaced_ses
         assert!(requests(&mut app).is_empty());
         let session = &mut app.sessions[index];
         match state {
-            "archived" => session.archived = true,
-            "archiving" => session.archiving = true,
-            "forgotten" => session.forgotten = true,
-            "deleting" => session.deleting = true,
+            "archived" => session.archive_fixture(ArchiveFixture::Stable(true)),
+            "archiving" => session.archive_fixture(ArchiveFixture::Archiving),
+            "forgotten" => session.archive_fixture(ArchiveFixture::Forgotten),
+            "deleting" => session.archive_fixture(ArchiveFixture::Deleting),
             "disconnected" => session.disconnected = true,
             "replaced" => session.remote_id = Some("replacement".into()),
             _ => unreachable!(),
