@@ -38,11 +38,11 @@ fn refresh_open_sessions_refreshes_every_open_active_session_only() {
         .collect();
     resumed.sort();
     assert_eq!(resumed, ["first", "other-project", "second"]);
-    assert!(app.sessions[first].loading);
-    assert!(app.sessions[second].loading);
-    assert!(app.sessions[other_project].loading);
-    assert!(!app.sessions[archived].loading);
-    assert!(!app.sessions[closed_project].loading);
+    assert!(app.sessions[first].loading());
+    assert!(app.sessions[second].loading());
+    assert!(app.sessions[other_project].loading());
+    assert!(!app.sessions[archived].loading());
+    assert!(!app.sessions[closed_project].loading());
 }
 
 #[test]

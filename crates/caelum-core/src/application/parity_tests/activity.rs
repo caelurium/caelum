@@ -158,7 +158,14 @@ fn unread_and_notifications_follow_visibility_and_do_not_replay_completed_activi
         .commands()
         .iter()
         .any(|(_, c)| matches!(c, Command::Notify(..))));
-    app.sessions[0].loading = false;
+    for (request, command) in commands {
+        if matches!(command, Command::Resume(_)) {
+            app.apply(Event::Completed(
+                request,
+                Err("offline test fixture".into()),
+            ));
+        }
+    }
     app.conversation_hidden = false;
     app.sessions[0].reading = 300.0;
     assert!(!app.acknowledge());

@@ -186,9 +186,8 @@ impl Workspace {
                     Pending::Archive(index, archived, _, _) => {
                         self.sessions[index].archiving = false;
                         self.sessions[index].error = Some(error);
-                        if !archived && self.last_archived == Some(index) {
-                            self.archive_clock =
-                                Some((crate::application::presentation::now(), 8_000));
+                        if !archived {
+                            self.reset_archive_notice(index);
                         }
                     }
                     Pending::DeleteSession(index) => {
@@ -207,9 +206,8 @@ impl Workspace {
                     | Pending::Choices(scope) => {
                         self.notices.insert(scope, error);
                     }
-                    Pending::Resume(index, _) | Pending::History(index, _, _) => {
-                        self.sessions[index].loading = false;
-                        self.sessions[index].error = Some(error);
+                    Pending::Resume(index) | Pending::History(index) => {
+                        self.fail_history(index, request, error);
                     }
                     Pending::Start(index, prompt) => {
                         let session = &mut self.sessions[index];
@@ -370,7 +368,9 @@ impl Workspace {
                                     session.conversation.handoff(&h.chat);
                                 }
                                 session.vm_link = saved.vm_link;
-                                session.loaded = saved.remote_id.is_none();
+                                if saved.remote_id.is_some() {
+                                    session.invalidate_history();
+                                }
                                 session.remote_id = saved.remote_id;
                                 session.title = saved.title;
                                 session.last_activity = saved.last_activity;
@@ -494,7 +494,7 @@ impl Workspace {
                     if self.selected == Some(index) {
                         let replacement = self.select_archive_replacement(index);
                         if owns_notice {
-                            self.archive_replacement = Some(replacement);
+                            self.set_notice_replacement(index, replacement);
                         }
                     }
                 } else {
@@ -575,17 +575,20 @@ impl Workspace {
                 }
                 self.choices.insert(scope, choices);
             }
-            (Pending::Resume(index, revision), Reply::Session(summary)) => {
-                self.complete_resume(request, index, revision, summary, None);
+            (Pending::Resume(index), Reply::Session(summary)) => {
+                self.complete_resume(request, index, summary, None);
             }
-            (Pending::Resume(index, revision), Reply::Resumed(summary, page)) => {
-                self.complete_resume(request, index, revision, summary, Some(page));
+            (Pending::Resume(index), Reply::Resumed(summary, page)) => {
+                self.complete_resume(request, index, summary, Some(page));
             }
-            (Pending::Resume(index, _), Reply::SessionMoved(change)) => {
+            (Pending::Resume(index), Reply::SessionMoved(change)) => {
                 self.resume_moved(request, index, change);
             }
-            (Pending::History(index, revision, older), Reply::History(page)) => {
-                self.complete_history(index, revision, older, page);
+            (Pending::History(index), Reply::History(page)) => {
+                self.complete_history(index, request, page);
+            }
+            (Pending::Resume(index) | Pending::History(index), _) => {
+                self.fail_history(index, request, "Unexpected history response".into());
             }
             (Pending::Start(index, prompt), Reply::Session(summary)) => {
                 let session = &mut self.sessions[index];

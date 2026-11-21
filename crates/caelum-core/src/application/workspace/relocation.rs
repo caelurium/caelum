@@ -81,8 +81,8 @@ impl Workspace {
                     let source_open = self.project_is_open(&session.scope.project);
                     if session.relocation.pending() {
                         self.sessions[i].relocation = Relocation::Settled(self.next_request);
-                        self.pending.retain(|_, p| !matches!(p, Pending::Resume(j, _) | Pending::History(j, _, _) if *j == i));
-                        self.sessions[i].loading = false;
+                        self.pending.retain(|_, p| !matches!(p, Pending::Resume(j) | Pending::History(j) if *j == i));
+                        self.sessions[i].cancel_history_read();
                     }
 
                     if source_open {
@@ -189,8 +189,7 @@ impl Workspace {
 
     pub(super) fn resume_moved(&mut self, request: u64, index: usize, change: OpenCodeMove) {
         let session = &mut self.sessions[index];
-        session.loading = false;
-        if request > session.relocation.request() {
+        if session.finish_resume(request) && request > session.relocation.request() {
             self.verified_move(request, index, change);
         }
     }
@@ -263,7 +262,7 @@ impl Workspace {
             session.archived = change.archived;
             session.archive_barrier = request;
         }
-        session.loading = false;
+        session.cancel_history_read();
         session.error = None;
         session.details = None;
         session.shells.clear();
@@ -309,7 +308,7 @@ impl Workspace {
 impl Pending {
     fn location_read(&self, index: usize) -> bool {
         matches!(self,
-            Self::Resume(i, _) | Self::History(i, _, _) | Self::Details(i)
+            Self::Resume(i) | Self::History(i) | Self::Details(i)
             | Self::Shells(i, _) | Self::Inbox(i, _) if *i == index)
             || matches!(self, Self::VerifyOpenCodeMove(i) if *i == index)
     }

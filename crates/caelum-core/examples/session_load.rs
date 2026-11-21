@@ -140,7 +140,7 @@ fn restore(snapshot: Snapshot, index: usize) -> Result<Value, String> {
             }
             completions.extend(metric);
         }
-        if workspace.sessions[index].loaded {
+        if workspace.sessions[index].loaded() {
             return Ok(
                 json!({"ready_ms":ms(start), "entries":workspace.sessions[index].conversation.entries.len(),
                 "completions":completions, "pending":pending.len()}),

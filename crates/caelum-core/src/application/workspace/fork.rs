@@ -418,7 +418,7 @@ impl Workspace {
         let index = p.index;
         let tip = p.tip.clone().expect("checkpoint from history");
         let admission = self.fork_source(index).and_then(|key| {
-            if self.sessions[index].loading {
+            if self.sessions[index].loading() {
                 Err("Wait for history to finish loading, then confirm again.")
             } else {
                 Ok(key)
@@ -514,8 +514,7 @@ impl Workspace {
                     Ok(Reply::Done) => {
                         session.conversation = Default::default();
                         session.revision += 1;
-                        session.loaded = false;
-                        session.next_cursor = None;
+                        session.invalidate_history();
                         session.reading = -1.0;
                         session.controls =
                             super::controls::Status::Finished("Conversation rewound.".into());
@@ -591,7 +590,7 @@ impl Workspace {
                     None => {
                         let mut s = Session::new(source.scope.clone());
                         s.remote_id = Some(child.key.id.clone());
-                        s.loaded = false;
+                        s.invalidate_history();
                         update_summary(&mut s, child, request);
                         self.sessions.push(s);
                         let i = self.sessions.len() - 1;

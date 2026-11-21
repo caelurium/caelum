@@ -41,7 +41,6 @@ fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[0].conversation.working = true;
         l.app.sessions[1].remote_id = Some("background".into());
-        l.app.sessions[1].loaded = true;
         l.app.sessions[1].title = "Background session".into();
     });
     secondary(&mut rt, "live-session-1");

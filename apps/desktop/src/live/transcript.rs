@@ -160,14 +160,14 @@ pub(super) fn timeline_row(
         if let Some(error) = &live.app.error {
             content = content.child(text(error).font(k.ty.ui).color(k.c.text_accent).wrap());
         }
-        if session.loading {
+        if session.loading() {
             content = content.child(ui::skeleton("Loading history", 3, k));
         }
-        if session.next_cursor.is_some() {
+        if session.next_cursor().is_some() {
             content = content.child(
                 Button::new("Load older messages")
                     .variant(ButtonVariant::GhostMuted)
-                    .disabled(session.loading)
+                    .disabled(session.loading())
                     .on_press(move |s: &mut Workspace| live_mut(s).app.older(index))
                     .build(k)
                     .key("load-older")
@@ -185,7 +185,7 @@ pub(super) fn timeline_row(
         });
         if session.scope.provider_available()
             && session.conversation.entries.is_empty()
-            && !session.loading
+            && !session.loading()
             && !needs_input
         {
             content = content.child(ui::empty(

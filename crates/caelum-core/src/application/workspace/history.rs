@@ -1,20 +1,176 @@
-use super::{update_summary, Pending, Workspace};
+use super::{update_summary, Pending, Session, Workspace};
 use crate::application::{Command, Provider, Summary};
 use caelum_protocol::SessionHistoryPage;
 
+pub(super) enum State {
+    Idle(Availability),
+    Resuming(Availability, Read),
+    Fetching(Availability, Read),
+    Paging(String, Read),
+}
+
+pub(super) enum Availability {
+    Unloaded,
+    Loaded(Option<String>),
+}
+
+pub(super) struct Read {
+    request: u64,
+    revision: u64,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Idle(Availability::Loaded(None))
+    }
+}
+
+impl State {
+    fn cancel(&mut self) {
+        let available = match std::mem::take(self) {
+            Self::Idle(available) | Self::Resuming(available, _) | Self::Fetching(available, _) => {
+                available
+            }
+            Self::Paging(cursor, _) => Availability::Loaded(Some(cursor)),
+        };
+        *self = Self::Idle(available);
+    }
+
+    fn request(&self) -> Option<u64> {
+        match self {
+            Self::Idle(_) => None,
+            Self::Resuming(_, read) | Self::Fetching(_, read) | Self::Paging(_, read) => {
+                Some(read.request)
+            }
+        }
+    }
+}
+
+impl Session {
+    pub fn loading(&self) -> bool {
+        self.history.request().is_some()
+    }
+
+    pub fn loaded(&self) -> bool {
+        !matches!(
+            self.history,
+            State::Idle(Availability::Unloaded)
+                | State::Resuming(Availability::Unloaded, _)
+                | State::Fetching(Availability::Unloaded, _)
+        )
+    }
+
+    pub fn next_cursor(&self) -> Option<&str> {
+        match &self.history {
+            State::Idle(Availability::Loaded(cursor))
+            | State::Resuming(Availability::Loaded(cursor), _)
+            | State::Fetching(Availability::Loaded(cursor), _) => cursor.as_deref(),
+            State::Paging(cursor, _) => Some(cursor),
+            _ => None,
+        }
+    }
+
+    pub fn invalidate_history(&mut self) {
+        self.history = State::Idle(Availability::Unloaded);
+    }
+
+    pub(super) fn cancel_history_read(&mut self) {
+        self.history.cancel();
+    }
+
+    pub(super) fn finish_resume(&mut self, request: u64) -> bool {
+        if matches!(&self.history, State::Resuming(_, read) if read.request == request) {
+            self.cancel_history_read();
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl Workspace {
+    pub fn refresh(&mut self, index: usize) {
+        let session = &mut self.sessions[index];
+        if !session.scope.provider_available()
+            || session.loading()
+            || session.submitting
+            || session.relocation.pending()
+            || session.rewinding()
+            || session.forgotten
+        {
+            return;
+        }
+        let Some(key) = session.key() else {
+            return;
+        };
+        session.error = None;
+        let revision = session.revision;
+        let request = self.request(Command::Resume(key), Pending::Resume(index));
+        let State::Idle(available) = std::mem::take(&mut self.sessions[index].history) else {
+            unreachable!();
+        };
+        self.sessions[index].history = State::Resuming(available, Read { request, revision });
+    }
+
+    pub fn older(&mut self, index: usize) {
+        let session = &self.sessions[index];
+        if !session.scope.provider_available()
+            || session.rewinding()
+            || session.relocation.pending()
+            || session.forgotten
+        {
+            return;
+        }
+        let (Some(key), State::Idle(Availability::Loaded(Some(cursor)))) =
+            (session.key(), &session.history)
+        else {
+            return;
+        };
+        let cursor = cursor.clone();
+        let revision = session.revision;
+        let request = self.request(
+            Command::History(key, Some(cursor.clone())),
+            Pending::History(index),
+        );
+        self.sessions[index].history = State::Paging(cursor, Read { request, revision });
+    }
+
+    pub(super) fn fail_history(&mut self, index: usize, request: u64, error: String) {
+        let session = &mut self.sessions[index];
+        if session.history.request() == Some(request) {
+            session.cancel_history_read();
+            session.error = Some(error);
+        }
+    }
+
     pub(super) fn complete_resume(
         &mut self,
         request: u64,
         index: usize,
-        revision: u64,
         summary: Summary,
         history: Option<SessionHistoryPage>,
     ) {
         let session = &mut self.sessions[index];
+        let State::Resuming(
+            _,
+            Read {
+                request: owner,
+                revision,
+            },
+        ) = &session.history
+        else {
+            return;
+        };
+        if *owner != request {
+            return;
+        }
+        let revision = *revision;
         if session.key().as_ref() != Some(&summary.key) {
-            session.loading = false;
-            session.error = Some("Provider returned a different session".into());
+            self.fail_history(
+                index,
+                request,
+                "Provider returned a different session".into(),
+            );
             return;
         }
         if session.revision == revision {
@@ -22,9 +178,9 @@ impl Workspace {
         }
         update_summary(session, summary, request);
         let key = session.key().expect("resumed session");
-        let needs_history = history.is_none();
+        let needs_page = history.is_none();
         if let Some(page) = history {
-            self.complete_history(index, revision, false, page);
+            self.complete_history(index, request, page);
         }
         if key.scope.provider == Provider::OpenCode {
             self.request(
@@ -33,25 +189,36 @@ impl Workspace {
             );
             self.refresh_inbox(index);
         }
-        if needs_history {
-            self.request(
-                Command::History(key, None),
-                Pending::History(index, revision, false),
-            );
+        if needs_page {
+            let request = self.request(Command::History(key, None), Pending::History(index));
+            let State::Resuming(available, _) = std::mem::take(&mut self.sessions[index].history)
+            else {
+                unreachable!();
+            };
+            self.sessions[index].history = State::Fetching(available, Read { request, revision });
         }
     }
 
     pub(super) fn complete_history(
         &mut self,
         index: usize,
-        revision: u64,
-        older: bool,
+        request: u64,
         page: SessionHistoryPage,
     ) {
         let session = &mut self.sessions[index];
+        let (read, older) = match &session.history {
+            State::Resuming(_, read) | State::Fetching(_, read) => (read, false),
+            State::Paging(_, read) => (read, true),
+            State::Idle(_) => return,
+        };
+        if read.request != request {
+            return;
+        }
+        let revision = read.revision;
+        let loaded = session.loaded();
         session
             .conversation
-            .history(session.scope.provider, &page.data, older || !session.loaded);
+            .history(session.scope.provider, &page.data, older || !loaded);
         if session.scope.provider == Provider::OpenCode {
             for message in &page.data {
                 if message["type"] == "user" {
@@ -82,11 +249,12 @@ impl Workspace {
                 session.options.agent = page.agent;
             }
         }
-        if older || !session.loaded {
-            session.next_cursor = page.next_cursor;
-        }
-        session.loaded = true;
-        session.loading = false;
+        let cursor = if older || !loaded {
+            page.next_cursor
+        } else {
+            session.next_cursor().map(str::to_owned)
+        };
+        session.history = State::Idle(Availability::Loaded(cursor));
         session.disconnected = false;
     }
 }

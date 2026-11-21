@@ -20,7 +20,7 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
         .child(
             ui::choice(
                 "Refresh session",
-                if session.loading {
+                if session.loading() {
                     "Reconnecting and loading history…"
                 } else if session.remote_id.is_none() {
                     "Available after your first message"
@@ -30,9 +30,9 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
                 false,
                 k,
             )
-            .disabled(session.remote_id.is_none() || session.loading || session.submitting)
+            .disabled(session.remote_id.is_none() || session.loading() || session.submitting)
             .opacity(
-                if session.remote_id.is_none() || session.loading || session.submitting {
+                if session.remote_id.is_none() || session.loading() || session.submitting {
                     0.5
                 } else {
                     1.0
@@ -130,7 +130,7 @@ pub fn close_session_menu(s: &mut Workspace) {
 pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     super::sidebar::overlays(s, k, layers);
     let l = live(s);
-    if let Some(index) = l.app.last_archived {
+    if let Some(index) = l.app.last_archived() {
         let session = &l.app.sessions[index];
         let width =
             rune::memo::window_layout("main-pane").map_or(480.0, |r| (r[2] - 32.0).min(480.0));
@@ -172,7 +172,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                 .disabled(session.archiving)
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
-                    if l.app.last_archived == Some(index) {
+                    if l.app.last_archived() == Some(index) {
                         l.app.undo_archive();
                         l.sync_editors();
                     }

@@ -9,7 +9,6 @@ fn history() -> Runtime<Workspace> {
         live.fixture = true;
         let session = &mut live.app.sessions[0];
         session.scope.provider = Provider::OpenCode;
-        session.loaded = true;
         let messages: Vec<_> = (0..60).map(|n| json!({
             "id":format!("prompt-{n}"),"type":"user","text":format!("Prompt {n}: preserve the reading position.")
         })).collect();

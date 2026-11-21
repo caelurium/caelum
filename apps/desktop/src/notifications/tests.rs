@@ -18,7 +18,6 @@ fn clicking_a_notification_reopens_the_conversation_without_changing_drafts() {
             provider,
         });
         live.app.sessions[index].remote_id = Some("same-id".into());
-        live.app.sessions[index].loaded = true;
     }
     live.sync_editors();
     live.drafts[0].text = "Original café draft".into();

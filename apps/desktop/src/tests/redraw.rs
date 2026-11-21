@@ -18,7 +18,6 @@ fn state(provider: Provider) -> Workspace {
         });
         let session = &mut l.app.sessions[index];
         session.remote_id = Some(id.into());
-        session.loaded = true;
         session.last_activity = Some(1);
     }
     l.app.select(0);

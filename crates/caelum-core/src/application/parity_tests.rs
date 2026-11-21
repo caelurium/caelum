@@ -22,7 +22,6 @@ fn workspace() -> Workspace {
             provider,
         });
         app.sessions[i].remote_id = Some(format!("session-{i}"));
-        app.sessions[i].loaded = true;
     }
     app.select(0);
     app.commands();

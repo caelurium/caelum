@@ -262,7 +262,7 @@ fn initial_history_precedes_nonoverlapping_live_output_and_refresh_keeps_paginat
     let mut workspace = Workspace::default();
     let index = workspace.new_session(scope(Provider::Codex, "/a"));
     workspace.sessions[index].remote_id = Some("one".into());
-    workspace.sessions[index].loaded = false;
+    workspace.sessions[index].invalidate_history();
     workspace.refresh(index);
     let resume = workspace.commands().pop().unwrap().0;
     workspace.apply(Event::Completed(
@@ -311,7 +311,7 @@ fn initial_history_precedes_nonoverlapping_live_output_and_refresh_keeps_paginat
         })),
     ));
     assert!(
-        workspace.sessions[index].next_cursor.is_none(),
+        workspace.sessions[index].next_cursor().is_none(),
         "refresh must not reset the already-exhausted older cursor"
     );
 }
