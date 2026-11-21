@@ -23,6 +23,69 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
     if l.fixture || l.evaluation {
         return;
     }
+    let unix_now = unix_now();
+    let deadlines: Vec<_> = l
+        .app
+        .remote
+        .saved
+        .checkouts
+        .iter()
+        .filter_map(|(id, checkout)| {
+            let Phase::Ready { machine, .. } = &checkout.phase else {
+                return None;
+            };
+            Some((
+                id.clone(),
+                machine.key.clone(),
+                machine.auto_stop_unix?,
+                checkout.lifetime,
+            ))
+        })
+        .collect();
+    let active_deadlines: std::collections::HashSet<_> = deadlines
+        .iter()
+        .map(|(_, machine, deadline, _)| (machine.clone(), *deadline))
+        .collect();
+    l.remote
+        .checked_deadlines
+        .retain(|key| active_deadlines.contains(key));
+    let mut next_auto_stop = None;
+    for (id, machine, deadline, lifetime) in deadlines {
+        if l.app.remote.jobs.contains_key(&id)
+            || matches!(l.app.remote.lifetimes.get(&id), Some(Job::Busy(_)))
+        {
+            continue;
+        }
+        let project = caelum_core::remote::native::project_key(&id);
+        let active = l
+            .app
+            .sessions
+            .iter()
+            .any(|session| session.scope.project == project && session.working());
+        let at = if active {
+            deadline.saturating_sub(300)
+        } else {
+            deadline.saturating_add(6)
+        };
+        let remaining = at.saturating_sub(unix_now);
+        if remaining > 0 {
+            let remaining = Duration::from_secs(remaining as u64);
+            next_auto_stop =
+                Some(next_auto_stop.map_or(remaining, |next: Duration| next.min(remaining)));
+            continue;
+        }
+        let key = (machine, deadline);
+        if l.remote.checked_deadlines.insert(key) {
+            if active {
+                l.app.set_vm_lifetime(&id, lifetime);
+            } else {
+                l.app.refresh_remote(&id);
+            }
+        }
+    }
+    if let Some(at) = next_auto_stop {
+        tx.wake_after(at);
+    }
     let inspected = super::popup::owner(l);
     let id = if l.app.window_background {
         None
@@ -30,6 +93,8 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         inspected
     } else if l.panels.screen == Screen::Remote && l.panels.overlay.is_none() {
         l.app.remote.saved.selected.as_deref()
+    } else if l.panels.screen == Screen::Conversation && l.panels.overlay.is_none() {
+        super::native::selected(l)
     } else {
         None
     };
@@ -39,24 +104,6 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         return;
     };
     let visible = (inspected.is_some() || (wide() && checkout.pinned_stats)).then(|| id.clone());
-    // A collapsed badge doesn't sample processes, but must still notice its known auto-stop.
-    if let Phase::Ready { machine, .. } = &checkout.phase
-        && let Some(stops) = machine.auto_stop_unix
-        && !l
-            .remote
-            .checked_deadline
-            .as_ref()
-            .is_some_and(|(m, t)| m == &machine.key && *t == stops)
-    {
-        let remaining = stops.saturating_add(6).saturating_sub(unix_now());
-        if remaining > 0 {
-            tx.wake_after(Duration::from_secs(remaining as u64));
-        } else {
-            let id = id.clone();
-            l.remote.checked_deadline = Some((machine.key.clone(), stops));
-            l.app.refresh_remote(&id);
-        }
-    }
     if let Some(at) = l.app.monitor_remote(visible.as_deref(), now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
@@ -211,7 +258,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
         }
         box_ = box_.child(ui::divider(k)).child(choices).child(
             ui::caption(
-                "Boat renews timed VMs while an agent prompt runs or waits.",
+                "Active native Codex turns renew auto-stop using the saved lifetime.",
                 k,
             )
             .wrap(),

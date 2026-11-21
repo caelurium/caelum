@@ -57,6 +57,17 @@ pub enum Provider {
 impl Provider {
     pub const ALL: [Self; 2] = [Self::Codex, Self::OpenCode];
 
+    pub fn for_project(project: Option<&str>) -> &'static [Self] {
+        if project
+            .and_then(crate::remote::native::checkout_id)
+            .is_some()
+        {
+            &[Self::Codex]
+        } else {
+            &Self::ALL
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Codex => "Codex",
@@ -78,6 +89,19 @@ pub struct Scope {
     pub provider: Provider,
 }
 
+impl Scope {
+    pub fn provider_available(&self) -> bool {
+        Provider::for_project(Some(&self.project)).contains(&self.provider)
+    }
+
+    fn for_new_session(mut self) -> Self {
+        if !self.provider_available() {
+            self.provider = Provider::Codex;
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SessionKey {
     pub scope: Scope,
@@ -92,7 +116,7 @@ pub struct Options {
     pub agent: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Summary {
     /// Provider activity time in Unix milliseconds.
     pub updated_at: Option<u64>,

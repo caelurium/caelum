@@ -19,7 +19,7 @@ interactions = {
     "vm-session-sidebar": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True}]),
     "remote-provider": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.35, "key": "vm-provider-trigger"}]),
     "remote-sessions": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.25, "key": "vm-threads"}, {"t": 0.45, "key": "new-vm-session"}, {"t": 0.7, "key": "vm-threads"}]),
-    "remote-create-ready": ("remote-create", [{"t": 0.25, "key": "remote-branch"}, {"t": 0.4, "paste": "feat/health-check"}]),
+    "remote-create-ready": ("remote-create", []),
     "remote-remove": ("remote-working", [{"t": 0.25, "key": "remove-remote-checkout-example"}]),
     "home-continue-on-vm": ("home-draft", [{"t": 0.25, "key": "continue-on-vm"}]),
     "remote-handoff-new": ("remote-handoff", [{"t": 0.25, "key": "handoff-new-vm"}]),
@@ -93,6 +93,7 @@ scenes += ("models-settings",)
 scenes += ("fork",)
 scenes += ("remote-working", "remote-creating", "remote-setup-failed", "remote-stopped")
 scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create")
+scenes += ("native-connected", "native-offline")
 scenes += ("edit-branch", "rewind-checkpoint", "rename-session")
 scenes += ("remote-handoff",)
 scenes += ("home", "home-empty", "home-draft", "home-projects")

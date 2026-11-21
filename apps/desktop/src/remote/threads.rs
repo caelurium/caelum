@@ -17,17 +17,20 @@ pub(super) fn button(k: &Kit) -> El {
 
 pub(crate) fn start(s: &mut Workspace, id: &str) {
     let l = live_mut(s);
-    let Some(c) = l.app.remote.saved.checkouts.get(id) else {
+    if !l.app.remote.saved.checkouts.contains_key(id) {
         return;
-    };
-    let provider = if l.panels.overlay == Some(Screen::Launcher) {
-        l.panels.launch_provider
-    } else {
-        c.thread.provider
-    };
-    if l.app.new_vm_session(id, provider) {
-        super::checkout::enter_new(s);
     }
+    let current_vm = match l.panels.screen {
+        Screen::Home => None,
+        Screen::Remote => l.app.remote.saved.selected.as_deref(),
+        _ => super::native::selected(l),
+    };
+    if l.panels.overlay == Some(Screen::Launcher) && current_vm != Some(id) {
+        let source = &l.app.remote.saved.checkouts[id].source.project;
+        let project = super::launch_source_for(l, source).to_owned();
+        l.app.check_vm_destination(id, project);
+    }
+    super::checkout::session(s, id, caelum_core::remote::native::SessionIntent::New);
 }
 
 pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
@@ -107,14 +110,20 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
     .child(ui::divider(k))
     .child(
         row().w_full().justify_end().child(
-            ui::Button::new("New session on this VM")
+            ui::Button::new("New Boat conversation")
                 .icon(&crate::PLUS)
                 .variant(ButtonVariant::Contrast)
                 .disabled(!app.can_start_vm_session(id))
-                .on_press(move |s: &mut Workspace| start(s, &new))
+                .on_press(move |s: &mut Workspace| {
+                    let l = live_mut(s);
+                    let provider = l.app.remote.saved.checkouts[&new].thread.provider;
+                    if l.app.new_vm_session(&new, provider) {
+                        super::checkout::enter_new(s);
+                    }
+                })
                 .build(k)
                 .key("new-vm-session")
-                .help("Start with an empty chat and draft on the same checkout."),
+                .help("Start a managed Boat conversation on this checkout."),
         ),
     )
 }

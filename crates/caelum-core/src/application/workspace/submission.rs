@@ -182,8 +182,12 @@ impl Workspace {
                 .chars()
                 .take(60)
                 .collect();
-            let command = Command::Start(session.scope.clone(), session.options.clone());
-            self.request(command, Pending::Start(index, prompt));
+            if session.native_handoff.is_some() {
+                self.check_native_start(index, prompt);
+            } else {
+                let command = Command::Start(session.scope.clone(), session.options.clone());
+                self.request(command, Pending::Start(index, prompt));
+            }
         } else {
             self.send_existing(index, prompt);
         }
@@ -197,6 +201,22 @@ impl Workspace {
             Command::Send(key, prompt.clone(), session.inflight_options.clone()),
             Pending::Send(index, prompt, session.revision),
         );
+    }
+
+    pub(super) fn send_first(&mut self, index: usize, prompt: String) {
+        let session = &self.sessions[index];
+        if let Some(h) = &session.native_handoff {
+            self.request(
+                Command::Send(
+                    session.key().unwrap(),
+                    h.chat.prompt(&prompt),
+                    session.inflight_options.clone(),
+                ),
+                Pending::Send(index, prompt, session.revision),
+            );
+        } else {
+            self.send_existing(index, prompt);
+        }
     }
 
     pub fn cancel(&mut self, index: usize) {

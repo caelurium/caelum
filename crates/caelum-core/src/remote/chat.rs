@@ -25,7 +25,7 @@ pub struct Continuation {
 }
 
 impl Chat {
-    pub(super) fn prompt(&self, text: &str) -> String {
+    pub(crate) fn prompt(&self, text: &str) -> String {
         if self.messages.is_empty() {
             return text.into();
         }

@@ -39,26 +39,22 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
     click(&mut rt, "new-session");
 
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
-    assert!(c.thread.conversation.is_none());
-    let editor = c.thread.editor_key(id).to_owned();
-    let fresh = format!("vm-session-{id}/{editor}");
+    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    let editor = live(&rt.state).app.selected.unwrap();
+    let fresh = format!("live-session-{editor}");
     assert_eq!(count(&rt), before + 1);
     let new_row = element(&rt, &fresh);
-    assert_eq!(new_row.label.as_deref(), Some("New VM session"));
+    assert_eq!(new_row.label.as_deref(), Some("New session"));
     assert!(new_row.item_selected && new_row.visible[3] > 0.);
     assert!(!element(&rt, &original).item_selected);
 
     click(&mut rt, "new-session");
     assert_eq!(count(&rt), before + 1);
     assert!(element(&rt, &fresh).item_selected);
-    fill(
-        &mut rt,
-        &format!("remote-draft-{editor}"),
-        "A separate task",
-    );
+    fill(&mut rt, &format!("live-draft-{editor}"), "A separate task");
     assert_eq!(
-        element(&rt, &fresh).label.as_deref(),
-        Some("A separate task")
+        live(&rt.state).app.sessions[editor].draft,
+        "A separate task"
     );
     reveal(&mut rt, &original);
     click(&mut rt, &original);
@@ -72,10 +68,9 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
     advance(&mut rt, 0.2);
     assert!(element(&rt, &fresh).item_selected);
     let app = &mut live_mut(&mut rt.state).app;
-    let c = &app.remote.saved.checkouts[id];
-    assert_eq!(c.thread.editor_key(id), editor);
-    assert_eq!(c.thread.draft, "A separate task");
-    assert!(c.thread.conversation.is_none());
+    assert_eq!(app.selected, Some(editor));
+    assert_eq!(app.sessions[editor].draft, "A separate task");
+    assert!(app.sessions[editor].remote_id.is_none());
     assert!(
         app.commands()
             .iter()
@@ -84,7 +79,7 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
 }
 
 #[test]
-fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
+fn new_session_shortcuts_use_codex_on_the_vm_even_with_opencode_selected_for_local_sessions() {
     let mut rt = design_runtime("", (800., 620.));
     let id = "checkout-example";
     rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
@@ -104,38 +99,85 @@ fn new_session_shortcuts_keep_the_chosen_vm_provider_and_checkout() {
         advance(rt, 0.2);
     };
     shortcut(&mut rt, true);
-    assert_eq!(live(&rt.state).panels.launch_provider, Provider::OpenCode);
     fill(&mut rt, "launch-search", "no-such-machine");
     assert!(rt.find("launch-vm-checkout-example").is_none());
     fill(&mut rt, "launch-search", "feat/remote-checkout");
-    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "launch-provider-opencode");
     click(&mut rt, "launch-vm-checkout-example");
     let l = live(&rt.state);
-    assert_eq!(l.panels.screen, Screen::Remote);
-    assert_eq!(l.app.remote.saved.selected.as_deref(), Some(id));
-    let c = &l.app.remote.saved.checkouts[id];
-    assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(l.panels.screen, Screen::Conversation);
+    let first = l.app.selected.unwrap();
     assert_eq!(
-        (
-            c.other_threads[0].provider,
-            c.other_threads[0].draft.as_str()
-        ),
+        l.app.sessions[first].scope.project,
+        "boat://checkout/checkout-example"
+    );
+    assert_eq!(l.app.sessions[first].scope.provider, Provider::Codex);
+    let c = &l.app.remote.saved.checkouts[id];
+    assert_eq!(
+        (c.thread.provider, c.thread.draft.as_str()),
         (Provider::OpenCode, "Park this draft")
     );
-    let first = c.thread.editor_key(id).to_owned();
-    fill(&mut rt, &format!("remote-draft-{first}"), "Second draft");
+    fill(&mut rt, &format!("live-draft-{first}"), "Second draft");
     shortcut(&mut rt, false);
     let app = &mut live_mut(&mut rt.state).app;
-    let c = &app.remote.saved.checkouts[id];
-    assert!(c.thread.conversation.is_none() && c.thread.draft.is_empty());
-    assert_ne!(c.thread.editor_key(id), first);
-    assert_eq!(c.thread.provider, Provider::Codex);
-    assert_eq!(c.other_threads[1].draft, "Second draft");
+    let second = app.selected.unwrap();
+    assert_ne!(second, first);
+    assert_eq!(app.sessions[second].scope, app.sessions[first].scope);
+    assert!(app.sessions[second].remote_id.is_none() && app.sessions[second].draft.is_empty());
+    assert_eq!(app.sessions[first].draft, "Second draft");
     assert!(
         app.commands()
             .iter()
             .all(|(_, op)| !matches!(op, Command::Remote(_)))
     );
+}
+
+#[test]
+fn a_vm_launch_from_home_checks_its_chosen_worktree_and_keeps_the_boat_chat_parked_on_mismatch() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    let tree = "/worktrees/selected";
+    rt.update(|s, _| {
+        crate::remote::scene(s, "native-connected");
+        crate::home::open(s);
+        let app = &mut live_mut(s).app;
+        let source = app.remote.saved.checkouts[id].source.project.clone();
+        app.projects.push(caelum_protocol::ProjectInfo {
+            name: "selected".into(),
+            path: tree.into(),
+        });
+        app.project_roots.insert(tree.into(), source);
+        app.home_select_project(tree.into());
+        crate::panels::open_launcher(s);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "launch-vm-checkout-example");
+    assert!(rt.find("remote-setup-composer").is_some());
+    let commands = live_mut(&mut rt.state).app.commands();
+    let check = commands.iter().find_map(|(r,c)| matches!(c, Command::Remote(Operation::MatchCheckout(p,t)) if p == tree && t.machine.id == "vm-example").then_some(*r)).unwrap();
+    rt.update(|s, _| {
+        live_mut(s).apply(Event::Completed(
+            check,
+            Err("The VM is on a different branch.".into()),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.find("refresh-remote-checkout").is_some());
+    assert!(rt.find("vm-provider-trigger").is_none());
+    assert!(rt.find("remote-draft-checkout-example").is_none());
+    let l = live_mut(&mut rt.state);
+    assert!(l.app.selected.is_none());
+    assert_eq!(
+        l.app.remote.saved.checkouts[id]
+            .thread
+            .conversation
+            .as_deref(),
+        Some("thread-example")
+    );
+    assert!(l.app.commands().iter().all(|(_, c)| !matches!(
+        c,
+        Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+    )));
 }
 
 #[test]
@@ -163,8 +205,8 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     );
 
     // Starting again on an untouched draft reuses the fresh editor.
-    secondary(&mut rt, "remote-checkout-checkout-example");
-    choose_context(&mut rt, "New session on this VM");
+    click(&mut rt, "vm-threads");
+    click(&mut rt, "new-vm-session");
     let field = format!("remote-draft-{fresh}");
     fill(&mut rt, &field, "Independent task");
     click(&mut rt, "vm-provider-trigger");

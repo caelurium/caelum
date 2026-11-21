@@ -93,12 +93,7 @@ pub fn open(s: &mut Workspace, settings: Option<Provider>) {
     l.models.selected = match &owner {
         Owner::Home(_) => l.app.home_options().model,
         Owner::Session(i, _) => l.app.sessions[*i].options.model.clone(),
-        Owner::Defaults(scope) => l
-            .app
-            .preferences
-            .providers
-            .get(scope.provider.as_str())
-            .and_then(|o| o.model.clone()),
+        Owner::Defaults(scope) => l.app.provider_options(scope).and_then(|o| o.model.clone()),
     };
     l.models.owner = Some(owner);
     l.models.filter = Filter::All;
@@ -146,17 +141,16 @@ fn filter(s: &mut Workspace, filter: Filter, tx: &mut Tx) {
 
 fn favorite(s: &mut Workspace, provider: Provider, id: &str) {
     let l = live_mut(s);
-    let favorites = l
-        .app
-        .preferences
-        .favorite_models
-        .entry(provider.as_str().into())
-        .or_default();
-    if favorites.iter().any(|favorite| favorite == id) {
-        favorites.retain(|favorite| favorite != id);
-    } else {
-        favorites.push(id.to_owned());
-    }
+    let Some(scope) = l
+        .models
+        .owner
+        .as_ref()
+        .map(Owner::scope)
+        .filter(|s| s.provider == provider)
+    else {
+        return;
+    };
+    l.app.toggle_favorite_model(scope, id);
     l.models.selected = Some(id.to_owned());
     l.models.query.focused = true;
     let at = selected_index(s, &matches(s));
@@ -195,14 +189,10 @@ fn choose(s: &mut Workspace, id: &str) {
             l.app.home.draft.options = options;
         }
         Owner::Defaults(scope) => {
-            let defaults = l
-                .app
-                .preferences
-                .providers
-                .entry(scope.provider.as_str().into())
-                .or_default();
-            defaults.model = model;
-            defaults.effort = effort;
+            l.app.edit_provider_options(&scope, |defaults| {
+                defaults.model = model;
+                defaults.effort = effort;
+            });
         }
         Owner::Session(index, scope) => {
             let session = &mut l.app.sessions[index];

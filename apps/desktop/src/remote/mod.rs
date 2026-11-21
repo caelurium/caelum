@@ -4,6 +4,7 @@ mod conversation;
 mod create;
 mod handoff;
 mod launcher;
+pub(crate) mod native;
 mod picker;
 mod popup;
 mod provider;
@@ -17,6 +18,8 @@ mod transcript;
 
 pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::enter_new;
+pub(crate) use checkout::launch_source_for;
+pub(crate) use checkout::manage;
 pub(crate) use checkout::open_session_row;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
@@ -45,6 +48,7 @@ use rune_kit::Kit;
 
 #[derive(Default)]
 pub(crate) struct State {
+    open_when_ready: Option<(String, caelum_core::remote::native::SessionIntent)>,
     key: TextEdit,
     form: picker::Form,
     folders: create::Folders,
@@ -55,7 +59,7 @@ pub(crate) struct State {
     inspection: Option<popup::Inspection>,
     pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,
-    checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
+    checked_deadlines: std::collections::HashSet<(caelum_core::remote::MachineId, i64)>,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

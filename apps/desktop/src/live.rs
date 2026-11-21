@@ -8,6 +8,7 @@ mod menus;
 mod patches;
 #[cfg(test)]
 mod polling_tests;
+mod runtime;
 mod sidebar;
 mod transcript;
 
@@ -18,6 +19,7 @@ pub(crate) use menus::archive_disabled;
 pub use menus::close_session_menu;
 pub use menus::delete_confirmation;
 pub use menus::overlays;
+pub use runtime::setup;
 pub use sidebar::on_key as sidebar_key;
 pub use sidebar::sidebar;
 pub use transcript::transcript;
@@ -30,6 +32,7 @@ use rune::{FileDialogOptions, ScrollPos, TextEdit, Tx, Waker};
 use crate::Workspace;
 
 pub struct Live {
+    pub(crate) native: crate::remote::native::Connections,
     pub latency: crate::latency::State,
     pub feed: sidebar::State,
     pub context: crate::context::State,
@@ -78,26 +81,13 @@ pub struct Live {
 }
 
 impl Live {
-    pub(crate) fn start(&mut self, store: caelum_core::application::Store, wake: Waker) {
-        match store.lock() {
-            Ok(lock) => self.store_lock = Some(lock),
-            Err(error) => {
-                self.app.persistence_error = Some(error);
-                return;
-            }
-        }
-        self.app.enable_store(store.0);
-        self.wake = Some(wake.clone());
-        self.media = crate::media::State::new(wake.clone());
-        self.runtime = Some(Runtime::new(move || wake()));
-    }
-
     pub fn new(project: Option<String>) -> Self {
         let mut app = Application::default();
         if let Some(project) = project {
             app.open_project(project);
         }
         Self {
+            native: Default::default(),
             latency: Default::default(),
             feed: Default::default(),
             context: Default::default(),
@@ -172,6 +162,10 @@ impl Live {
             self.panels.overlay = Some(crate::panels::Screen::Launcher);
             return;
         };
+        if let Some(id) = caelum_core::remote::native::checkout_id(&project) {
+            crate::remote::native::open(self, id, caelum_core::remote::native::SessionIntent::New);
+            return;
+        }
         let provider = self.app.preferences.default_provider;
         let index = self.app.project_draft(Scope { project, provider });
         self.sync_editors();
@@ -382,6 +376,9 @@ impl Live {
     }
 
     pub fn send(&mut self, tx: &mut Tx) {
+        if !crate::remote::native::ready(self) {
+            return;
+        }
         let trace = self.latency.begin("send");
         self.latency.track(trace, self.app.selected, false);
         self.schedule();
@@ -497,9 +494,13 @@ impl Live {
                 }
             }
         }
-        let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
+        let mut events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
+        for event in &mut events {
+            self.app.merge_broker_event(None, event);
+        }
         changed |= self.apply_events(events);
         changed |= crate::remote::sync(self, tx);
+        changed |= crate::remote::native::poll(self);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
         if self.last_selected != self.app.selected
@@ -512,6 +513,7 @@ impl Live {
         }
         if self.runtime.is_some() {
             changed |= crate::notifications::dispatch(self);
+            let connected = crate::remote::native::ready(self);
             self.feed.discover(&mut self.app);
             changed |= self.checkouts.sync(&mut self.app);
             self.runtime
@@ -524,6 +526,7 @@ impl Live {
                 .filter(|_| self.panels.overlay == Some(crate::panels::Screen::Shells))
                 .map(|p| p.index)
                 .or(self.app.selected)
+                && connected
                 && !self.app.sessions[index].shells.is_empty()
                 && self
                     .shell_refresh
@@ -548,6 +551,7 @@ impl Live {
                 }
             }
             if self.panels.screen == crate::panels::Screen::Review
+                && connected
                 && let Some(key) = self.panels.review.clone()
             {
                 let now = std::time::Instant::now();
@@ -576,7 +580,10 @@ impl Live {
                     }
                     continue;
                 }
-                if let Err(error) = self.runtime.as_mut().unwrap().submit(id, command) {
+                let wake = self.waker();
+                let app = &self.app;
+                let runtime = self.runtime.as_mut().unwrap();
+                if let Err(error) = self.native.submit(runtime, app, wake, id, command) {
                     self.apply(Event::Completed(id, Err(error)));
                     changed = true;
                 }
@@ -657,11 +664,12 @@ impl Live {
             changed = true;
         }
         self.last_screen = self.panels.screen;
-        if self
-            .app
-            .sessions
-            .iter()
-            .any(|s| s.working() || !s.shells.is_empty())
+        if crate::remote::native::ready(self)
+            && self
+                .app
+                .sessions
+                .iter()
+                .any(|s| s.working() || !s.shells.is_empty())
         {
             tx.wake_after(std::time::Duration::from_secs(1));
         }
@@ -674,32 +682,8 @@ impl Live {
             wake();
         }
     }
-}
-
-impl Drop for Live {
-    fn drop(&mut self) {
-        self.app.home.draft.text.clone_from(&self.home.editor.text);
-        self.panels.remember(&mut self.app);
-        for (i, editor) in self.drafts.iter().enumerate() {
-            self.app.sessions[i].draft.clone_from(&editor.text);
-        }
-        drop(self.runtime.take());
-        if let Err(error) = self.app.flush() {
-            self.updates.abort_restart();
-            eprintln!("{error}");
-        }
-    }
-}
-
-pub fn setup(s: &mut Workspace, wake: Waker) {
-    if let Some(live) = &mut s.live {
-        if live.evaluation || live.fixture {
-            return;
-        }
-        live.start(
-            caelum_core::application::Store(caelum_core::application::Store::default_path()),
-            wake,
-        );
+    pub(crate) fn waker(&self) -> Option<Waker> {
+        self.wake.clone()
     }
 }
 

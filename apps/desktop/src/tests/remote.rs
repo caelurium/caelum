@@ -1,5 +1,6 @@
 mod handoff;
 mod models;
+mod native;
 mod transcript;
 mod workspace;
 
@@ -29,7 +30,7 @@ fn small_destination_picker_keeps_creation_separate_from_attaching() {
         (footer.rect[1] - initial.rect[1]).abs() < 1. && footer.visible[3] >= 28.,
         "{footer:?}"
     );
-    assert!(!footer.focusable);
+    assert!(footer.focusable);
     click(&mut rt, "handoff-existing-vm");
     assert!(rt.find("attach-vm-vm-example").is_some() && rt.find("create-remote").is_none());
     let app = &mut rt.state.live.as_mut().unwrap().app;
@@ -66,22 +67,20 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         l.apply(Event::Completed(
             id,
             Ok(Reply::Remote(Outcome::Source(Source {
-                published_tip: None,
+                published_tip: Some("a".repeat(40)),
                 account: "example-account".into(),
                 project,
                 repository: "example/project".into(),
-                base: "main".into(),
+                base: "feat/remote-ui".into(),
                 environment: None,
             }))),
         ));
     });
     advance(&mut rt, 0.2);
-    assert!(!element(&rt, "create-remote").focusable);
-    fill(&mut rt, "remote-branch", "main");
-    assert!(!element(&rt, "create-remote").focusable);
-    assert!(element(&rt, "vm-branch-error").visible[3] > 0.);
-    fill(&mut rt, "remote-branch", "feat/remote-ui");
-    assert!(rt.find("vm-branch-error").is_none());
+    assert_eq!(
+        element(&rt, "handoff-base").text.as_deref(),
+        Some("feat/remote-ui")
+    );
     click(&mut rt, "vm-size-Large");
     click(&mut rt, "vm-lifetime-Until stopped");
     assert!(
@@ -110,7 +109,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         panic!("{creates:?}")
     };
     assert_eq!(source.repository, "example/project");
-    assert_eq!(source.base, "main");
+    assert_eq!(source.base, "feat/remote-ui");
     assert_eq!(plan.branch, "feat/remote-ui");
     assert_eq!(plan.size, caelum_core::remote::Size::Large);
     assert_eq!(plan.lifetime, caelum_core::remote::Lifetime::UntilStopped);
@@ -143,7 +142,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
 }
 
 #[test]
-fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
+fn changing_the_launch_project_opens_a_codex_vm_with_the_selected_branch() {
     use crate::live::{live, live_mut};
     let mut rt = design_runtime("", (800., 620.));
     rt.update(|s, _| {
@@ -151,7 +150,7 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
         crate::panels::open_launcher(s);
     });
     advance(&mut rt, 0.2);
-    click(&mut rt, "launch-provider-codex");
+    click(&mut rt, "launch-provider-opencode");
     click(&mut rt, "open-create-vm");
     let publish_source = |rt: &mut Runtime<Workspace>| {
         rt.update(|s, _| {
@@ -171,8 +170,8 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
                     project,
                     account: "example-account".into(),
                     repository: "example/project".into(),
-                    base: "main".into(),
-                    published_tip: None,
+                    base: "feature/launcher".into(),
+                    published_tip: Some("a".repeat(40)),
                     environment: None,
                 }))),
             ));
@@ -185,16 +184,37 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
     let choice = crate::code_view::source_key(project, "vm-project");
     click(&mut rt, &choice);
     publish_source(&mut rt);
-    fill(&mut rt, "remote-branch", "feature/launcher");
     click(&mut rt, "create-remote");
     let app = &mut live_mut(&mut rt.state).app;
     let c = &app.remote.saved.checkouts[app.remote.saved.selected.as_ref().unwrap()];
     assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(c.branch(), Some("feature/launcher"));
     assert!(c.thread.conversation.is_none());
-    assert!(matches!(
-        app.commands().as_slice(),
-        [(_, Command::Remote(Operation::Create(..)))]
-    ));
+    let commands = app.commands();
+    let [(req, Command::Remote(Operation::Create(..)))] = commands.as_slice() else {
+        panic!("{commands:?}")
+    };
+    let machine = app.remote.inventory.as_ref().unwrap().machines[0].clone();
+    rt.update(|s, _| {
+        live_mut(s).apply(Event::Completed(
+            *req,
+            Ok(Reply::Remote(Outcome::Prepared {
+                machine,
+                root: "/workspace/checkout".into(),
+                branch: "feature/launcher".into(),
+            })),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    let l = live_mut(&mut rt.state);
+    assert_eq!(l.panels.screen, crate::panels::Screen::Conversation);
+    let draft = &l.app.sessions[l.app.selected.unwrap()];
+    assert_eq!(draft.scope.provider, Provider::Codex);
+    assert!(draft.remote_id.is_none());
+    assert!(!l.app.commands().iter().any(|(_, c)| matches!(
+        c,
+        Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+    )));
 }
 
 #[test]

@@ -4,6 +4,9 @@ use caelum_protocol::{ApprovalDecision, LineChanges};
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "tests/websocket.rs"]
+mod websocket_tests;
+
 static NEXT_DIR: AtomicU64 = AtomicU64::new(0);
 
 struct TestDirectory(PathBuf);
@@ -276,7 +279,7 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
     assert_eq!(provider.inner.lock_connections().len(), 1);
     for connection in [connection, nested_connection] {
         assert!(matches!(
-            processes.terminate(connection.process_id),
+            processes.terminate(connection.process_id.unwrap()),
             Err(crate::processes::ProcessError::UnknownProcess)
         ));
     }

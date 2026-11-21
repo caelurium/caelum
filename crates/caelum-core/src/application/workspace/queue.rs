@@ -14,6 +14,7 @@ impl Workspace {
     pub fn refresh_inbox(&mut self, index: usize) {
         let session = &self.sessions[index];
         if session.scope.provider != Provider::OpenCode
+            || !session.scope.provider_available()
             || self
                 .pending
                 .values()

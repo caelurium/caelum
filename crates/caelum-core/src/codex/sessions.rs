@@ -15,7 +15,7 @@ impl CodexProvider {
         turn: &str,
         before: bool,
     ) -> Result<CodexSessionInfo, CodexError> {
-        let project = Project::open(path)?;
+        let project = self.project(path)?;
         let connection = self.connection(&project)?;
 
         connection.require_action(if before {
@@ -55,7 +55,7 @@ impl CodexProvider {
     }
 
     pub(crate) fn rename(&self, path: &str, id: &str, title: &str) -> Result<(), CodexError> {
-        let project = Project::open(path)?;
+        let project = self.project(path)?;
         let connection = self.connection(&project)?;
         connection.owned_thread(&project, id, false)?;
         connection.request("thread/name/set", json!({"threadId":id,"name":title}))?;
@@ -69,7 +69,7 @@ impl CodexProvider {
         before: &str,
         tip: &str,
     ) -> Result<(), CodexError> {
-        let project = Project::open(path)?;
+        let project = self.project(path)?;
         let connection = self.connection(&project)?;
         connection.require_action(HistoryAction::Rewind)?;
         connection.owned_thread(&project, id, true)?;
@@ -95,7 +95,7 @@ impl CodexProvider {
     }
 
     pub(crate) fn verify_export_owner(&self, path: &str, id: &str) -> Result<(), CodexError> {
-        let project = Project::open(path)?;
+        let project = self.project(path)?;
         self.connection(&project)?
             .owned_thread(&project, id, true)
             .map(drop)
@@ -107,7 +107,7 @@ impl CodexProvider {
         id: &str,
         action: crate::application::HistoryAction,
     ) -> Result<(), CodexError> {
-        let project = Project::open(path)?;
+        let project = self.project(path)?;
         let connection = self.connection(&project)?;
         connection.require_action(action)?;
         let thread = connection.owned_thread(&project, id, true)?;
@@ -126,7 +126,7 @@ impl CodexProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<CodexSessionList, CodexError> {
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         Self::list_sessions_on(&project, &connection, false)
     }
@@ -136,7 +136,7 @@ impl CodexProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<CodexSessionList, CodexError> {
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         Self::list_sessions_on(&project, &connection, true)
     }
@@ -169,6 +169,9 @@ impl CodexProvider {
                     CodexError::Protocol("thread/list response has no data array".into())
                 })?;
             for value in data {
+                if project.is_remote() && !in_checkout(value, project) {
+                    continue;
+                }
                 if let Some(thread) = thread_info(value) {
                     connection.remember_thread(&thread.id);
                     threads.push(thread);
@@ -205,7 +208,7 @@ impl CodexProvider {
     }
 
     pub fn choices(&self, project_path: impl AsRef<Path>) -> Result<ProviderChoices, CodexError> {
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         let mut models = Vec::new();
         let mut default_model = None;
@@ -281,12 +284,12 @@ impl CodexProvider {
         project_path: impl AsRef<Path>,
         model: Option<&str>,
     ) -> Result<CodexSessionInfo, CodexError> {
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         let mut params = json!({
             "cwd": project.path().to_string_lossy(),
-            "approvalPolicy": "unlessTrusted",
-            "sandbox": "workspaceWrite",
+            "approvalPolicy": "untrusted",
+            "sandbox": "workspace-write",
             "serviceName": "caelum",
             "model": model
         });
@@ -298,6 +301,9 @@ impl CodexProvider {
             params["historyMode"] = "paginated".into();
         }
         let response = connection.request("thread/start", params)?;
+        if project.is_remote() && !in_checkout(&response["thread"], &project) {
+            return Err(CodexError::ThreadNotInProject);
+        }
         let thread = response
             .get("thread")
             .and_then(thread_info)
@@ -325,12 +331,17 @@ impl CodexProvider {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
         let response = connection.request(
             "thread/resume",
             json!({ "threadId": thread_id, "excludeTurns": true }),
         )?;
+        if response.pointer("/thread/id").and_then(Value::as_str) != Some(thread_id)
+            || project.is_remote() && !in_checkout(&response["thread"], &project)
+        {
+            return Err(CodexError::ThreadNotInProject);
+        }
         let thread = response
             .get("thread")
             .and_then(thread_info)
@@ -359,7 +370,7 @@ impl CodexProvider {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
         let response = connection.request(
             "thread/turns/list",
@@ -420,7 +431,7 @@ impl CodexProvider {
         if prompt.trim().is_empty() {
             return Err(CodexError::EmptyPrompt);
         }
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
         connection.queue_turn(thread_id);
         let (prompt, images) = crate::application::provider_prompt(prompt);
@@ -456,7 +467,7 @@ impl CodexProvider {
         project_path: impl AsRef<Path>,
         thread_id: &str,
     ) -> Result<SessionDetails, CodexError> {
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
         let response = connection.request("thread/read", json!({ "threadId": thread_id }))?;
         let branch = response
@@ -505,15 +516,14 @@ impl CodexProvider {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let project = Project::open(project_path)?;
-
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         let response = connection.request("thread/read", json!({ "threadId": thread_id }))?;
         let cwd = response
             .pointer("/thread/cwd")
             .and_then(Value::as_str)
             .ok_or(CodexError::ThreadNotInProject)?;
-        if Path::new(cwd).canonicalize().ok().as_deref() != Some(project.path()) {
+        if !project.matches(cwd) {
             return Err(CodexError::ThreadNotInProject);
         }
         if archived
@@ -552,14 +562,14 @@ impl CodexProvider {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
         let response = connection.request("thread/read", json!({ "threadId": thread_id }))?;
         let cwd = response
             .pointer("/thread/cwd")
             .and_then(Value::as_str)
             .ok_or(CodexError::ThreadNotInProject)?;
-        if Path::new(cwd).canonicalize().ok().as_deref() != Some(project.path()) {
+        if !project.matches(cwd) {
             return Err(CodexError::ThreadNotInProject);
         }
         if response
@@ -597,7 +607,7 @@ impl CodexProvider {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
-        let project = Project::open(project_path)?;
+        let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
         connection.request("turn/interrupt", json!({ "threadId": thread_id }))?;
         self.inner.questions.clear(
@@ -624,11 +634,11 @@ fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
 }
 
 fn in_checkout(thread: &Value, project: &Project) -> bool {
-    thread["cwd"]
-        .as_str()
-        .and_then(|s| Path::new(s).canonicalize().ok())
-        .as_deref()
-        == Some(project.path())
+    match thread.get("cwd") {
+        Some(Value::String(dir)) => project.matches(dir),
+        None | Some(Value::Null) => project.is_remote(),
+        _ => false,
+    }
 }
 
 impl CodexConnection {

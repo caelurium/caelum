@@ -29,7 +29,7 @@ impl Workspace {
         }
         let request = self.request(
             Command::Remote(Operation::Lifetime(machine, lifetime)),
-            Pending::Remote(Lane::Lifetime(id.into())),
+            Pending::Remote(Lane::Lifetime(id.into(), lifetime)),
         );
         self.remote.lifetimes.insert(id.into(), Job::Busy(request));
     }
@@ -38,6 +38,7 @@ impl Workspace {
         &mut self,
         id: &str,
         request: u64,
+        lifetime: Lifetime,
         result: Result<Outcome, String>,
     ) {
         if !matches!(self.remote.lifetimes.get(id), Some(Job::Busy(r)) if *r == request) {
@@ -52,6 +53,7 @@ impl Workspace {
                 if let Phase::Ready { machine, .. } = &mut c.phase {
                     machine.auto_stop_unix = m.auto_stop_unix;
                 }
+                c.lifetime = lifetime;
             }
             other => {
                 self.remote.lifetimes.insert(

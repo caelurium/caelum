@@ -47,7 +47,6 @@ pub struct VmHandoff {
     navigation: u64,
     home_generation: Option<u64>,
     pub project: String,
-    pub provider: Provider,
     pub title: String,
     draft: String,
     pub phase: HandoffPhase,
@@ -87,6 +86,7 @@ impl Workspace {
                     .project
                     .as_ref()
                     .is_some_and(|p| self.group_path(p) != self.group_path(&s.scope.project)))
+            || crate::remote::native::checkout_id(&s.scope.project).is_some()
             || !self.project_is_open(&s.scope.project)
             || s.archived
             || s.forgotten
@@ -146,9 +146,6 @@ impl Workspace {
             },
         );
         self.handoff = Some(VmHandoff {
-            provider: source
-                .session()
-                .map_or_else(|| self.home_provider(), |i| self.sessions[i].scope.provider),
             origin,
             navigation: self.navigation,
             home_generation: (!matches!(source, HandoffSource::Composer(_)))
@@ -298,7 +295,14 @@ impl Workspace {
             unreachable!()
         };
         h.phase = HandoffPhase::Ready(chat);
-        if self.finish_vm_handoff(destination).is_some() {
+        if let Some(id) = self.finish_vm_handoff(destination) {
+            self.remote
+                .saved
+                .checkouts
+                .get_mut(&id)
+                .unwrap()
+                .thread
+                .awaiting_native = true;
             return true;
         }
         self.handoff.as_mut().unwrap().phase =
@@ -351,7 +355,7 @@ impl Workspace {
         }
         let c = self.remote.saved.checkouts.get_mut(&id).unwrap();
         c.open_thread(Thread {
-            provider: h.provider,
+            provider: Provider::Codex,
             continued: Some(Continuation {
                 id: thread,
                 title: h.title,

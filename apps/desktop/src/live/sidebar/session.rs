@@ -157,7 +157,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     .description(format!("{project}, {branch}, {provider}, {status}, {age}"))
     .help(format!(
         "{}\n{branch}\n{provider} · {status}\n{}",
-        session.scope.project,
+        app.checkout_directory(&session.scope.project),
         error.unwrap_or("")
     ))
     .key(format!("live-session-{index}"))

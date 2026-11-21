@@ -1,6 +1,6 @@
 use crate::{
     Workspace,
-    live::{live, live_mut},
+    live::{Live, live, live_mut},
     ui,
 };
 use caelum_core::remote::{Checkout, Job, Phase};
@@ -15,7 +15,14 @@ pub(super) enum Dock {
 }
 
 impl Dock {
-    pub(super) fn for_checkout(c: &Checkout) -> Self {
+    pub(super) fn for_checkout(l: &Live, id: &str, c: &Checkout) -> Self {
+        if l.remote
+            .open_when_ready
+            .as_ref()
+            .is_some_and(|(owner, _)| owner == id)
+        {
+            return Self::Setup;
+        }
         match &c.phase {
             Phase::Ready { .. } => Self::Draft,
             Phase::Prepare {

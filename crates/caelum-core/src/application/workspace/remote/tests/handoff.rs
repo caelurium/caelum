@@ -68,6 +68,107 @@ fn new_vm() -> VmDestination {
 }
 
 #[test]
+fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_send_only() {
+    use crate::application::{Options, SessionKey, Summary};
+    let mut app = Workspace::default();
+    let local = local(&mut app);
+    let req = reading(&mut app, local);
+    ready(&mut app, req);
+    app.confirm_vm_handoff(VmDestination::Existing(machine("vm")));
+    let (req, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Remote(Outcome::Source(source()))),
+    ));
+    assert!(app.enter_confirmed_vm());
+    let id = app.remote.saved.selected.clone().unwrap();
+    let (req, _) = app.commands().pop().unwrap();
+    let verified = || Reply::Remote(prepared_vm(machine("vm"), "feature/local"));
+    app.apply(Event::Completed(req, Ok(verified())));
+    let slot = app.open_vm_session(&id, SessionIntent::Reopen).unwrap();
+    assert_ne!(slot, local);
+    assert_eq!(app.sessions[slot].scope.provider, Provider::Codex);
+    assert_eq!(app.sessions[local].scope.provider, Provider::OpenCode);
+    assert_eq!(
+        app.sessions[local].remote_id.as_deref(),
+        Some("local-session")
+    );
+    assert_eq!(app.sessions[slot].draft, app.sessions[local].draft);
+    assert!(app.commands().is_empty());
+    assert!(app.send(slot, "Continue work".into()));
+    let mut commands = app.commands();
+    let (req, Command::Remote(Operation::Prepare(t, branch, None))) = commands.pop().unwrap()
+    else {
+        panic!()
+    };
+    assert!(commands.is_empty());
+    assert_eq!(t.required_base.unwrap().tip, "a".repeat(40));
+    assert_eq!(branch, "feature/local");
+    app.apply(Event::Completed(req, Ok(verified())));
+    let (req, Command::Start(scope, _)) = app.commands().pop().unwrap() else {
+        panic!()
+    };
+    assert_eq!(scope.project, crate::remote::native::project_key(&id));
+    let key = SessionKey {
+        scope,
+        id: "session-vm".into(),
+    };
+    app.apply(Event::Completed(
+        req,
+        Ok(Reply::Session(Summary {
+            key: key.clone(),
+            title: "VM".into(),
+            updated_at: None,
+            working: false,
+            options: Options::default(),
+        })),
+    ));
+    let (req, Command::Send(owner, text, _)) = app.commands().pop().unwrap() else {
+        panic!()
+    };
+    assert_eq!(owner, key);
+    assert!(text.contains("Earlier answer") && text.ends_with("Continue work"));
+    for event in app.native_connection_lost(&key.scope.project) {
+        app.apply(event);
+    }
+    app.apply(Event::Completed(req, Err("Unconfirmed".into())));
+    app.native_connected(&key.scope.project);
+    assert_eq!(app.sessions[slot].key().as_ref(), Some(&key));
+    assert!(!app.commands().iter().any(|(_, c)| matches!(
+        c,
+        Command::Start(..)
+            | Command::Send(..)
+            | Command::Enqueue(..)
+            | Command::Remote(Operation::Prompt(..))
+    )));
+
+    // A cold resume replays history into the same slot. Show the chat and user's
+    // message once, without exposing the wire envelope as another user message.
+    let snapshot = app.snapshot();
+    let mut restored = Workspace::default();
+    restored.enable_store("workspace.json".into());
+    let load = restored.commands().pop().unwrap().0;
+    restored.apply(Event::Completed(
+        load,
+        Ok(Reply::Snapshot(Some(Box::new(snapshot)))),
+    ));
+    let conversation = &mut restored.sessions[slot].conversation;
+    conversation.history(
+        Provider::Codex,
+        &[serde_json::json!({"id":"turn-first","items":[{"type":"userMessage","id":"msg_first","content":[{"type":"text","text":text}]}]})],
+        true,
+    );
+    assert_eq!(
+        conversation
+            .entries
+            .iter()
+            .map(|e| e.text.as_str())
+            .collect::<Vec<_>>(),
+        ["Earlier question", "Earlier answer", "Continue work"]
+    );
+}
+
+#[test]
 fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     let mut app = Workspace::default();
     let index = local(&mut app);
@@ -79,10 +180,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     let req = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(
         req,
-        Ok(Reply::Remote(Outcome::Prepared(
-            machine("vm"),
-            "feature/local".into(),
-        ))),
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "feature/local"))),
     ));
     app.remote
         .saved
@@ -96,7 +194,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
-            provider: Provider::OpenCode,
+            provider: Provider::Codex,
             conversation: "c".into(),
             prompt: "p".into(),
             id: "r".into(),
@@ -247,7 +345,7 @@ fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touc
         .unwrap();
     let link = app.linked_vm(i).unwrap().clone();
     let (req, _) = app.commands().pop().unwrap();
-    let prepared = || Outcome::Prepared(machine("vm"), "feature/local".into());
+    let prepared = || prepared_vm(machine("vm"), "feature/local");
     app.apply(Event::Completed(req, Ok(Reply::Remote(prepared()))));
     app.home_select_project(source().project);
     assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
@@ -389,11 +487,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         target.required_base.unwrap().tip,
         source.published_tip.as_deref().unwrap()
     );
-    complete(
-        &mut reopened,
-        prepare,
-        Outcome::Prepared(machine("vm"), branch),
-    );
+    complete(&mut reopened, prepare, prepared_vm(machine("vm"), branch));
     assert!(reopened.commands().is_empty());
     assert_eq!(
         reopened.remote.saved.checkouts[&id].thread.draft,
@@ -516,14 +610,11 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     let i = local(&mut app);
     let m = machine("vm");
     app.remote.picker = Some(Picker::Ready(source()));
-    let id = app.attach_remote(m.clone(), None).unwrap();
+    let id = app.attach_remote(m.clone(), SessionIntent::Reopen).unwrap();
     let (req, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(
         req,
-        Ok(Reply::Remote(Outcome::Prepared(
-            m.clone(),
-            "existing".into(),
-        ))),
+        Ok(Reply::Remote(prepared_vm(m.clone(), "existing"))),
     ));
     let original = Thread {
         conversation: Some("original".into()),
@@ -533,7 +624,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     app.remote.saved.checkouts.get_mut(&id).unwrap().thread = original.clone();
     app.home_select_project(source().project);
     app.home.draft.text = "From Home".into();
-    app.home_set_provider(Provider::Codex);
+    app.home_set_provider(Provider::OpenCode);
     assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
     app.home_select_project(source().project);
     app.remote.picker = Some(Picker::Ready(source()));
@@ -561,7 +652,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
         .unwrap();
     app.apply(Event::Completed(
         req,
-        Ok(Reply::Remote(Outcome::Prepared(m, "existing".into()))),
+        Ok(Reply::Remote(prepared_vm(m, "existing"))),
     ));
     assert!(app.switch_vm_thread(&id, &id));
     assert_eq!(app.remote.saved.checkouts[&id].thread, original);
