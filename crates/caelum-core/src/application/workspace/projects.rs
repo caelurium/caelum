@@ -71,7 +71,8 @@ impl Workspace {
                     && !session.archiving
                     && !session.deleting
                     && (session.scope.project == path
-                        || self.group_path(&session.scope.project) == path)
+                        || (crate::remote::native::checkout_id(&session.scope.project).is_none()
+                            && self.group_path(&session.scope.project) == path))
             })
             .max_by_key(|(index, session)| {
                 (
@@ -236,6 +237,9 @@ impl Workspace {
     }
 
     pub fn group_path<'a>(&'a self, path: &'a str) -> &'a str {
+        let path = self
+            .native_checkout(path)
+            .map_or(path, |c| c.source.project.as_str());
         self.project_roots
             .get(path)
             .map(String::as_str)
@@ -247,10 +251,12 @@ impl Workspace {
             self.task(Task::Git {
                 project: path.clone(),
             });
-            self.task(Task::Worktrees {
-                project: path.clone(),
-                directory: self.preferences.worktree_directory.clone(),
-            });
+            if crate::remote::native::checkout_id(&path).is_none() {
+                self.task(Task::Worktrees {
+                    project: path.clone(),
+                    directory: self.preferences.worktree_directory.clone(),
+                });
+            }
             if let Some(branch) = self
                 .services
                 .checkouts

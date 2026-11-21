@@ -171,22 +171,18 @@ impl Workspace {
         {
             return None;
         }
-        if let Some(provider) = new_session {
-            if self.vm_session_machine_blocker(&machine).is_some() {
-                return None;
-            }
-            if let Some((id, _)) = self.registered_checkout(&machine.key) {
-                let id = id.clone();
-                if !self.new_vm_session(&id, provider) {
-                    return None;
-                }
-                self.remote.picker = None;
-                return Some(id);
-            }
+        if new_session.is_some() && self.vm_session_machine_blocker(&machine).is_some() {
+            return None;
         }
+        let existing = self.registered_checkout(&machine.key).is_some();
         let id = self.register_machine(machine)?;
         if let Some(provider) = new_session {
-            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
+            if existing && self.can_open_vm_session(&id) {
+                return Some(id);
+            }
+            if !existing {
+                self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
+            }
         }
         self.select_remote(&id);
         Some(id)

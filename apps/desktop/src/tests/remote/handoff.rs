@@ -149,19 +149,19 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     });
     advance(&mut rt, 0.2);
     let l = live(&rt.state);
-    let id = l.app.remote.saved.selected.as_ref().unwrap();
-    let checkout = &l.app.remote.saved.checkouts[id];
+    let i = l.app.selected.unwrap();
+    let id = caelum_core::remote::native::checkout_id(&l.app.sessions[i].scope.project)
+        .unwrap()
+        .to_owned();
+    let checkout = &l.app.remote.saved.checkouts[&id];
     assert!(checkout.other_threads.is_empty());
-    let thread = &checkout.thread;
-    assert_eq!(thread.draft, "Edit this on the VM");
-    assert_eq!(l.drafts[0].text, thread.draft);
-    let handoff_row = format!("vm-session-{id}/{}", thread.editor_key(id));
+    assert_eq!(l.panels.screen, Screen::Conversation);
+    assert_eq!(l.app.sessions[i].draft, "Edit this on the VM");
+    assert_eq!(l.drafts[0].text, l.drafts[i].text);
+    let handoff_row = format!("live-session-{i}");
     assert!(element(&rt, &handoff_row).item_selected);
     assert!(!element(&rt, "live-session-0").item_selected);
-    assert!(
-        rt.find(&format!("remote-draft-{}", thread.editor_key(id)))
-            .is_some()
-    );
+    assert!(rt.find(&format!("live-draft-{i}")).is_some());
     assert!(
         rt.elements()
             .iter()
@@ -195,24 +195,19 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
         Command::Remote(Operation::DiscoverHandoff(_) | Operation::Create(..))
     )));
     click(&mut rt, "open-linked-vm");
-    assert_eq!(live(&rt.state).panels.screen, Screen::Remote);
+    assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
+    assert_eq!(live(&rt.state).app.selected, Some(i));
     assert_eq!(live(&rt.state).drafts[0].text, "Edit this on the VM");
-    let id = live(&rt.state).app.remote.saved.selected.clone().unwrap();
-    rt.update(|s, _| {
-        let l = live_mut(s);
-        let req = l
+    assert!(
+        live_mut(&mut rt.state)
             .app
             .commands()
-            .into_iter()
-            .find_map(|(req, command)| {
-                matches!(command, Command::Remote(Operation::Prepare(..))).then_some(req)
-            })
-            .unwrap();
-        l.apply(Event::Completed(
-            req,
-            Ok(Reply::Remote(prepared_vm("feat/existing"))),
-        ));
-    });
+            .iter()
+            .all(|(_, c)| !matches!(
+                c,
+                Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+            ))
+    );
     advance(&mut rt, 0.2);
     click(&mut rt, &format!("remove-remote-{id}"));
     click(&mut rt, "confirm-remove-vm");
@@ -311,10 +306,11 @@ fn vm_setup_occupies_the_composer_until_the_prepared_checkout_restores_the_draft
     advance(&mut rt, 0.5);
     same_dock(element(&rt, "message-composer").rect);
     assert!(rt.find("remote-setup-composer").is_none());
-    let input = element(&rt, &editor);
+    let i = live(&rt.state).app.selected.unwrap();
+    let input = element(&rt, &format!("live-draft-{i}"));
     assert!(input.focused);
     assert_eq!(input.text.as_deref(), Some("Keep this draft"));
-    assert!(rt.find(&transcript).is_some() && element(&rt, "remote-send").focusable);
+    assert!(rt.find(&format!("live-transcript-{i}")).is_some() && rt.find("send").is_some());
     assert_eq!(live(&rt.state).drafts[0].text, "Keep this draft");
     assert!(
         live_mut(&mut rt.state)

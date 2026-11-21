@@ -100,7 +100,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                         )
                         .child(
                             quiet_button(&ui::BRANCH, "Create worktree")
-                                .disabled(l.native.is_some())
                                 .on_press({
                                     let path = path.clone();
                                     move |s: &mut Workspace| {
@@ -118,7 +117,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                         )
                         .child(
                             quiet_button(&glyphs::CLOSE, "Close project")
-                                .disabled(l.native.is_some())
                                 .on_press({
                                     let path = path.clone();
                                     move |s: &mut Workspace| live_mut(s).close_project(&path)

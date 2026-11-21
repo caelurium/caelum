@@ -13,8 +13,7 @@ pub(crate) fn path(el: El, project: String, path: String, directory: bool, origi
         .on_secondary_press(move |s: &mut Workspace, at, _| {
             let l = live(s);
             let owner = l.app.selected;
-            let home = (l.native.is_some()
-                && l.panels.screen == panels::Screen::Home
+            let home = (l.panels.screen == panels::Screen::Home
                 && l.app.home.draft.project.as_ref() == Some(&project))
             .then(|| l.app.home.generation());
             let project = project.clone();
@@ -43,7 +42,7 @@ pub(crate) fn path(el: El, project: String, path: String, directory: bool, origi
                 .item(
                     Item::new("reveal", "Reveal in Finder")
                         .icon(&ui::FOLDER)
-                        .enabled(l.native.is_none()),
+                        .enabled(caelum_core::remote::native::checkout_id(&project).is_none()),
                 );
             if !directory {
                 menu = menu.separator().item(
@@ -80,7 +79,11 @@ pub(crate) fn path(el: El, project: String, path: String, directory: bool, origi
                     panels::show(s, panels::Screen::Files);
                 }
                 "relative" => tx.copy(path),
-                "full" => tx.copy(std::path::Path::new(&project).join(path).to_string_lossy()),
+                "full" => tx.copy(
+                    std::path::Path::new(live(s).app.checkout_directory(&project))
+                        .join(path)
+                        .to_string_lossy(),
+                ),
                 "reveal" => live_mut(s).app.task(Task::Reveal { project, path }),
                 "attach" if home.is_some() => {
                     let l = live_mut(s);

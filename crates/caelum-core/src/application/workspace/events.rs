@@ -12,6 +12,7 @@ impl Workspace {
             Event::Branch(update) => self.branch_update(update),
             Event::Checkout(project) => self.checkout_changed(&project),
             Event::Completed(id, result) => {
+                self.remote.native_requests.remove(&id);
                 if let Some(pending) = self.pending.remove(&id) {
                     let activation = matches!(pending, Pending::Load)
                         .then(|| self.notifications.take(self.navigation))

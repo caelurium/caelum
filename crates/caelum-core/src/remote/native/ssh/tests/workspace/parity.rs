@@ -3,8 +3,7 @@ use crate::application::{Task, TaskReply};
 use caelum_protocol::{ApprovalDecision, ProjectSearchMode};
 use std::{fs, path::Path};
 
-pub(super) fn codex(desktop: &mut Desktop, scope: Scope) {
-    let dir = Path::new(&scope.project).to_owned();
+pub(super) fn codex(desktop: &mut Desktop, scope: Scope, dir: &Path) {
     let options = Options {
         model: Some("test-model".into()),
         effort: Some("high".into()),
@@ -16,7 +15,6 @@ pub(super) fn codex(desktop: &mut Desktop, scope: Scope) {
     let key = session.key;
     desktop.id += 1;
     desktop
-        .client
         .submit(
             desktop.id,
             Command::Send(key.clone(), "request-approval".into(), options),

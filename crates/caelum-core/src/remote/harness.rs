@@ -11,6 +11,8 @@ fn opencode() -> Provider {
 /// advanced atomically with its visible messages in the workspace snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub awaiting_native: bool,
     /// A fresh session needs an editor identity before Boat assigns a conversation ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_id: Option<String>,
@@ -38,6 +40,7 @@ impl Default for Thread {
     fn default() -> Self {
         Self {
             local_id: None,
+            awaiting_native: false,
             continued: None,
             provider: opencode(),
             model: None,
@@ -187,7 +190,7 @@ impl Thread {
             .unwrap_or(checkout)
     }
 
-    pub(crate) fn is_blank(&self) -> bool {
+    pub fn is_blank(&self) -> bool {
         self.continued.is_none()
             && self.model.is_none()
             && self.effort.is_none()

@@ -6,6 +6,7 @@ mod harness;
 mod lifetime;
 mod link;
 mod models;
+mod native;
 mod removal;
 mod stats;
 #[cfg(test)]
@@ -115,7 +116,7 @@ impl Workspace {
                     Ok(Outcome::Disconnected) => {
                         self.remote.inventory = None;
                         self.remote.tool = None;
-                        Connection::Idle
+                        Connection::SignedOut
                     }
                     Err(error) => Connection::Failed(error),
                     _ => Connection::Failed("Unexpected connection response".into()),

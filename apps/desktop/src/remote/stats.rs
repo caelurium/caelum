@@ -30,6 +30,8 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         inspected
     } else if l.panels.screen == Screen::Remote && l.panels.overlay.is_none() {
         l.app.remote.saved.selected.as_deref()
+    } else if l.panels.screen == Screen::Conversation && l.panels.overlay.is_none() {
+        super::native::selected(l)
     } else {
         None
     };
@@ -211,7 +213,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
         }
         box_ = box_.child(ui::divider(k)).child(choices).child(
             ui::caption(
-                "Boat renews timed VMs while an agent prompt runs or waits.",
+                "Managed Boat turns renew auto-stop. SSH sessions use the timer you set.",
                 k,
             )
             .wrap(),

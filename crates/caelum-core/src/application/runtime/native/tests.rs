@@ -59,7 +59,7 @@ fn offline_drafts_and_options_survive_restart_without_loading_a_laptop_provider_
         provider: Provider::Codex,
     });
     app.select(existing);
-    app.native_connection_lost(&root);
+    assert!(app.native_connection_lost(&root).is_empty());
     app.sessions[existing].draft = "Continue after reconnect".into();
     app.sessions[existing].options = Options {
         model: Some("example/model".into()),

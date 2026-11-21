@@ -91,7 +91,9 @@ impl Workspace {
     /// Retain a follow-up invalidation while Git is in flight. A tool ending or
     /// an external edit must not be lost behind an older snapshot.
     pub fn checkout_changed(&mut self, project: &str) {
-        if !self.projects.iter().any(|p| p.path == project) {
+        if !self.projects.iter().any(|p| p.path == project)
+            && self.native_checkout(project).is_none()
+        {
             return;
         }
         let git = Task::Git {

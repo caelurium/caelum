@@ -32,7 +32,7 @@ use rune::{FileDialogOptions, ScrollPos, TextEdit, Tx, Waker};
 use crate::Workspace;
 
 pub struct Live {
-    pub(crate) native: Option<crate::remote::native::Native>,
+    pub(crate) native: crate::remote::native::Connections,
     pub latency: crate::latency::State,
     pub feed: sidebar::State,
     pub context: crate::context::State,
@@ -87,7 +87,7 @@ impl Live {
             app.open_project(project);
         }
         Self {
-            native: None,
+            native: Default::default(),
             latency: Default::default(),
             feed: Default::default(),
             context: Default::default(),
@@ -162,6 +162,16 @@ impl Live {
             self.panels.overlay = Some(crate::panels::Screen::Launcher);
             return;
         };
+        if let Some(id) = caelum_core::remote::native::checkout_id(&project) {
+            let provider = self
+                .app
+                .selected
+                .map_or(self.app.preferences.default_provider, |i| {
+                    self.app.sessions[i].scope.provider
+                });
+            crate::remote::native::open(self, id, Some(provider));
+            return;
+        }
         let provider = self.app.preferences.default_provider;
         let index = self.app.project_draft(Scope { project, provider });
         self.sync_editors();
@@ -232,9 +242,6 @@ impl Live {
     }
 
     pub(crate) fn close_project(&mut self, project: &str) {
-        if self.native.is_some() {
-            return;
-        }
         self.panels.remember(&mut self.app);
         for (index, editor) in self.drafts.iter().enumerate() {
             self.app.sessions[index].draft.clone_from(&editor.text);
@@ -292,9 +299,6 @@ impl Live {
             self.app.remote.picker = None;
         }
         self.app.apply(event);
-        if restoring && let Some(n) = &self.native {
-            n.restore(&mut self.app);
-        }
         self.sync_editors();
         if self.panels.overlay == Some(crate::panels::Screen::Fork)
             && self.app.fork_picker().is_none()
@@ -498,12 +502,13 @@ impl Live {
                 }
             }
         }
-        let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
-        changed |= self.apply_events(events);
-        changed |= crate::remote::native::poll(self);
-        if self.native.is_none() {
-            changed |= crate::remote::sync(self, tx);
+        let mut events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
+        for event in &mut events {
+            self.app.merge_broker_event(None, event);
         }
+        changed |= self.apply_events(events);
+        changed |= crate::remote::sync(self, tx);
+        changed |= crate::remote::native::poll(self);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
         if self.last_selected != self.app.selected
@@ -518,16 +523,12 @@ impl Live {
         if self.runtime.is_some() {
             changed |= crate::notifications::dispatch(self);
             let connected = crate::remote::native::ready(self);
-            if connected {
-                self.feed.discover(&mut self.app);
-                changed |= self.checkouts.sync(&mut self.app);
-            }
-            if self.native.is_none() {
-                self.runtime
-                    .as_mut()
-                    .unwrap()
-                    .watch_checkouts(self.app.projects.iter().map(|p| p.path.clone()).collect());
-            }
+            self.feed.discover(&mut self.app);
+            changed |= self.checkouts.sync(&mut self.app);
+            self.runtime
+                .as_mut()
+                .unwrap()
+                .watch_checkouts(self.app.projects.iter().map(|p| p.path.clone()).collect());
             if let Some(index) = self
                 .shell_panel
                 .as_ref()
@@ -588,12 +589,10 @@ impl Live {
                     }
                     continue;
                 }
-                if let Err(error) = crate::remote::native::submit(
-                    self.native.as_ref(),
-                    self.runtime.as_mut().unwrap(),
-                    id,
-                    command,
-                ) {
+                if let Err(error) = self
+                    .native
+                    .submit(self.runtime.as_mut().unwrap(), id, command)
+                {
                     self.apply(Event::Completed(id, Err(error)));
                     changed = true;
                 }
@@ -694,6 +693,9 @@ impl Live {
             wake();
         }
     }
+    pub(crate) fn waker(&self) -> Option<Waker> {
+        self.wake.clone()
+    }
 }
 
 pub(crate) fn live(s: &Workspace) -> &Live {
@@ -707,18 +709,7 @@ pub(crate) fn live_mut(s: &mut Workspace) -> &mut Live {
     live
 }
 
-pub fn open_project(s: &mut Workspace, tx: &mut Tx) {
-    if let Some(native) = live(s).native.as_ref() {
-        if let Ok(root) = native.target.root() {
-            let l = live_mut(s);
-            l.app.select_project(&root);
-            l.panels.screen = crate::panels::Screen::Conversation;
-            l.panels.overlay = None;
-            l.sync_editors();
-            l.focus();
-        }
-        return;
-    }
+pub fn open_project(_: &mut Workspace, tx: &mut Tx) {
     tx.open_folder(
         FileDialogOptions {
             title: "Open a project".into(),

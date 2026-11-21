@@ -393,12 +393,16 @@ pub fn file(
             .item(
                 Item::new("reveal", "Reveal in Finder")
                     .icon(&ui::FOLDER)
-                    .enabled(live(s).native.is_none()),
+                    .enabled(caelum_core::remote::native::checkout_id(&project).is_none()),
             );
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
             "copy" => tx.copy(content.clone()),
             "path" => tx.copy(path.clone()),
-            "full-path" => tx.copy(std::path::Path::new(&project).join(&path).to_string_lossy()),
+            "full-path" => tx.copy(
+                std::path::Path::new(live(s).app.checkout_directory(&project))
+                    .join(&path)
+                    .to_string_lossy(),
+            ),
             "attach" if live(s).app.selected == owner => {
                 if let Some(i) = owner.filter(|&i| live(s).app.sessions[i].scope.project == project)
                 {

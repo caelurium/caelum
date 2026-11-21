@@ -236,18 +236,15 @@ fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
             lifetime: f.lifetime,
         });
         l.schedule();
-    } else if l
-        .app
-        .create_remote(
-            f.base(owner),
-            &f.branch.text,
-            f.size,
-            f.lifetime,
-            f.provider(),
-        )
-        .is_some()
-    {
-        super::checkout::enter_new(s);
+    } else if let Some(id) = l.app.create_remote(
+        f.base(owner),
+        &f.branch.text,
+        f.size,
+        f.lifetime,
+        f.provider(),
+    ) {
+        let provider = f.provider();
+        super::checkout::session(s, &id, Some(provider));
     }
 }
 
@@ -409,12 +406,8 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
                     l.app
                         .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
                     l.schedule();
-                } else if l.app.attach_remote(owner.clone(), new_session).is_some() {
-                    if new_session.is_some() {
-                        super::checkout::enter_new(s);
-                    } else {
-                        super::checkout::enter(s);
-                    }
+                } else if let Some(id) = l.app.attach_remote(owner.clone(), new_session) {
+                    super::checkout::session(s, &id, new_session);
                 }
             }),
         );

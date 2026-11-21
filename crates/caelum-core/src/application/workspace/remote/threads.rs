@@ -29,11 +29,21 @@ impl Workspace {
     }
 
     pub fn vm_session_machine_blocker(&self, machine: &Machine) -> Option<&'static str> {
-        self.handoff_machine_blocker(machine).or_else(|| {
-            let (_, c) = self.registered_checkout(&machine.key)?;
+        let Some(crate::remote::Picker::Ready(source)) = &self.remote.picker else {
+            return Some("Choose a project first.");
+        };
+        if machine.key.account != source.account {
+            return Some("This VM belongs to another Boat account.");
+        }
+        let (id, c) = self.registered_checkout(&machine.key)?;
+        if !c.source.repository.eq_ignore_ascii_case(&source.repository) {
+            Some("This VM has a different repository.")
+        } else if matches!(self.remote.jobs.get(id), Some(Job::Deleting(_))) {
+            Some("This VM is being deleted.")
+        } else {
             (!matches!(c.phase, Phase::Ready { .. }))
                 .then_some("Prepare or resume this VM before starting a session.")
-        })
+        }
     }
 
     /// Opening a blank editor never submits a prompt or changes the VM branch.

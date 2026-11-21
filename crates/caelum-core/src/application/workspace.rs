@@ -43,6 +43,7 @@ use super::{
 
 pub struct Session {
     vm_link: Option<crate::remote::VmLink>,
+    native_handoff: Option<crate::remote::Continuation>,
     pub scope: Scope,
     pub remote_id: Option<String>,
     relocation: relocation::Relocation,
@@ -105,6 +106,7 @@ impl Session {
     fn new(scope: Scope) -> Self {
         Self {
             vm_link: None,
+            native_handoff: None,
             scope,
             remote_id: None,
             relocation: Default::default(),
@@ -256,6 +258,7 @@ enum Pending {
     VerifyOpenCodeMove(usize),
     History(usize, u64, bool),
     Start(usize, String),
+    CheckHandoff(usize, String),
     Send(usize, String, u64),
     Cancel(usize),
     Request {
@@ -321,7 +324,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn request(&mut self, command: Command, pending: Pending) -> u64 {
+    fn request(&mut self, mut command: Command, pending: Pending) -> u64 {
         if matches!(command, Command::Notify(..)) && self.preferences.sound_volume > 0 {
             self.request(
                 Command::Sound(self.preferences.sound_volume),
@@ -330,6 +333,7 @@ impl Workspace {
         }
         self.next_request += 1;
         let id = self.next_request;
+        self.track_native_request(id, &mut command, &pending);
         crate::diagnostics::command("created", id, &command);
         self.pending.insert(id, pending);
         self.outgoing.push((id, command));

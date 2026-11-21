@@ -168,6 +168,39 @@ pub enum TaskReply {
     Done,
 }
 
+macro_rules! project_field {
+    ($task:expr) => {
+        match $task {
+            Task::Shell { project, .. }
+            | Task::Completions { project, .. }
+            | Task::Image { project, .. }
+            | Task::EncodeImage { project, .. }
+            | Task::Reveal { project, .. }
+            | Task::Usage { project }
+            | Task::Stats { project, .. }
+            | Task::AttachPullRequest { project, .. }
+            | Task::Directory { project, .. }
+            | Task::File { project, .. }
+            | Task::Search { project, .. }
+            | Task::Git { project }
+            | Task::Diff { project, .. }
+            | Task::Worktrees { project, .. }
+            | Task::CreateWorktree { project, .. }
+            | Task::RemoveWorktree { project, .. }
+            | Task::RenameWorktree { project, .. }
+            | Task::Discover { project, .. }
+            | Task::Details { project, .. }
+            | Task::ReviewCache { project, .. }
+            | Task::ReviewFiles { project, .. }
+            | Task::Feedback { project, .. }
+            | Task::Merge { project, .. }
+            | Task::SetAutoMerge { project, .. }
+            | Task::UpdateBranch { project, .. } => Some(project),
+            Task::ImportSettings { .. } | Task::Updates | Task::Update(_) => None,
+        }
+    };
+}
+
 impl Task {
     fn mutates_review(&self) -> bool {
         matches!(
@@ -176,34 +209,10 @@ impl Task {
         )
     }
     pub fn project(&self) -> &str {
-        match self {
-            Self::Shell { project, .. } => project,
-            Self::Completions { project, .. }
-            | Self::Image { project, .. }
-            | Self::EncodeImage { project, .. }
-            | Self::Reveal { project, .. } => project,
-            Self::Usage { project }
-            | Self::Stats { project, .. }
-            | Self::AttachPullRequest { project, .. } => project,
-            Self::Directory { project, .. }
-            | Self::File { project, .. }
-            | Self::Search { project, .. }
-            | Self::Git { project }
-            | Self::Diff { project, .. }
-            | Self::Worktrees { project, .. }
-            | Self::CreateWorktree { project, .. }
-            | Self::RemoveWorktree { project, .. }
-            | Self::RenameWorktree { project, .. }
-            | Self::Discover { project, .. }
-            | Self::Details { project, .. }
-            | Self::ReviewCache { project, .. }
-            | Self::ReviewFiles { project, .. }
-            | Self::Feedback { project, .. }
-            | Self::Merge { project, .. }
-            | Self::SetAutoMerge { project, .. }
-            | Self::UpdateBranch { project, .. } => project,
-            Self::ImportSettings { .. } | Self::Updates | Self::Update(_) => "",
-        }
+        project_field!(self).map_or("", String::as_str)
+    }
+    pub(crate) fn project_mut(&mut self) -> Option<&mut String> {
+        project_field!(self)
     }
     pub fn review(&self) -> Option<(&str, Option<&str>)> {
         match self {

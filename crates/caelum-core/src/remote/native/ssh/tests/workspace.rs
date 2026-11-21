@@ -1,7 +1,10 @@
 use super::super::{connect, Bundle, Endpoint};
 use crate::{
     application::{Command, Event, Options, Provider, Reply, Scope, SessionKey},
-    remote::native::{Client, Notice, Status},
+    remote::{
+        native::{Binding, Client, NativeTarget, Notice, Status},
+        Host, MachineId,
+    },
 };
 use caelum_protocol::{ApprovalDecision, ApprovalPrompt, QuestionPrompt};
 use std::{
@@ -13,6 +16,7 @@ use std::{
 };
 
 struct Desktop {
+    binding: Binding,
     client: Client,
     wake: mpsc::Receiver<()>,
     notices: VecDeque<Notice>,
@@ -23,6 +27,9 @@ struct Desktop {
 }
 
 impl Desktop {
+    fn submit(&self, id: u64, cmd: Command) -> Result<(), String> {
+        self.client.submit(id, self.binding.outgoing(cmd)?)
+    }
     fn interrupt_link(&mut self) {
         let tunnel = self.tunnels.recv_timeout(Duration::from_secs(5)).unwrap();
         rustix::process::kill_process(
@@ -39,6 +46,13 @@ impl Desktop {
         loop {
             self.notices.extend(self.client.drain());
             while let Some(n) = self.notices.pop_front() {
+                let n = match n {
+                    Notice::Event(e) => match self.binding.incoming(*e) {
+                        Some(e) => Notice::Event(Box::new(e)),
+                        None => continue,
+                    },
+                    other => other,
+                };
                 if let Notice::Event(e) = &n {
                     match e.as_ref() {
                         Event::Approvals(a) => self.approvals.clone_from(a),
@@ -67,7 +81,7 @@ impl Desktop {
     fn request(&mut self, cmd: Command) -> Reply {
         self.id += 1;
         let id = self.id;
-        self.client.submit(id, cmd).unwrap();
+        self.submit(id, cmd).unwrap();
         self.until(|n| {
             if let Notice::Event(e) = n {
                 if let Event::Completed(i, r) = *e {
@@ -87,6 +101,19 @@ fn attach() -> (Desktop, PathBuf) {
         PathBuf::from(std::env::var_os("CAELUM_NATIVE_SSH_FIXTURE").expect("SSH fixture"));
     let root = std::env::var("CAELUM_NATIVE_SSH_ROOT").unwrap();
     let repo = "example/project";
+    let binding = Binding::new(
+        "fixture",
+        &NativeTarget {
+            machine: MachineId {
+                host: Host::Boat,
+                account: "example".into(),
+                id: "vm-fixture".into(),
+            },
+            repository: repo.into(),
+            checkout_root: root.clone(),
+        },
+    )
+    .unwrap();
     let (wake, events) = mpsc::channel();
     let (children, pids) = mpsc::channel();
     let project = PathBuf::from(&root);
@@ -123,6 +150,7 @@ fn attach() -> (Desktop, PathBuf) {
     )
     .unwrap();
     let mut desktop = Desktop {
+        binding,
         client,
         wake: events,
         notices: VecDeque::new(),
@@ -141,7 +169,7 @@ fn attach() -> (Desktop, PathBuf) {
 #[ignore = "run scripts/dev/smoke_native_workspace.py with the loopback SSH fixture"]
 fn native_workspace_over_openssh() {
     let (mut desktop, fixture) = attach();
-    let root = fixture.to_str().unwrap().to_owned();
+    let root = desktop.binding.project.clone();
     let scope = |provider| Scope {
         project: root.clone(),
         provider,
@@ -171,7 +199,6 @@ fn native_workspace_over_openssh() {
     };
     desktop.id += 1;
     desktop
-        .client
         .submit(
             desktop.id,
             Command::Send(key.clone(), "SSH smoke turn".into(), options),
@@ -222,7 +249,7 @@ fn native_workspace_over_openssh() {
             .count(),
         1
     );
-    parity::codex(&mut desktop, scope(Provider::Codex));
+    parity::codex(&mut desktop, scope(Provider::Codex), &fixture);
     parity::checkout(&mut desktop, &key);
 }
 
@@ -238,7 +265,7 @@ fn native_new_session_over_openssh() {
         Provider::OpenCode
     };
     let scope = Scope {
-        project: fixture.to_str().unwrap().into(),
+        project: desktop.binding.project.clone(),
         provider,
     };
     let Reply::Sessions(before) = desktop.request(Command::List(scope.clone())) else {
@@ -254,7 +281,6 @@ fn native_new_session_over_openssh() {
     {
         desktop.id += 1;
         desktop
-            .client
             .submit(
                 desktop.id,
                 Command::Send(

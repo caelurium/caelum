@@ -154,12 +154,14 @@ pub struct State {
     pub delete_errors: std::collections::HashMap<String, String>,
     pub removed: Vec<String>,
     pub(crate) deleted_during_inventory: Vec<MachineId>,
+    pub(crate) native_requests: std::collections::BTreeMap<u64, String>,
 }
 
 #[derive(Debug, Default)]
 pub enum Connection {
     #[default]
     Idle,
+    SignedOut,
     Loading(u64),
     Failed(String),
 }

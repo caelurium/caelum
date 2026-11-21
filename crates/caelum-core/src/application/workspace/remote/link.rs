@@ -4,7 +4,9 @@ use crate::remote::{Job, VmLink};
 impl Workspace {
     pub fn linked_vm(&self, index: usize) -> Option<&VmLink> {
         let link = self.sessions.get(index)?.vm_link.as_ref()?;
-        link.resolve(&self.remote.saved)?;
+        if self.inline_link(link).is_none() {
+            link.resolve(&self.remote.saved)?;
+        }
         Some(link)
     }
 
@@ -21,6 +23,9 @@ impl Workspace {
     }
 
     pub fn can_open_vm_thread(&self, link: &VmLink) -> bool {
+        if self.inline_link(link).is_some() {
+            return !matches!(self.remote.jobs.get(&link.checkout), Some(Job::Deleting(_)));
+        }
         link.resolve(&self.remote.saved).is_some_and(|(c, _)| {
             !matches!(self.remote.jobs.get(&link.checkout), Some(Job::Deleting(_)))
                 && (c.thread.editor_key(&link.checkout) == link.thread
@@ -32,6 +37,10 @@ impl Workspace {
     pub fn open_vm_thread(&mut self, link: &VmLink) -> bool {
         if !self.can_open_vm_thread(link) {
             return false;
+        }
+        if let Some(i) = self.inline_link(link) {
+            self.select(i);
+            return true;
         }
         let current = self.remote.saved.checkouts[&link.checkout]
             .thread
