@@ -34,7 +34,7 @@ impl Workspace {
             session.revision += 1;
             session.queue_paused = true;
             session.disconnected = session.remote_id.is_some();
-            session.conversation.working = false;
+            session.conversation.set_working(false);
         }
         self.deferred_lists
             .retain(|scope, _| scope.project != project);

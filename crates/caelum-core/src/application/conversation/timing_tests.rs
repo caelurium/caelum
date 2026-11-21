@@ -13,6 +13,22 @@ fn output(conversation: &Conversation, id: &str) -> u64 {
 }
 
 #[test]
+fn reconciling_idle_clears_retrying_before_the_next_turn() {
+    let mut conversation = Conversation::default();
+    conversation.apply(Provider::OpenCode, "session.retry.scheduled", &json!({}));
+    assert!(conversation.working());
+    assert!(conversation.retrying());
+
+    conversation.set_working(false);
+    assert!(!conversation.working());
+    assert!(!conversation.retrying());
+    conversation.optimistic("next".into(), "New prompt".into());
+    assert!(conversation.working());
+    assert!(!conversation.retrying());
+    assert!(conversation.entries[0].optimistic());
+}
+
+#[test]
 fn out_of_order_step_completion_cannot_borrow_another_steps_model() {
     let mut conversation = Conversation::default();
     let start = |conversation: &mut Conversation, id, model, at| {
@@ -220,7 +236,7 @@ fn refresh_preserves_the_original_live_submission_and_completion_times() {
         conversation
             .entries
             .iter()
-            .filter(|entry| entry.kind == EntryKind::User)
+            .filter(|entry| entry.kind() == EntryKind::User)
             .count(),
         1
     );

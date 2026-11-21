@@ -15,7 +15,7 @@ fn composer_typing_during_streaming_preserves_transcript_reading_position() {
             {"id":format!("reply-{n}"),"type":"agentMessage","text":"Keep each session’s draft and reading position independent."}
         ]})).collect();
         session.conversation.history(Provider::Codex, &turns, false);
-        session.conversation.working = true;
+        session.conversation.set_working(true);
     });
     fill(&mut rt, "live-draft-0", "My next prompt");
 

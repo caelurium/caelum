@@ -32,7 +32,7 @@ fn collect(
         let mut conversation = Conversation::default();
         conversation.history(provider, &page.data, false);
         for entry in conversation.entries.into_iter().rev() {
-            let message = match entry.kind {
+            let message = match entry.kind() {
                 EntryKind::User => Message::User,
                 EntryKind::Assistant => Message::Assistant,
                 _ => continue,

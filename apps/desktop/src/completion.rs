@@ -388,7 +388,7 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
             .entries
             .iter()
             .rev()
-            .find(|e| e.kind == caelum_core::application::EntryKind::User)
+            .find(|e| e.kind() == caelum_core::application::EntryKind::User)
             .map(|e| {
                 caelum_core::application::split_context(&e.text)
                     .0

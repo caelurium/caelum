@@ -14,7 +14,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
             rt.update(|s, _| {
                 s.live.as_mut().unwrap().app.sessions[0]
                     .conversation
-                    .working = working
+                    .set_working(working)
             });
             advance(&mut rt, 0.3);
             for name in [
@@ -86,7 +86,7 @@ fn composer_submission_matches_enter_and_stop_keeps_the_next_draft() {
                         let session = &mut l.app.sessions[0];
                         session.scope.provider = provider;
                         session.remote_id = Some("session".into());
-                        session.conversation.working = working;
+                        session.conversation.set_working(working);
                         if attachment_only {
                             session.attachments.push(Attachment::new(
                                 "src/main.rs".into(),
@@ -219,7 +219,7 @@ fn composer_inbox_errors_stay_visible_when_collapsed_and_retry_the_same_message(
         let session = &mut l.app.sessions[0];
         session.scope.provider = Provider::OpenCode;
         session.remote_id = Some("session".into());
-        session.conversation.working = true;
+        session.conversation.set_working(true);
         l.app.commands();
     });
     fill(&mut rt, "live-draft-0", "Keep this queued message");

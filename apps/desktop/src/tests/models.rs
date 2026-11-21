@@ -351,7 +351,7 @@ fn native_shortcuts_and_large_model_catalogue_keep_the_captured_owner() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[0].remote_id = Some("thread".into());
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
     });
     key(
         &mut rt,
@@ -398,7 +398,7 @@ fn model_popover_stays_anchored_and_returns_focus_without_cancelling_work() {
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.sessions[0]
             .conversation
-            .working = true;
+            .set_working(true);
     });
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.4);
@@ -505,7 +505,7 @@ fn opencode_effort_default_controls_reset_sent_and_queued_prompts() {
                 session.remote_id = Some("ses_fake".into());
                 session.options.model = Some("local/model/a".into());
                 session.options.effort = Some("high".into());
-                session.conversation.working = working;
+                session.conversation.set_working(working);
                 app.choices.insert(
                     session.scope.clone(),
                     serde_json::from_value(serde_json::json!({

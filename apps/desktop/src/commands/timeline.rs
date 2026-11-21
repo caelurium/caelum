@@ -19,7 +19,7 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         .iter()
         .enumerate()
         .filter(|(_, e)| {
-            e.kind == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
+            e.kind() == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
         })
         .enumerate()
         .filter(|(_, (_, e))| {
@@ -265,7 +265,7 @@ pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .entries
         .iter()
         .filter(|e| {
-            e.kind == EntryKind::User
+            e.kind() == EntryKind::User
                 && caelum_core::application::presentation::entry_visible(e)
                 && caelum_core::application::presentation::entry_text(e)
                     .to_lowercase()

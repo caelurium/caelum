@@ -26,7 +26,7 @@ fn returning_to_a_project_restores_its_active_worktree_session() {
                     provider,
                 });
                 l.app.sessions[owner].remote_id = Some("active-worktree".into());
-                l.app.sessions[owner].conversation.working = true;
+                l.app.sessions[owner].conversation.set_working(true);
                 other_session = l.app.new_session(Scope {
                     project: "/other".into(),
                     provider,

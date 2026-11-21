@@ -67,7 +67,7 @@ fn session_popover_roves_without_selecting_its_background_owner() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[1].remote_id = Some("background".into());
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
     });
     let (x, y) = rt.find("session-actions-1").unwrap();
     rt.pointer_move(x, y);

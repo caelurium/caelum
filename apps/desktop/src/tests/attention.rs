@@ -9,7 +9,7 @@ fn workspace_menu_routes_file_search_and_changes_without_losing_the_draft() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.drafts[0].set_selection(0, 8);
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
     });
     assert!(rt.accessibility_action("workspace-trigger", rune::accesskit::Action::Focus, None));
     key(&mut rt, Key::Text(" ".into()), Mods::default());

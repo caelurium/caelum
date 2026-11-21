@@ -391,7 +391,7 @@ impl Workspace {
                         .into_iter()
                         .filter(|shell| {
                             !session.conversation.entries.iter().any(|e| {
-                                e.id == format!("opencode-shell-{}", shell.id) && e.complete
+                                e.id == format!("opencode-shell-{}", shell.id) && e.complete()
                             })
                         })
                         .collect();

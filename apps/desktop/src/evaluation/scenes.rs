@@ -364,10 +364,10 @@ pub(super) fn activity(l: &mut crate::live::Live, name: &str) {
     use serde_json::json;
 
     l.app.sessions[0].remote_id = Some("fixture".into());
-    l.app.sessions[0].conversation.working = true;
+    l.app.sessions[0].conversation.set_working(true);
     match name {
         "thinking" => l.app.sessions[0].conversation.apply(Provider::Codex, "item/reasoning/summaryTextDelta", &json!({"itemId":"thinking","delta":"Checking the original interactions before changing the layout."})),
-        "retrying" => l.app.sessions[0].conversation.retrying = true,
+        "retrying" => l.app.sessions[0].conversation.set_retrying(true),
         "stopping" => l.app.cancel(0),
         _ => {}
     }
@@ -380,4 +380,23 @@ pub(super) fn command_overlay(l: &mut crate::live::Live, name: &str) {
         "usage" | "usage-loading" => crate::panels::Screen::Usage,
         _ => crate::panels::Screen::Stats,
     }));
+}
+
+pub(super) fn composer_queue(session: &mut caelum_core::application::Session, name: &str) {
+    if matches!(name, "composer-queued" | "composer-queue-error") {
+        session.conversation.set_working(name == "composer-queued");
+        session.queue = [
+            "Review keyboard focus and session switching.",
+            "Check attachments and multiline drafts.",
+        ]
+        .map(|text| caelum_core::application::QueuedPrompt {
+            text: text.into(),
+            options: session.options.clone(),
+        })
+        .into();
+        if name == "composer-queue-error" {
+            session.queue_paused = true;
+            session.error = Some("The provider is unavailable. Resume when it reconnects.".into());
+        }
+    }
 }

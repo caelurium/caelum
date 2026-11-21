@@ -239,7 +239,7 @@ fn provider_controls_run_during_execution_without_clearing_stop_on_failure() {
             description: None,
         }],
     );
-    app.sessions[0].conversation.working = true;
+    app.sessions[0].conversation.set_working(true);
     assert!(app.send(0, "/goal pause".into()));
     assert!(app.sessions[0].queue.is_empty());
     let (id, command) = app.commands().pop().unwrap();

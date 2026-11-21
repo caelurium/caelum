@@ -73,17 +73,25 @@ fn transcript_keys_follow_same_length_replacements_reorders_and_visibility() {
         let entry = &mut s.live.as_mut().unwrap().app.sessions[0]
             .conversation
             .entries[2];
-        entry.kind = EntryKind::Reasoning;
-        entry.text.clear();
-        entry.complete = false;
+        *entry = caelum_core::application::Entry::new(
+            entry.id.clone(),
+            EntryKind::Reasoning,
+            String::new(),
+            false,
+        );
     });
     advance(&mut rt, 0.3);
     assert!(shown(&rt, 0, "hidden"));
     rt.update(|s, _| {
-        s.live.as_mut().unwrap().app.sessions[0]
+        let entry = &mut s.live.as_mut().unwrap().app.sessions[0]
             .conversation
-            .entries[2]
-            .complete = true;
+            .entries[2];
+        *entry = caelum_core::application::Entry::new(
+            entry.id.clone(),
+            EntryKind::Reasoning,
+            String::new(),
+            true,
+        );
     });
     advance(&mut rt, 0.3);
     assert!(!shown(&rt, 0, "hidden"));

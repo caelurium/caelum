@@ -6,7 +6,7 @@ use super::{Entry, EntryKind};
 pub fn running(entries: &[Entry]) -> usize {
     entries
         .iter()
-        .filter(|entry| entry.name == "subagent" && !entry.complete)
+        .filter(|entry| entry.name == "subagent" && !entry.complete())
         .map(|entry| child_id(entry).unwrap_or(&entry.id))
         .collect::<std::collections::HashSet<_>>()
         .len()
@@ -22,7 +22,7 @@ pub struct Subagent {
 
 impl Subagent {
     pub fn from_entry(entry: &Entry) -> Option<Self> {
-        if entry.kind != EntryKind::Tool || entry.name != "subagent" {
+        if entry.kind() != EntryKind::Tool || entry.name != "subagent" {
             return None;
         }
         let input: Value = serde_json::from_str(&entry.input).unwrap_or_default();
@@ -48,7 +48,7 @@ impl Subagent {
 }
 
 pub(crate) fn child_id(entry: &Entry) -> Option<&str> {
-    (entry.kind == EntryKind::Tool && entry.name == "subagent")
+    (entry.kind() == EntryKind::Tool && entry.name == "subagent")
         .then(|| entry.metadata["sessionID"].as_str())
         .flatten()
         .filter(|id| valid_id(id))

@@ -206,7 +206,7 @@ impl Workspace {
                     session.cancel_history_read();
                 }
                 session.revision += 1;
-                session.conversation.working = false;
+                session.conversation.set_working(false);
                 session.queue_paused = true;
                 session.disconnected = true;
                 session.error = Some(
@@ -262,7 +262,7 @@ impl Workspace {
                             .conversation
                             .entries
                             .iter()
-                            .any(|e| e.id == format!("opencode-shell-{id}") && e.complete)
+                            .any(|e| e.id == format!("opencode-shell-{id}") && e.complete())
                     {
                         session
                             .shells
@@ -283,7 +283,7 @@ impl Workspace {
                     .conversation
                     .entries
                     .iter()
-                    .any(|e| e.id == entry_id && !e.complete)
+                    .any(|e| e.id == entry_id && !e.complete())
                     || session.shells.iter().any(|s| s.id == shell)
                 {
                     shells_completed.push(index);

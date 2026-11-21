@@ -12,12 +12,11 @@ pub(super) fn tool(entry: &mut Entry) {
     }
 
     if entry.error.is_empty() && entry.metadata["status"] == "running" {
-        entry.complete = false;
-        entry.status = "running".into();
-        entry.background = true;
+        entry.set_progress(false, "running");
+        entry.set_background();
         entry.metadata.as_object_mut().unwrap().remove("ended");
         entry.output.clear();
-    } else if entry.complete {
+    } else if entry.complete() {
         let id = child_id(entry).unwrap();
         let header = format!("<subagent sessionID=\"{id}\" state=\"completed\">");
         entry.output = body(&entry.output, &header).into();
@@ -47,8 +46,8 @@ pub(super) fn synthetic(data: &Value) -> Option<Entry> {
         true,
     );
     entry.name = "subagent".into();
-    entry.background = true;
-    entry.status = state.into();
+    entry.set_background();
+    entry.set_progress(true, state.to_owned());
     entry.input =
         json!({"agent": data["metadata"]["agent"], "description": description}).to_string();
     entry.output = body(data["text"].as_str().unwrap_or_default(), &header).into();
@@ -75,7 +74,7 @@ fn body<'a>(text: &'a str, header: &str) -> &'a str {
 
 pub(super) fn reconcile(entries: &mut Vec<Entry>) {
     if !entries.iter().any(|entry| {
-        entry.metadata["source"] == "subagent" || (child_id(entry).is_some() && !entry.complete)
+        entry.metadata["source"] == "subagent" || (child_id(entry).is_some() && !entry.complete())
     }) {
         return;
     }
@@ -132,12 +131,11 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
         let report_id = report.metadata["subagentReport"]
             .as_str()
             .unwrap_or(&report.id);
-        task.complete = true;
-        task.status.clone_from(&report.status);
+        task.set_progress(true, report.status().to_owned());
         task.output.clone_from(&report.output);
         task.history_output.clone_from(&task.output);
         task.stream_output.clear();
-        task.metadata["status"] = task.status.clone().into();
+        task.metadata["status"] = report.status().into();
         task.metadata["subagentReport"] = report_id.into();
         if let Some(ended) = ended {
             task.metadata["ended"] = ended.into();
@@ -151,8 +149,8 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
             {
                 continue;
             }
-            if task.complete {
-                let newer_join = task.background
+            if task.complete() {
+                let newer_join = task.background()
                     && task.error.is_empty()
                     && !task.metadata["subagentReport"].is_string()
                     && task.metadata["ended"]
@@ -163,9 +161,8 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
                     continue;
                 }
             }
-            task.complete = true;
-            task.status.clone_from(&report.status);
-            task.metadata["status"] = task.status.clone().into();
+            task.set_progress(true, report.status().to_owned());
+            task.metadata["status"] = report.status().into();
             task.metadata["ended"] = ended.into();
         }
         if report.metadata["source"] == "subagent" {

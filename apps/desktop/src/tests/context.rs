@@ -39,7 +39,7 @@ fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
     rt.use_clipboard(&clipboard);
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
         l.app.sessions[1].remote_id = Some("background".into());
         l.app.sessions[1].title = "Background session".into();
     });

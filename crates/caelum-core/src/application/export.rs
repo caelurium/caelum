@@ -158,7 +158,7 @@ fn markdown_record(
         writeln!(
             out,
             "## {:?}{}\n",
-            entry.kind,
+            entry.kind(),
             if entry.name.is_empty() {
                 String::new()
             } else {

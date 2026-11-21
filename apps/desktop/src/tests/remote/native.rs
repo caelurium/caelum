@@ -253,7 +253,7 @@ fn active_native_turns_renew_each_vm_at_its_saved_lifetime() {
             .checkouts
             .insert("idle-checkout".into(), idle);
         let session = l.app.selected.unwrap();
-        l.app.sessions[session].conversation.working = true;
+        l.app.sessions[session].conversation.set_working(true);
     });
     advance(&mut rt, 0.2);
 

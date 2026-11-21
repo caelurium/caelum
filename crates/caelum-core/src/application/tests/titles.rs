@@ -157,7 +157,7 @@ fn titles_count_success_events_once_even_before_admission_or_after_idle() {
     {
         app.apply(event("/a", "one", &format!("other-{i}"), method, json!({})));
     }
-    assert!(!app.sessions[index].conversation.working);
+    assert!(!app.sessions[index].conversation.working());
     succeeded(&mut app, index, 2);
     assert!(requests(&mut app).is_empty());
     succeeded(&mut app, index, 3);

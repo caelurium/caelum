@@ -17,7 +17,7 @@ impl Summary {
         Self {
             title: session.title.clone(),
             working: session.working(),
-            retrying: session.conversation.retrying,
+            retrying: session.conversation.retrying(),
             unread: session.unread,
             failure: session.conversation.failure.notice().map(|n| n.generation),
             last_activity: session.last_activity,
@@ -27,7 +27,7 @@ impl Summary {
     fn matches(&self, session: &Session) -> bool {
         self.title == session.title
             && self.working == session.working()
-            && self.retrying == session.conversation.retrying
+            && self.retrying == session.conversation.retrying()
             && self.unread == session.unread
             && self.failure == session.conversation.failure.notice().map(|n| n.generation)
             && self.last_activity == session.last_activity

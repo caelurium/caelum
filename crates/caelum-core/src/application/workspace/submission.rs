@@ -436,13 +436,13 @@ impl Workspace {
             Err(error) => {
                 session.queue_paused = true;
                 if session.revision == revision {
-                    session.conversation.working = false;
+                    session.conversation.set_working(false);
                 }
                 if session
                     .conversation
                     .entries
                     .iter()
-                    .any(|entry| entry.optimistic)
+                    .any(|entry| entry.optimistic())
                 {
                     session.conversation.remove_optimistic();
                     session.recover_prompt(attempt);

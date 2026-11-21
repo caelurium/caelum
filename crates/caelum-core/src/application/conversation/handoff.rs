@@ -21,7 +21,7 @@ impl Conversation {
             return Vec::new();
         };
         for entry in history {
-            if entry.kind == EntryKind::User && entry.text.starts_with(prefix) {
+            if entry.kind() == EntryKind::User && entry.text.starts_with(prefix) {
                 entry.text.drain(..prefix.len());
             }
         }
