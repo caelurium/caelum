@@ -23,7 +23,11 @@ fn stale_opencode_archive_error_preserves_the_session_for_reconnection() {
     assert!(!app.sessions[index].forgotten);
     assert!(!app.sessions[index].archived);
     assert!(!app.sessions[index].archiving);
-    assert_eq!(app.last_archived, None, "there is no provider Undo action");
+    assert_eq!(
+        app.last_archived(),
+        None,
+        "there is no provider Undo action"
+    );
     let selected = app.selected.unwrap();
     assert_eq!(selected, index);
     assert_eq!(app.sessions[selected].draft, "Keep this draft");

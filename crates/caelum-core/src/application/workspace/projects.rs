@@ -207,7 +207,7 @@ impl Workspace {
         self.closed_projects.insert(root.clone(), self.next_request);
         self.projects.retain(|p| !closed.contains(&p.path));
         if let Some(index) = self
-            .last_archived
+            .last_archived()
             .filter(|i| self.group_path(&self.sessions[*i].scope.project) == root)
         {
             self.dismiss_archive(index);

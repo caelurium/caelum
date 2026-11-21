@@ -5,12 +5,16 @@ fn archive_notice_expires_only_after_unengaged_time_and_recovers_after_undo_fail
     let mut app = workspace();
     app.archive(0, true);
     let request = app.commands().pop().unwrap().0;
-    assert_eq!(app.last_archived, None, "notice waits for provider success");
+    assert_eq!(
+        app.last_archived(),
+        None,
+        "notice waits for provider success"
+    );
     app.apply(Event::Completed(request, Ok(Reply::Done)));
     let now = presentation::now();
     app.tick_archive_notice(now + 4_000, false);
     app.tick_archive_notice(now + 24_000, true);
-    assert_eq!(app.last_archived, Some(0));
+    assert_eq!(app.last_archived(), Some(0));
     app.undo_archive();
     let undo = app
         .commands()
@@ -20,16 +24,16 @@ fn archive_notice_expires_only_after_unengaged_time_and_recovers_after_undo_fail
         .0;
     app.tick_archive_notice(now + 60_000, false);
     assert_eq!(
-        app.last_archived,
+        app.last_archived(),
         Some(0),
         "restoration keeps its notice alive"
     );
     app.apply(Event::Completed(undo, Err("Offline, try again".into())));
     let failed = presentation::now();
     app.tick_archive_notice(failed + 7_000, false);
-    assert_eq!(app.last_archived, Some(0));
+    assert_eq!(app.last_archived(), Some(0));
     assert!(app.tick_archive_notice(failed + 8_001, false));
-    assert_eq!(app.last_archived, None);
+    assert_eq!(app.last_archived(), None);
     assert!(
         app.sessions[0].archived,
         "expiration does not restore the session"
@@ -45,7 +49,7 @@ fn late_archive_and_restore_callbacks_cannot_replace_a_newer_notice() {
     let second = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(second, Ok(Reply::Done)));
     app.apply(Event::Completed(first, Ok(Reply::Done)));
-    assert_eq!(app.last_archived, Some(1));
+    assert_eq!(app.last_archived(), Some(1));
     app.undo_archive();
     let undo = app
         .commands()
@@ -55,9 +59,35 @@ fn late_archive_and_restore_callbacks_cannot_replace_a_newer_notice() {
         .0;
     let draft = app.selected.unwrap();
     app.archive(draft, true);
-    assert_eq!(app.last_archived, Some(draft));
+    assert_eq!(app.last_archived(), Some(draft));
     app.apply(Event::Completed(undo, Ok(Reply::Done)));
-    assert_eq!(app.last_archived, Some(draft));
+    assert_eq!(app.last_archived(), Some(draft));
     app.dismiss_archive(1);
-    assert_eq!(app.last_archived, Some(draft));
+    assert_eq!(app.last_archived(), Some(draft));
+}
+
+#[test]
+fn failed_undo_cannot_extend_a_newer_archive_notice() {
+    let mut app = workspace();
+    app.archive(0, true);
+    let first = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(first, Ok(Reply::Done)));
+    app.undo_archive();
+    let undo = app
+        .commands()
+        .into_iter()
+        .find(|(_, command)| matches!(command, Command::Archive(_, false)))
+        .unwrap()
+        .0;
+
+    let draft = app.new_session(app.sessions[0].scope.clone());
+    app.archive(draft, true);
+    let now = presentation::now();
+    assert_eq!(app.last_archived(), Some(draft));
+    assert!(!app.tick_archive_notice(now + 7_000, false));
+    assert!(!app.tick_archive_notice(now + 12_000, true));
+    app.apply(Event::Completed(undo, Err("Offline".into())));
+    assert!(!app.tick_archive_notice(now + 12_000, false));
+    assert!(app.tick_archive_notice(now + 13_001, false));
+    assert_eq!(app.last_archived(), None);
 }

@@ -4,7 +4,7 @@ fn begin(workspace: &mut Workspace) -> (usize, u64, Summary) {
     let summary = summary(scope(Provider::OpenCode, "/a"), "ses_one");
     let index = workspace.new_session(summary.key.scope.clone());
     workspace.sessions[index].remote_id = Some(summary.key.id.clone());
-    workspace.sessions[index].loaded = false;
+    workspace.sessions[index].invalidate_history();
     workspace.refresh(index);
     let (request, command) = workspace.commands().pop().unwrap();
     assert!(matches!(command, Command::Resume(_)));
@@ -51,10 +51,10 @@ fn bundled_resume_is_ready_without_a_history_command_and_recovers_inbox_before_q
         Ok(Reply::Resumed(summary.clone(), history(false))),
     ));
     let session = &workspace.sessions[index];
-    assert!(session.loaded);
-    assert!(!session.loading);
+    assert!(session.loaded());
+    assert!(!session.loading());
     assert_eq!(session.conversation.entries[0].text, "Saved prompt");
-    assert_eq!(session.next_cursor.as_deref(), Some("older"));
+    assert_eq!(session.next_cursor(), Some("older"));
     assert_eq!(session.options.model.as_deref(), Some("local/saved"));
     assert_eq!(session.options.effort.as_deref(), Some("high"));
     assert_eq!(session.options.agent.as_deref(), Some("build"));
@@ -98,7 +98,7 @@ fn bundled_resume_preserves_navigation_live_text_activity_title_and_edited_optio
     workspace.apply(Event::Completed(request, Ok(Reply::Resumed(summary, page))));
     let session = &workspace.sessions[index];
     assert!(session.working());
-    assert!(session.loaded);
+    assert!(session.loaded());
     assert_eq!(session.title, "Live title");
     assert_eq!(session.options.model.as_deref(), Some("local/chosen"));
     assert_eq!(session.conversation.entries.len(), 2);
@@ -145,8 +145,8 @@ fn bundled_resume_rejects_other_session_project_and_provider_before_applying_his
             Ok(Reply::Resumed(wrong, history(false))),
         ));
         let session = &workspace.sessions[index];
-        assert!(!session.loaded);
-        assert!(!session.loading);
+        assert!(!session.loaded());
+        assert!(!session.loading());
         assert!(session
             .error
             .as_deref()
@@ -162,8 +162,8 @@ fn bundled_resume_failure_retries_and_ignores_duplicate_old_completions() {
     let mut workspace = Workspace::default();
     let (index, first, summary) = begin(&mut workspace);
     workspace.apply(Event::Completed(first, Err("history unavailable".into())));
-    assert!(!workspace.sessions[index].loading);
-    assert!(!workspace.sessions[index].loaded);
+    assert!(!workspace.sessions[index].loading());
+    assert!(!workspace.sessions[index].loaded());
     assert_eq!(
         workspace.sessions[index].error.as_deref(),
         Some("history unavailable")
@@ -175,16 +175,71 @@ fn bundled_resume_failure_retries_and_ignores_duplicate_old_completions() {
         first,
         Ok(Reply::Resumed(summary.clone(), history(false))),
     ));
-    assert!(workspace.sessions[index].loading);
-    assert!(!workspace.sessions[index].loaded);
+    assert!(workspace.sessions[index].loading());
+    assert!(!workspace.sessions[index].loaded());
     assert!(workspace.sessions[index].conversation.entries.is_empty());
     workspace.apply(Event::Completed(
         retry,
         Ok(Reply::Resumed(summary, history(false))),
     ));
-    assert!(workspace.sessions[index].loaded);
-    assert!(!workspace.sessions[index].loading);
+    assert!(workspace.sessions[index].loaded());
+    assert!(!workspace.sessions[index].loading());
     assert!(workspace.sessions[index].error.is_none());
+}
+
+#[test]
+fn disconnect_retires_a_pending_history_reply_before_reconnect() {
+    let mut workspace = Workspace::default();
+    let (index, first, mut summary) = begin(&mut workspace);
+    workspace.apply(event("server.disconnected", json!({})));
+    let (reconnect, command) = workspace.commands().pop().unwrap();
+    assert!(matches!(command, Command::Resume(_)));
+    assert_ne!(first, reconnect);
+
+    summary.working = true;
+    workspace.apply(Event::Completed(
+        first,
+        Ok(Reply::Resumed(summary.clone(), history(true))),
+    ));
+    let session = &workspace.sessions[index];
+    assert!(session.disconnected);
+    assert!(session.loading());
+    assert!(!session.working());
+    assert!(session.conversation.entries.is_empty());
+
+    summary.working = false;
+    workspace.apply(Event::Completed(
+        reconnect,
+        Ok(Reply::Resumed(summary, history(false))),
+    ));
+    let session = &workspace.sessions[index];
+    assert!(!session.disconnected);
+    assert!(!session.loading());
+    assert!(session.loaded());
+}
+
+#[test]
+fn failed_older_page_preserves_the_cursor_for_retry() {
+    let mut workspace = Workspace::default();
+    let (index, request, summary) = begin(&mut workspace);
+    workspace.apply(Event::Completed(
+        request,
+        Ok(Reply::Resumed(summary, history(false))),
+    ));
+    workspace.commands();
+
+    workspace.older(index);
+    let (request, command) = workspace.commands().pop().unwrap();
+    assert!(matches!(command, Command::History(_, Some(cursor)) if cursor == "older"));
+    assert!(workspace.sessions[index].loaded());
+    assert!(workspace.sessions[index].loading());
+    workspace.apply(Event::Completed(request, Err("page unavailable".into())));
+    assert!(!workspace.sessions[index].loading());
+    assert_eq!(workspace.sessions[index].next_cursor(), Some("older"));
+
+    workspace.older(index);
+    let command = workspace.commands().pop().unwrap().1;
+    assert!(matches!(command, Command::History(_, Some(cursor)) if cursor == "older"));
 }
 
 #[test]
@@ -200,14 +255,14 @@ fn bundled_refresh_preserves_exhausted_pagination_and_restores_failure_notice() 
     let (older, command) = workspace.commands().pop().unwrap();
     assert!(matches!(command, Command::History(_, Some(cursor)) if cursor == "older"));
     workspace.apply(Event::Completed(older, Ok(page(Vec::new(), false))));
-    assert!(workspace.sessions[index].next_cursor.is_none());
+    assert!(workspace.sessions[index].next_cursor().is_none());
     workspace.refresh(index);
     let refresh = workspace.commands().pop().unwrap().0;
     let mut page = history(false);
     page.data.push(json!({"id":"idle", "type":"idle", "outcome":"failed", "time":{"created":123}, "error":{"message":"Provider failure"}}));
     workspace.apply(Event::Completed(refresh, Ok(Reply::Resumed(summary, page))));
     let session = &workspace.sessions[index];
-    assert!(session.next_cursor.is_none());
+    assert!(session.next_cursor().is_none());
     assert!(session.queue_paused);
     assert_eq!(
         session.conversation.failure.notice().unwrap().message,

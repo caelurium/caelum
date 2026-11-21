@@ -114,8 +114,8 @@ impl Workspace {
         if let Some(i) = self.selected {
             if !self.window_background
                 && !self.conversation_hidden
-                && self.sessions[i].loaded
-                && !self.sessions[i].loading
+                && self.sessions[i].loaded()
+                && !self.sessions[i].loading()
                 && self.sessions[i].reading < 0.0
             {
                 return std::mem::take(&mut self.sessions[i].unread);
@@ -147,43 +147,9 @@ impl Workspace {
             self.remembered.insert(root.clone(), index);
         }
         self.selected = Some(index);
-        if !session.loaded {
+        if !session.loaded() {
             self.refresh(index);
         }
-    }
-
-    pub fn refresh(&mut self, index: usize) {
-        let session = &mut self.sessions[index];
-        if session.loading
-            || session.submitting
-            || session.relocation.pending()
-            || session.rewinding()
-        {
-            return;
-        }
-        let Some(key) = session.key() else {
-            return;
-        };
-        session.loading = true;
-        session.error = None;
-        let revision = session.revision;
-        self.request(Command::Resume(key), Pending::Resume(index, revision));
-    }
-
-    pub fn older(&mut self, index: usize) {
-        let session = &mut self.sessions[index];
-        if session.loading || session.rewinding() {
-            return;
-        }
-        let (Some(key), Some(cursor)) = (session.key(), session.next_cursor.clone()) else {
-            return;
-        };
-        session.loading = true;
-        let revision = session.revision;
-        self.request(
-            Command::History(key, Some(cursor)),
-            Pending::History(index, revision, true),
-        );
     }
 
     pub(super) fn creating(&self, scope: &Scope) -> bool {
@@ -230,7 +196,7 @@ impl Workspace {
             } else {
                 let mut session = Session::new(scope.clone());
                 session.remote_id = Some(summary.key.id.clone());
-                session.loaded = false;
+                session.invalidate_history();
                 session.conversation.working = summary.working;
                 session.archived = archived;
                 update_summary(&mut session, summary, request);

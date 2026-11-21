@@ -335,7 +335,6 @@ fn completed_assistant_response_shows_agent_and_duration_below_the_output() {
         {
             let session = &mut app.sessions[1];
             session.remote_id = Some("session-1".into());
-            session.loaded = true;
             session.options.agent = Some("build".into());
             session
                 .conversation
@@ -392,7 +391,6 @@ fn restored_response_duration_includes_work_before_the_final_answer() {
         let app = &mut s.live.as_mut().unwrap().app;
         let session = &mut app.sessions[1];
         session.remote_id = Some("session-1".into());
-        session.loaded = true;
         session.conversation = Default::default();
         session.conversation.history(Provider::OpenCode, &[
             serde_json::json!({"id":"prompt", "type":"user", "text":"Build this", "time":{"created":1000}}),

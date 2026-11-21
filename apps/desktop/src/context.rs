@@ -614,7 +614,7 @@ pub fn session(el: El, index: usize) -> El {
                 Item::new("refresh", "Refresh session")
                     .icon(&ui::REFRESH)
                     .enabled(
-                        session.remote_id.is_some() && !session.loading && !session.submitting,
+                        session.remote_id.is_some() && !session.loading() && !session.submitting,
                     ),
             )
             .separator()

@@ -53,12 +53,10 @@ pub struct Session {
     pub last_activity: Option<u64>,
     pub conversation: Conversation,
     pub options: Options,
-    pub loading: bool,
-    pub loaded: bool,
+    history: history::State,
     pub submitting: bool,
     pub commanding: bool,
     pub stopping: bool,
-    pub next_cursor: Option<String>,
     pub error: Option<String>,
     /// A failed or cancelled submission stays available without replacing a
     /// newer editor draft. The UI can explicitly restore/copy it.
@@ -114,12 +112,10 @@ impl Session {
             last_activity: None,
             conversation: Conversation::default(),
             options: Options::default(),
-            loading: false,
-            loaded: true,
+            history: Default::default(),
             submitting: false,
             commanding: false,
             stopping: false,
-            next_cursor: None,
             error: None,
             failed_prompt: None,
             draft: String::new(),
@@ -195,8 +191,8 @@ impl Session {
         !self.rewinding()
             && !self.relocation.pending()
             && !self.working()
-            && self.loaded
-            && !self.loading
+            && self.loaded()
+            && !self.loading()
             && !self.disconnected
             && !self.stopping
             && !self.archived
@@ -252,9 +248,9 @@ enum Pending {
     Open(Option<Provider>, u64),
     List(Scope),
     Choices(Scope),
-    Resume(usize, u64),
+    Resume(usize),
     VerifyOpenCodeMove(usize),
-    History(usize, u64, bool),
+    History(usize),
     Start(usize, String),
     Send(usize, String, u64),
     Cancel(usize),
@@ -292,11 +288,9 @@ pub struct Workspace {
     pub preferences: Preferences,
     notifications: notifications::State,
     pub provider_commands: HashMap<Scope, Vec<caelum_protocol::OpenCodeCommandInfo>>,
-    pub last_archived: Option<usize>,
-    archive_clock: Option<(u64, u64)>,
+    archive_notice: Option<archive::Notice>,
     archive_revision: u64,
     archive_notice_revision: u64,
-    archive_replacement: Option<usize>,
     navigation: u64,
     persistence: persistence::State,
     durable_outgoing: Vec<(u64, Command)>,

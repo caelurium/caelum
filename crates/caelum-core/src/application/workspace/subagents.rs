@@ -33,7 +33,7 @@ impl Workspace {
             let mut session = Session::new(scope);
             session.remote_id = Some(child);
             session.title = task.description;
-            session.loaded = false;
+            session.invalidate_history();
             let index = self.sessions.len();
             self.sessions.push(session);
             index
