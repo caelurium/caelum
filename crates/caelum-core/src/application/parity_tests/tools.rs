@@ -10,7 +10,7 @@ fn compaction_without_a_summary_stays_visible_for_both_providers() {
         &json!({"item":{"id":"compact","type":"contextCompaction"},"_created":100}),
     );
     assert!(entry_visible(&codex.entries[0]));
-    assert!(!codex.entries[0].complete);
+    assert!(!codex.entries[0].complete());
     codex.apply(
         Provider::Codex,
         "item/completed",
@@ -24,7 +24,7 @@ fn compaction_without_a_summary_stays_visible_for_both_providers() {
     assert_eq!(codex.entries.len(), 1);
     assert!(entry_visible(&codex.entries[0]));
     assert_eq!(
-        outcome(&codex.entries[0].status, codex.entries[0].complete),
+        outcome(codex.entries[0].status(), codex.entries[0].complete()),
         Outcome::Success
     );
 
@@ -45,7 +45,7 @@ fn compaction_without_a_summary_stays_visible_for_both_providers() {
     assert_eq!(native.entries.len(), 1);
     assert!(entry_visible(&native.entries[0]));
     assert_eq!(
-        outcome(&native.entries[0].status, native.entries[0].complete),
+        outcome(native.entries[0].status(), native.entries[0].complete()),
         Outcome::Success
     );
     assert_eq!(native.used_tokens, None);
@@ -111,7 +111,7 @@ fn compaction_failures_and_summaries_survive_refresh_and_late_events() {
         "session.compaction.delta",
         &json!({"text":"stale","_created":150}),
     );
-    assert!(!c.entries[1].complete);
+    assert!(!c.entries[1].complete());
     assert!(c.entries[1].text.is_empty());
     c.apply(
         Provider::OpenCode,

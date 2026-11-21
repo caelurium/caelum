@@ -338,7 +338,7 @@ fn late_history_and_source_changes_cannot_provision_or_replace_a_newer_attempt()
         ..source()
     }));
     assert!(app.finish_vm_handoff(new_vm()).is_none());
-    app.sessions[i].conversation.working = true;
+    app.sessions[i].conversation.set_working(true);
     assert!(!app.begin_vm_handoff(HandoffSource::Composer(i)));
     assert!(app.remote.saved.checkouts.is_empty() && app.commands().is_empty());
     assert_eq!(app.sessions[i].draft, "Next step");

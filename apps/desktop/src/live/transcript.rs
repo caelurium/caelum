@@ -133,7 +133,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                             .iter()
                             .rev()
                             .find(|e| {
-                                e.kind == EntryKind::User
+                                e.kind() == EntryKind::User
                                     && caelum_core::application::presentation::entry_visible(e)
                             })
                             .map(|e| e.id.clone());
@@ -218,7 +218,7 @@ pub(super) fn timeline_row(
             .w_full()
             .gap(8.0)
             .key(format!("live-entry-{index}-{}", entry.id));
-        match entry.kind {
+        match entry.kind() {
             EntryKind::User => {
                 let (_, files) = caelum_core::application::split_context(&entry.text);
                 let message = caelum_core::application::presentation::entry_text(entry);
@@ -329,7 +329,7 @@ pub(super) fn timeline_row(
                                     .gap(7.0)
                                     .child(icon(&glyphs::SPARKLE, 13.0).color(k.c.icon_muted))
                                     .child(
-                                        text(if entry.complete {
+                                        text(if entry.complete() {
                                             ui::provider_name(session.scope.provider)
                                         } else {
                                             "Responding…"
@@ -361,7 +361,7 @@ pub(super) fn timeline_row(
                     .child(
                         Markdown::new(caelum_core::application::presentation::entry_text(entry))
                             .selectable(true)
-                            .streaming(!entry.complete && session.working())
+                            .streaming(!entry.complete() && session.working())
                             .reveal(if reduced { 0.0 } else { 0.12 })
                             .on_link_tx(move |s: &mut Workspace, url, tx| {
                                 crate::panels::open_link(s, index, url, tx)
@@ -371,7 +371,7 @@ pub(super) fn timeline_row(
                             })
                             .render(&theme::markdown(k)),
                     );
-                if entry.complete {
+                if entry.complete() {
                     let agent = entry.metadata["agent"].as_str().map(|id| {
                         live.app
                             .choices
@@ -413,7 +413,11 @@ pub(super) fn timeline_row(
                 );
             }
         }
-        for media in entry.media.iter().filter(|_| entry.kind != EntryKind::User) {
+        for media in entry
+            .media
+            .iter()
+            .filter(|_| entry.kind() != EntryKind::User)
+        {
             item = item.child(crate::media::thumbnail(s, k, &session.scope.project, media));
         }
         return content.child(crate::context::message(
@@ -421,7 +425,7 @@ pub(super) fn timeline_row(
             caelum_core::application::presentation::entry_text(entry),
             index,
             format!("live-entry-{index}-{}", entry.id),
-            (entry.kind == EntryKind::User && !entry.optimistic).then(|| entry.id.clone()),
+            (entry.kind() == EntryKind::User && !entry.optimistic()).then(|| entry.id.clone()),
         ));
     }
     if let Some(notice) = session.conversation.failure.notice() {

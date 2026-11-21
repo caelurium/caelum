@@ -26,8 +26,8 @@ fn background_shell_completion_renders_output_live_and_after_history_refresh() {
         assert_eq!(conversation.entries.len(), 1);
         let entry = &conversation.entries[0];
         assert_eq!(entry.id, "opencode-shell-sh_build");
-        assert_eq!(entry.kind, EntryKind::Tool);
-        assert!(entry.background && entry.complete);
+        assert_eq!(entry.kind(), EntryKind::Tool);
+        assert!(entry.background() && entry.complete());
         assert!(presentation::entry_visible(entry));
         let tool = presentation::Tool::from_entry(entry, 9000);
         assert_eq!(tool.summary, command);
@@ -51,13 +51,13 @@ fn shell_completion_keeps_failure_timing_and_cannot_be_reopened_by_a_late_start(
     conversation.history(Provider::OpenCode, &[event], false);
     assert_eq!(conversation.entries.len(), 1);
     let entry = &conversation.entries[0];
-    assert!(entry.complete);
+    assert!(entry.complete());
     let tool = presentation::Tool::from_entry(entry, 9000);
     assert_eq!(tool.output, "test failed");
     assert_eq!(tool.outcome, presentation::Outcome::Failure);
     assert_eq!(tool.details, ["Background", "Exit 101"]);
     assert_eq!(tool.timing, "1.5s");
-    assert!(!conversation.working);
+    assert!(!conversation.working());
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn native_shell_history_preserves_output_timing_and_terminal_outcomes() {
         conversation.history(Provider::OpenCode, &[running], false);
         assert_eq!(conversation.entries.len(), 1);
         let entry = &conversation.entries[0];
-        assert!(entry.complete);
+        assert!(entry.complete());
         let tool = presentation::Tool::from_entry(entry, 9000);
         assert_eq!(tool.output, "final output");
         assert_eq!(tool.timing, "1.5s");
@@ -137,11 +137,11 @@ fn shell_markup_without_provider_metadata_is_not_a_command_result() {
     message["metadata"] = json!({"source": "plugin"});
     let mut conversation = Conversation::default();
     conversation.history(Provider::OpenCode, std::slice::from_ref(&message), false);
-    assert_eq!(conversation.entries[0].kind, EntryKind::Status);
+    assert_eq!(conversation.entries[0].kind(), EntryKind::Status);
     assert_eq!(conversation.entries[0].text, message["text"]);
     message["type"] = "user".into();
     conversation.history(Provider::OpenCode, std::slice::from_ref(&message), false);
-    assert_eq!(conversation.entries[0].kind, EntryKind::User);
+    assert_eq!(conversation.entries[0].kind(), EntryKind::User);
     assert_eq!(conversation.entries[0].text, message["text"]);
 }
 

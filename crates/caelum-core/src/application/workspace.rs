@@ -145,7 +145,7 @@ impl Session {
     }
 
     pub fn working(&self) -> bool {
-        self.submitting() || self.conversation.working
+        self.submitting() || self.conversation.working()
     }
 
     fn record_activity(&mut self, at: u64) {

@@ -123,7 +123,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                     .unwrap()
                     .output = output;
             }
-            conversation.working = running;
+            conversation.set_working(running);
             if !failed && !running {
                 l.expanded.insert((0, "opencode-tool-run".into()));
             }
@@ -140,7 +140,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                 ""
             };
             conversation.history(Provider::OpenCode, &[json!({"id":"compact","type":"compaction","summary":summary,"status":status,"error":if status == "failed" {Some("The provider could not summarise the conversation. Your messages are still available.")} else {None}})], false);
-            conversation.working = status == "running";
+            conversation.set_working(status == "running");
             if status == "completed" {
                 conversation.history(Provider::OpenCode, &[json!({"id":"after","type":"assistant","content":[{"type":"text","text":"The working context is ready. I’ll continue with the tool-call layout."}],"finish":"stop"})], false);
             }
@@ -217,7 +217,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             session.title = title.into();
             session.draft = format!("Independent draft for {title}");
             if provider == Provider::Codex {
-                session.conversation.working = true;
+                session.conversation.set_working(true);
             } else {
                 session.queue.push(caelum_core::application::QueuedPrompt {
                     text: "Review the reconnect changes".into(),
@@ -526,24 +526,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                 _ => "Then check the compact layout in both themes.",
             };
             session.draft = prompt.into();
-            if matches!(name, "composer-queued" | "composer-queue-error") {
-                session.conversation.working = true;
-                session.queue = [
-                    "Review keyboard focus and session switching.",
-                    "Check attachments and multiline drafts.",
-                ]
-                .map(|text| caelum_core::application::QueuedPrompt {
-                    text: text.into(),
-                    options: session.options.clone(),
-                })
-                .into();
-                if name == "composer-queue-error" {
-                    session.conversation.working = false;
-                    session.queue_paused = true;
-                    session.error =
-                        Some("The provider is unavailable. Resume when it reconnects.".into());
-                }
-            }
+            scenes::composer_queue(session, name);
             if matches!(
                 name,
                 "composer-attachments"
@@ -878,7 +861,8 @@ pub fn scene(state: &mut Workspace, name: &str) {
             {"id":"patch","type":"tool","name":"apply_patch","state":{"status":"completed","input":{"path":"src/workspace.rs","patch":"@@ -1 +1 @@\n-restore();\n+restore_owned_draft();"},"content":[{"type":"text","text":"Updated src/workspace.rs"}],"time":{"start":4600,"end":4800}}}
         ]})],false);
         for entry in &session.conversation.entries {
-            if name != "tools-collapsed" && entry.kind != caelum_core::application::EntryKind::User
+            if name != "tools-collapsed"
+                && entry.kind() != caelum_core::application::EntryKind::User
             {
                 l.expanded.insert((0, entry.id.clone()));
             }

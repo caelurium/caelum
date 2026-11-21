@@ -158,11 +158,11 @@ fn fork_checks_admission_again_and_failures_do_not_change_the_parent() {
         None,
     );
     let bound = ForkBoundary::OpenCodeTip("msg_a".into());
-    app.sessions[0].conversation.working = true;
+    app.sessions[0].conversation.set_working(true);
     app.fork_at(&bound);
     assert!(app.fork_picker().unwrap().error.is_some());
     assert!(app.commands().is_empty());
-    app.sessions[0].conversation.working = false;
+    app.sessions[0].conversation.set_working(false);
     let id = create(&mut app, &source, bound.clone());
     app.apply(Event::Completed(id, Err("Provider unavailable".into())));
     assert_eq!(

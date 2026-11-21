@@ -306,7 +306,7 @@ fn settings_dropdown_escape_dismisses_only_the_foremost_surface() {
         crate::evaluation::scene(&mut state, "providers");
         state.live.as_mut().unwrap().app.sessions[0]
             .conversation
-            .working = true;
+            .set_working(true);
         let mut rt = Runtime::new(state, app.view, (800.0, 620.0), Env::new(dark, 1.0));
         rt.poll = app.poll;
         rt.on_key = app.on_key;

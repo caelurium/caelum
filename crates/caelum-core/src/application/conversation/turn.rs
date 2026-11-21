@@ -28,7 +28,7 @@ impl Timing {
 impl Conversation {
     pub fn begin_turn(&mut self, agent: Option<String>, started_at: u64) {
         self.failure.begin(started_at);
-        if !self.working || self.turn.is_none() {
+        if !self.working() || self.turn.is_none() {
             self.turn = Some(Turn::AwaitingProvider(Timing::new(started_at, agent)));
         }
     }
@@ -39,7 +39,7 @@ impl Conversation {
                 self.turn = Some(started);
                 return;
             }
-            Some(Turn::AwaitingProvider(mut timing)) if self.working => {
+            Some(Turn::AwaitingProvider(mut timing)) if self.working() => {
                 timing.started_at = timing.started_at.min(started_at);
                 timing
             }

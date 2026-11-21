@@ -108,14 +108,14 @@ fn parent_activity_takes_precedence_while_subagents_are_running() {
     }
     state.live.as_mut().unwrap().app.sessions[0]
         .conversation
-        .working = true;
+        .set_working(true);
     state.live.as_mut().unwrap().app.sessions[0]
         .conversation
-        .retrying = true;
+        .set_retrying(true);
     assert_eq!(activity(state), Some(ActivityKind::Retrying));
     state.live.as_mut().unwrap().app.sessions[0]
         .conversation
-        .retrying = false;
+        .set_retrying(false);
     state.live.as_mut().unwrap().app.sessions[0]
         .conversation
         .apply(

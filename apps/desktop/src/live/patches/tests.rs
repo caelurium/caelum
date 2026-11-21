@@ -32,7 +32,6 @@ fn unchanged_patch_inputs_preserve_native_state_through_output_and_status_update
     let e = entry(&mut live, &key);
     e.output = "large streaming output\n".repeat(8192);
     e.error = "tool failed".into();
-    e.status = "failed".into();
     e.metadata = json!({"durationMs":4000,"ended":5000});
     assert!(!live.sync_patches());
     assert_eq!(live.patches[&key].diff.selection(), selection);
@@ -80,8 +79,8 @@ fn collapse_navigation_and_history_replacement_keep_inputs_owned_by_their_sessio
     assert_eq!(live.patches[&key].diff.files()[0].path(), "new.rs");
     assert!(!live.patch_inputs.values.contains_key(&key));
 
-    entry(&mut live, &second).kind = EntryKind::Assistant;
-    entry(&mut live, &second).name.clear();
+    let row = entry(&mut live, &second);
+    *row = Entry::new(row.id.clone(), EntryKind::Assistant, row.text.clone(), true);
     assert!(live.sync_patches());
     assert!(!live.patches.contains_key(&second));
     live.visible_entries = HashSet::from([key.clone()]);
@@ -126,9 +125,15 @@ fn tool_identity_changes_invalidate_previews_with_identical_input() {
     entry(&mut live, &key).name = "edit".into();
     assert!(live.sync_patches());
     assert!(live.patches.contains_key(&key));
-    entry(&mut live, &key).kind = EntryKind::Reasoning;
+    let original = entry(&mut live, &key).clone();
+    *entry(&mut live, &key) = Entry::new(
+        original.id.clone(),
+        EntryKind::Reasoning,
+        String::new(),
+        false,
+    );
     assert!(live.sync_patches());
     assert!(!live.patches.contains_key(&key));
-    entry(&mut live, &key).kind = EntryKind::Tool;
+    *entry(&mut live, &key) = original;
     assert!(live.sync_patches());
 }

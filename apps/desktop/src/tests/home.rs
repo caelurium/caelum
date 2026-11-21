@@ -227,7 +227,7 @@ fn background_streaming_on_home_updates_sessions_without_rebuilding_or_taking_fo
     rt.update(|s, _| {
         let l = live_mut(s);
         l.app.sessions[0].remote_id = Some("background".into());
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
         l.app.sessions[0].last_activity = Some(1);
     });
     advance(&mut rt, 0.3);

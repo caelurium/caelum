@@ -103,7 +103,7 @@ fn dismissal_recovery_and_late_events_cannot_replace_a_newer_failure_or_turn() {
         .conversation
         .entries
         .iter()
-        .all(|e| e.kind != EntryKind::Status));
+        .all(|e| e.kind() != EntryKind::Status));
 }
 
 #[test]

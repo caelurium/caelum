@@ -141,7 +141,7 @@ fn closing_project_groups_keeps_sessions_work_and_drafts_through_reopen_and_rest
     app.project_roots.insert("/linked".into(), "/main".into());
     app.sessions[0].remote_id = Some("thread-main".into());
     app.sessions[1].remote_id = Some("thread-linked".into());
-    app.sessions[1].conversation.working = true;
+    app.sessions[1].conversation.set_working(true);
     app.sessions[1].reading = 512.0;
     app.attach(
         1,

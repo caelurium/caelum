@@ -169,7 +169,7 @@ impl Workspace {
             return;
         }
         if session.revision == revision {
-            session.conversation.working = summary.working;
+            session.conversation.set_working(summary.working);
         }
         update_summary(session, summary, request);
         let key = session.key().expect("resumed session");
@@ -234,7 +234,7 @@ impl Workspace {
                 }
             }
             if let Some(working) = page.is_working {
-                session.conversation.working = working;
+                session.conversation.set_working(working);
             }
             if page.model.is_some() && !session.options_dirty {
                 session.options.model = page.model;

@@ -188,7 +188,7 @@ fn switching_worktrees_restores_each_checkout_session_without_redirecting_main()
     app.select(main);
     let linked = app.new_session(scope(Provider::Codex, "/linked"));
     app.sessions[linked].draft = "Linked draft".into();
-    app.sessions[linked].conversation.working = true;
+    app.sessions[linked].conversation.set_working(true);
     app.sessions[linked].queue.push(QueuedPrompt {
         text: "Next linked turn".into(),
         options: Default::default(),
