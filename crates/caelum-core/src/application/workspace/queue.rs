@@ -1,5 +1,5 @@
-use super::{Pending, Workspace};
-use crate::application::{Command, Provider};
+use super::{submission::Origin, Pending, Workspace};
+use crate::application::{inbox::Mutation, Command, Provider};
 
 impl Workspace {
     pub fn resume_queue(&mut self, index: usize) {
@@ -34,7 +34,7 @@ impl Workspace {
             .inbox
             .items
             .iter()
-            .any(|item| item.id == id && item.removing)
+            .any(|item| item.id == id && item.removing())
         {
             self.remove_queued(index, id);
             return;
@@ -46,19 +46,19 @@ impl Workspace {
         let Some(item) = session
             .inbox
             .items
-            .iter_mut()
-            .find(|v| v.id == id && !v.pending)
+            .iter()
+            .find(|v| v.id == id && !v.pending() && v.error().is_some())
         else {
             return;
         };
-        item.pending = true;
-        item.error = None;
         let text = item.text.clone();
-        session.inbox.revision += 1;
-        self.request(
+        let request = self.request(
             Command::Enqueue(key, id.into(), text),
             Pending::Enqueue(index, id.into()),
         );
+        self.sessions[index]
+            .inbox
+            .start_mutation(id, request, Mutation::Enqueue);
     }
 
     pub fn remove_queued(&mut self, index: usize, id: &str) {
@@ -66,22 +66,21 @@ impl Workspace {
         let Some(key) = session.key() else {
             return;
         };
-        let Some(item) = session
+        if !session
             .inbox
             .items
-            .iter_mut()
-            .find(|v| v.id == id && !v.pending)
-        else {
+            .iter()
+            .any(|v| v.id == id && !v.pending())
+        {
             return;
-        };
-        item.pending = true;
-        item.removing = true;
-        item.error = None;
-        session.inbox.revision += 1;
-        self.request(
+        }
+        let request = self.request(
             Command::RemoveQueued(key, id.into()),
             Pending::RemoveQueued(index, id.into()),
         );
+        self.sessions[index]
+            .inbox
+            .start_mutation(id, request, Mutation::Remove);
     }
 
     pub(super) fn advance_queue(&mut self, index: usize) {
@@ -100,13 +99,9 @@ impl Workspace {
             && session.error.is_none()
         {
             let queued = session.queue.remove(0);
-            let options = std::mem::replace(&mut session.options, queued.options);
-            let dirty = session.options_dirty;
-            self.send_raw(index, queued.text);
-            self.sessions[index].inflight_queued = true;
-            self.sessions[index].options = options;
-            self.sessions[index].options_dirty =
-                dirty || self.sessions[index].options != self.sessions[index].inflight_options;
+            let dirty = session.options_dirty || session.options != queued.options;
+            self.submit_prompt(index, queued, Origin::Queue);
+            self.sessions[index].options_dirty = dirty;
         }
     }
 }

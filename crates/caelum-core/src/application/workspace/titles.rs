@@ -26,10 +26,10 @@ impl Workspace {
         if session.scope.provider != Provider::OpenCode
             || session.title_state.manual
             || session.title_state.turns < TURN_INTERVAL
-            || session.archived
-            || session.archiving
-            || session.forgotten
-            || session.deleting
+            || session.archived()
+            || session.archiving()
+            || session.forgotten()
+            || session.deleting()
             || session.disconnected
         {
             return;

@@ -35,7 +35,7 @@ fn archive_notice_expires_only_after_unengaged_time_and_recovers_after_undo_fail
     assert!(app.tick_archive_notice(failed + 8_001, false));
     assert_eq!(app.last_archived(), None);
     assert!(
-        app.sessions[0].archived,
+        app.sessions[0].archived(),
         "expiration does not restore the session"
     );
 }

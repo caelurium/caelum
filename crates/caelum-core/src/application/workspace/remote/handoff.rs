@@ -88,16 +88,16 @@ impl Workspace {
                     .as_ref()
                     .is_some_and(|p| self.group_path(p) != self.group_path(&s.scope.project)))
             || !self.project_is_open(&s.scope.project)
-            || s.archived
-            || s.forgotten
-            || s.archiving
-            || s.deleting
+            || s.archived()
+            || s.forgotten()
+            || s.archiving()
+            || s.deleting()
             || s.relocation.pending()
         {
             Some("Choose an open local session.")
         } else if s.working()
-            || s.stopping
-            || s.commanding
+            || s.stopping()
+            || s.commanding()
             || !s.queue.is_empty()
             || !s.inbox.items.is_empty()
         {

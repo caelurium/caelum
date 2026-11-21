@@ -174,7 +174,7 @@ pub struct SavedSession {
     pub pending_submission: Option<QueuedPrompt>,
     pub queue: Vec<QueuedPrompt>,
     #[serde(default)]
-    pub inbox: Vec<super::InboxPrompt>,
+    pub inbox: Vec<super::SavedInboxPrompt>,
     pub archived: bool,
     pub reading: f32,
     #[serde(default)]

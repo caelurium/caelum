@@ -233,10 +233,10 @@ impl Workspace {
             .key()
             .ok_or("Send a message before choosing a conversation boundary.")?;
         if self.selected != Some(index)
-            || s.archived
-            || s.forgotten
-            || s.deleting
-            || s.archiving
+            || s.archived()
+            || s.forgotten()
+            || s.deleting()
+            || s.archiving()
             || s.relocation.pending()
             || !self.project_is_open(&s.scope.project)
         {
@@ -253,8 +253,8 @@ impl Workspace {
             return Err("A history operation is already in progress.");
         }
         if s.working()
-            || s.stopping
-            || s.commanding
+            || s.stopping()
+            || s.commanding()
             || s.control_busy()
             || s.generating
             || !s.shells.is_empty()
@@ -501,7 +501,7 @@ impl Workspace {
             }
             Request::Rewind { index, source } => {
                 if self.sessions[index].key().as_ref() != Some(&source)
-                    || self.sessions[index].forgotten
+                    || self.sessions[index].forgotten()
                 {
                     return;
                 }
@@ -573,7 +573,7 @@ impl Workspace {
                             picker.phase = Phase::Ready;
                             picker.error = Some(error);
                         } else if self.sessions[index].key().as_ref() == Some(&source)
-                            && !self.sessions[index].forgotten
+                            && !self.sessions[index].forgotten()
                         {
                             self.sessions[index].error = Some(error);
                         }
@@ -602,8 +602,8 @@ impl Workspace {
                 };
                 if let Some(draft) = draft {
                     let child = &mut self.sessions[child_index];
-                    if !child.forgotten
-                        && !child.archived
+                    if !child.forgotten()
+                        && !child.archived()
                         && child.draft.is_empty()
                         && child.attachments.is_empty()
                         && !child.working()
@@ -611,15 +611,15 @@ impl Workspace {
                         child.draft = draft.text;
                         child.attachments = draft.attachments;
                         child.completion_caret = Some(child.draft.len());
-                    } else if !child.forgotten {
+                    } else if !child.forgotten() {
                         self.sessions[index].error=Some("Branch created, but its draft was already in use. The original prompt is unchanged.".into());
                     }
                 }
                 if foreground {
                     self.dismiss_fork();
                     if !self.closed_since(&source.scope.project, request)
-                        && !self.sessions[child_index].archived
-                        && !self.sessions[child_index].forgotten
+                        && !self.sessions[child_index].archived()
+                        && !self.sessions[child_index].forgotten()
                     {
                         self.select(child_index);
                     }

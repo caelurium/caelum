@@ -19,7 +19,7 @@ fn session_matches(s: &Workspace, index: usize) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter(|(_, session)| {
-            !session.forgotten
+            !session.forgotten()
                 && session.remote_id.is_some()
                 && session.scope.provider == current.scope.provider
                 && l.app.group_path(&session.scope.project) == project_group
@@ -67,7 +67,7 @@ pub(super) fn sessions(s: &Workspace, k: &Kit, index: usize) -> El {
             .rsplit('/')
             .next()
             .unwrap_or("Project");
-        let detail = if session.archived {
+        let detail = if session.archived() {
             format!("Archived · {project_name}")
         } else if session.working() {
             format!("Working · {project_name}")

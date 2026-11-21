@@ -673,13 +673,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         return true;
     }
     if matches!(name, "working" | "thinking" | "retrying" | "stopping") {
-        l.app.sessions[0].remote_id = Some("fixture".into());
-        l.app.sessions[0].conversation.working = true;
-        if name == "thinking" {
-            l.app.sessions[0].conversation.apply(Provider::Codex, "item/reasoning/summaryTextDelta", &json!({"itemId":"thinking","delta":"Checking the original interactions before changing the layout."}));
-        }
-        l.app.sessions[0].conversation.retrying = name == "retrying";
-        l.app.sessions[0].stopping = name == "stopping";
+        scenes::activity(l, name);
         return true;
     }
     if matches!(

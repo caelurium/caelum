@@ -205,7 +205,7 @@ fn sidebar_worktrees_switch_exact_checkouts_and_keep_background_work() {
         );
         assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(0));
         assert!(rt.state.live.as_ref().unwrap().app.sessions[index].working());
-        assert!(!rt.state.live.as_ref().unwrap().app.sessions[index].stopping);
+        assert!(!rt.state.live.as_ref().unwrap().app.sessions[index].stopping());
         assert!(element(&rt, "sidebar-scroll").visible[3] >= 80.0);
         let toggle = crate::code_view::source_key(root, "worktrees-toggle");
         reveal(&mut rt, &toggle);

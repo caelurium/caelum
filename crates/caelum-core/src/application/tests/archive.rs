@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn discovery_and_restore_cannot_change_visibility_during_deletion() {
+    let mut app = Workspace::default();
+    let scope = scope(Provider::OpenCode, "/a");
+    let index = app.new_session(scope.clone());
+    app.sessions[index].remote_id = Some("session".into());
+    app.sessions[index].archive_fixture(ArchiveFixture::Stable(true));
+    let list = discover_session_list(&mut app, &scope, false);
+    assert!(app.delete_archived_session(index));
+    let (delete, command) = app.commands().pop().unwrap();
+    assert!(matches!(command, Command::DeleteSession(_)));
+    app.archive(index, false);
+    app.apply(Event::Completed(
+        list,
+        Ok(Reply::Sessions(vec![summary(scope, "session")])),
+    ));
+    assert!(app.commands().is_empty());
+    assert!(app.sessions[index].deleting());
+    assert!(app.sessions[index].archived());
+
+    app.apply(Event::Completed(delete, Err("Try again".into())));
+    assert!(!app.sessions[index].deleting());
+    assert!(app.sessions[index].archived());
+}
+
+#[test]
 fn stale_opencode_archive_error_preserves_the_session_for_reconnection() {
     let mut app = Workspace::default();
     let project = "/project";
@@ -20,9 +45,9 @@ fn stale_opencode_archive_error_preserves_the_session_for_reconnection() {
         Err("OpenCode session does not belong to this project".into()),
     ));
 
-    assert!(!app.sessions[index].forgotten);
-    assert!(!app.sessions[index].archived);
-    assert!(!app.sessions[index].archiving);
+    assert!(!app.sessions[index].forgotten());
+    assert!(!app.sessions[index].archived());
+    assert!(!app.sessions[index].archiving());
     assert_eq!(
         app.last_archived(),
         None,
@@ -61,11 +86,11 @@ fn archiving_selects_existing_context_before_a_blank_session() {
 
     assert_eq!(app.selected, Some(contextual));
     assert_eq!(app.sessions.len(), 3, "do not create another empty session");
-    assert!(!app.sessions[blank].archived);
+    assert!(!app.sessions[blank].archived());
 
     app.undo_archive();
     assert_eq!(app.selected, Some(archived));
-    assert!(!app.sessions[archived].archived);
+    assert!(!app.sessions[archived].archived());
 }
 
 #[test]
@@ -80,26 +105,29 @@ fn deleting_archived_provider_sessions_removes_local_metadata_after_provider_suc
     app.archive(index, true);
     let archive = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(archive, Ok(Reply::Done)));
-    assert!(app.sessions[index].archived);
+    assert!(app.sessions[index].archived());
 
     assert!(app.delete_archived_session(index));
-    assert!(!app.sessions[index].forgotten, "wait for provider deletion");
+    assert!(
+        !app.sessions[index].forgotten(),
+        "wait for provider deletion"
+    );
     let (request, command) = app.commands().pop().unwrap();
     assert!(matches!(command, Command::DeleteSession(key) if key.id == "ses_archived"));
     app.apply(Event::Completed(
         request,
         Err("provider does not support deletion".into()),
     ));
-    assert!(app.sessions[index].archived);
-    assert!(!app.sessions[index].forgotten);
-    assert!(!app.sessions[index].deleting);
+    assert!(app.sessions[index].archived());
+    assert!(!app.sessions[index].forgotten());
+    assert!(!app.sessions[index].deleting());
 
     assert!(app.delete_archived_session(index));
     let (request, command) = app.commands().pop().unwrap();
     assert!(matches!(command, Command::DeleteSession(key) if key.id == "ses_archived"));
     app.apply(Event::Completed(request, Ok(Reply::Done)));
 
-    assert!(app.sessions[index].forgotten);
+    assert!(app.sessions[index].forgotten());
     assert!(app
         .snapshot()
         .sessions
@@ -116,10 +144,10 @@ fn provider_deleted_events_forget_sessions_and_keep_the_selection_usable() {
     });
     let parent = app.new_session(scope(Provider::OpenCode, "/project"));
     app.sessions[parent].remote_id = Some("ses_parent".into());
-    app.sessions[parent].archived = true;
+    app.sessions[parent].archive_fixture(ArchiveFixture::Stable(true));
     let child = app.new_session(scope(Provider::OpenCode, "/project"));
     app.sessions[child].remote_id = Some("ses_child".into());
-    app.sessions[child].archived = true;
+    app.sessions[child].archive_fixture(ArchiveFixture::Stable(true));
     let active = app.new_session(scope(Provider::OpenCode, "/project"));
     app.sessions[active].remote_id = Some("ses_active".into());
     app.select(parent);
@@ -135,8 +163,8 @@ fn provider_deleted_events_forget_sessions_and_keep_the_selection_usable() {
         }));
     }
 
-    assert!(app.sessions[parent].forgotten);
-    assert!(app.sessions[child].forgotten);
+    assert!(app.sessions[parent].forgotten());
+    assert!(app.sessions[child].forgotten());
     assert_eq!(app.selected, Some(active));
     assert!(app.sessions[active].can_send());
 }
@@ -150,10 +178,10 @@ fn discovery_started_before_archive_completion_preserves_the_new_state() {
                 let scope = scope(provider, "/a");
                 let index = workspace.new_session(scope.clone());
                 workspace.sessions[index].remote_id = Some("changed".into());
-                workspace.sessions[index].archived = !archived;
+                workspace.sessions[index].archive_fixture(ArchiveFixture::Stable(!archived));
                 let other = workspace.new_session(scope.clone());
                 workspace.sessions[other].remote_id = Some("other".into());
-                workspace.sessions[other].archived = archived;
+                workspace.sessions[other].archive_fixture(ArchiveFixture::Stable(archived));
                 let mut list = None;
                 if !during {
                     list = Some(discover_session_list(&mut workspace, &scope, !archived));
@@ -164,7 +192,7 @@ fn discovery_started_before_archive_completion_preserves_the_new_state() {
                     list = Some(discover_session_list(&mut workspace, &scope, !archived));
                 }
                 workspace.apply(Event::Completed(archive, Ok(Reply::Done)));
-                assert_eq!(workspace.sessions[index].archived, archived);
+                assert_eq!(workspace.sessions[index].archived(), archived);
 
                 workspace.apply(Event::Completed(
                     list.unwrap(),
@@ -174,20 +202,20 @@ fn discovery_started_before_archive_completion_preserves_the_new_state() {
                         summary(scope.clone(), "discovered"),
                     ])),
                 ));
-                assert_eq!(workspace.sessions[index].archived, archived);
-                assert_eq!(workspace.sessions[other].archived, !archived);
+                assert_eq!(workspace.sessions[index].archived(), archived);
+                assert_eq!(workspace.sessions[other].archived(), !archived);
                 assert_eq!(
                     workspace.sessions.last().unwrap().remote_id.as_deref(),
                     Some("discovered")
                 );
-                assert_eq!(workspace.sessions.last().unwrap().archived, !archived);
+                assert_eq!(workspace.sessions.last().unwrap().archived(), !archived);
 
                 let fresh = discover_session_list(&mut workspace, &scope, !archived);
                 workspace.apply(Event::Completed(
                     fresh,
                     Ok(Reply::Sessions(vec![summary(scope, "changed")])),
                 ));
-                assert_eq!(workspace.sessions[index].archived, !archived);
+                assert_eq!(workspace.sessions[index].archived(), !archived);
             }
         }
     }
@@ -218,7 +246,7 @@ fn discovery_deferred_during_creation_keeps_its_original_archive_boundary() {
             create,
             Ok(Reply::Session(summary(scope, "created"))),
         ));
-        assert!(workspace.sessions[existing].archived);
+        assert!(workspace.sessions[existing].archived());
         assert_eq!(
             workspace.sessions[created].remote_id.as_deref(),
             Some("created")
@@ -234,7 +262,7 @@ fn failed_archive_changes_do_not_block_discovery_reconciliation() {
         let scope = scope(Provider::OpenCode, "/a");
         let index = workspace.new_session(scope.clone());
         workspace.sessions[index].remote_id = Some("session".into());
-        workspace.sessions[index].archived = !archived;
+        workspace.sessions[index].archive_fixture(ArchiveFixture::Stable(!archived));
         let list = discover_session_list(&mut workspace, &scope, archived);
         workspace.archive(index, archived);
         let archive = workspace.commands().pop().unwrap().0;
@@ -243,6 +271,6 @@ fn failed_archive_changes_do_not_block_discovery_reconciliation() {
             list,
             Ok(Reply::Sessions(vec![summary(scope, "session")])),
         ));
-        assert_eq!(workspace.sessions[index].archived, archived);
+        assert_eq!(workspace.sessions[index].archived(), archived);
     }
 }

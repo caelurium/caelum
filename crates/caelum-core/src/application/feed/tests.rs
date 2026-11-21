@@ -37,9 +37,9 @@ fn scope_filters_include_linked_checkouts_but_exclude_closed_archived_and_forgot
     app.select(0);
     assert!(app.session_feed(None, "Beta", false).is_empty());
     assert_eq!(app.session_feed(Some("/beta"), "codex", false), [1]);
-    app.sessions[2].archived = true;
+    app.sessions[2].archive_fixture(ArchiveFixture::Stable(true));
     assert_eq!(app.session_feed(None, "", true), [2]);
-    app.sessions[2].forgotten = true;
+    app.sessions[2].archive_fixture(ArchiveFixture::Forgotten);
     assert!(app.session_feed(None, "", true).is_empty());
     app.preferences.session_scope = SessionScope::AllProjects;
     app.close_project("/beta");
@@ -162,14 +162,14 @@ fn archived_session_rows_keep_the_recorded_branch_until_restored() {
         branch_is_current: false,
         changes: None,
     });
-    app.sessions[0].archived = true;
+    app.sessions[0].archive_fixture(ArchiveFixture::Stable(true));
     refresh_branch(&mut app, "/alpha", Some("feature/current"));
     assert_eq!(
         app.session_branch(&app.sessions[0]),
         Some("feature/archived")
     );
     assert_eq!(app.session_feed(None, "feature/archived", true), [0]);
-    app.sessions[0].archived = false;
+    app.sessions[0].archive_fixture(ArchiveFixture::Stable(false));
     assert_eq!(
         app.session_branch(&app.sessions[0]),
         Some("feature/current")

@@ -237,7 +237,7 @@ fn switching_worktrees_restores_each_checkout_session_without_redirecting_main()
     assert_eq!(restored.sessions[linked].draft, "Linked draft");
     assert_eq!(restored.sessions[linked].queue[0].text, "Next linked turn");
     assert_eq!(restored.sessions[linked].attachments[0].content, "snapshot");
-    restored.sessions[main].archived = true;
+    restored.sessions[main].archive_fixture(ArchiveFixture::Stable(true));
     assert!(restored.select_checkout("/main"));
     assert_eq!(restored.selected, Some(other_main));
     assert!(!restored.select_checkout("/unknown"));
@@ -376,7 +376,7 @@ fn removing_the_active_linked_checkout_returns_to_the_surviving_project() {
             },
         ))),
     ));
-    assert!(app.sessions[index].archived);
+    assert!(app.sessions[index].archived());
     assert_eq!(app.active_project.as_deref(), Some("/main"));
     assert_eq!(app.sessions[app.selected.unwrap()].scope.project, "/main");
     assert!(!app.projects.iter().any(|p| p.path == "/linked"));
@@ -427,7 +427,7 @@ fn removing_a_worktree_selects_existing_context_instead_of_creating_a_draft() {
         ))),
     ));
 
-    assert!(app.sessions[linked].archived);
+    assert!(app.sessions[linked].archived());
     assert_eq!(app.sessions.len(), 2);
     assert_eq!(app.active_project.as_deref(), Some("/main"));
     assert_eq!(app.selected, Some(main));
@@ -439,7 +439,7 @@ fn removing_a_worktree_selects_existing_context_instead_of_creating_a_draft() {
             "thread-linked",
         )])),
     ));
-    assert!(app.sessions[linked].archived);
+    assert!(app.sessions[linked].archived());
 }
 
 #[test]

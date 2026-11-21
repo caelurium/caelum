@@ -1,6 +1,94 @@
 use super::{Pending, Session, Workspace};
-use crate::application::{Command, Provider, QueuedPrompt};
+use crate::application::{Command, Provider, QueuedPrompt, SessionKey, Summary};
 use caelum_protocol::{ApprovalDecision, ApprovalPrompt, QuestionPrompt};
+
+#[derive(Default)]
+pub(super) enum Submission {
+    #[default]
+    Idle,
+    Creating {
+        request: u64,
+        attempt: Attempt,
+    },
+    Admitting {
+        request: u64,
+        key: SessionKey,
+        revision: u64,
+        attempt: Attempt,
+    },
+    Stopping {
+        request: u64,
+    },
+}
+
+pub(super) struct Attempt {
+    prompt: QueuedPrompt,
+    origin: Origin,
+    intent: Intent,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Origin {
+    Direct,
+    Queue,
+}
+
+enum Intent {
+    Continue,
+    Stop,
+}
+
+pub(super) struct NativeCommand {
+    request: u64,
+    prompt: String,
+}
+
+impl Session {
+    pub fn submitting(&self) -> bool {
+        self.pending_prompt().is_some()
+    }
+
+    pub fn stopping(&self) -> bool {
+        matches!(
+            self.submission,
+            Submission::Stopping { .. }
+                | Submission::Creating {
+                    attempt: Attempt {
+                        intent: Intent::Stop,
+                        ..
+                    },
+                    ..
+                }
+                | Submission::Admitting {
+                    attempt: Attempt {
+                        intent: Intent::Stop,
+                        ..
+                    },
+                    ..
+                }
+        )
+    }
+
+    pub fn commanding(&self) -> bool {
+        self.native_command.is_some()
+    }
+
+    pub(super) fn pending_prompt(&self) -> Option<&QueuedPrompt> {
+        match &self.submission {
+            Submission::Creating { attempt, .. } | Submission::Admitting { attempt, .. } => {
+                Some(&attempt.prompt)
+            }
+            _ => None,
+        }
+    }
+
+    fn recover_prompt(&mut self, attempt: Attempt) {
+        match attempt.origin {
+            Origin::Direct => self.failed_prompt = Some(attempt.prompt.text),
+            Origin::Queue => self.queue.insert(0, attempt.prompt),
+        }
+    }
+}
 
 impl Workspace {
     /// Ordinary messages wait behind active work, history/inbox reads and earlier prompts.
@@ -51,13 +139,13 @@ impl Workspace {
         }
         let prompt = crate::application::composer::with_context(&prompt, &session.attachments);
         if let Some(key) = session.key().filter(|_| native_command.is_some()) {
-            session.commanding = true;
             session.error = None;
             session.attachments.clear();
             session.draft.clear();
             session.options_dirty = false;
             let command = Command::Send(key, prompt.clone(), session.options.clone());
-            self.request(command, Pending::Control(index, prompt));
+            let request = self.request(command, Pending::Control(index));
+            self.sessions[index].native_command = Some(NativeCommand { request, prompt });
             return true;
         }
         if session.working()
@@ -72,20 +160,13 @@ impl Workspace {
                     .unwrap_or_default()
                     .as_nanos();
                 let id = format!("msg_caelum_{stamp}_{}", self.next_request);
-                session.inbox.items.push(crate::application::InboxPrompt {
-                    id: id.clone(),
-                    text: prompt.clone(),
-                    pending: true,
-                    removing: false,
-                    error: None,
-                });
-                session.inbox.revision += 1;
                 session.attachments.clear();
                 session.draft.clear();
-                self.request(
-                    Command::Enqueue(key, id.clone(), prompt),
-                    Pending::Enqueue(index, id),
+                let request = self.request(
+                    Command::Enqueue(key, id.clone(), prompt.clone()),
+                    Pending::Enqueue(index, id.clone()),
                 );
+                self.sessions[index].inbox.enqueue(id, prompt, request);
                 return true;
             }
         }
@@ -154,64 +235,225 @@ impl Workspace {
         self.send_raw(index, prompt)
     }
 
-    pub(super) fn send_raw(&mut self, index: usize, prompt: String) -> bool {
+    fn send_raw(&mut self, index: usize, text: String) -> bool {
+        let prompt = QueuedPrompt {
+            text,
+            options: self.sessions[index].options.clone(),
+        };
+        self.submit_prompt(index, prompt, Origin::Direct)
+    }
+
+    pub(super) fn submit_prompt(
+        &mut self,
+        index: usize,
+        prompt: QueuedPrompt,
+        origin: Origin,
+    ) -> bool {
         let session = &mut self.sessions[index];
-        if prompt.trim().is_empty() || !session.can_send() {
+        if prompt.text.trim().is_empty() || !session.can_send() {
             return false;
         }
-        session.submitting = true;
         session.record_activity(crate::application::presentation::now());
         session.error = None;
-        session.inflight_prompt = Some(prompt.clone());
-        session.inflight_options = session.options.clone();
-        session.inflight_queued = false;
         session.options_dirty = false;
         session.revision += 1;
         session.conversation.begin_turn(
-            session.inflight_options.agent.clone(),
+            prompt.options.agent.clone(),
             crate::application::presentation::now(),
         );
-        session
-            .conversation
-            .optimistic(format!("local-{}", self.next_request + 1), prompt.clone());
-        if session.remote_id.is_none() {
-            session.title = prompt
+        session.conversation.optimistic(
+            format!("local-{}", self.next_request + 1),
+            prompt.text.clone(),
+        );
+        let attempt = Attempt {
+            prompt,
+            origin,
+            intent: Intent::Continue,
+        };
+        if let Some(key) = session.key() {
+            self.admit_prompt(index, key, attempt);
+        } else {
+            let text = &attempt.prompt.text;
+            session.title = text
                 .lines()
                 .next()
-                .unwrap_or(&prompt)
+                .unwrap_or(text)
                 .chars()
                 .take(60)
                 .collect();
-            let command = Command::Start(session.scope.clone(), session.options.clone());
-            self.request(command, Pending::Start(index, prompt));
-        } else {
-            self.send_existing(index, prompt);
+            let command = Command::Start(session.scope.clone(), attempt.prompt.options.clone());
+            let request = self.request(command, Pending::Start(index));
+            self.sessions[index].submission = Submission::Creating { request, attempt };
         }
         true
     }
 
-    pub(super) fn send_existing(&mut self, index: usize, prompt: String) {
-        let session = &self.sessions[index];
-        let key = session.key().expect("created session");
-        self.request(
-            Command::Send(key, prompt.clone(), session.inflight_options.clone()),
-            Pending::Send(index, prompt, session.revision),
+    fn admit_prompt(&mut self, index: usize, key: SessionKey, attempt: Attempt) {
+        let revision = self.sessions[index].revision;
+        let request = self.request(
+            Command::Send(
+                key.clone(),
+                attempt.prompt.text.clone(),
+                attempt.prompt.options.clone(),
+            ),
+            Pending::Send(index),
         );
+        self.sessions[index].submission = Submission::Admitting {
+            request,
+            key,
+            revision,
+            attempt,
+        };
     }
 
     pub fn cancel(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if !session.working() || session.stopping {
+        if !session.working() || session.stopping() {
             return;
         }
-        session.stopping = true;
         session.queue_paused = true;
+        let previous_revision = session.revision;
         session.revision += 1;
-
-        if !session.submitting {
-            if let Some(key) = session.key() {
-                self.request(Command::Cancel(key), Pending::Cancel(index));
+        match &mut session.submission {
+            Submission::Creating { attempt, .. } => {
+                attempt.intent = Intent::Stop;
             }
+            Submission::Admitting {
+                attempt, revision, ..
+            } => {
+                attempt.intent = Intent::Stop;
+                if *revision == previous_revision {
+                    *revision = session.revision;
+                }
+            }
+            Submission::Idle => {
+                if let Some(key) = session.key() {
+                    self.stop_provider(index, key);
+                }
+            }
+            Submission::Stopping { .. } => {}
+        }
+    }
+
+    fn stop_provider(&mut self, index: usize, key: SessionKey) {
+        let request = self.request(Command::Cancel(key), Pending::Cancel(index));
+        self.sessions[index].submission = Submission::Stopping { request };
+    }
+
+    pub(super) fn complete_creation(
+        &mut self,
+        index: usize,
+        id: u64,
+        result: Result<Summary, String>,
+    ) {
+        let session = &mut self.sessions[index];
+        if !matches!(session.submission, Submission::Creating { request, .. } if request == id) {
+            return;
+        }
+        let Submission::Creating { attempt, .. } = std::mem::take(&mut session.submission) else {
+            unreachable!();
+        };
+        let result = result.and_then(|summary| {
+            (session.scope == summary.key.scope)
+                .then_some(summary.key)
+                .ok_or_else(|| "Provider created a session in a different project".to_string())
+        });
+        match result {
+            Ok(key) => {
+                session.remote_id = Some(key.id.clone());
+                match attempt.intent {
+                    Intent::Continue => self.admit_prompt(index, key, attempt),
+                    Intent::Stop => {
+                        session.conversation.settle();
+                        session.conversation.remove_optimistic();
+                        session.recover_prompt(attempt);
+                    }
+                }
+            }
+            Err(error) => {
+                session.queue_paused = true;
+                session.conversation.settle();
+                session.conversation.remove_optimistic();
+                session.recover_prompt(attempt);
+                session.error = Some(error);
+            }
+        }
+    }
+
+    pub(super) fn complete_admission(&mut self, index: usize, id: u64, result: Result<(), String>) {
+        let session = &mut self.sessions[index];
+        if !matches!(session.submission, Submission::Admitting { request, .. } if request == id) {
+            return;
+        }
+        let Submission::Admitting {
+            key,
+            revision,
+            attempt,
+            ..
+        } = std::mem::take(&mut session.submission)
+        else {
+            unreachable!();
+        };
+        match result {
+            Ok(()) if matches!(attempt.intent, Intent::Stop) => self.stop_provider(index, key),
+            Ok(()) => {
+                if !session.working() {
+                    self.refresh(index);
+                }
+            }
+            Err(error) => {
+                session.queue_paused = true;
+                if session.revision == revision {
+                    session.conversation.working = false;
+                }
+                if session
+                    .conversation
+                    .entries
+                    .iter()
+                    .any(|entry| entry.optimistic)
+                {
+                    session.conversation.remove_optimistic();
+                    session.recover_prompt(attempt);
+                }
+                session.error = Some(error);
+            }
+        }
+    }
+
+    pub(super) fn complete_stop(&mut self, index: usize, id: u64, result: Result<(), String>) {
+        let session = &mut self.sessions[index];
+        if !matches!(session.submission, Submission::Stopping { request } if request == id) {
+            return;
+        }
+        session.submission = Submission::Idle;
+        match result {
+            Ok(()) => {
+                session.revision += 1;
+                session.conversation.settle();
+                self.refresh(index);
+            }
+            Err(error) => session.error = Some(error),
+        }
+    }
+
+    pub(super) fn complete_native_command(
+        &mut self,
+        index: usize,
+        id: u64,
+        result: Result<(), String>,
+    ) {
+        let session = &mut self.sessions[index];
+        if session
+            .native_command
+            .as_ref()
+            .is_none_or(|command| command.request != id)
+        {
+            return;
+        }
+        let command = session.native_command.take().unwrap();
+        if let Err(error) = result {
+            session.error = Some(error);
+            session.failed_prompt = Some(command.prompt);
         }
     }
 

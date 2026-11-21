@@ -77,7 +77,7 @@ impl Workspace {
             for session in self
                 .sessions
                 .iter()
-                .filter(|s| !s.forgotten && s.scope.project == path)
+                .filter(|s| !s.forgotten() && s.scope.project == path)
             {
                 if let Some(branch) = self.session_branch(session) {
                     branches.insert(branch.to_owned());
@@ -122,8 +122,8 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter(move |(_, session)| {
-                !session.forgotten
-                    && session.archived == archived
+                !session.forgotten()
+                    && session.archived() == archived
                     && self.feed_includes_project(&session.scope.project, project)
                     && (query.is_empty()
                         || format!(
@@ -144,7 +144,7 @@ impl Workspace {
     }
 
     pub fn session_branch<'a>(&'a self, session: &'a Session) -> Option<&'a str> {
-        if !session.archived {
+        if !session.archived() {
             if let Some(git) = self
                 .services
                 .checkouts

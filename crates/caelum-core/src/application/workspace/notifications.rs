@@ -31,10 +31,10 @@ impl Workspace {
         }
         if let Some(index) = self.sessions.iter().position(|session| {
             session.key().as_ref() == Some(&target)
-                && !session.archived
-                && !session.forgotten
-                && !session.archiving
-                && !session.deleting
+                && !session.archived()
+                && !session.forgotten()
+                && !session.archiving()
+                && !session.deleting()
                 && self.project_is_open(&session.scope.project)
         }) {
             self.select(index);

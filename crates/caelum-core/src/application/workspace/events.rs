@@ -191,7 +191,10 @@ impl Workspace {
         let mut shells_completed = Vec::new();
         let mut titles_completed = Vec::new();
         for (index, session) in self.sessions.iter_mut().enumerate() {
-            if session.scope.project != path || session.scope.provider != provider {
+            if session.forgotten()
+                || session.scope.project != path
+                || session.scope.provider != provider
+            {
                 continue;
             }
             if disconnected {
@@ -209,7 +212,7 @@ impl Workspace {
                     "Provider disconnected. Refresh this session to reconnect and recover history."
                         .into(),
                 );
-                if recover && !session.submitting && !session.loading() {
+                if recover && !session.submitting() && !session.loading() {
                     completed.push(index);
                 }
                 continue;
@@ -296,11 +299,10 @@ impl Workspace {
             }
             session.revision += 1;
             if matches!(method, "turn/started" | "session.execution.started") {
-                let agent = if session.inflight_prompt.is_some() {
-                    session.inflight_options.agent.clone()
-                } else {
-                    session.options.agent.clone()
-                };
+                let options = session
+                    .pending_prompt()
+                    .map_or(&session.options, |prompt| &prompt.options);
+                let agent = options.agent.clone();
                 session.conversation.provider_started_with_agent(
                     agent,
                     crate::application::conversation::provider_started_at(data),
