@@ -8,7 +8,7 @@ impl Workspace {
 
     pub fn set_effort(&mut self, index: usize, effort: Option<String>) {
         let session = &mut self.sessions[index];
-        // OpenCode treats None as keeping the current variant, and "" as a reset.
+
         session.options.effort =
             effort.or_else(|| (session.scope.provider == Provider::OpenCode).then(String::new));
         self.options_changed(index);
@@ -201,6 +201,7 @@ impl Workspace {
         let session = &mut self.sessions[index];
         if session.scope.provider != Provider::OpenCode
             || session.generating
+            || session.rewinding()
             || prompt.trim().is_empty()
         {
             return false;

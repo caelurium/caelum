@@ -17,6 +17,7 @@ use rune_kit::{Kit, MenuItem, glyphs};
 
 mod project;
 pub(crate) use project::project;
+pub(crate) use project::remote_checkout;
 
 type Choose = Box<dyn FnOnce(&mut Workspace, &str, &mut Tx)>;
 
@@ -39,6 +40,7 @@ struct Opened {
 #[derive(PartialEq, Eq)]
 struct Scope {
     session: Option<usize>,
+    remote: Option<(String, String)>,
     project: Option<String>,
     screen: panels::Screen,
     inspector: panels::Screen,
@@ -56,6 +58,14 @@ impl Scope {
     fn of(l: &Live) -> Self {
         Self {
             session: l.app.selected,
+            remote: l.app.remote.saved.selected.as_ref().and_then(|id| {
+                l.app
+                    .remote
+                    .saved
+                    .checkouts
+                    .get(id)
+                    .map(|c| (id.clone(), c.thread.editor_key(id).to_owned()))
+            }),
             project: l.app.active_project.clone(),
             screen: l.panels.screen,
             inspector: l.panels.inspector,
@@ -166,8 +176,6 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     if let Some((origin, scope, waited)) = l.context.paste.take()
         && scope == Scope::of(l)
     {
-        // Clipboard requests capture the presented input, so wait for the menu's
-        // closing commit to return focus before using Rune's guarded paste route.
         if l.focus_key.as_deref() == Some(&origin) {
             tx.request_paste();
         } else if !waited {
@@ -254,8 +262,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         }
         menu = menu.item(row);
     }
-    // The source is already mounted in a virtual row or pane. Return focus there,
-    // rather than to the synthetic trigger that Menu normally wraps.
+
     menu.build(k, layers);
     let surface = layers
         .pop()
@@ -278,7 +285,13 @@ fn selection(tx: &Tx, origin: &str) -> Option<String> {
         .map(|selection| selection.text().to_owned())
 }
 
-pub fn message(el: El, text: String, index: usize, origin: String) -> El {
+pub fn message(
+    el: El,
+    text: String,
+    index: usize,
+    origin: String,
+    user_entry: Option<String>,
+) -> El {
     el.focusable(true)
         .tab_index(-1)
         .on_secondary_press(move |s: &mut Workspace, at, tx| {
@@ -297,7 +310,28 @@ pub fn message(el: El, text: String, index: usize, origin: String) -> El {
                         .icon(&ui::EDIT)
                         .enabled(live(s).app.selected == Some(index)),
                 );
+            let entry = user_entry.clone();
+            let owner = live(s).app.sessions[index].key();
+            if entry.is_some() {
+                menu = menu
+                    .separator()
+                    .item(Item::new("edit", "Edit in new branch…"))
+                    .item(Item::new("rewind", "Rewind before this prompt…"));
+            }
             show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
+                "edit" | "rewind" if live(s).app.sessions[index].key() == owner => {
+                    use caelum_core::application::HistoryAction;
+                    crate::commands::history(
+                        s,
+                        index,
+                        if pick == "edit" {
+                            HistoryAction::Edit
+                        } else {
+                            HistoryAction::Rewind
+                        },
+                        entry,
+                    );
+                }
                 "selection" => tx.copy(selected.unwrap_or_default()),
                 "copy" => tx.copy(text.clone()),
                 "reuse" if live(s).app.selected == Some(index) => {
@@ -568,10 +602,14 @@ pub fn session(el: El, index: usize) -> El {
         let session = &live(s).app.sessions[index];
         let archived = session.archived;
         let title = session.title.clone();
+        let owner = session.key();
         let id = session.remote_id.clone();
         let mut menu = Menu::new()
             .item(Item::new("copy", "Copy session title").icon(&glyphs::COPY))
             .item(Item::new("id", "Copy session ID").enabled(id.is_some()))
+            .item(Item::new("rename", "Rename session…").enabled(id.is_some()))
+            .item(Item::new("export-md", "Export Markdown…").enabled(id.is_some()))
+            .item(Item::new("export-json", "Export JSON…").enabled(id.is_some()))
             .item(
                 Item::new("refresh", "Refresh session")
                     .icon(&ui::REFRESH)
@@ -598,8 +636,7 @@ pub fn session(el: El, index: usize) -> El {
                     .enabled(!crate::live::archive_disabled(live(s), index)),
             );
         }
-        // Restoring the row itself would follow the list's selected session.
-        // Its action button keeps keyboard focus on the right-clicked owner.
+
         show(
             s,
             at,
@@ -607,6 +644,22 @@ pub fn session(el: El, index: usize) -> El {
             menu,
             move |s, pick, tx| match pick {
                 "copy" => tx.copy(title.clone()),
+                "rename" if live(s).app.sessions[index].key() == owner => {
+                    crate::commands::rename(s, index);
+                }
+                "export-md" | "export-json" if live(s).app.sessions[index].key() == owner => {
+                    use caelum_core::application::ExportFormat;
+                    crate::commands::export(
+                        s,
+                        index,
+                        if pick == "export-md" {
+                            ExportFormat::Markdown
+                        } else {
+                            ExportFormat::Json
+                        },
+                        tx,
+                    );
+                }
                 "id" => tx.copy(id.unwrap_or_default()),
                 "refresh" => live_mut(s).app.refresh_session(index),
                 "archive" if !crate::live::archive_disabled(live(s), index) => {

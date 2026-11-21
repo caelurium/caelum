@@ -150,7 +150,6 @@ fn shell_events_win_over_old_lists_and_stop_stays_with_its_owner() {
     app.sessions[other].draft = "Independent draft".into();
     app.apply(Event::Completed(
         stop,
-        // Stopping succeeds even if the final output read failed.
         Ok(Reply::Task(TaskReply::Shell(String::new()))),
     ));
     assert!(app.sessions[index].shells.is_empty());

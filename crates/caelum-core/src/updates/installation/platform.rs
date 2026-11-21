@@ -97,7 +97,7 @@ fn mac(stage: &Stage, version: &str, cancelled: &dyn Fn() -> bool) -> Result<(),
     let result = (|| {
         let app = mount.join("Caelum.app");
         let plist = app.join("Contents/Info.plist");
-        // Compare individual plist values without trusting shell interpolation.
+
         for (key, expected) in [
             ("CFBundleIdentifier", "dev.caelum.desktop"),
             ("CFBundleExecutable", "caelum-desktop"),

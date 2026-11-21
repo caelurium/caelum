@@ -35,6 +35,7 @@ fn open_menu(
     selected: Option<String>,
 ) {
     let checkout = live(s).app.active_project.is_some();
+    let remote = live(s).panels.screen == panels::Screen::Remote;
     let mut menu = Menu::new();
     if selected.is_some() {
         menu = menu
@@ -49,9 +50,16 @@ fn open_menu(
                 .enabled(checkout),
         )
         .item(
-            Item::new("changes", "View local changes")
-                .icon(&ui::BRANCH)
-                .enabled(checkout),
+            Item::new(
+                "changes",
+                if remote {
+                    "View remote changes"
+                } else {
+                    "View local changes"
+                },
+            )
+            .icon(&ui::BRANCH)
+            .enabled(checkout || remote),
         )
         .separator()
         .item(
@@ -73,6 +81,7 @@ fn open_menu(
     show(s, at, origin, menu, move |s, pick, tx| match pick {
         "copy" => tx.copy(selected.unwrap_or_default()),
         "files" => panels::find_files(s, false),
+        "changes" if remote => crate::remote::open_changes(s),
         "changes" => panels::show(s, panels::Screen::Changes),
         "new" => s.new_session(),
         "open" => crate::live::open_project(s, tx),

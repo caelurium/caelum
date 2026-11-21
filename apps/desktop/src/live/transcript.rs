@@ -48,9 +48,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             )
             .grow(1.0);
     };
-    // Version the ordered visible identities, not the text or entry count. Rune
-    // can then retain its row keys through streaming/typing commits, while an
-    // equal-length replacement, reorder or visibility change still invalidates.
+
     let mut version = DefaultHasher::new();
     index.hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
@@ -140,9 +138,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                             })
                             .map(|e| e.id.clone());
                     }
-                    // Visibility and the current prompt are bookkeeping, not
-                    // view inputs. Patch changes redraw from the scheduled poll;
-                    // only newly queued images change the view here (busy state).
+
                     crate::media::request(s, index, &positions)
                 }),
         )
@@ -425,6 +421,7 @@ pub(super) fn timeline_row(
             caelum_core::application::presentation::entry_text(entry),
             index,
             format!("live-entry-{index}-{}", entry.id),
+            (entry.kind == EntryKind::User && !entry.optimistic).then(|| entry.id.clone()),
         ));
     }
     if let Some(notice) = session.conversation.failure.notice() {
@@ -460,6 +457,9 @@ pub(super) fn timeline_row(
     }
     if let Some(error) = &session.error {
         content = content.child(ui::notice("Session needs attention", error, k));
+    }
+    if let Some(status) = session.control_status() {
+        content = content.child(ui::caption(status, k).role("status").wrap());
     }
     if let Some(prompt) = &session.failed_prompt {
         let prompt = prompt.clone();

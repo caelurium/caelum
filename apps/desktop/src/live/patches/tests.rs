@@ -38,8 +38,6 @@ fn unchanged_patch_inputs_preserve_native_state_through_output_and_status_update
     assert_eq!(live.patches[&key].diff.selection(), selection);
     assert!(live.patches[&key].diff.collapsed(0));
 
-    // A history prepend invalidates the cached position, not the entry's identity
-    // or its native selection/disclosure state.
     let mut older = entry(&mut live, &key).clone();
     older.id = "older-patch".into();
     live.app.sessions[0].conversation.entries.insert(0, older);
@@ -47,7 +45,6 @@ fn unchanged_patch_inputs_preserve_native_state_through_output_and_status_update
     assert_eq!(live.patches[&key].diff.selection(), selection);
     assert!(live.patches[&key].diff.collapsed(0));
 
-    // Same-length replacements must invalidate; no length/pointer heuristics.
     let original = entry(&mut live, &key).input.clone();
     entry(&mut live, &key).input = original.replace("session.rs", "another.rs");
     assert_eq!(entry(&mut live, &key).input.len(), original.len());
@@ -82,7 +79,7 @@ fn collapse_navigation_and_history_replacement_keep_inputs_owned_by_their_sessio
     assert_eq!(live.patches[&second].diff.files()[0].path(), "other.rs");
     assert_eq!(live.patches[&key].diff.files()[0].path(), "new.rs");
     assert!(!live.patch_inputs.values.contains_key(&key));
-    // Entry identity can survive a provider history replacement with a new kind.
+
     entry(&mut live, &second).kind = EntryKind::Assistant;
     entry(&mut live, &second).name.clear();
     assert!(live.sync_patches());
@@ -112,7 +109,7 @@ fn input_cache_bounds_entries_and_bytes_and_reclaims_offscreen_content() {
         cache.remember(&(n, "tool".into()), n, e);
     }
     assert_eq!(cache.values.len(), MAX_ENTRIES);
-    // Replacing an existing entry with an oversized input cannot leave a stale hit.
+
     e.input = "x".repeat(MAX_BYTES);
     cache.remember(&(0, "tool".into()), 0, e);
     e.input = "{}".into();

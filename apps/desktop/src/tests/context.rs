@@ -330,7 +330,7 @@ fn context_worktrees_delete_the_clicked_checkout_and_surface_failures() {
         fill(&mut rt, "live-draft-0", "Keep the other project's draft");
         rt.update(|s, _| {
             let app = &mut s.live.as_mut().unwrap().app;
-            // A subproject's navigation path differs from the Git worktree root.
+
             app.projects
                 .iter_mut()
                 .find(|p| p.path == path)

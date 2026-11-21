@@ -58,7 +58,7 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
             assert!(rt.find("expand-composer").is_none());
             assert!(element(&rt, "composer-context-0").rect[3] <= 180.1);
             let grown = element(&rt, "composer-editor").rect[3];
-            // The long input's un-clipped centre is below its scroll viewport.
+
             click(&mut rt, "composer-editor");
             key(
                 &mut rt,
@@ -126,7 +126,7 @@ fn composer_resize_preserves_unicode_selection_scroll_and_undo() {
     );
     advance(&mut rt, 0.1);
     assert_eq!(rt.state.live.as_ref().unwrap().drafts[0].text, prompt);
-    // Window-aware resizing must not replace the editor's earlier history.
+
     key(
         &mut rt,
         Key::Command('z'),
@@ -228,8 +228,7 @@ fn attachment_preview_copies_the_captured_snapshot_and_removal_is_separate() {
             .iter()
             .any(|e| { e.text.as_deref().is_some_and(|t| t == "Partial") })
     );
-    // Even if the original draft's attachment is replaced while the reader is
-    // open, the captured preview and its Copy action must remain immutable.
+
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.attach(
             0,

@@ -2,6 +2,9 @@
 use super::{Session, Task, Workspace};
 use serde::{Deserialize, Serialize};
 
+mod rows;
+pub use rows::FeedSession;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionScope {
@@ -27,16 +30,26 @@ impl Workspace {
         }
     }
 
+    /// A VM has its own checkout, but its feed scope belongs to the source project group.
+    pub fn feed_project<'a>(&'a self, filter: Option<&'a str>) -> Option<&'a str> {
+        filter
+            .or_else(|| {
+                if self.preferences.session_scope != SessionScope::CurrentProject {
+                    return None;
+                }
+                self.active_project.as_deref().or_else(|| {
+                    let id = self.remote.saved.selected.as_ref()?;
+                    Some(self.remote.saved.checkouts.get(id)?.source.project.as_str())
+                })
+            })
+            .map(|p| self.group_path(p))
+    }
+
     /// Shared scope for the session feed and its pull requests, including linked checkouts.
     pub fn feed_includes_project(&self, path: &str, project: Option<&str>) -> bool {
-        let project = project.or_else(|| {
-            (self.preferences.session_scope == SessionScope::CurrentProject)
-                .then_some(self.active_project.as_deref())
-                .flatten()
-        });
         self.project_is_open(path)
-            && match project {
-                Some(project) => self.group_path(path) == self.group_path(project),
+            && match self.feed_project(project) {
+                Some(project) => self.group_path(path) == project,
                 None => self.preferences.session_scope == SessionScope::AllProjects,
             }
     }
@@ -91,10 +104,24 @@ impl Workspace {
     pub fn session_feed(&self, project: Option<&str>, query: &str, archived: bool) -> Vec<usize> {
         let query = query.trim().to_lowercase();
         let mut indices: Vec<_> = self
-            .sessions
+            .matching_local_sessions(project, &query, archived)
+            .map(|(index, _)| index)
+            .collect();
+        indices
+            .sort_by_key(|&index| (std::cmp::Reverse(self.sessions[index].last_activity), index));
+        indices
+    }
+
+    fn matching_local_sessions<'a>(
+        &'a self,
+        project: Option<&'a str>,
+        query: &'a str,
+        archived: bool,
+    ) -> impl Iterator<Item = (usize, &'a Session)> + 'a {
+        self.sessions
             .iter()
             .enumerate()
-            .filter(|(_, session)| {
+            .filter(move |(_, session)| {
                 !session.forgotten
                     && session.archived == archived
                     && self.feed_includes_project(&session.scope.project, project)
@@ -112,13 +139,8 @@ impl Workspace {
                             self.session_worktree(session).unwrap_or_default(),
                         )
                         .to_lowercase()
-                        .contains(&query))
+                        .contains(query))
             })
-            .map(|(index, _)| index)
-            .collect();
-        indices
-            .sort_by_key(|&index| (std::cmp::Reverse(self.sessions[index].last_activity), index));
-        indices
     }
 
     pub fn session_branch<'a>(&'a self, session: &'a Session) -> Option<&'a str> {
@@ -129,8 +151,6 @@ impl Workspace {
                 .get(&session.scope.project)
                 .and_then(|checkout| checkout.git.as_ref())
             {
-                // Active rows describe where the next prompt runs. A known
-                // detached HEAD must not fall back to a recorded branch.
                 return git.branch.as_deref();
             }
         }

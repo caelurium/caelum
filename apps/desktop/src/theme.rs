@@ -1,7 +1,6 @@
 use rune::{Color, TextStyle, color::hex};
 use rune_kit::{Kit, MarkdownStyle};
 
-// Caelum's default palette, mapped to Rune's semantic component tokens.
 pub fn kit(dark: bool) -> Kit {
     appearance(dark, "caelum", "violet")
 }
@@ -18,7 +17,7 @@ pub const ACCENTS: [&str; 7] = ["theme", "violet", "blue", "teal", "green", "amb
 pub fn appearance(dark: bool, family: &str, accent_name: &str) -> Kit {
     let mut k = Kit::neutral(dark);
     let color = |light, dark_value| hex(if dark { dark_value } else { light }).unwrap();
-    // Background, sidebar, panel, hover, border, text, muted, accent, solid, success, danger.
+
     let values = match (family, dark) {
         ("vercel", true) => [
             "#000000", "#000000", "#141414", "#1f1f1f", "#2e2e2e", "#ededed", "#a1a1a1", "#ededed",

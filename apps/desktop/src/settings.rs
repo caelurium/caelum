@@ -18,6 +18,7 @@ pub enum Page {
     #[default]
     Appearance,
     Providers,
+    Remote,
     Worktrees,
     Notifications,
     About,
@@ -46,6 +47,7 @@ pub fn height(s: &Workspace) -> f32 {
                 }
         }
         Page::Worktrees => 236.0,
+        Page::Remote => 400.0,
         Page::Notifications => 316.0,
         Page::About => {
             if matches!(
@@ -92,7 +94,7 @@ pub(crate) fn setting_row(title: &str, detail: &str, control: El, k: &Kit) -> El
 pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let page = live(s).panels.settings_page;
     let mut nav = col()
-        .w(128.0)
+        .w(146.0)
         .h_full()
         .gap(4.0)
         .pr(8.0)
@@ -103,6 +105,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     for (name, target, glyph) in [
         ("Appearance", Page::Appearance, &crate::APPEARANCE),
         ("Providers", Page::Providers, &ui::AGENT),
+        ("Remote machines", Page::Remote, &ui::SERVER),
         ("Worktrees", Page::Worktrees, &ui::BRANCH),
         ("Notifications", Page::Notifications, &ui::BELL),
         ("About", Page::About, &crate::ORBIT),
@@ -141,6 +144,10 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 let p = &mut live_mut(s).panels;
                 p.settings_page = target;
                 p.settings_menu = None;
+                if target == Page::Remote {
+                    live_mut(s).app.list_machines();
+                    live_mut(s).schedule();
+                }
                 tx.scroll_to_y("settings-scroll", 0.0);
             })
             .w_full()
@@ -150,6 +157,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let body = match page {
         Page::Appearance => panels::appearance_settings(s, k),
         Page::Providers => providers(s, k, layers),
+        Page::Remote => crate::remote::settings(s, k),
         Page::Worktrees => worktrees(s, k),
         Page::Notifications => notifications(s, k),
         Page::About => about(s, k),

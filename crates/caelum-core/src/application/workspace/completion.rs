@@ -10,6 +10,14 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::Remote(lane) = pending {
+            self.complete_remote(request, lane, result);
+            return;
+        }
+        if let Pending::ConversationControl(i, owner, operation) = pending {
+            self.finish_control(i, owner, operation, result);
+            return;
+        }
         if let Pending::Fork(pending) = pending {
             self.complete_fork(request, pending, result);
             return;
@@ -23,8 +31,6 @@ impl Workspace {
             return;
         }
         if let Pending::RegenerateTitle(index, key) = pending {
-            // The provider publishes the new title through session.renamed.
-            // A failed request must not disturb chat, drafts or queued work.
             if self.sessions[index].key().as_ref() == Some(&key) {
                 self.refresh_title(index);
             }
@@ -158,7 +164,9 @@ impl Workspace {
                         self.durable_outgoing = commands;
                         self.persistence_error = Some(error);
                     }
-                    Pending::Home(_)
+                    Pending::Remote(_)
+                    | Pending::Home(_)
+                    | Pending::ConversationControl(..)
                     | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)
@@ -320,6 +328,7 @@ impl Workspace {
                     let snapshot = *snapshot;
                     self.saved = Some(snapshot.clone());
                     self.home.restore(snapshot.home);
+                    self.remote.saved = snapshot.remote;
                     self.managed_worktrees = snapshot.managed_worktrees;
                     self.preferences = snapshot.preferences;
                     for (project, saved) in &self.preferences.files {
@@ -351,11 +360,13 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
+                                session.vm_link = saved.vm_link;
                                 session.loaded = saved.remote_id.is_none();
                                 session.remote_id = saved.remote_id;
                                 session.title = saved.title;
                                 session.last_activity = saved.last_activity;
                                 session.title_state.turns = saved.title_refresh_turns;
+                                session.title_state.manual = saved.manual_title;
                                 session.options = saved.options;
                                 session.options_dirty = true;
                                 session.draft = saved.draft;
@@ -423,8 +434,7 @@ impl Workspace {
                         {
                             let navigation = self.navigation;
                             self.select(index);
-                            // Restoring storage is not user navigation; an explicit launch
-                            // still owns its pending project-open request.
+
                             self.navigation = navigation;
                             self.refresh_project();
                         }
@@ -469,7 +479,7 @@ impl Workspace {
             (Pending::Archive(index, archived, select, revision), Reply::Done) => {
                 self.sessions[index].archiving = false;
                 self.sessions[index].archived = archived;
-                // Lists issued while the mutation was in flight can also be stale.
+
                 self.sessions[index].archive_barrier = self.next_request;
                 if archived {
                     let owns_notice = self.archived_notice(index, revision);
@@ -503,7 +513,7 @@ impl Workspace {
                 if !self.projects.iter().any(|p| p.path == project.path) {
                     self.projects.push(project.clone());
                 }
-                // Restored, closed groups defer detail reads until reopened.
+
                 let details: Vec<_> = self
                     .sessions
                     .iter()
@@ -536,9 +546,6 @@ impl Workspace {
                 }
             }
             (Pending::List(scope), Reply::Sessions(summaries)) => {
-                // Discovery can see a newly created remote session before the
-                // creation reply supplies its ID. Adopt it into its stable local
-                // slot first, then reconcile discovery without duplicate rows.
                 if self.creating(&scope) {
                     self.deferred_lists.insert(scope, (request, summaries));
                 } else {

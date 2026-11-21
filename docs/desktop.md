@@ -36,24 +36,31 @@ Search text filters sessions only. Active session rows and branch searches follo
 the current Git branch of each session's checkout, including external switches.
 Archived rows use their recorded session branch.
 
+**Sessions** also lists chats on [Boat VMs](remote-machines.md). The server icon
+and machine name identify the checkout. A new VM chat appears as soon as you
+create it, even before its first message. Select any of the VM’s chats to
+return to its transcript and draft.
+
 **Needs input** appears on a session row when its agent has a question or approval
 waiting. In the open conversation, the same label appears beside the session title.
 When there is no pending input, **PR #… · Changes requested** links directly to
 review feedback on a branch that session worked on. Use **Back to session** to
 return to the conversation and its draft.
 
-**⇧⌘N** opens the project/provider launcher; **⌘N** reuses that project's
-draft for the default provider chosen in Settings. Each session retains an
+**⇧⌘N** opens the launcher for local projects, worktrees and ready [Boat VMs](remote-machines.md).
+Choose the provider and destination for the new session. **⌘N** reuses a local
+project’s draft for the default provider chosen in Settings; on an idle VM it
+starts a fresh chat on that checkout with the current provider. Each session retains an
 independent draft and reading position. Hover a
-session to close it with **×**. A temporary notice names the archived session and
+local session to close it with **×**. A temporary notice names the archived session and
 offers **Undo**; it expires after eight unengaged seconds and pauses while hovered,
 keyboard-focused or restoring. Undo preserves newer navigation. Session actions and
-custom context menus also offer archive/reconnect. Hover any session row for its
+custom context menus also offer archive/reconnect. Hover a local session row for its
 **…** popover; actions belong to that row, including background sessions. Escape
 returns focus to its button. Use the archive icon beside
 **Sessions** to switch between active and archived sessions. The **+** beside
-**Sessions**, just before the archive icon, starts a session with the default
-provider chosen in Settings → Providers. **Refresh sessions** reloads active
+**Sessions**, just before the archive icon, does the same as **⌘N**.
+**Refresh sessions** reloads active
 session history and model, effort and agent catalogues across all open
 projects and their worktrees, including catalogues for drafts and busy sessions.
 
@@ -196,6 +203,34 @@ the same checkout. Press Enter for the newest turn, or use ↑/↓, search, and
 turn's reply, starts with its own empty draft, and does not change project files.
 The original keeps its draft and attachments. Resolve queued prompts and pending
 input requests before forking. Codex requires CLI 0.143.0 or newer.
+
+Other conversation controls are available from the same `/` menu:
+
+- **`/rename <title>`** saves the title with the provider. Bare `/rename` opens
+  a title editor. Caelum pins the explicit title across refreshes and restarts;
+  another `/rename` replaces it.
+- **`/edit`** branches *before* the chosen prompt. The new session opens with
+  that prompt and its available attachment snapshots in an editable draft.
+  Edit it and press Send when ready. Neither the original prompt nor its later
+  replies are changed. If a provider attachment cannot be replayed faithfully,
+  the operation reports why instead of dropping it or rereading a changed file.
+- **`/rewind`** previews which prompt and subsequent history will be removed
+  from the **current session**. Escape cancels; selecting the prompt alone
+  changes nothing. **Rewind conversation only** leaves the checkout untouched.
+  OpenCode can also show snapshot paths and offer **Rewind and restore files**,
+  which changes the shared checkout. Codex does not restore files. Resolve
+  running work, pending input and queued prompts first.
+- **`/export md`** (or `/export`) saves a readable transcript: visible messages,
+  reported tool input/output and attachment references. **`/export json`** saves
+  the structured provider records, including stored attachment data. Both
+  read *all* pages of provider history, not just the visible page. A failed,
+  changing or over-limit (128 MiB) export leaves the chosen file untouched.
+  Unsent drafts, queued local input and checkout files are not exported.
+
+Session-row menus also offer rename and export; the context menu on a saved
+user prompt offers edit and rewind at that prompt. Completion and errors belong
+to the original session even if you switch conversations. See the
+[Codex](codex.md) and [OpenCode](opencode.md) provider notes for version limits.
 
 Side questions have a separate editor, context, retry and answer-copy actions;
 they preserve the main draft and do not add a conversation turn. Timeline groups

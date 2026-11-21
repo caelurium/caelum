@@ -14,6 +14,7 @@ use thiserror::Error;
 
 use crate::projects::{Project, ProjectError};
 
+mod handoff;
 mod paths;
 use paths::{
     git_path_string, project_relative_prefix, validate_project_relative_path, validate_scoped_file,
@@ -100,6 +101,23 @@ impl GitClient {
             root,
             branch: (!branch.is_empty()).then_some(branch),
         }))
+    }
+
+    pub(crate) fn published_source(&self, path: &str) -> Result<(String, String), String> {
+        let project = Project::open(path).map_err(|e| e.to_string())?;
+        let read = |args: &[&str]| {
+            self.run(&project, args)
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| output_text(&o.stdout).trim().to_owned())
+        };
+        let repo = read(&["remote", "get-url", "origin"])
+            .and_then(|url| crate::remote::github_slug(&url))
+            .ok_or("A GitHub origin is required to open this project on Boat")?;
+        let base = read(&["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+            .and_then(|r| r.strip_prefix("origin/").map(str::to_owned))
+            .unwrap_or_else(|| "main".into());
+        Ok((repo, base))
     }
 
     pub fn file_diff(
@@ -424,9 +442,7 @@ fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError> {
             .map(|position| offset + position)
             .ok_or(GitError::MalformedStatus)?;
         let record = &output[offset..end];
-        // Porcelain v2 includes the index object ID, so staging another version
-        // of an already-staged file is observable even when its XY code is unchanged.
-        // Renames are disabled above; paths may contain spaces and newlines.
+
         let (xy, path) = match record.first() {
             Some(b'?') if record.starts_with(b"? ") => (&b"??"[..], &record[2..]),
             Some(b'1' | b'u') => {

@@ -178,8 +178,6 @@ class AutomaticReleaseTests(unittest.TestCase):
             self.assertEqual(bot_push_outputs["release_tag"], "")
             self.assertEqual(bot_push_outputs["should_release"], "false")
 
-            # Manual recovery resolves the original tag, not the checkout's HEAD,
-            # and never makes another version commit.
             recovery_output = root / "recovery-output"
             environment.update({
                 "GITHUB_EVENT_NAME": "workflow_dispatch",
@@ -198,7 +196,6 @@ class AutomaticReleaseTests(unittest.TestCase):
                 rejected = subprocess.run([sys.executable, str(script)], cwd=repository, env=environment, capture_output=True, text=True)
                 self.assertNotEqual(rejected.returncode, 0, tag)
 
-            # An older queued merge must not silently release a newer tree.
             self.git(repository, "checkout", "--detach", release_commit)
             (repository / "README.md").write_text("first overlapping merge\n")
             self.git(repository, "commit", "-am", "feat: first overlapping merge")

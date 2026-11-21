@@ -210,7 +210,6 @@ impl Task {
         }
     }
     pub(super) fn slot(&self) -> String {
-        // JSON tuple encoding keeps delimiters inside paths unambiguous.
         let part = match self {
             Self::Shell {
                 session, id, stop, ..
@@ -585,8 +584,7 @@ impl Services {
             .discovered
             .get(&(project.into(), branch.into()))?
             .as_ref()?;
-        // Discovery owns the branch association. A newer successful live review can
-        // update its decision (or close it); a disk cache or late reply cannot.
+
         let discovered = self
             .checkouts
             .get(project)?

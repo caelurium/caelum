@@ -31,7 +31,7 @@ fn supplied_grid_keeps_its_spacing_colours_and_bounded_atlas() {
             }
         }
     }
-    // The palette is spatial, not a global monochrome tint.
+
     assert!(
         cells
             .chunks_exact(4)
@@ -118,7 +118,7 @@ fn gpu_home_animates_without_commits_and_stops_for_motion_theme_and_navigation()
     let before = draw.frame(&mut rt);
     assert!(draw.compositor.animating());
     let commits = rt.stats.commits;
-    // Advance the actual render clock; a long jump is intentionally capped.
+
     let mut travelled = 0;
     for frame in 0..30 {
         advance(&mut rt, 0.1);
@@ -202,8 +202,7 @@ fn gpu_art_keeps_its_shape_with_shimmer_stars_and_a_smooth_loop() {
     rt.set_system_reduced_motion(false);
     advance(&mut rt, 0.1);
     let spinning = draw.phase(&mut rt, 3.25);
-    // Empty scanlines must stay empty: orbiting characters should not bend
-    // the artwork's rows into waves. Fixed stars leave the same gaps too.
+
     let (blank_rows, displaced) = still
         .chunks_exact(PIXEL_SIZE.0 as usize * 4)
         .zip(spinning.chunks_exact(PIXEL_SIZE.0 as usize * 4))
@@ -221,8 +220,6 @@ fn gpu_art_keeps_its_shape_with_shimmer_stars_and_a_smooth_loop() {
     );
     assert_eq!(displaced, 0, "the disc must keep its original row geometry");
 
-    // This top strip has only faint ink in the source artwork. The new bright
-    // points must be sparse stars that stay put as the disc flows beneath them.
     let sky = PIXEL_SIZE.0 as usize * 100 * 4;
     let stars = still[..sky]
         .chunks_exact(4)
@@ -235,8 +232,6 @@ fn gpu_art_keeps_its_shape_with_shimmer_stars_and_a_smooth_loop() {
         "stars must not drift with the disc"
     );
 
-    // Eight seconds returns every row to the same glyph footprint. Individual
-    // characters should now brighten and dim independently of their motion.
     let before = draw.phase(&mut rt, 1.0);
     let after = draw.phase(&mut rt, 9.0);
     let (brighter, dimmer) = before

@@ -34,6 +34,17 @@ A native Rust desktop and CLI for Codex and OpenCode sessions. See
 - Keep visibility narrow. Prefer private or `pub(super)` implementation details
   over broadening the public API to accommodate a move.
 
+## Comments and documentation
+
+- Do not add comments that restate nearby code or narrate what it does. Prefer
+  clear names, types and tests to explain behavior.
+- Keep ordinary source comments exceptional: add one only for a non-obvious
+  invariant, constraint or rationale that cannot be made clear in code. Keep it
+  concise and remove it when it is no longer true.
+- Use Rust `///` and `//!` comments for useful public API and module contracts;
+  document behavior and guarantees, not implementation details.
+- Preserve comments required by tools, licenses or generated-file conventions.
+
 ## State and asynchronous work
 
 - Model mutually exclusive lifecycle phases as enums carrying the data valid in

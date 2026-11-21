@@ -59,7 +59,7 @@ fn title_regeneration_uses_native_patch_checks_ownership_and_streams_the_new_nam
     assert_eq!(session.title.as_deref(), Some("Regenerated session"));
     assert_eq!(session.model.as_deref(), Some("local/original"));
     assert_eq!(session.agent.as_deref(), Some("build"));
-    // Title generation uses neither the prompt nor transient-generation route.
+
     assert!(!project.join("requests.jsonl").exists());
 
     fs::write(project.join("title-error"), "").unwrap();

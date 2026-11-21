@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn composer_typing_during_streaming_preserves_transcript_reading_position() {
     use caelum_core::application::{Event, Provider};
-    // Parallel runtimes must not change view-side measurements and rewrap
-    // transcript rows while this test checks the reading anchor.
+
     let families = spec().families;
     let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = live_runtime_size((800.0, 620.0));
@@ -19,17 +18,14 @@ fn composer_typing_during_streaming_preserves_transcript_reading_position() {
         session.conversation.working = true;
     });
     fill(&mut rt, "live-draft-0", "My next prompt");
-    // Land the initial history before scrolling away from the bottom.
-    // Streaming and typing below still use normal animated frames.
+
     rt.settle_all();
     rt.frame(1.0 / 60.0);
     let (x, y) = rt.find("live-transcript-0").unwrap();
     rt.wheel(x, y, 240.0);
     advance(&mut rt, 0.2);
     assert_eq!(rt.scroll_at_bottom("live-transcript-0"), Some(false));
-    // Virtual rows above the viewport can replace estimated heights as the
-    // composer resizes. The scroll offset may change to keep this visible row
-    // fixed; verify the reader's actual position instead of the estimated offset.
+
     let anchor = rt
         .elements()
         .into_iter()

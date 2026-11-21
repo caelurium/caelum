@@ -37,6 +37,7 @@ pub struct Live {
     pub completion: crate::completion::Menu,
     pub composer: crate::composer::State,
     pub home: crate::home::State,
+    pub remote: crate::remote::State,
     pub commands: crate::commands::State,
     pub models: crate::models::Picker,
     pub notifications: crate::notifications::State,
@@ -104,6 +105,7 @@ impl Live {
             completion: Default::default(),
             composer: Default::default(),
             home: Default::default(),
+            remote: Default::default(),
             commands: Default::default(),
             models: Default::default(),
             notifications: Default::default(),
@@ -165,10 +167,7 @@ impl Live {
 
     pub fn new_session(&mut self) {
         self.schedule();
-        self.feed.project = None;
-        self.feed.close();
-        self.panels.sessions.clear();
-        self.panels.archived = false;
+        self.reveal_new_session();
         let Some(project) = self.app.active_project.clone() else {
             self.panels.overlay = Some(crate::panels::Screen::Launcher);
             return;
@@ -182,6 +181,10 @@ impl Live {
     }
 
     pub fn focus(&mut self) {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            crate::remote::focus(self);
+            return;
+        }
         if self.panels.screen == crate::panels::Screen::Home {
             self.home.editor.focused = true;
             return;
@@ -197,8 +200,7 @@ impl Live {
     pub(crate) fn archive(&mut self, index: usize, archived: bool) {
         let selected = self.app.selected;
         self.app.archive(index, archived);
-        // Local archive can create and select its replacement synchronously. Rune
-        // rebuilds after the press, before poll gets a chance to create its editor.
+
         self.sync_editors();
         self.menu = None;
         self.panels.overlay = None;
@@ -277,10 +279,22 @@ impl Live {
             &event,
             Event::Completed(_, Ok(caelum_core::application::Reply::Snapshot(_)))
         );
-        // A provider-created fork is still discoverable after the picker is replaced,
-        // but its completion must not navigate away from the user's current view.
+
         if self.panels.overlay != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
+        }
+        if self.panels.overlay != Some(crate::panels::Screen::VmHandoff) {
+            self.app.dismiss_vm_handoff();
+        }
+        if !matches!(
+            self.panels.overlay,
+            Some(
+                crate::panels::Screen::CreateVm
+                    | crate::panels::Screen::RemotePicker
+                    | crate::panels::Screen::VmHandoff
+            )
+        ) {
+            self.app.remote.picker = None;
         }
         self.app.apply(event);
         self.sync_editors();
@@ -337,6 +351,16 @@ impl Live {
     }
 
     pub fn working(&self) -> bool {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            return self
+                .app
+                .remote
+                .saved
+                .selected
+                .as_ref()
+                .and_then(|id| self.app.remote.saved.checkouts.get(id))
+                .is_some_and(|c| c.thread.turn.run().is_some());
+        }
         self.panels.screen == crate::panels::Screen::Conversation
             && self
                 .app
@@ -346,6 +370,12 @@ impl Live {
 
     pub fn stop(&mut self) {
         self.schedule();
+        if self.panels.screen == crate::panels::Screen::Remote {
+            if let Some(id) = self.app.remote.saved.selected.clone() {
+                self.app.interrupt_remote(&id);
+            }
+            return;
+        }
         if let Some(index) = self.app.selected {
             self.app.cancel(index);
         }
@@ -469,6 +499,7 @@ impl Live {
         }
         let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
         changed |= self.apply_events(events);
+        changed |= crate::remote::sync(self, tx);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
         if self.last_selected != self.app.selected
@@ -476,7 +507,6 @@ impl Live {
         {
             let scope = self.app.sessions[index].scope.clone();
             if !self.app.choices.contains_key(&scope) {
-                // Retry missing catalogues on navigation, not on every idle poll.
                 self.app.refresh_choices_for(scope);
             }
         }
@@ -588,8 +618,6 @@ impl Live {
                 && !session.working()
                 && self.app.selected == Some(index)
             {
-                // Restored history is already complete; opening it must not
-                // reveal thousands of pixels at the live-stream growth speed.
                 tx.instant();
             }
             self.history_lengths[index] = length;
@@ -641,7 +669,7 @@ impl Live {
         changed
     }
 
-    fn schedule(&self) {
+    pub(crate) fn schedule(&self) {
         if let Some(wake) = &self.wake {
             wake();
         }
@@ -680,8 +708,7 @@ pub(crate) fn live(s: &Workspace) -> &Live {
 }
 pub(crate) fn live_mut(s: &mut Workspace) -> &mut Live {
     let live = s.live.as_mut().expect("live workspace");
-    // Rune polls before input handlers. Mutations must schedule the following
-    // poll so commands and derived views also advance in an otherwise idle app.
+
     live.schedule();
     live
 }
@@ -715,8 +742,7 @@ pub fn open_project(_: &mut Workspace, tx: &mut Tx) {
 /// navigation (including Tab, pointer and accessibility moves), never from a timer.
 pub fn presented_focus(rt: &rune::Runtime<Workspace>) -> Option<Option<String>> {
     let l = rt.state.live.as_ref()?;
-    // Rune commits pointer, keyboard and accessibility focus changes. Paint-only
-    // frames keep the same focus. Also observe blur when an exit is pruned.
+
     let observation = (rt.stats.commits, rt.has_focus());
     if l.focus_observation.replace(Some(observation)) == Some(observation) {
         return None;

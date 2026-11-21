@@ -61,7 +61,6 @@ impl Services {
                 },
                 TaskReply::Shell(output),
             ) => {
-                // Long-running workspaces can observe many short-lived shells.
                 if checkout.shell_output.len() >= 64
                     && !checkout
                         .shell_output
@@ -219,7 +218,7 @@ impl Services {
                     .reviews
                     .entry((project.clone(), url.clone()))
                     .or_default();
-                // Disk replies never replace live data, including a newer head.
+
                 if review.details.is_none() && cached.details.pull_request.url == *url {
                     if let Some(files) = cached
                         .files
@@ -365,8 +364,6 @@ impl Services {
                 }
             }
             (Task::SetAutoMerge { project, url, .. }, TaskReply::AutoMerge(result)) => {
-                // Refreshes started before or during the mutation cannot restore
-                // the previous setting after GitHub has confirmed the change.
                 self.invalidate_details(project, url);
                 if result.state == "MERGED" {
                     merged_url = Some(url.clone());

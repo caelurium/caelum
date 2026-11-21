@@ -184,8 +184,7 @@ fn home_layout_fits_compact_and_large_windows_and_settles_when_idle() {
             let mut rt = Runtime::new(state, app.view, size, Env::new(true, 1.0));
             rt.poll = app.poll;
             advance(&mut rt, 0.4);
-            // Image::wait finishes before the cache's redraw callback. The
-            // virtual frame clock cannot settle those worker notifications.
+
             for _ in 0..2 {
                 receive
                     .recv_timeout(std::time::Duration::from_secs(5))

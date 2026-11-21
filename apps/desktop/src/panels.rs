@@ -49,10 +49,18 @@ pub enum Screen {
     CreateWorktree,
     Shells,
     Review,
+    Remote,
+    CreateVm,
+    RemotePicker,
+    RemoveVm,
+    VmHandoff,
+    VmStats,
+    VmThreads,
     Settings,
     Session,
     Sessions,
     Fork,
+    Rename,
     Timeline,
     Usage,
     Stats,
@@ -188,8 +196,6 @@ impl Panels {
     }
     pub fn reveal_line(&mut self, tx: &mut Tx) {
         if let Some((key, offset)) = self.pending_scroll.take() {
-            // Restoration must be held through the first virtual-row measurements
-            // after a surface remount, rather than gliding from an empty viewport.
             tx.scroll_to_instant(key, offset[0], offset[1]);
         }
         if let Some((project, path, line)) = &self.pending_line
@@ -421,6 +427,11 @@ fn scroll(content: El) -> El {
 }
 
 pub fn show(s: &mut Workspace, screen: Screen) {
+    if live(s).panels.screen == Screen::Remote && matches!(screen, Screen::Changes | Screen::Files)
+    {
+        crate::remote::open_changes(s);
+        return;
+    }
     if screen == Screen::Worktrees
         && let Some(project) = live(s).app.active_project.clone()
     {
@@ -442,6 +453,7 @@ pub fn show(s: &mut Workspace, screen: Screen) {
         | Screen::Session
         | Screen::Sessions
         | Screen::Fork
+        | Screen::Rename
         | Screen::Timeline
         | Screen::Usage
         | Screen::Stats => live.panels.overlay = Some(screen),
@@ -524,10 +536,13 @@ pub fn open_link(s: &mut Workspace, index: usize, url: &str, tx: &mut Tx) {
 }
 
 pub fn navigation(_: &Workspace, k: &Kit) -> El {
-    quiet_button(&ui::BRANCH, "New session in a project or worktree · ⇧⌘N")
-        .on_press(open_launcher)
-        .build(k)
-        .key("nav-worktrees")
+    quiet_button(
+        &ui::BRANCH,
+        "New session in a project, worktree or VM · ⇧⌘N",
+    )
+    .on_press(open_launcher)
+    .build(k)
+    .key("nav-worktrees")
 }
 
 pub(crate) fn find_files(s: &mut Workspace, content: bool) {
@@ -552,11 +567,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return crate::commands::sessions_key(s, ev, tx);
         }
         if ev.key == Key::Escape {
-            if live(s).panels.overlay == Some(Screen::Fork) {
-                live_mut(s).app.dismiss_fork();
-            }
-            live_mut(s).panels.overlay = None;
-            live_mut(s).focus();
+            overlays::close(s);
         }
         return ['n', 'p', 'o', 'l', 'k', ',', 'i']
             .iter()
@@ -616,6 +627,9 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
 }
 
 pub fn inspector(s: &Workspace, k: &Kit) -> El {
+    if live(s).panels.screen == Screen::Remote {
+        return crate::remote::inspector(s, k);
+    }
     let mut tabs = row().w_full().h(44.0).px(8.0).center_y().gap(4.0);
     for (name, screen) in [("Files", Screen::Files), ("Changes", Screen::Changes)] {
         let selected = live(s).panels.inspector == screen;

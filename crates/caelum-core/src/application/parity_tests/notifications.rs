@@ -26,7 +26,7 @@ fn notifications(app: &mut Workspace) -> Vec<Notification> {
 fn notification_effects_keep_the_exact_requesting_session() {
     let mut app = open_workspace();
     app.window_background = true;
-    // Identical remote IDs in different providers must remain distinct.
+
     app.sessions[1].remote_id = Some("session-0".into());
     let target = app.sessions[1].key().unwrap();
     let question = caelum_protocol::QuestionPrompt {

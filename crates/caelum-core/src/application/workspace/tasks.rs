@@ -241,8 +241,7 @@ impl Workspace {
         if let Ok(TaskReply::Worktree(worktree)) = &result {
             if let Task::CreateWorktree { project, .. } = &task {
                 self.managed_worktrees.insert(worktree.path.clone());
-                // Record ownership before opening: closing the group must also
-                // reject an in-flight Open for this newly created checkout.
+
                 let root = self.group_path(project).to_owned();
                 self.project_roots
                     .insert(worktree.project.path.clone(), root);
@@ -288,9 +287,6 @@ impl Workspace {
         if let Ok(TaskReply::Worktrees(Some(listing))) = &result {
             let root = self.group_path(task.project()).to_owned();
             if !self.closed_since(&root, request) && self.project_is_open(&root) {
-                // Older versions already created worktrees in this repository's
-                // dedicated Caelum storage folder. Remember them across directory
-                // preference changes, alongside explicitly recorded creations.
                 for worktree in &listing.worktrees {
                     if !worktree.main
                         && std::path::Path::new(&worktree.path).parent()

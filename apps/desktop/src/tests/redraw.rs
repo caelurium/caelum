@@ -110,7 +110,7 @@ fn background_unread_retry_and_title_changes_invalidate_the_view() {
     for provider in Provider::ALL {
         let mut state = state(provider);
         let l = state.live.as_mut().unwrap();
-        // Busy can already be set by turn-start while the first output is unread.
+
         l.app.sessions[1].conversation.working = true;
         assert!(l.apply_events([delta(provider, "background", "first")]));
         assert!(l.app.sessions[1].unread);
@@ -137,7 +137,7 @@ fn redraw_suppression_keeps_project_provider_and_unique_session_ownership() {
         let mut state = state(provider);
         let l = state.live.as_mut().unwrap();
         l.apply_events([delta(provider, "background", "first")]);
-        // Reused remote ids in another provider or checkout are distinct owners.
+
         l.app.sessions[0].remote_id = Some("background".into());
         l.app.sessions[0].scope.provider = match provider {
             Provider::Codex => Provider::OpenCode,

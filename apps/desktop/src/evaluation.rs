@@ -116,7 +116,6 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                 {"id":"run","type":"tool","name":if search {"grep"} else {"bash"},"state":{"status":if failed {"error"} else if running {"running"} else {"completed"},"input":if search {json!({"pattern":"restore_draft"})} else {json!({"command":"cargo test --workspace","timeout":120000,"description":"Run the workspace tests"})},"metadata":{"durationMs":2500,"exit":if failed {Some(101)} else {None}},"error":if failed {Some("A workspace test failed. Open the output for details.")} else {None},"content":[{"type":"text","text":output}]}}
             ]})], false);
             if failed {
-                // Include captured stdout alongside the provider's final error.
                 conversation
                     .entries
                     .iter_mut()
@@ -768,8 +767,6 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
     false
 }
 
-// Populated scenes seed their read results above. Release the corresponding
-// loading slots too, so refresh/retry controls reflect a settled response.
 fn finish_fixture_reads(live: &mut crate::live::Live) {
     use caelum_core::application::{Command, Reply, TaskReply};
     for (id, command) in live.app.commands() {

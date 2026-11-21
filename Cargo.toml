@@ -8,14 +8,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.105"
+version = "0.1.112"
 edition = "2021"
 rust-version = "1.95"
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json"] }
-rusqlite = { version = "0.42", features = ["bundled", "backup", "fallible_uint"] }
+rusqlite = { version = "0.43", features = ["bundled", "backup", "fallible_uint"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

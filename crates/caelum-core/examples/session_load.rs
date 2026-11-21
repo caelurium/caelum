@@ -100,7 +100,7 @@ fn restore(snapshot: Snapshot, index: usize) -> Result<Value, String> {
         let _ = wake.send(());
     });
     let mut workspace = Workspace::default();
-    // Complete persistence in memory; never migrate or write the supplied snapshot.
+
     workspace.enable_store("unused-session-profile.json".into());
     let load = workspace.commands().pop().unwrap().0;
     let start = Instant::now();
@@ -147,7 +147,6 @@ fn restore(snapshot: Snapshot, index: usize) -> Result<Value, String> {
             );
         }
         if let Some(error) = &workspace.sessions[index].error {
-            // Keep provider messages (which can contain private paths) out of reports.
             return Err(format!("restore failed ({}-byte error)", error.len()));
         }
         if start.elapsed() > Duration::from_secs(90) {

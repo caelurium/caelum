@@ -36,7 +36,7 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
         let registration = directory.0.join("service.json");
         let mut record =
             json!({ "url": url, "pid": external.0.id(), "version": "2.2.1", "password": password });
-        // Stale registrations must not attach to a different process/version.
+
         record["pid"] = json!(external.0.id() + 1);
         fs::write(&registration, record.to_string()).unwrap();
         assert!(discover_service(&registration).is_none());
@@ -74,7 +74,7 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
         assert!(server.process_id.is_none());
         let checkout = directory.0.canonicalize().unwrap();
         assert!(provider.ensure_checkout_idle(&checkout).is_err());
-        // Trigger the service independently of Caelum's prompt endpoint.
+
         server
             .request_json(Method::POST, "/external", &[], None)
             .unwrap();
@@ -82,8 +82,7 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
         assert_eq!(event.event_type, "session.reasoning.delta");
         assert_eq!(event.data["delta"], "External thinking");
         assert!(events.try_recv().is_err());
-        // Repeated history polls and resume must agree with the runtime,
-        // even though persisted session metadata has only an old idle time.
+
         for _ in 0..3 {
             assert!(
                 provider
@@ -100,7 +99,7 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
                 Some(true)
             );
         }
-        // An unavailable or malformed activity response must not report idle.
+
         fs::write(directory.0.join("activity-error"), "").unwrap();
         assert!(matches!(
             provider.session_history(&directory.0, "ses_shared", None),

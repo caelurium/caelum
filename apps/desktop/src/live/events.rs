@@ -104,8 +104,7 @@ impl Live {
             }
             _ => return None,
         };
-        // OpenCode may bundle a history record with an event. That can update
-        // more than streamed text, so retain the normal invalidation path.
+
         if data["message"]["type"].is_string() {
             return None;
         }

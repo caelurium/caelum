@@ -44,7 +44,6 @@ PY
 codesign --force --sign - --timestamp=none "$app"
 codesign --verify --deep --strict "$app"
 plutil -lint "$app/Contents/Info.plist"
-# Replace only the generated bundle, so deleted resources cannot survive a rebuild.
 rm -rf "$output/Caelum.app"
 ditto "$app" "$output/Caelum.app"
 echo "$output/Caelum.app"

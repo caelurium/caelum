@@ -86,9 +86,7 @@ fn start_for_state(
                         if ready.send(Ok(true)).is_ok() {
                             let _ = stopped.await;
                         }
-                        // Dropping the Tokio runtime can abort the connection's
-                        // cleanup before the bus observes it. Finish releasing
-                        // ownership before an immediate relaunch can forward here.
+
                         let _ = tokio::time::timeout(
                             Duration::from_secs(5),
                             connection.release_name(name.as_str()),
@@ -150,8 +148,7 @@ async fn connect(
                     .await
                 {
                     Ok(()) => return Ok(None),
-                    // The owner can exit between RequestName and Activate. Retry
-                    // ownership, bounded by both attempts and the launch timeout.
+
                     Err(zbus::Error::FDO(error))
                         if attempt < 2
                             && matches!(

@@ -44,6 +44,46 @@ cannot occupy their capacity.
 The shared `ProviderRuntime` owns providers, brokers, process registration and
 session-branch attribution.
 
+Remote checkouts live in `caelum-core::remote`, outside the local project and
+filesystem registries. Settings owns the Boat connection; a checkout captures
+its account, machine ID, GitHub repository and branch. The local project path
+only groups the sidebar row. A saved creation attempt carries its idempotency
+key through provisioning; once Boat returns a machine, retries prepare that
+same machine. A one-repository environment puts the agent and remote Git in
+`/home/user/<repository>`. Caelum can create a dedicated environment and never
+adds a repository to an existing shared environment.
+
+On explicit Send, the remote composer captures the thread’s provider (`codex`
+or `opencode`), optional Boat model ID and optional `reasoningEffort`.
+The pickers share the public SDK catalogue; only a concrete model’s advertised
+levels are selectable. Each default omits its request field. The public harness
+default does not identify the account’s configured model. Changing models
+clears effort; switching providers clears both overrides but keeps the conversation ID and event cursor;
+the accepted run records which provider authored its replies. Caelum does not
+install a VM bridge or connect to a native OpenCode session in the checkout.
+Each send explicitly targets a new conversation or its saved Boat conversation ID.
+The core follows ascending event
+pages and uses `promptRun.done` to finish only after the last page. The account,
+machine, conversation, prompt/run IDs, event cursor and bounded transcript
+survive a restart. A lost prompt acknowledgement requires reconciliation;
+reopening never resends it. Turn interruption always supplies the conversation
+ID, whereas stopping the machine is a distinct lifecycle operation.
+
+At the live edge the feed rereads the latest identified response snapshot;
+terminal and intermediate pages advance their cursor. VM tool rows save a
+bounded reference to the Boat conversation, prompt, event and call. Expansion
+rereads its event page and keeps only the selected call’s bounded text in
+memory. Commands and result bodies aren’t written to the workspace. Structured
+reasoning items render their public `summary_text` blocks when supplied;
+generic running state is shown as working, not inferred reasoning.
+
+Remote **Changes** runs Git through the sandbox commands API. A temporary VM
+index captures tracked edits and non-ignored new files as one reviewable Git
+tree. Commit pins that tree and checks the branch, HEAD and original index;
+edits after review stay in the working directory. Push sends the reviewed
+commit to the verified GitHub origin without force. To bring it back to the
+laptop, fetch the branch in the local checkout.
+
 Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery

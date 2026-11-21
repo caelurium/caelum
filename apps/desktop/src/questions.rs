@@ -159,7 +159,7 @@ fn belongs(prompt: &QuestionPrompt, session: &caelum_core::application::Session)
 
 pub fn active(l: &Live, index: usize) -> Option<&QuestionPrompt> {
     let session = l.app.sessions.get(index)?;
-    // Keep arrival order even when a provider's next snapshot sorts requests differently.
+
     l.forms
         .order
         .iter()
@@ -230,8 +230,7 @@ pub fn focus(l: &mut Live) -> bool {
         return true;
     };
     let checked = answer(&prompt, draft);
-    // Text-only questions focus their first active field. Choice groups use
-    // Rune's focus handoff from the replaced message composer and native arrows.
+
     if let Some(field) = prompt.fields.iter().find(|field| {
         field["key"]
             .as_str()

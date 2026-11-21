@@ -20,7 +20,6 @@ impl Client {
         thread::Builder::new()
             .name("desktop-notifications".into())
             .spawn(move || {
-                // Do not connect to desktop services until there is an actual notification.
                 while let Some(first) = receiver.blocking_recv() {
                     let runtime = match tokio::runtime::Builder::new_current_thread()
                         .enable_all()

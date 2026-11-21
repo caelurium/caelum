@@ -45,8 +45,7 @@ impl State {
             if self.colours.contains_key(&project.path) {
                 continue;
             }
-            // Prefer the project's hash, then an unused colour. Existing assignments
-            // stay fixed as other projects open, close, or move in the sidebar.
+
             let start = preferred(&project.path);
             let index = (0..PALETTE.len())
                 .map(|offset| (start + offset) % PALETTE.len())

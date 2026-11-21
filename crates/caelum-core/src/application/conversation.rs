@@ -130,8 +130,7 @@ impl Conversation {
             self.turn_agent = agent.clone();
             self.turn_agent_captured = true;
         }
-        // Admission and session startup belong to the original prompt too. A
-        // later provider start must not discard time already spent waiting.
+
         self.turn_started_at = self.turn_started_at.map(|at| at.min(started_at));
         self.turn_provider_started = true;
     }
@@ -211,9 +210,6 @@ impl Conversation {
                 .flat_map(|message| {
                     let at = message["time"]["created"].as_u64();
                     opencode_message(message).into_iter().map(move |mut entry| {
-                        // A background result's message was created at completion,
-                        // not when it started. Subagent launches can still fall
-                        // back to their owning assistant message's timestamp.
                         if !entry.background
                             || (entry.name == "subagent" && entry.metadata["source"] != "subagent")
                         {
@@ -493,8 +489,6 @@ fn set_metadata(entry: &mut Entry, key: &str, value: impl Into<Value>) {
 }
 
 fn set_output_duration(entry: &mut Entry, start: u64, end: u64) {
-    // A history refresh may know an earlier prompt or a later execution end,
-    // but must not shorten a complete duration captured from live events.
     let start = entry.metadata["outputStartedAt"]
         .as_u64()
         .map_or(start, |at| at.min(start));

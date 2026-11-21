@@ -237,7 +237,7 @@ fn view(s: &Workspace, k: &Kit) -> (El, f32) {
         .enumerate()
         .filter(|(i, m)| m.group != Group::Default && (*i == 0 || items[*i - 1].group != m.group))
         .count();
-    // Search, filters and one quiet footer; short result sets shrink naturally.
+
     let height = if l.app.notices.contains_key(scope) {
         MAX_HEIGHT
     } else {
@@ -407,8 +407,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     } else {
         rune_kit::Placement::TopStart
     };
-    // A settings field sits mid-window. In compact windows, use the room
-    // beside it rather than squeezing the catalogue into a single model row.
+
     if defaults
         && let Some(window) = window
         && let Some(trigger) = rune::memo::window_layout(anchor)

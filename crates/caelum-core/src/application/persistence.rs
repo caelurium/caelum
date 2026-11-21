@@ -9,6 +9,7 @@ use std::{
 };
 
 mod migration;
+mod remote_history;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -154,6 +155,8 @@ impl Preferences {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedSession {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm_link: Option<crate::remote::VmLink>,
     #[serde(default)]
     pub last_activity: Option<u64>,
     pub scope: Scope,
@@ -161,6 +164,8 @@ pub struct SavedSession {
     pub title: String,
     #[serde(default)]
     pub title_refresh_turns: u8,
+    #[serde(default)]
+    pub manual_title: bool,
     pub options: Options,
     pub draft: String,
     pub attachments: Vec<Attachment>,
@@ -179,6 +184,8 @@ pub struct SavedSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub version: u32,
+    #[serde(default)]
+    pub remote: crate::remote::Saved,
     #[serde(default)]
     pub home: super::HomeDraft,
     pub projects: Vec<ProjectInfo>,
@@ -250,12 +257,12 @@ impl Store {
         };
         let mut value: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|e| format!("Cannot read saved workspace: {e}"))?;
-        // The former black-surface override is now a complete theme. Migrate at
-        // the read boundary so the next snapshot contains only the new setting.
+
         if value["preferences"]["blackBackgrounds"] == true {
             value["preferences"]["themeFamily"] = "vercel".into();
             value["preferences"]["accentColor"] = "theme".into();
         }
+        remote_history::retire_vm_sessions(&mut value);
         let state: Snapshot = serde_json::from_value(value)
             .map_err(|e| format!("Cannot read saved workspace: {e}"))?;
         if state.version != 1 {

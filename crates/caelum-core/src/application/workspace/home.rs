@@ -46,7 +46,6 @@ impl Home {
     }
 
     pub(super) fn restore(&mut self, draft: HomeDraft) {
-        // Loading storage must not replace input entered during startup.
         if self.draft == HomeDraft::default()
             && self.generation == 0
             && self.attaching == 0
@@ -65,6 +64,7 @@ pub(super) enum Request {
 impl Workspace {
     /// A navigation barrier for asynchronous project opens and archive restoration.
     pub fn leave_conversation(&mut self) {
+        self.remote.saved.selected = None;
         self.navigation += 1;
         self.notifications.cancel();
         if let Some(index) = self.selected.take() {

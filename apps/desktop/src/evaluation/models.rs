@@ -7,7 +7,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
     l.app.sessions[0].scope.provider = Provider::OpenCode;
     l.app.sessions[0].options.model = Some("openai/gpt-5.4".into());
     let scope = l.app.sessions[0].scope.clone();
-    // Offline sample connections; the live catalogue always comes from the provider.
+
     let mut models = Vec::new();
     for (id, name, context) in [
         ("gpt-5.4", "GPT-5.4", 1_050_000),

@@ -169,7 +169,7 @@ fn image_inbox_delivery_reconciles_the_real_submission_path_and_later_turns() {
                 unreachable!()
             };
             let (provider_text, images) = crate::application::provider_prompt(&prompt);
-            // OpenCode normalizes submitted data URIs into these inbox/history files.
+
             let files = images
                 .iter()
                 .map(|image| {

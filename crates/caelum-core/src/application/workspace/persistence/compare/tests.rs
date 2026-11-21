@@ -40,8 +40,10 @@ fn every_persisted_field_participates_in_change_detection() {
         ("last_activity", json!(12)),
         ("scope", json!({"project":"/other","provider":"opencode"})),
         ("remote_id", json!("remote")),
+        ("vm_link", json!({"checkout":"vm", "thread":"chat"})),
         ("title", json!("New title")),
         ("title_refresh_turns", json!(2)),
+        ("manual_title", json!(true)),
         ("options", json!({"model":"new-model"})),
         ("draft", json!("edited draft")),
         ("attachments", json!([])),
@@ -169,7 +171,7 @@ fn direct_edits_save_again_but_transcript_updates_do_not() {
         .unwrap()
         .0;
     app.apply(Event::Completed(save, Ok(Reply::Done)));
-    // Warm command queues before exercising otherwise idle polling.
+
     app.commands();
     app.sessions[0]
         .conversation

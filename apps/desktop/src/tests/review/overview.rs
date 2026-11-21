@@ -102,7 +102,7 @@ fn header_identity_refresh_and_back_follow_the_review_and_restore_its_session_dr
     assert!(l.app.commands().iter().any(|(_, c)| matches!(c, Command::Task(Task::Details { project, url }) if (project, url) == (&target.0, &target.1))));
     let index = l.app.selected.unwrap();
     assert_eq!(l.app.active_project.as_deref(), Some("/projects/other"));
-    // The header must remain usable beside an inspector at the minimum window size.
+
     rt.update(|s, _| s.inspector.set_open(true));
     advance(&mut rt, 0.5);
     for key in [

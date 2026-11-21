@@ -47,11 +47,9 @@ impl Installed {
                     ));
                 }
                 if Instant::now() >= deadline {
-                    // A slow but live application may still acknowledge later.
-                    // Never exchange its executable out from under that process.
                     return Ok(child);
                 }
-                // Bounded, post-shutdown supervision; no UI loop or idle updater poll.
+
                 thread::sleep(Duration::from_millis(100));
             }
         });

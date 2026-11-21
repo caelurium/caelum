@@ -152,11 +152,9 @@ impl Tracking {
             details.branch = saved.branch;
             details.branches = saved.branches;
         } else if details.branch_is_current {
-            // A directory's current branch says nothing about an older session.
             details.branch = None;
             details.branches.clear();
         } else if let Some(branch) = &details.branch {
-            // Preserve a provider-owned session branch before execution moves on.
             self.record(key, Some(branch.clone()));
             details.branches = vec![branch.clone()];
         }
@@ -235,7 +233,7 @@ impl Tracking {
                 ambiguous,
             },
         );
-        // Overlapping sessions in one checkout cannot reliably own its branch changes.
+
         if !ambiguous {
             return self.record(key, context.branch);
         }
@@ -626,7 +624,6 @@ mod tests {
             assert_eq!(updates[0].branches, expected);
             drop(tracker);
 
-            // Execution can resume before the sidebar has loaded any metadata.
             let tracker = SessionBranches::new(Some(fixture.database()));
             git(&fixture.0, &["checkout", "-b", "feature/after-restart"]);
             start(&tracker);

@@ -124,7 +124,6 @@ impl Cache {
         let db = Connection::open(&self.0).ok()?;
         db.busy_timeout(Duration::from_millis(50)).ok()?;
         if create {
-            // Reclaim deleted pages on commit; no growing WAL or free-page pool.
             db.execute_batch(
                 "PRAGMA auto_vacuum = FULL;
                 CREATE TABLE IF NOT EXISTS entries (
@@ -162,8 +161,6 @@ impl Cache {
     }
 }
 
-// Request start time, rather than completion time, prevents a slow older details
-// request from replacing a newer snapshot shared by another worktree/process.
 pub(crate) fn timestamp() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

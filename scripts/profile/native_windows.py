@@ -16,8 +16,6 @@ def select_window(rows, pid):
 
 
 def summarize_windows(samples):
-    # Launch/tiling can settle during the fixture's two-second warmup. Keep the
-    # raw observations, but require a stable front window from one second on.
     observed = [sample for sample in samples if sample["seconds"] >= 1]
     bounds = next((sample["bounds"][0] for sample in observed if len(sample["bounds"]) == 1), None)
     missing = sum(len(sample["bounds"]) != 1 for sample in observed)
@@ -54,7 +52,6 @@ class WindowObserver:
         self.cf.CFRelease.restype = None
 
     def sample(self, pid):
-        # On-screen windows, excluding desktop elements, in front-to-back order.
         info = self.cg.CGWindowListCopyWindowInfo(1 | 16, 0)
         if not info:
             raise RuntimeError("WindowServer information is unavailable")
@@ -64,8 +61,6 @@ class WindowObserver:
             if not data:
                 raise RuntimeError("Cannot decode WindowServer information")
             rows = plistlib.loads(ctypes.string_at(self.cf.CFDataGetBytePtr(data), self.cf.CFDataGetLength(data)))
-            # Names, other apps' identifiers and unrelated window geometry never
-            # enter the saved observations.
             return select_window(rows, pid)
         finally:
             if data:

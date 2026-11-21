@@ -19,12 +19,7 @@ impl OpenCodeProvider {
         message: &str,
         before: bool,
     ) -> Result<OpenCodeSessionInfo, OpenCodeError> {
-        if !message.starts_with("msg_")
-            || message.len() <= 4
-            || !message
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
-        {
+        if !valid_message_id(message) {
             return Err(OpenCodeError::Protocol(
                 "Invalid OpenCode fork boundary".into(),
             ));
@@ -165,8 +160,7 @@ impl OpenCodeProvider {
         } else {
             None
         };
-        // Include the initial variant atomically. Switching it before the first
-        // prompt creates an effort-update history item on the provider side.
+
         let model = model
             .or(fallback.as_deref())
             .map(|model| model_ref(model, effort))
@@ -289,6 +283,15 @@ impl OpenCodeProvider {
         project_path: impl AsRef<Path>,
         session_id: &str,
     ) -> Result<(), OpenCodeError> {
+        self.set_title(project_path, session_id, "")
+    }
+
+    pub(crate) fn set_title(
+        &self,
+        project_path: impl AsRef<Path>,
+        session_id: &str,
+        title: &str,
+    ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         self.session_metadata(&server, &project, session_id)?;
@@ -296,8 +299,109 @@ impl OpenCodeProvider {
             Method::PATCH,
             &format!("/api/session/{session_id}"),
             &[],
-            Some(json!({ "title": "" })),
+            Some(json!({ "title": title })),
         )?;
+        Ok(())
+    }
+
+    pub(crate) fn checkpoint_files(
+        &self,
+        path: &str,
+        id: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<Vec<String>, OpenCodeError> {
+        let project = Project::open(path)?;
+        let server = self.server(&project)?;
+        self.session_metadata(&server, &project, id)?;
+        let response = server.request_json(
+            Method::GET,
+            &format!("/api/session/{id}/diff"),
+            &[
+                ("from", from.into()),
+                ("to", to.into()),
+                ("context", "0".into()),
+            ],
+            None,
+        )?;
+        response["data"]
+            .as_array()
+            .ok_or_else(|| OpenCodeError::Protocol("Missing snapshot diff".into()))?
+            .iter()
+            .map(|file| {
+                file["file"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| OpenCodeError::Protocol("Incomplete snapshot diff".into()))
+            })
+            .collect()
+    }
+
+    pub(crate) fn rewind(
+        &self,
+        path: &str,
+        id: &str,
+        message: &str,
+        tip: &str,
+        files: bool,
+    ) -> Result<(), OpenCodeError> {
+        if !valid_message_id(message) {
+            return Err(OpenCodeError::Protocol("Invalid rewind boundary".into()));
+        }
+        let project = Project::open(path)?;
+        let server = self.server(&project)?;
+        let session = self.session(&server, &project, id)?;
+        if session.archived || session.is_working {
+            return Err(OpenCodeError::Protocol(
+                "Rewind needs an idle, unarchived conversation.".into(),
+            ));
+        }
+        let route = format!("/api/session/{id}");
+
+        if !self.inbox(path, id)?.is_empty() || !self.background_shells(path, id)?.is_empty() {
+            return Err(OpenCodeError::Protocol(
+                "Finish queued prompts and background commands before rewinding.".into(),
+            ));
+        }
+        let current = server.request_json(Method::GET, &route, &[], None)?;
+        if !current["data"]["revert"].is_null() {
+            return Err(OpenCodeError::Protocol(
+                "A revert is already staged. Commit or clear it in OpenCode before retrying."
+                    .into(),
+            ));
+        }
+        let latest = server.request_json(
+            Method::GET,
+            &format!("{route}/message"),
+            &[("order", "desc".into()), ("limit", "1".into())],
+            None,
+        )?;
+        if latest.pointer("/data/0/id").and_then(Value::as_str) != Some(tip) {
+            return Err(OpenCodeError::Protocol(
+                "History changed. Reopen /rewind to review the new boundary.".into(),
+            ));
+        }
+        let staged = server.request_json(
+            Method::POST,
+            &format!("{route}/revert/stage"),
+            &[],
+            Some(json!({"messageID":message, "files":files})),
+        )?;
+        if staged.pointer("/data/messageID").and_then(Value::as_str) != Some(message) {
+            return Err(OpenCodeError::Protocol(
+                "Unexpected staged boundary; inspect the revert in OpenCode before continuing."
+                    .into(),
+            ));
+        }
+        let current = server.request_json(Method::GET, &route, &[], None)?;
+        if current["data"]["id"].as_str() != Some(id)
+            || !session_directory(&current["data"])
+                .is_some_and(|dir| directory_matches(dir, project.path()))
+            || current["data"]["revert"] != staged["data"]
+        {
+            return Err(OpenCodeError::Protocol("The staged revert changed. Inspect it in OpenCode; it was not committed by Caelum.".into()));
+        }
+        server.request_json(Method::POST, &format!("{route}/revert/commit"), &[], None).map_err(|e| OpenCodeError::Protocol(format!("Could not confirm the staged revert: {e}. Inspect the session in OpenCode and commit or clear the staged boundary.")))?;
         Ok(())
     }
 
@@ -338,8 +442,6 @@ impl OpenCodeProvider {
                 Some(total)
             });
         Ok(SessionDetails {
-            // VCS metadata belongs to the directory, not this session. The
-            // desktop supplies the branch recorded during session execution.
             branch: None,
             branches: Vec::new(),
             branch_is_current: false,
@@ -435,7 +537,7 @@ impl OpenCodeProvider {
         session_id: &str,
     ) -> Result<OpenCodeSession, OpenCodeError> {
         let mut session = self.session_metadata(server, project, session_id)?;
-        // Only callers consuming activity need the runtime's fresh active map.
+
         session.is_working = server.active_sessions()?.contains(&session.id);
         Ok(session)
     }
@@ -494,10 +596,9 @@ fn history_on(
         effort: session.effort.clone(),
         agent: session.agent.clone(),
         data: messages.iter().rev().cloned().collect(),
-        next_cursor: response
-            .pointer("/cursor/next")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        next_cursor: serde_json::from_value(response["cursor"]["next"].clone()).map_err(|_| {
+            OpenCodeError::Protocol("Session history returned an invalid cursor".into())
+        })?,
     })
 }
 
@@ -533,4 +634,12 @@ fn session_info(value: &Value) -> Option<OpenCodeSession> {
 
 fn session_directory(value: &Value) -> Option<&str> {
     value.get("location")?.get("directory")?.as_str()
+}
+
+fn valid_message_id(id: &str) -> bool {
+    id.starts_with("msg_")
+        && id.len() > 4
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
 }

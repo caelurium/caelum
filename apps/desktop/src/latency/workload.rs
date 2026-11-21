@@ -53,8 +53,7 @@ pub fn workspace(scenario: Scenario) -> Workspace {
         }
     };
     let live = state.live.as_mut().unwrap();
-    // Keep the demanding fixture, but drive its deltas from fixed deadlines,
-    // independently of the frame/poll rate, so faster rendering cannot add load.
+
     live.evaluation = false;
     live.fixture = true;
     live.latency.replay.set(super::Replay::Pending(scenario));
@@ -69,8 +68,7 @@ pub(super) fn run(handle: rune::AppHandle<Workspace>, scenario: Scenario) {
     }
     std::thread::spawn(move || {
         let start = Instant::now();
-        // Native app updates run on the UI thread. This deliberately measures the
-        // application-handler boundary, not OS input delivery or physical scanout.
+
         for tick in 1..=380 {
             let deadline = start + Duration::from_millis(tick * 50);
             std::thread::sleep(deadline.saturating_duration_since(Instant::now()));

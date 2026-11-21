@@ -17,7 +17,8 @@ use super::{Options, Provider, SessionKey, Summary, Task};
 
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
-mod fork;
+mod conversation;
+mod handoff;
 mod messages;
 mod opencode;
 mod worker;
@@ -35,6 +36,7 @@ pub struct ProviderRuntime {
     pub approvals: ApprovalBroker,
     pub questions: QuestionBroker,
     pub processes: Arc<ProcessRegistry>,
+    remote: Arc<crate::remote::Backend>,
     pub worktrees: crate::worktrees::WorktreeClient,
     pub branches: crate::session_branches::SessionBranches,
     pub(super) review_cache: Arc<Mutex<Option<crate::github::cache::Cache>>>,
@@ -54,6 +56,7 @@ impl Default for ProviderRuntime {
                 questions.clone(),
             ),
             processes,
+            remote: Arc::default(),
             approvals,
             questions,
             worktrees: crate::worktrees::WorktreeClient::new(
@@ -68,10 +71,10 @@ impl Default for ProviderRuntime {
 
 impl ProviderRuntime {
     pub fn shutdown(&self) {
+        self.remote.shutdown();
         self.updates.shutdown();
         self.approvals.shutdown();
-        // Close registration first: an in-flight connection cannot leak a child
-        // after shutdown, and terminating children unblocks protocol handshakes.
+
         self.processes.shutdown();
         self.codex.shutdown();
         self.opencode.shutdown();
@@ -79,6 +82,7 @@ impl ProviderRuntime {
 
     fn execute(&self, command: &Command) -> Result<Reply, String> {
         let result = match command {
+            Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
                 return self
                     .opencode
@@ -105,6 +109,43 @@ impl ProviderRuntime {
                 .opencode
                 .regenerate_title(&key.scope.project, &key.id)
                 .map_err(|e| e.to_string()),
+            Command::Rename(key, title) => match key.scope.provider {
+                Provider::Codex => self
+                    .codex
+                    .rename(&key.scope.project, &key.id, title)
+                    .map_err(|e| e.to_string()),
+                Provider::OpenCode => self
+                    .opencode
+                    .set_title(&key.scope.project, &key.id, title)
+                    .map_err(|e| e.to_string()),
+            },
+            Command::Export(key, title, format, path) => self.export(key, title, *format, path),
+            Command::Rewind {
+                key,
+                before,
+                tip,
+                files,
+            } => match key.scope.provider {
+                Provider::Codex if !files => self
+                    .codex
+                    .rewind(&key.scope.project, &key.id, before, tip)
+                    .map_err(|e| e.to_string()),
+                Provider::Codex => Err("Codex rewinds conversation history only.".into()),
+                Provider::OpenCode => self
+                    .opencode
+                    .rewind(&key.scope.project, &key.id, before, tip, *files)
+                    .map_err(|e| e.to_string()),
+            },
+            Command::CheckpointFiles(key, from, to) => {
+                if key.scope.provider != Provider::OpenCode {
+                    return Err("Codex does not restore checkout files.".into());
+                }
+                return self
+                    .opencode
+                    .checkpoint_files(&key.scope.project, &key.id, from, to)
+                    .map(Reply::CheckpointFiles)
+                    .map_err(|e| e.to_string());
+            }
             Command::Sound(volume) => {
                 #[cfg(target_os = "macos")]
                 if *volume > 0 {
@@ -295,6 +336,9 @@ impl ProviderRuntime {
                 .map(Reply::Choices);
             }
             Command::Fork(key, boundary) => return self.fork(key, boundary),
+            Command::EditBranch(key, boundary, text, attachments) => {
+                return self.edit_branch(key, boundary, text, attachments);
+            }
             Command::Start(scope, options) => {
                 return match scope.provider {
                     Provider::Codex => self
@@ -366,17 +410,21 @@ impl ProviderRuntime {
                 };
             }
             Command::History(key, cursor) => {
-                return match key.scope.provider {
-                    Provider::Codex => self
-                        .codex
-                        .session_history(&key.scope.project, &key.id, cursor.as_deref())
-                        .map_err(|e| e.to_string()),
-                    Provider::OpenCode => self
-                        .opencode
-                        .session_history(&key.scope.project, &key.id, cursor.as_deref())
-                        .map_err(|e| e.to_string()),
+                return self
+                    .history_page(key, cursor.as_deref())
+                    .map(Reply::History);
+            }
+            Command::HandoffChat(key) => {
+                return self.handoff_chat(key).map(Reply::HandoffChat);
+            }
+            Command::CodexControlHistory(key, action) => {
+                if key.scope.provider != Provider::Codex {
+                    return Err("Expected a Codex session".into());
                 }
-                .map(Reply::History);
+                self.codex
+                    .check_history_action(&key.scope.project, &key.id, *action)
+                    .map_err(|e| e.to_string())?;
+                return self.history_page(key, None).map(Reply::History);
             }
             Command::Send(key, prompt, options) => match key.scope.provider {
                 Provider::Codex => self
@@ -534,7 +582,7 @@ impl Runtime {
                                 projects = latest;
                             }
                             watch.sync(projects.iter().cloned());
-                            // Reconcile edits made while native registration was pending.
+
                             watch
                                 .dirty
                                 .lock()
@@ -623,6 +671,7 @@ impl Runtime {
         let queue = if matches!(
             command,
             Command::Cancel(_)
+                | Command::Remote(crate::remote::Operation::Interrupt(..))
                 | Command::Task(Task::Shell { stop: true, .. })
                 | Command::Approve(..)
                 | Command::Answer(..)
@@ -632,7 +681,11 @@ impl Runtime {
             &self.control
         } else if matches!(
             command,
-            Command::Resume(_) | Command::History(..) | Command::Inbox(_)
+            Command::Resume(_)
+                | Command::History(..)
+                | Command::HandoffChat(_)
+                | Command::CodexControlHistory(..)
+                | Command::Inbox(_)
         ) {
             &self.history
         } else {
@@ -678,7 +731,7 @@ impl Drop for Runtime {
     fn drop(&mut self) {
         self.closed.store(true, Ordering::Release);
         self.checkout_watch.take();
-        self.inbox.take(); // Release any producers waiting on a full inbox.
+        self.inbox.take();
         let workers = self.workers.take().map(worker::Workers::stop);
         if let Some(providers) = &self.providers {
             providers.shutdown();

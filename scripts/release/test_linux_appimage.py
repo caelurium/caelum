@@ -37,7 +37,6 @@ class AppImageTests(unittest.TestCase):
 
     def test_reused_runtime_does_not_retain_the_packaging_tools_update_url_or_signature(self):
         runtime = bytearray(640)
-        # Minimal ELF64 section table with string, update and signature sections.
         struct.pack_into("<HHIQQQIHHHHHH", runtime, 16, 2, 62, 1, 0, 0, 64, 0, 64, 0, 0, 64, 4, 1)
         names = b"\0.shstrtab\0.upd_info\0.sha256_sig\0"
         runtime[320:320 + len(names)] = names

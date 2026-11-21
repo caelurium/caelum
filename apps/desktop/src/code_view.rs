@@ -43,8 +43,6 @@ impl Position {
             rune::memo::layout(&format!("{key}/scroll")),
             rune::memo::layout(&format!("{key}/scroll/rows")),
         ) {
-            // A virtual list's mounted rows start after the culled prefix.
-            // Compare scrolled/unscrolled origins, not just the visible gap.
             self.0.set(Some([
                 (rows_origin[0] - rows[0] - (view_origin[0] - view[0])).max(0.0),
                 (rows_origin[1] - rows[1] - (view_origin[1] - view[1])).max(0.0),
@@ -174,8 +172,7 @@ impl Document {
         if revision == self.revision {
             return false;
         }
-        // A source document is a single unchanged range. This gives both modes
-        // the same syntax cache, virtualization, line selection and navigation.
+
         let mut patch = format!(
             "--- {}\n+++ {}\n@@ -1,{n} +1,{n} @@\n",
             quoted("a", path),
@@ -304,8 +301,7 @@ pub fn review_files(files: &[caelum_protocol::GitHubPullRequestFile]) -> Vec<Fil
                     "copied" => diff::FileStatus::Copied,
                     _ => diff::FileStatus::Modified,
                 };
-                // Rune's no-content surface is binary-only. The file header
-                // supplies GitHub's more precise binary-or-omitted explanation.
+
                 diff.binary |= file.patch.is_none();
             }
             parsed

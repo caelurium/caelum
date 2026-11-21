@@ -129,6 +129,7 @@ impl Workspace {
         if index >= self.sessions.len() || self.sessions[index].forgotten {
             return;
         }
+        self.remote.saved.selected = None;
         if self.selected != Some(index) {
             if let Some(previous) = self.selected {
                 self.dismiss_side_question(previous);
@@ -153,7 +154,11 @@ impl Workspace {
 
     pub fn refresh(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading || session.submitting || session.relocation.pending() {
+        if session.loading
+            || session.submitting
+            || session.relocation.pending()
+            || session.rewinding()
+        {
             return;
         }
         let Some(key) = session.key() else {
@@ -167,7 +172,7 @@ impl Workspace {
 
     pub fn older(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.loading {
+        if session.loading || session.rewinding() {
             return;
         }
         let (Some(key), Some(cursor)) = (session.key(), session.next_cursor.clone()) else {
@@ -196,9 +201,6 @@ impl Workspace {
             .into_iter()
             .filter(|summary| summary.key.scope == *scope)
         {
-            // OpenCode IDs survive moves. Discovery of the destination must
-            // reconnect the original local slot, preserving its draft/editor.
-            // A late list from the old checkout must not recreate a duplicate.
             if scope.provider == Provider::OpenCode {
                 if let Some(index) = self.sessions.iter().position(|session| {
                     session.scope.provider == Provider::OpenCode

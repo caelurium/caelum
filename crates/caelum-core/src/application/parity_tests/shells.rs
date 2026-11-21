@@ -77,7 +77,7 @@ fn native_shell_history_preserves_output_timing_and_terminal_outcomes() {
         });
         let mut conversation = Conversation::default();
         conversation.history(Provider::OpenCode, std::slice::from_ref(&message), false);
-        // An older history page cannot reopen the finished command.
+
         let mut running = message;
         running["status"] = "running".into();
         running["time"]["completed"] = json!(null);

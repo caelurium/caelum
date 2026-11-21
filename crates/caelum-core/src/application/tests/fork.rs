@@ -25,7 +25,7 @@ fn provider_page(app: &mut Workspace, records: Vec<serde_json::Value>, next: Opt
     let id = app
         .commands()
         .into_iter()
-        .find(|(_, c)| matches!(c, Command::History(..)))
+        .find(|(_, c)| matches!(c, Command::History(..) | Command::CodexControlHistory(..)))
         .unwrap()
         .0;
     let Reply::History(mut p) = page(records, false) else {
@@ -180,4 +180,160 @@ fn fork_checks_admission_again_and_failures_do_not_change_the_parent() {
     assert_eq!(app.sessions.len(), 1);
     assert_eq!(app.sessions[0].draft, "Parent draft");
     assert!(app.fork_picker().unwrap().error.is_some());
+}
+
+#[test]
+fn edit_uses_the_exclusive_boundary_and_seeds_only_the_child_with_captured_context() {
+    for provider in Provider::ALL {
+        let (mut app, owner) = parent(provider);
+        let captured = Attachment::new(
+            "src/example.rs".into(),
+            "before the change".into(),
+            Some((2, 3)),
+            false,
+        );
+        let prompt = crate::application::composer::with_context(
+            "original café",
+            std::slice::from_ref(&captured),
+        );
+        let (record, boundary) = match provider {
+            Provider::Codex => (
+                json!({"id":"turn-a","status":"completed","items":[{"type":"userMessage","id":"user","content":[{"type":"text","text":prompt}]}]}),
+                ForkBoundary::CodexBefore("turn-a".into()),
+            ),
+            Provider::OpenCode => (
+                json!({"id":"msg_a","type":"user","text":prompt}),
+                ForkBoundary::OpenCodeBefore("msg_a".into()),
+            ),
+        };
+        assert!(app.open_history_action(0, HistoryAction::Edit, None));
+        provider_page(&mut app, vec![record], None);
+        app.fork_at(&boundary);
+        let (id, cmd) = app.commands().pop().unwrap();
+        let Command::EditBranch(key, b, text, attachments) = cmd else {
+            panic!("expected editable branch")
+        };
+        assert_eq!(key, owner);
+        assert_eq!(b, boundary);
+        assert_eq!(text, "original café");
+        assert_eq!(attachments, [captured]);
+
+        let selected = app.new_session(owner.scope.clone());
+        app.apply(Event::Completed(
+            id,
+            Ok(Reply::EditableBranch {
+                source: owner.clone(),
+                child: summary(owner.scope, "child"),
+                text,
+                attachments,
+            }),
+        ));
+        assert_eq!(app.selected, Some(selected));
+        let child = app.sessions.last().unwrap();
+        assert_eq!(child.draft, "original café");
+        assert_eq!(child.attachments[0].content, "before the change");
+        assert_eq!(app.sessions[0].draft, "Parent draft");
+        assert!(app
+            .commands()
+            .iter()
+            .all(|(_, c)| !matches!(c, Command::Send(..))));
+    }
+}
+
+#[test]
+fn rewind_previews_without_mutation_and_rechecks_queues_then_reloads_only_its_owner() {
+    let (mut app, owner) = parent(Provider::OpenCode);
+    assert!(app.open_history_action(0, HistoryAction::Rewind, Some("opencode-msg_old".into())));
+    provider_page(
+        &mut app,
+        vec![json!({"id":"msg_tip","type":"user","text":"latest"})],
+        Some("older"),
+    );
+    provider_page(
+        &mut app,
+        vec![json!({"id":"msg_old","type":"user","text":"earlier"})],
+        None,
+    );
+    let b = ForkBoundary::OpenCodeBefore("msg_old".into());
+    app.fork_at(&b);
+    assert_eq!(
+        app.fork_picker()
+            .unwrap()
+            .confirmation()
+            .unwrap()
+            .newer_turns,
+        1
+    );
+    let (read, cmd) = app.commands().pop().unwrap();
+    assert!(
+        matches!(cmd,Command::CheckpointFiles(k,a,b) if k==owner && a=="msg_old" && b=="msg_tip")
+    );
+    app.confirm_rewind(true);
+    assert!(app.commands().is_empty());
+    app.apply(Event::Completed(
+        read,
+        Ok(Reply::CheckpointFiles(vec!["source.rs".into()])),
+    ));
+    app.sessions[0].queue.push(QueuedPrompt {
+        text: "waiting".into(),
+        options: Default::default(),
+    });
+    app.confirm_rewind(true);
+    assert!(app.commands().is_empty());
+    app.sessions[0].queue.clear();
+    app.confirm_rewind(false);
+    let (id, cmd) = app.commands().pop().unwrap();
+    assert!(
+        matches!(cmd,Command::Rewind{key,before,tip,files:false} if key==owner && before=="msg_old" && tip=="msg_tip")
+    );
+    assert!(!app.send(0, "in flight".into()));
+    app.new_session(scope(Provider::OpenCode, "/elsewhere"));
+    app.apply(Event::Completed(id, Ok(Reply::Done)));
+    assert_eq!(app.selected, Some(1));
+    assert_eq!(app.sessions[0].draft, "Parent draft");
+    assert!(app
+        .commands()
+        .iter()
+        .any(|(_, c)| matches!(c,Command::Resume(k) if k==&owner)));
+}
+
+#[test]
+fn editing_retains_provider_image_references_and_rejects_unreplayable_context_before_branching() {
+    let (mut app, _) = parent(Provider::OpenCode);
+    let boundary = ForkBoundary::OpenCodeBefore("msg_a".into());
+    let hash = "a".repeat(64);
+    for (file, supported) in [
+        (
+            json!({"name":"picture.png","mime":"image/png","hash":hash}),
+            true,
+        ),
+        (
+            json!({"name":"picture.png","mime":"image/png","url":"file:///changed.png"}),
+            false,
+        ),
+    ] {
+        app.open_history_action(0, HistoryAction::Edit, None);
+        provider_page(
+            &mut app,
+            vec![json!({"type":"user","id":"msg_a","text":"Review","files":[file]})],
+            None,
+        );
+        app.fork_at(&boundary);
+        let cmd = app.commands().pop();
+        if supported {
+            let (id, Command::EditBranch(_, _, _, images)) = cmd.unwrap() else {
+                panic!("missing edit")
+            };
+            assert_eq!(images[0].content, format!("opencode-media:{hash}"));
+            app.apply(Event::Completed(
+                id,
+                Err("Image no longer available".into()),
+            ));
+        } else {
+            assert!(cmd.is_none());
+        }
+        assert!(app.fork_picker().unwrap().error.is_some());
+        assert_eq!(app.sessions[0].draft, "Parent draft");
+        assert_eq!(app.sessions.len(), 1);
+    }
 }

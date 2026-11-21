@@ -55,9 +55,7 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
         .collect();
     let mut matches = BTreeMap::new();
     let mut end = history.len();
-    // Match every pending submission, newest to newest, using each echo once.
-    // An unmatched image must not block later turns, and a known earlier echo
-    // must not consume a new submission of the same prompt.
+
     for (index, entry) in live.iter().enumerate().rev().filter(|(_, e)| e.optimistic) {
         if let Some(history_index) = history[..end].iter().rposition(|snapshot| {
             positions
@@ -96,8 +94,6 @@ fn optimistic_matches(history: &Entry, optimistic: &Entry) -> bool {
         .iter()
         .filter(|attachment| attachment.kind == AttachmentKind::Image)
         .all(|attachment| {
-            // Inbox delivery reconstructs context with fresh attachment IDs;
-            // unlike history, it carries images in context rather than media.
             history_attachments.iter().any(|existing| {
                 existing.kind == AttachmentKind::Image && existing.content == attachment.content
             }) || history
@@ -168,7 +164,6 @@ fn merge_missing_metadata(target: &mut serde_json::Value, fallback: &serde_json:
 fn merge_entry(mut snapshot: Entry, mut current: Entry) -> Entry {
     snapshot.started_at = snapshot.started_at.or(current.started_at);
     if snapshot.background && snapshot.complete && !current.complete {
-        // A shell's final exit/timing replaces its running metadata.
         merge_missing_metadata(&mut snapshot.metadata, &current.metadata);
     } else {
         overlay_metadata(&mut snapshot.metadata, &current.metadata);
@@ -194,8 +189,7 @@ fn merge_entry(mut snapshot: Entry, mut current: Entry) -> Entry {
     }
     current.history = snapshot.text;
     current.text = reconcile(&current.history, &current.stream);
-    // OpenCode publishes whole output snapshots, while Codex also publishes
-    // output deltas. Retain either kind when a slower history page arrives.
+
     let live_output = if current.stream_output.is_empty() {
         &current.output
     } else {

@@ -60,9 +60,7 @@ pub(super) fn migrate(connection: &mut Connection) -> Result<(), DatabaseError> 
 
     if version < 3 {
         let transaction = connection.transaction()?;
-        // Early v2 installations required an opened timestamp even for sessions
-        // merely discovered in a provider listing. SQLite needs a table rebuild
-        // to remove that constraint; retain every label and timestamp as-is.
+
         let opened_required: bool = transaction.query_row(
             "SELECT \"notnull\" FROM pragma_table_info('sessions') WHERE name = 'last_opened_at'",
             [],

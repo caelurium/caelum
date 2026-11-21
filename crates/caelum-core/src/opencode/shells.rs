@@ -61,8 +61,6 @@ impl OpenCodeProvider {
             Ok(output[start..].to_owned())
         };
         if stop {
-            // DELETE also removes retained output. Keep the final visible tail,
-            // but an output failure must never prevent stopping a command.
             let output = read().unwrap_or_default();
             server.request_json(Method::DELETE, &path, &query, None)?;
             Ok(output)
@@ -91,8 +89,7 @@ impl OpenCodeProvider {
         let shells = response["data"]
             .as_array()
             .ok_or_else(|| OpenCodeError::Protocol("shell response has no data array".into()))?;
-        // The location list includes other sessions and foreground commands.
-        // Only owned commands count; the UI shows waiting once the model is idle.
+
         shells
             .iter()
             .filter(|shell| {

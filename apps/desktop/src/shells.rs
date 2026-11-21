@@ -36,8 +36,6 @@ impl Panel {
     }
 }
 fn output<'a>(app: &'a Application, project: &str, remote: &str, id: &str) -> Option<&'a str> {
-    // Completion retires the live cache. Prefer the final transcript output so
-    // an already-open reader does not stay on its last running snapshot.
     let key = format!("opencode-shell-{id}");
     if let Some(entry) = app
         .sessions

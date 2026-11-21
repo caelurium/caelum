@@ -37,8 +37,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             .key("back-to-session"),
     );
     if let Some((project, url)) = target {
-        // Identity comes from the reviewed repository, which can differ from the
-        // selected session's project or the local checkout directory's name.
         let (repository, number) = url
             .split_once("://")
             .and_then(|(_, rest)| rest.split_once('/'))

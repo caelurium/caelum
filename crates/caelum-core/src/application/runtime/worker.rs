@@ -58,8 +58,6 @@ impl Workers {
                         biased;
                         _ = stopped => {}
                         _ = async {
-                            // History and controls keep their own capacity even
-                            // when catalogues, diffs, and discovery are blocked.
                             tokio::join!(
                                 dispatch(normal, NORMAL_LIMIT, run.clone()),
                                 dispatch(history, HISTORY_LIMIT, run.clone()),
@@ -68,7 +66,6 @@ impl Workers {
                         } => {}
                     }
                 });
-                // Dropping the runtime waits for blocking work already running.
             })
             .expect("start command dispatcher");
         Self { thread, stop }

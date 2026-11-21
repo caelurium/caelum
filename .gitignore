@@ -1,8 +1,6 @@
-# Rust
 /target/
 **/target/
 
-# Ignored artifacts from earlier web builds (safe to keep locally)
 node_modules/
 **/node_modules/
 apps/desktop/dist/
@@ -15,7 +13,6 @@ apps/desktop/src-tauri/gen/
 .pnpm-store/
 __pycache__/
 
-# Local environment and editor files
 .env
 .env.*
 !.env.example

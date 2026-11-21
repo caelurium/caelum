@@ -9,11 +9,26 @@ use caelum_protocol::{
 
 #[derive(Debug, Clone)]
 pub enum Command {
+    Remote(crate::remote::Operation),
     Inbox(SessionKey),
     Enqueue(SessionKey, String, String),
     RemoveQueued(SessionKey, String),
     Generate(SessionKey, String),
     RegenerateTitle(SessionKey),
+    Rename(SessionKey, String),
+    CheckpointFiles(SessionKey, String, String),
+    Export(
+        SessionKey,
+        String,
+        crate::application::ExportFormat,
+        std::path::PathBuf,
+    ),
+    Rewind {
+        key: SessionKey,
+        before: String,
+        tip: String,
+        files: bool,
+    },
     Notify(Notification),
     Sound(u8),
     Task(Task),
@@ -30,12 +45,20 @@ pub enum Command {
     Choices(Scope),
     Start(Scope, Options),
     Fork(SessionKey, ForkBoundary),
+    EditBranch(
+        SessionKey,
+        ForkBoundary,
+        String,
+        Vec<crate::application::Attachment>,
+    ),
     Resume(SessionKey),
     VerifyOpenCodeMove {
         from: SessionKey,
         destination: String,
     },
     History(SessionKey, Option<String>),
+    HandoffChat(SessionKey),
+    CodexControlHistory(SessionKey, crate::application::HistoryAction),
     Send(SessionKey, String, Options),
     Cancel(SessionKey),
     Approve(ApprovalPrompt, ApprovalDecision),
@@ -53,6 +76,8 @@ pub struct OpenCodeMove {
 
 #[derive(Debug)]
 pub enum Reply {
+    Remote(crate::remote::Outcome),
+    CheckpointFiles(Vec<String>),
     Inbox(Vec<serde_json::Value>),
     Generated(String),
     Task(TaskReply),
@@ -63,11 +88,21 @@ pub enum Reply {
     Project(ProjectInfo),
     Sessions(Vec<Summary>),
     Session(Summary),
-    Forked { source: SessionKey, child: Summary },
+    Forked {
+        source: SessionKey,
+        child: Summary,
+    },
+    EditableBranch {
+        source: SessionKey,
+        child: Summary,
+        text: String,
+        attachments: Vec<crate::application::Attachment>,
+    },
     Resumed(Summary, SessionHistoryPage),
     SessionMoved(OpenCodeMove),
     Choices(ProviderChoices),
     History(SessionHistoryPage),
+    HandoffChat(crate::remote::Chat),
     Done,
 }
 

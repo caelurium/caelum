@@ -113,6 +113,18 @@ impl Workspace {
             if live.panels.screen == crate::panels::Screen::Home {
                 return "Home";
             }
+            if live.panels.screen == crate::panels::Screen::Remote {
+                return live
+                    .app
+                    .remote
+                    .saved
+                    .selected
+                    .as_ref()
+                    .and_then(|id| live.app.remote.saved.checkouts.get(id))
+                    .map_or("Remote checkout", |c| {
+                        c.thread.heading().unwrap_or_else(|| c.title())
+                    });
+            }
             live.app
                 .selected
                 .map(|i| live.app.sessions[i].title.as_str())
@@ -154,6 +166,17 @@ impl Workspace {
 
     pub fn new_session(&mut self) {
         if let Some(live) = &mut self.live {
+            if live.panels.screen == crate::panels::Screen::Remote {
+                if let Some(id) = live.app.remote.saved.selected.clone()
+                    && live.panels.overlay.is_none()
+                    && live.app.can_start_vm_session(&id)
+                {
+                    crate::remote::new_session(self, &id);
+                } else {
+                    crate::panels::open_launcher(self);
+                }
+                return;
+            }
             live.new_session();
             return;
         }
@@ -207,14 +230,21 @@ impl Workspace {
     }
 }
 
-// The frame clock is virtual in headless runs, so the same interaction is reproducible.
-// Advance every session, including those currently hidden behind another selection.
 pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
     if let Some(live) = &mut s.live {
         if !s.sidebar.is_open() {
             live.feed.hidden();
         }
         let changed = live.poll(tx);
+        if !live.app.remote.removed.is_empty() {
+            return crate::remote::finish_removals(s);
+        }
+        if live.panels.overlay == Some(crate::panels::Screen::VmHandoff)
+            && live.app.enter_confirmed_vm()
+        {
+            crate::remote::enter_new(s);
+            return true;
+        }
         return crate::context::sync(live, tx) || changed;
     }
     let mut changed = false;
