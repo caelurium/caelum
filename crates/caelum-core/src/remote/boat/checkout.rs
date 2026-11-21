@@ -63,7 +63,9 @@ impl Boat {
     ) -> Result<Source, String> {
         let git = crate::git::GitClient::new();
         let repository = git.github_origin(project)?;
-        let published = match git.handoff_base(project).await {
+        let (published_result, environments_result) =
+            tokio::join!(git.handoff_base(project), self.client.environments(None),);
+        let published = match published_result {
             Ok(base) => Some(base),
             Err(error) if handoff => return Err(error),
             Err(_) => None,
@@ -72,10 +74,7 @@ impl Boat {
             .as_ref()
             .map(|base| base.branch.clone())
             .unwrap_or_else(|| git.checkout_branch(project).unwrap_or_default());
-        let environments = self
-            .client
-            .environments(None)
-            .await
+        let environments = environments_result
             .map_err(|e| Step::ListEnvironments.error(e))?
             .environments;
         let environment = environments

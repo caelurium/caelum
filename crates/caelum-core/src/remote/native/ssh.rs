@@ -179,21 +179,30 @@ impl Endpoint {
 pub(super) async fn open(target: &NativeTarget, parent_store: &Path) -> Result<Tunnel, String> {
     let owner = target.clone();
     let parent = parent_store.to_owned();
-    let ((key, public), metadata) = tokio::task::spawn_blocking(move || {
-        owner.with_live_profile(&parent, || {
-            let store = owner.store_path(&parent);
-            let dir = store.parent().expect("workspace directory");
-            Ok((
-                identity(&dir.join("ssh"))?,
-                access::Metadata::open(&owner, &parent, &store)?,
-            ))
+    let local_setup = async {
+        tokio::task::spawn_blocking(move || {
+            owner.with_live_profile(&parent, || {
+                let store = owner.store_path(&parent);
+                let dir = store.parent().expect("workspace directory");
+                Ok((
+                    identity(&dir.join("ssh"))?,
+                    access::Metadata::open(&owner, &parent, &store)?,
+                ))
+            })
         })
-    })
-    .await
-    .map_err(|e| e.to_string())??;
+        .await
+        .map_err(|e| e.to_string())?
+    };
+    let authenticate = async {
+        tokio::time::timeout(Duration::from_secs(22), async {
+            let key = credentials::read().await?;
+            Boat::authenticate(boat_sdk::Client::new(key.0.trim()).map_err(api)?).await
+        })
+        .await
+        .map_err(|_| "Boat timed out authorizing SSH.".to_owned())?
+    };
+    let (((key, public), metadata), boat) = tokio::try_join!(local_setup, authenticate)?;
     let endpoint = tokio::time::timeout(Duration::from_secs(22), async {
-        let key = credentials::read().await?;
-        let boat = Boat::authenticate(boat_sdk::Client::new(key.0.trim()).map_err(api)?).await?;
         Endpoint::new(authorize(&boat, target, public).await?)
     })
     .await
@@ -286,21 +295,18 @@ async fn connect(
     };
     if let Some(error) = diagnostic {
         let _ = child.kill().await;
-        let _ = child.wait().await;
-        return Err(with_diagnostic(
-            error,
-            stderr_task.await.unwrap_or_default(),
-        ));
+        let (_, stderr_bytes) = tokio::join!(child.wait(), stderr_task);
+        return Err(with_diagnostic(error, stderr_bytes.unwrap_or_default()));
     }
     if !origin.ends_with('\n')
         || !crate::remote::github_slug(origin.trim())
             .is_some_and(|r| r.eq_ignore_ascii_case(repository))
     {
         let _ = child.kill().await;
-        let _ = child.wait().await;
+        let (_, stderr_bytes) = tokio::join!(child.wait(), stderr_task);
         return Err(with_diagnostic(
             "SSH could not verify the VM host key and Git checkout. Check the machine and refresh its connection.".into(),
-            stderr_task.await.unwrap_or_default(),
+            stderr_bytes.unwrap_or_default(),
         ));
     }
     Ok(Tunnel {
