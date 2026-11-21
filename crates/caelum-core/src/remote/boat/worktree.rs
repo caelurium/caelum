@@ -66,11 +66,20 @@ impl Boat {
         if reply.timed_out {
             return Err(format!("Timed out preparing {repo} on the VM. Check its GitHub access, then choose Refresh checkout."));
         }
+        let diagnostic = reply
+            .stderr
+            .chars()
+            .filter(|character| !character.is_control() || *character == ' ')
+            .take(512)
+            .collect::<String>()
+            .trim()
+            .to_owned();
         Err(match (reply.exit_code, target.root.as_deref()) {
             (Some(40), Some(path)) => format!("The saved checkout of {repo} is missing at {path} on this VM. Restore it there, then choose Refresh checkout."),
             (Some(40), None) => format!("No checkout of {repo} was found on this VM. Check Boat’s GitHub repository access and restore the checkout, then choose Refresh checkout."),
             (Some(41), _) => format!("The VM checkout directory is occupied or its Git origin does not match {repo}. Check the repository on the VM, then choose Refresh checkout."),
             (Some(42), _) => format!("More than one VM checkout has {repo} as its origin. Leave one checkout in the VM work directory, then choose Refresh checkout."),
+            (Some(43), _) if !diagnostic.is_empty() => format!("Could not clone {repo} at branch {base} on the new VM: {diagnostic}"),
             (Some(43), _) => format!("Could not clone {repo} at branch {base} on the new VM. Check Boat’s GitHub access and the published branch, then choose Refresh checkout."),
             _ => "Could not locate the Git checkout on the VM. Check that Git and Python 3 are available, then choose Refresh checkout.".into(),
         })

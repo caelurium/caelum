@@ -129,6 +129,7 @@ impl Workspace {
                 defaults: None,
                 source,
                 phase: Phase::Create(plan),
+                lifetime,
                 root: None,
                 thread: Thread::for_checkout(),
                 other_threads: Vec::new(),
@@ -199,6 +200,7 @@ impl Workspace {
                 Checkout {
                     defaults: None,
                     source,
+                    lifetime: Lifetime::default(),
                     root: None,
                     thread: Thread::for_checkout(),
                     other_threads: Vec::new(),

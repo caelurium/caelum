@@ -26,12 +26,29 @@ pub enum Page {
 
 fn settings_provider(s: &Workspace) -> Provider {
     let l = live(s);
-    let available = Provider::for_project(l.app.active_project.as_deref());
+    let project = settings_project(s);
+    let available = Provider::for_project(project.as_deref());
     if available.contains(&l.panels.settings_provider) {
         l.panels.settings_provider
     } else {
         available[0]
     }
+}
+
+fn settings_project(s: &Workspace) -> Option<String> {
+    let l = live(s);
+    l.app.active_project.clone().or_else(|| {
+        (l.panels.screen == panels::Screen::Remote)
+            .then(|| {
+                l.app
+                    .remote
+                    .saved
+                    .selected
+                    .as_deref()
+                    .map(caelum_core::remote::native::project_key)
+            })
+            .flatten()
+    })
 }
 
 pub fn height(s: &Workspace) -> f32 {
@@ -45,7 +62,7 @@ pub fn height(s: &Workspace) -> f32 {
                 } else {
                     0.0
                 }
-                + if l.app.active_project.as_ref().is_some_and(|project| {
+                + if settings_project(s).as_ref().is_some_and(|project| {
                     l.app.notices.contains_key(&Scope {
                         project: project.clone(),
                         provider: settings_provider(s),
@@ -236,12 +253,10 @@ fn picker(
 
 fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let app = &live(s).app;
+    let project = settings_project(s);
     let provider = settings_provider(s);
-    let available = Provider::for_project(app.active_project.as_deref());
-    let destination = app
-        .active_project
-        .as_deref()
-        .and_then(|p| app.native_checkout(p));
+    let available = Provider::for_project(project.as_deref());
+    let destination = project.as_deref().and_then(|p| app.native_checkout(p));
     let detail = destination.map(|c| {
         format!(
             "Codex defaults for new sessions on {}. Adjust each session in the composer.",
@@ -258,7 +273,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if available.len() > 1 {
         let mut defaults = row().gap(4.0);
         for &p in available {
-            let destination = app.active_project.clone();
+            let destination = project.clone();
             defaults = defaults.child(
                 ui::tab(
                     ui::provider_name(p),
@@ -288,14 +303,22 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         tabs = tabs.child(
             ui::tab(ui::provider_name(p), p == provider, k)
                 .on_press(move |s: &mut Workspace| {
+                    let scope = settings_project(s).map(|project| Scope {
+                        provider: p,
+                        project,
+                    });
                     live_mut(s).panels.settings_provider = p;
                     live_mut(s).panels.settings_menu = None;
-                    live_mut(s).app.refresh_choices(p);
+                    if let Some(scope) = scope {
+                        live_mut(s).app.refresh_choices_for(scope);
+                    } else {
+                        live_mut(s).app.refresh_choices(p);
+                    }
                 })
                 .key(format!("settings-provider-{}", p.as_str())),
         );
     }
-    let Some(project) = &app.active_project else {
+    let Some(project) = &project else {
         return body.child(tabs.py(10.0)).child(ui::caption(
             "Open a project to discover available models and agents.",
             k,

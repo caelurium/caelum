@@ -4,11 +4,68 @@ use caelum_protocol::{
     GitFileDiff, GitRepositoryStatus, ProjectSearchMatch, ProjectSearchMode, ProjectSearchResults,
 };
 
+const CONTENT_SEARCH: &str = r#"import json,os,subprocess,sys
+root,query=sys.argv[1:]
+env=os.environ.copy()
+env["GIT_TERMINAL_PROMPT"]="0"
+command=["git","-C",root,"--literal-pathspecs","grep","--untracked","--exclude-standard","-n","-z","-I","-i","-F","-e",query,"--","."]
+process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env)
+matches=[]
+truncated=False
+while True:
+    record=process.stdout.readline(1024*1024+1)
+    if not record:
+        break
+    oversized=len(record)>1024*1024 and not record.endswith(b"\n")
+    while oversized and not record.endswith(b"\n"):
+        record=process.stdout.readline(1024*1024+1)
+        if not record:
+            break
+    if oversized:
+        truncated=True
+    fields=record.rstrip(b"\n").split(b"\0",2)
+    if len(fields)!=3:
+        continue
+    path=fields[0].decode("utf-8","replace")
+    number=fields[1].decode("ascii","ignore")
+    line=fields[2].decode("utf-8","replace")
+    folded=line.casefold()
+    needle=query.casefold()
+    found=folded.find(needle)
+    if found<0:
+        continue
+    if len(matches)==200:
+        truncated=True
+        process.kill()
+        break
+    offset=0
+    source_index=None
+    for index,char in enumerate(line):
+        if offset==found:
+            source_index=index
+            break
+        offset+=len(char.casefold())
+        if offset>found:
+            break
+        if offset==found:
+            source_index=index+1
+            break
+    if source_index is None:
+        column=None
+        start=0
+    else:
+        column=len(line[:source_index].encode("utf-16-le"))//2+1
+        start=max(0,source_index-60)
+    matches.append({"path":path,"line":int(number) if number.isdigit() else None,"column":column,"preview":line[start:start+240]})
+process.communicate()
+print(json.dumps({"matches":matches,"truncated":truncated},ensure_ascii=True))
+"#;
+
 impl Access {
     async fn git(&self, args: &[&str], codes: &[i32]) -> Result<Vec<u8>, String> {
         let root = quote(&self.root);
         let args = args.iter().map(|a| quote(a)).collect::<Vec<_>>().join(" ");
-        let script=format!("test \"$(git -C {root} rev-parse --show-toplevel)\" = {root} && GIT_OPTIONAL_LOCKS=0 LC_ALL=C git -C {root} --literal-pathspecs {args}");
+        let script=format!("test \"$(git -C {root} rev-parse --show-toplevel)\" = {root} && GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 LC_ALL=C.UTF-8 git -C {root} --literal-pathspecs {args}");
         self.run(&script, 8 * 1024 * 1024, codes).await
     }
     pub(crate) async fn branch_context(&self) -> Result<git::GitBranchContext, String> {
@@ -20,14 +77,29 @@ impl Access {
         })
     }
     pub(super) async fn status(&self) -> Result<GitRepositoryStatus, String> {
-        let branch = self.branch_context().await?.branch;
-        let mut changes = git::parse_status(&self.git(git::PORCELAIN_STATUS_ARGS, &[0]).await?)
-            .map_err(|e| e.to_string())?;
+        let root = quote(&self.root);
+        let args = git::PORCELAIN_STATUS_ARGS
+            .iter()
+            .map(|argument| quote(argument))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let script = format!(
+            "test \"$(git -C {root} rev-parse --show-toplevel)\" = {root} && branch=$(git -C {root} branch --show-current) && printf '%s\\n' \"$branch\" && GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 LC_ALL=C.UTF-8 git -C {root} --literal-pathspecs {args}"
+        );
+        let data = self.run(&script, 8 * 1024 * 1024, &[0]).await?;
+        let delimiter = data
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .ok_or("Invalid VM Git status response.")?;
+        let (branch, status) = data.split_at(delimiter);
+        let status = &status[1..];
+        let branch = std::str::from_utf8(branch).map_err(|_| "Invalid VM branch.")?;
+        let mut changes = git::parse_status(status).map_err(|e| e.to_string())?;
         self.stamps(&mut changes).await;
         Ok(GitRepositoryStatus {
             project_path: self.root.clone(),
             repository_root: Some(self.root.clone()),
-            branch,
+            branch: (!branch.is_empty()).then(|| branch.into()),
             changes,
         })
     }
@@ -109,55 +181,27 @@ impl Access {
                     .collect();
             }
             ProjectSearchMode::Content if !query.trim().is_empty() => {
-                let data = self
-                    .git(
-                        &[
-                            "grep",
-                            "--untracked",
-                            "--exclude-standard",
-                            "-n",
-                            "-z",
-                            "-I",
-                            "-i",
-                            "-F",
-                            "-e",
-                            query,
-                            "--",
-                            ".",
-                        ],
-                        &[0, 1],
-                    )
-                    .await?;
-                let pattern = regex::RegexBuilder::new(&regex::escape(query))
-                    .case_insensitive(true)
-                    .build()
-                    .map_err(|e| e.to_string())?;
-                let text = String::from_utf8_lossy(&data);
-                let mut rest = text.as_ref();
-                while let Some((path, after)) = rest.split_once('\0') {
-                    let Some((n, after)) = after.split_once('\0') else {
-                        break;
-                    };
-                    let (line, after) = after.split_once('\n').unwrap_or((after, ""));
-                    if result.matches.len() == 200 {
-                        result.truncated = true;
-                        break;
-                    }
-                    if let Some(m) = pattern.find(line) {
-                        let prefix = &line[..m.start()];
-                        result.matches.push(ProjectSearchMatch {
-                            path: path.into(),
-                            line: n.parse().ok(),
-                            column: Some(prefix.encode_utf16().count() + 1),
-                            preview: Some(
-                                line.chars()
-                                    .skip(prefix.chars().count().saturating_sub(60))
-                                    .take(240)
-                                    .collect(),
-                            ),
-                        });
-                    }
-                    rest = after;
+                let root = quote(&self.root);
+                let script = format!(
+                    "cd -P {root} && python3 -c {} {root} {}",
+                    quote(CONTENT_SEARCH),
+                    quote(query)
+                );
+                let data = self.run(&script, 1024 * 1024, &[0]).await?;
+                let response: serde_json::Value =
+                    serde_json::from_slice(&data).map_err(|e| e.to_string())?;
+                result.truncated = response["truncated"].as_bool().unwrap_or(false);
+                for value in response["matches"].as_array().into_iter().flatten() {
+                    result.matches.push(ProjectSearchMatch {
+                        path: value["path"].as_str().unwrap_or_default().to_owned(),
+                        line: value["line"]
+                            .as_u64()
+                            .and_then(|line| usize::try_from(line).ok()),
+                        column: value["column"]
+                            .as_u64()
+                            .and_then(|column| usize::try_from(column).ok()),
+                        preview: value["preview"].as_str().map(str::to_owned),
+                    });
                 }
             }
             _ => {}

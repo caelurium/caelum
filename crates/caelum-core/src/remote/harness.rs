@@ -42,7 +42,7 @@ impl Default for Thread {
             local_id: None,
             awaiting_native: false,
             continued: None,
-            provider: opencode(),
+            provider: Provider::Codex,
             model: None,
             effort: None,
             last_activity: None,
@@ -203,7 +203,7 @@ impl Thread {
 
     /// A handoff replaces the checkout's initial empty editor without parking a phantom row.
     pub(super) fn is_placeholder(&self) -> bool {
-        self.local_id.is_none() && self.provider == opencode() && self.is_blank()
+        self.local_id.is_none() && self.is_blank()
     }
 
     pub fn title(&self) -> &str {

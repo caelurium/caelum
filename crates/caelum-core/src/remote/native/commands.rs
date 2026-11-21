@@ -28,6 +28,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         {
             &k.scope.project
         }
+        Command::Export(k, ..) if k.scope.provider == Provider::Codex => &k.scope.project,
         Command::Approve(p, _) if p.provider == Provider::Codex.as_str() => &p.project_path,
         Command::Answer(p, _) if p.provider == Provider::Codex.as_str() => &p.project_path,
         Command::Task(Task::Image { project, source })

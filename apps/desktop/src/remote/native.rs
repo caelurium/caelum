@@ -75,7 +75,8 @@ pub(crate) fn ready(l: &Live) -> bool {
     project.and_then(checkout_id).is_none_or(|id| {
         unavailable(&l.app, id).is_none()
             && !matches!(l.app.remote.jobs.get(id), Some(Job::Deleting(_)))
-            && l.native.status(id) == Some(&Status::Connected)
+            && l.app.can_open_vm_session(id)
+            && !matches!(l.native.status(id), Some(Status::Disconnected(_)))
     })
 }
 

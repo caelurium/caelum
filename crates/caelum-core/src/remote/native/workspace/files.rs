@@ -1,10 +1,10 @@
 use super::Access;
-use crate::{files, images, remote::boat::checkout_quote as quote};
+use crate::{files, images};
 use caelum_protocol::{
     ProjectDirectoryListing, ProjectEntryKind, ProjectFileContent, ProjectFileEntry,
 };
 use russh_sftp::client::SftpSession;
-use std::{path::Path, process::Stdio};
+use std::{path::Path, process::Stdio, time::Duration};
 use tokio::{io::AsyncReadExt, process::Child};
 
 fn error(e: impl std::fmt::Display) -> String {
@@ -16,31 +16,39 @@ impl Access {
         if changes.is_empty() {
             return;
         }
-        let Ok((_child, session)) = self.sftp().await else {
-            return;
-        };
-        use futures_util::StreamExt;
-        futures_util::stream::iter(changes)
-            .for_each_concurrent(16, |change| {
-                let session = &session;
-                async move {
-                    if files::validate_relative_path(&change.path).is_err() {
-                        return;
-                    }
-                    if let Ok(attrs) = session
-                        .symlink_metadata(format!("{}/{}", self.root, change.path))
-                        .await
-                    {
-                        change.modified_at = attrs
-                            .mtime
-                            .map(|s| (u64::from(s) * 1_000_000_000).to_string());
-                        change.revision =
-                            format!("{} {:?} {:?}", change.revision, attrs.mtime, attrs.size);
-                    }
-                }
+        let _ = self
+            .bounded(Duration::from_secs(20), async {
+                let Ok((_child, session)) = self.sftp().await else {
+                    return Ok(());
+                };
+                use futures_util::StreamExt;
+                futures_util::stream::iter(changes)
+                    .for_each_concurrent(16, |change| {
+                        let session = &session;
+                        async move {
+                            if files::validate_relative_path(&change.path).is_err() {
+                                return;
+                            }
+                            if let Ok(attrs) = session
+                                .symlink_metadata(format!("{}/{}", self.root, change.path))
+                                .await
+                            {
+                                change.modified_at = attrs
+                                    .mtime
+                                    .map(|s| (u64::from(s) * 1_000_000_000).to_string());
+                                change.revision = format!(
+                                    "{} {:?} {:?}",
+                                    change.revision, attrs.mtime, attrs.size
+                                );
+                            }
+                        }
+                    })
+                    .await;
+                Ok(())
             })
             .await;
     }
+
     async fn sftp(&self) -> Result<(Child, SftpSession), String> {
         let mut child = self
             .channel(&["-s"])
@@ -48,10 +56,25 @@ impl Access {
             .stdin(Stdio::piped())
             .spawn()
             .map_err(error)?;
-        let stream = tokio::io::join(child.stdout.take().unwrap(), child.stdin.take().unwrap());
+        if let Some(mut stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                let mut buffer = [0; 1024];
+                loop {
+                    match stderr.read(&mut buffer).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                }
+            });
+        }
+        let stream = tokio::io::join(
+            child.stdout.take().expect("piped stdout"),
+            child.stdin.take().expect("piped stdin"),
+        );
         let session = SftpSession::new(stream).await.map_err(error)?;
         Ok((child, session))
     }
+
     async fn scoped(&self, s: &SftpSession, path: &str) -> Result<String, String> {
         if !path.is_empty() {
             files::validate_relative_path(path).map_err(error)?;
@@ -73,79 +96,116 @@ impl Access {
         }
         Ok(physical)
     }
+
     pub(super) async fn directory(
         &self,
         path: &str,
         offset: usize,
     ) -> Result<ProjectDirectoryListing, String> {
-        let (_child, s) = self.sftp().await?;
-        let dir = self.scoped(&s, path).await?;
-        let mut entries = vec![];
-        for entry in s.read_dir(dir).await.map_err(error)? {
-            let name = entry.file_name();
-            if name == ".git" || name.contains('/') || files::validate_relative_path(&name).is_err()
-            {
-                continue;
+        self.bounded(Duration::from_secs(20), async {
+            let (_child, s) = self.sftp().await?;
+            let dir = self.scoped(&s, path).await?;
+            let mut entries = vec![];
+            for entry in s.read_dir(dir).await.map_err(error)? {
+                let name = entry.file_name();
+                if name == ".git"
+                    || name.contains('/')
+                    || files::validate_relative_path(&name).is_err()
+                {
+                    continue;
+                }
+                let attrs = entry.metadata();
+                let kind = if attrs.is_dir() {
+                    ProjectEntryKind::Directory
+                } else if attrs.is_regular() {
+                    ProjectEntryKind::File
+                } else if attrs.is_symlink() {
+                    ProjectEntryKind::Symlink
+                } else {
+                    continue;
+                };
+                entries.push(ProjectFileEntry {
+                    path: if path.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{path}/{name}")
+                    },
+                    name,
+                    kind,
+                    size_bytes: if kind == ProjectEntryKind::File {
+                        attrs.size
+                    } else {
+                        None
+                    },
+                });
             }
-            let attrs = entry.metadata();
-            let kind = if attrs.is_dir() {
-                ProjectEntryKind::Directory
-            } else if attrs.is_regular() {
-                ProjectEntryKind::File
-            } else if attrs.is_symlink() {
-                ProjectEntryKind::Symlink
-            } else {
-                continue;
-            };
-            entries.push(ProjectFileEntry {
-                path: if path.is_empty() {
-                    name.clone()
-                } else {
-                    format!("{path}/{name}")
-                },
-                name,
-                kind,
-                size_bytes: if kind == ProjectEntryKind::File {
-                    attrs.size
-                } else {
-                    None
-                },
-            });
-        }
-        Ok(files::directory_page(
-            entries,
-            path,
-            offset,
-            files::DEFAULT_DIRECTORY_PAGE_SIZE,
-        ))
+            Ok(files::directory_page(
+                entries,
+                path,
+                offset,
+                files::DEFAULT_DIRECTORY_PAGE_SIZE,
+            ))
+        })
+        .await
     }
+
     async fn bytes(&self, path: &str, limit: u64) -> Result<(Vec<u8>, u64), String> {
-        files::validate_relative_path(path).map_err(error)?;
-        let (_child, s) = self.sftp().await?;
-        let physical = self.scoped(&s, path).await?;
-        let file = s.open(physical).await.map_err(error)?;
-        let attrs = file.metadata().await.map_err(error)?;
-        if !attrs.is_regular() {
-            return Err("VM path is not a regular file.".into());
-        }
-        let mut bytes = vec![];
-        file.take(limit + 1)
-            .read_to_end(&mut bytes)
-            .await
-            .map_err(error)?;
-        let size = attrs.size.unwrap_or(bytes.len() as u64);
-        Ok((bytes, size))
+        self.bounded(Duration::from_secs(20), async {
+            files::validate_relative_path(path).map_err(error)?;
+            let (_child, s) = self.sftp().await?;
+            let requested = format!("{}/{}", self.root, path);
+            let physical = self.scoped(&s, path).await?;
+            let before = s.symlink_metadata(&physical).await.map_err(error)?;
+            if !before.is_regular() {
+                return Err("VM path is not a regular file.".into());
+            }
+            let file = s.open(&physical).await.map_err(error)?;
+            let attrs = file.metadata().await.map_err(error)?;
+            let after = s.canonicalize(requested).await.map_err(error)?;
+            if !attrs.is_regular() || after != physical {
+                return Err("VM path changed while it was being opened.".into());
+            }
+            let mut bytes = vec![];
+            file.take(limit + 1)
+                .read_to_end(&mut bytes)
+                .await
+                .map_err(error)?;
+            let size = attrs.size.unwrap_or(bytes.len() as u64);
+            Ok((bytes, size))
+        })
+        .await
     }
+
     pub(super) async fn file(&self, path: &str) -> Result<ProjectFileContent, String> {
         let (bytes, size) = self.bytes(path, files::MAX_TEXT_FILE_BYTES as u64).await?;
         files::text_preview(path, size, bytes).map_err(error)
     }
+
     pub(super) async fn image(&self, source: &str) -> Result<String, String> {
-        let bytes = if source.starts_with("https://") || source.starts_with("http://") {
-            self.run(&format!("curl -fsSL --proto '=http,https' --proto-redir '=http,https' --max-time 20 -- {}",quote(source)),images::MAX_IMAGE_BYTES as usize,&[0]).await?
-        } else {
-            self.bytes(source, images::MAX_IMAGE_BYTES).await?.0
-        };
-        images::data_url(bytes.as_slice())
+        self.bounded(Duration::from_secs(25), async {
+            let bytes = if source.starts_with("https://") || source.starts_with("http://") {
+                let mut response = reqwest::Client::builder()
+                    .timeout(Duration::from_secs(20))
+                    .build()
+                    .map_err(error)?
+                    .get(source)
+                    .send()
+                    .await
+                    .and_then(reqwest::Response::error_for_status)
+                    .map_err(error)?;
+                let mut bytes = Vec::new();
+                while let Some(chunk) = response.chunk().await.map_err(error)? {
+                    if bytes.len() as u64 + chunk.len() as u64 > images::MAX_IMAGE_BYTES {
+                        return Err("The image exceeds the 10 MB limit.".into());
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                bytes
+            } else {
+                self.bytes(source, images::MAX_IMAGE_BYTES).await?.0
+            };
+            images::data_url(bytes.as_slice())
+        })
+        .await
     }
 }

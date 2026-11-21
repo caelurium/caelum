@@ -1,6 +1,6 @@
 use super::{checkout, conversation};
 use crate::{Workspace, live::live_mut, panels::Screen, settings::Page};
-use caelum_core::remote::*;
+use caelum_core::{application::Provider, remote::*};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) fn scene(s: &mut Workspace, name: &str) {
@@ -89,6 +89,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     let mut c = Checkout {
         defaults: None,
         source,
+        lifetime: Lifetime::Hour,
         root: Some("/home/user/project".into()),
         phase: Phase::Ready {
             machine: machine.clone(),
@@ -98,6 +99,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         other_threads: vec![],
         thread: Thread {
             conversation: Some("thread-example".into()),
+            provider: Provider::OpenCode,
             last_activity: Some(l.feed.now - 120_000),
             lines: vec![
                 Line::new(Speaker::You, "Add a health check and show me the changes."),
@@ -115,6 +117,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             use caelum_core::application::Provider;
             use caelum_protocol::{ProviderChoice, ProviderModelChoice};
             c.thread = Thread {
+                provider: Provider::OpenCode,
                 draft: "Review the changes on this branch.".into(),
                 ..Default::default()
             };

@@ -634,9 +634,11 @@ fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
 }
 
 fn in_checkout(thread: &Value, project: &Project) -> bool {
-    thread["cwd"]
-        .as_str()
-        .is_some_and(|dir| project.matches(dir))
+    match thread.get("cwd") {
+        Some(Value::String(dir)) => project.matches(dir),
+        None | Some(Value::Null) => project.is_remote(),
+        _ => false,
+    }
 }
 
 impl CodexConnection {

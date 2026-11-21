@@ -1,5 +1,6 @@
 use super::*;
 use crate::live::{live, live_mut};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_and_other_vms() {
@@ -211,4 +212,86 @@ fn saved_opencode_vm_draft_opens_a_separate_codex_session_without_submitting() {
             | Command::Enqueue(..)
             | Command::Task(caelum_core::application::Task::Stats { .. })
     )));
+}
+
+#[test]
+fn active_native_turns_renew_each_vm_at_its_saved_lifetime() {
+    use caelum_core::remote::{Lifetime, Operation, Phase};
+
+    let mut rt = design_runtime("", (800., 620.));
+    let deadline = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        - 30;
+    rt.update(|s, _| {
+        crate::remote::scene(s, "native-connected");
+        let l = live_mut(s);
+        l.fixture = false;
+        let checkout = l
+            .app
+            .remote
+            .saved
+            .checkouts
+            .get_mut("checkout-example")
+            .unwrap();
+        checkout.lifetime = Lifetime::EightHours;
+        let Phase::Ready { machine, .. } = &mut checkout.phase else {
+            panic!()
+        };
+        machine.auto_stop_unix = Some(deadline);
+        let mut idle = checkout.clone();
+        let Phase::Ready { machine, .. } = &mut idle.phase else {
+            panic!()
+        };
+        machine.key.id = "idle-vm".into();
+        machine.auto_stop_unix = Some(deadline);
+        idle.lifetime = Lifetime::Day;
+        l.app
+            .remote
+            .saved
+            .checkouts
+            .insert("idle-checkout".into(), idle);
+        let session = l.app.selected.unwrap();
+        l.app.sessions[session].conversation.working = true;
+    });
+    advance(&mut rt, 0.2);
+
+    let commands = live_mut(&mut rt.state).app.commands();
+    assert!(commands.iter().any(|(_, command)| matches!(
+        command,
+        Command::Remote(Operation::Lifetime(machine, Lifetime::EightHours))
+            if machine.id == "vm-example"
+    )));
+    assert!(commands.iter().any(|(_, command)| matches!(
+        command,
+        Command::Remote(Operation::Prepare(target, _, None))
+            if target.machine.id == "idle-vm"
+    )));
+}
+
+#[test]
+fn remote_provider_settings_use_the_selected_vm_without_mutating_laptop_defaults() {
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| {
+        crate::remote::scene(s, "native-connected");
+        let l = live_mut(s);
+        l.panels.screen = crate::panels::Screen::Remote;
+        l.panels.overlay = Some(crate::panels::Screen::Settings);
+        l.panels.settings_page = crate::settings::Page::Providers;
+        l.app.active_project = None;
+        l.app.remote.saved.selected = Some("checkout-example".into());
+    });
+    advance(&mut rt, 0.2);
+    let preferences = live(&rt.state).app.preferences.clone();
+    assert!(rt.find("settings-provider-codex").is_some());
+    assert!(rt.find("default-provider-opencode").is_none());
+    click(&mut rt, "settings-provider-codex");
+    let app = &mut live_mut(&mut rt.state).app;
+    assert_eq!(app.preferences, preferences);
+    assert!(
+        app.commands()
+            .iter()
+            .all(|(_, command)| !matches!(command, Command::Remote(Operation::Prompt(..))))
+    );
 }

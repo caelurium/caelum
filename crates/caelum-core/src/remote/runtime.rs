@@ -108,10 +108,16 @@ impl Backend {
                 .recover(target, *provider, conv.as_deref(), prompt)
                 .await
                 .map(Outcome::Accepted),
-            Operation::Discover(project) | Operation::DiscoverHandoff(project) => self
+            Operation::Discover(project) => self
                 .connected()
                 .await?
-                .discover(project)
+                .discover(project, false)
+                .await
+                .map(Outcome::Source),
+            Operation::DiscoverHandoff(project) => self
+                .connected()
+                .await?
+                .discover(project, true)
                 .await
                 .map(Outcome::Source),
             Operation::MatchCheckout(project, target) => {

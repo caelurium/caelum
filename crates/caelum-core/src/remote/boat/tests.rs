@@ -56,6 +56,17 @@ async fn lists_every_page_without_exposing_sandbox_secrets() {
     );
 }
 
+#[test]
+fn new_vm_threads_default_to_codex_while_legacy_snapshots_keep_opencode() {
+    let thread = crate::remote::Thread::default();
+    assert_eq!(thread.provider, Provider::Codex);
+
+    let mut legacy = serde_json::to_value(thread).unwrap();
+    legacy.as_object_mut().unwrap().remove("provider");
+    let legacy: crate::remote::Thread = serde_json::from_value(legacy).unwrap();
+    assert_eq!(legacy.provider, Provider::OpenCode);
+}
+
 fn sandbox(state: &str) -> serde_json::Value {
     json!({"id":"vm-1","name":"dev","state":state,"desktopAvailable":false,"snapshotAvailable":true,
            "environment":"project-env","environmentVersion":2})

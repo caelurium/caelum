@@ -9,6 +9,8 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
 
+pub(super) type Outgoing = (String, std::sync::mpsc::Sender<Result<(), String>>);
+
 pub(super) fn open(access: &Access, url: &str) -> Result<(Writer, Messages), CodexError> {
     let (mut ws, _) = access
         .io
@@ -19,7 +21,8 @@ pub(super) fn open(access: &Access, url: &str) -> Result<(Writer, Messages), Cod
                     url,
                     Some(
                         tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
-                            .max_message_size(Some(32 * 1024 * 1024)),
+                            .max_message_size(Some(32 * 1024 * 1024))
+                            .max_frame_size(Some(32 * 1024 * 1024)),
                     ),
                     true,
                 ),
@@ -28,31 +31,56 @@ pub(super) fn open(access: &Access, url: &str) -> Result<(Writer, Messages), Cod
         })
         .map_err(|_| CodexError::Transport("VM Codex WebSocket handshake timed out.".into()))?
         .map_err(|e| CodexError::Transport(format!("VM Codex WebSocket handshake failed: {e}")))?;
-    let (tx, mut rx) = mpsc::channel::<String>(128);
+    let (tx, mut rx) = mpsc::channel::<Outgoing>(128);
     let (stop, mut closing) = watch::channel(false);
-    let (messages, input) = std::sync::mpsc::sync_channel(512);
+    let (input_tx, mut input) = mpsc::channel::<std::io::Result<String>>(128);
     let live = access.live.clone();
     access.io.spawn(async move {
-        loop {
+        let failure = loop {
             tokio::select! {
-                _ = closing.changed() => break,
+                _ = closing.changed() => break None,
                 msg = rx.recv() => match msg {
-                    Some(s) if live.load(std::sync::atomic::Ordering::Acquire) => {
-                        if ws.send(Message::Text(s.into())).await.is_err() { break }
+                    Some((s, delivered)) if live.load(std::sync::atomic::Ordering::Acquire) => {
+                        match ws.send(Message::Text(s.into())).await {
+                            Ok(()) => { let _ = delivered.send(Ok(())); },
+                            Err(error) => {
+                                let message = format!("Codex WebSocket write failed: {error}");
+                                let _ = delivered.send(Err(message.clone()));
+                                break Some(message);
+                            }
+                        }
                     }
-                    _ => break,
+                    Some((_, delivered)) => {
+                        let _ = delivered.send(Err("Codex WebSocket closed.".into()));
+                        break None;
+                    }
+                    None => break None,
                 },
                 msg = ws.next() => match msg {
-                    Some(Ok(Message::Text(s))) => if messages.try_send(Ok(s.to_string())).is_err() { break },
-                    Some(Ok(Message::Ping(_))) => if ws.flush().await.is_err() { break },
+                    Some(Ok(Message::Text(s))) => {
+                        if input_tx.send(Ok(s.to_string())).await.is_err() {
+                            break None;
+                        }
+                    }
+                    Some(Ok(Message::Ping(_))) => if ws.flush().await.is_err() {
+                        break Some("Codex WebSocket closed while replying to ping.".into())
+                    },
                     Some(Ok(Message::Pong(_))) => {},
-                    _ => break,
+                    Some(Ok(Message::Close(frame))) => {
+                        break Some(format!("Codex WebSocket closed: {frame:?}"));
+                    }
+                    Some(Ok(_)) => break Some("Codex WebSocket received an unsupported frame.".into()),
+                    Some(Err(error)) => break Some(format!("Codex WebSocket read failed: {error}")),
+                    None => break Some("Codex WebSocket closed.".into()),
                 },
             }
+        };
+        if let Some(error) = failure {
+            let _ = input_tx.send(Err(std::io::Error::other(error))).await;
         }
     });
     Ok((
         Writer::WebSocket(tx, stop, access.live.clone()),
-        Box::new(input.into_iter()),
+        Box::new(std::iter::from_fn(move || input.blocking_recv())),
     ))
 }

@@ -265,6 +265,11 @@ fn former_vm_profile_is_imported_once_without_replacing_the_laptop_selection() {
     legacy.sessions[i].remote_id = Some("ses_prior".into());
     legacy.sessions[i].draft = "in VM editor".into();
     legacy.sessions[i].options.model = Some("custom/model".into());
+    let unrelated = legacy.new_session(Scope {
+        project: "/unrelated-project".into(),
+        provider: Provider::Codex,
+    });
+    legacy.sessions[unrelated].draft = "leave this session out".into();
     legacy.preferences.default_provider = Provider::OpenCode;
     legacy
         .preferences

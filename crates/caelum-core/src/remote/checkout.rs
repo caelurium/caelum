@@ -62,6 +62,8 @@ pub enum Phase {
 pub struct Checkout {
     pub source: Source,
     pub phase: Phase,
+    #[serde(default)]
+    pub lifetime: super::Lifetime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<ProviderDefaults>,
     /// Canonical Git worktree on this VM. Older snapshots resolve it on refresh.
@@ -132,16 +134,7 @@ impl Checkout {
                 .continued
                 .as_ref()
                 .filter(|_| self.thread.conversation.is_none())
-                .and_then(|c| c.base.clone())
-                .or_else(|| {
-                    if self.root.is_some() || !matches!(self.phase, Phase::Prepare { .. }) {
-                        return None;
-                    }
-                    Some(PublishedBase {
-                        branch: self.source.base.clone(),
-                        tip: self.source.published_tip.clone()?,
-                    })
-                }),
+                .and_then(|c| c.base.clone()),
         })
     }
 }

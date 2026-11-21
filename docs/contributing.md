@@ -53,10 +53,11 @@ protocol, recovery and lifecycle checks. Real-service smoke tests are opt-in;
 see the [desktop development guide](../apps/desktop/README.md).
 
 In the dev shell, `python3 scripts/dev/smoke_native_workspace.py` exercises
-SFTP and Git in a temporary checkout over pinned loopback SSH. The fixture
-requires Python with `asyncssh`. Pass `--real-codex /path/to/codex` to stream
-a turn and recover its history after restarting the server and changing the
-host key. Add `--approval` to drop SSH while Codex waits for permission.
+SFTP, Git and a fake Codex app-server in a temporary checkout over pinned
+loopback SSH. The fixture requires Python with `asyncssh`. Pass
+`--real-codex /path/to/codex` to stream a turn and recover its history after
+restarting the server and changing the host key. Add `--approval` to drop SSH
+while Codex waits for permission.
 A loopback Responses fixture counts model requests before Send and after
 reconnect. The VM home has neither a Caelum binary nor OpenCode.
 

@@ -47,6 +47,14 @@ env_key = "CAELUM_TEST_KEY"
 ''')
         remote.update(CODEX_HOME=str(config), CAELUM_TEST_KEY="test-key")
         subprocess.run([binary / "codex", "login", "--with-api-key"], env=remote, input=b"test-key\n", check=True)
+    else:
+        fake_server = ROOT / "scripts/dev/fixtures/fake_native_codex.py"
+        (binary / "codex").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1 $2" = "login status" ]; then exit 0; fi\n'
+            f"python3 '{fake_server}'\n"
+        )
+        (binary / "codex").chmod(0o700)
 
     def git(*args):
         subprocess.run(["git", *args], cwd=project, env=remote, check=True, stdout=subprocess.DEVNULL)
@@ -66,7 +74,11 @@ env_key = "CAELUM_TEST_KEY"
     login.write_private_key(home / "client")
     (home / "client").chmod(0o600)
     login.write_public_key(home / "client.pub")
-    phases = ["native_new_session_over_openssh", "native_resume_after_vm_stop"] if real_codex else ["native_workspace_over_openssh"]
+    phases = (
+        ["native_new_session_over_openssh", "native_resume_after_vm_stop"]
+        if real_codex
+        else ["native_workspace_over_openssh", "native_fake_codex_over_openssh"]
+    )
     if approval:
         phases = ["native_pending_approval_over_openssh"]
     for phase in phases:

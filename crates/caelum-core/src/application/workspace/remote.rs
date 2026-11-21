@@ -32,7 +32,7 @@ pub(super) enum Lane {
     Tool,
     Git(String),
     Stats(String),
-    Lifetime(String),
+    Lifetime(String, crate::remote::Lifetime),
     Interrupt(String, crate::remote::Run),
 }
 
@@ -87,7 +87,7 @@ impl Workspace {
             Lane::Tool => self.complete_vm_tool(request, result),
             Lane::Git(id) => self.complete_git(&id, request, result),
             Lane::Stats(id) => self.complete_stats(&id, request, result),
-            Lane::Lifetime(id) => self.complete_lifetime(&id, request, result),
+            Lane::Lifetime(id, lifetime) => self.complete_lifetime(&id, request, lifetime, result),
             Lane::Interrupt(id, run) => self.complete_interrupt(&id, request, &run, result),
             Lane::Checkout(id) => self.complete_checkout(&id, request, result),
             Lane::MatchCheckout(id, project) => {

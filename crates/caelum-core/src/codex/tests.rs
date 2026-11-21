@@ -4,6 +4,9 @@ use caelum_protocol::{ApprovalDecision, LineChanges};
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "tests/websocket.rs"]
+mod websocket_tests;
+
 static NEXT_DIR: AtomicU64 = AtomicU64::new(0);
 
 struct TestDirectory(PathBuf);

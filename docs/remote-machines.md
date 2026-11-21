@@ -81,7 +81,9 @@ has stopped, **Resume** it from machine stats and reconnect in the same session.
 The connection verifies the new host key, reloads history and
 restores questions and approvals that the provider still has pending. Check the transcript before retrying
 a message marked unconfirmed. Closing the window detaches; it does not stop
-the VM. SSH activity does **not** extend Boat’s auto-stop timer.
+the VM. Active native Codex turns extend Boat’s auto-stop timer using the
+checkout’s saved lifetime. Closing Caelum or leaving a VM idle lets that timer
+expire.
 
 ![A disconnected Codex VM session with its unsent draft still visible](design/previews/rune-light-native-offline-small.png)
 

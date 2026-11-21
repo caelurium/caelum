@@ -139,12 +139,12 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
             changed = true;
         }
     }
-    if l.panels.screen != Screen::Remote && l.remote.restored {
+    if l.panels.screen != Screen::Remote && l.remote.restored && l.remote.open_when_ready.is_none()
+    {
         l.app.remote.saved.selected = None;
     }
     if let Some((id, intent)) = l.remote.open_when_ready.clone() {
-        if l.app.remote.saved.selected.as_deref() != Some(&id) || l.panels.screen != Screen::Remote
-        {
+        if l.app.remote.saved.selected.as_deref() != Some(&id) {
             l.app.dismiss_vm_destination(&id);
             l.remote.open_when_ready = None;
         } else if l.panels.overlay.is_none()

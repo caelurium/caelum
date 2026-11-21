@@ -44,11 +44,6 @@ impl Store {
                 continue;
             };
             let project = project_key(id);
-            if old.sessions.iter().any(|s| s.scope.project != root)
-                || old.projects.iter().any(|p| p.path != root)
-            {
-                continue;
-            }
             if c.defaults.is_none() {
                 c.defaults = Some(crate::remote::ProviderDefaults {
                     provider: old.preferences.default_provider,
@@ -60,16 +55,22 @@ impl Store {
             if imported {
                 continue;
             }
-            let start = state.sessions.len();
-            for mut s in old.sessions {
-                s.scope.project.clone_from(&project);
-                state.sessions.push(s);
-            }
-            if let Some(i) = old
-                .selected
-                .and_then(|n| start.checked_add(n))
-                .filter(|i| *i < state.sessions.len())
+            let selected = old.selected;
+            let mut imported_selected = None;
+            for (old_index, mut s) in old
+                .sessions
+                .into_iter()
+                .enumerate()
+                .filter(|(_, session)| session.scope.project == root)
             {
+                s.scope.project.clone_from(&project);
+                let index = state.sessions.len();
+                state.sessions.push(s);
+                if selected == Some(old_index) {
+                    imported_selected = Some(index);
+                }
+            }
+            if let Some(i) = imported_selected {
                 state.remembered_checkouts.insert(project.clone(), i);
             }
             if let Some(files) = old.preferences.files.remove(&root) {

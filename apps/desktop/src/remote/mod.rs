@@ -59,7 +59,7 @@ pub(crate) struct State {
     inspection: Option<popup::Inspection>,
     pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,
-    checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
+    checked_deadlines: std::collections::HashSet<(caelum_core::remote::MachineId, i64)>,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

@@ -113,7 +113,7 @@ pub(super) type Messages = Box<dyn Iterator<Item = io::Result<String>> + Send>;
 pub(super) enum Writer {
     Stdio(Mutex<std::process::ChildStdin>),
     WebSocket(
-        tokio::sync::mpsc::Sender<String>,
+        tokio::sync::mpsc::Sender<super::websocket::Outgoing>,
         tokio::sync::watch::Sender<bool>,
         std::sync::Arc<std::sync::atomic::AtomicBool>,
     ),
@@ -358,12 +358,22 @@ pub(super) fn write_message(writer: &Writer, message: &Value) -> Result<(), Stri
     let mut writer = match writer {
         Writer::Stdio(writer) => writer.lock().unwrap_or_else(|p| p.into_inner()),
         Writer::WebSocket(tx, stop, live) => {
-            return if live.load(Ordering::Acquire) && !*stop.borrow() {
-                tx.try_send(message.to_string())
-                    .map_err(|_| "Codex WebSocket is busy or closed.".into())
-            } else {
-                Err("Codex WebSocket closed.".into())
+            if !live.load(Ordering::Acquire) || *stop.borrow() {
+                return Err("Codex WebSocket closed.".into());
             }
+            let (delivered, response) = std::sync::mpsc::channel();
+            tx.try_send((message.to_string(), delivered))
+                .map_err(|_| "Codex WebSocket is busy or closed.")?;
+            return match response.recv_timeout(REQUEST_TIMEOUT) {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(error)) => Err(error),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    Err("Codex WebSocket write timed out.".into())
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    Err("Codex WebSocket closed before the write was confirmed.".into())
+                }
+            };
         }
     };
     serde_json::to_writer(&mut *writer, message).map_err(|error| error.to_string())?;

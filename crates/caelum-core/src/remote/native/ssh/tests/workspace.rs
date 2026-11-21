@@ -171,6 +171,42 @@ fn native_workspace_over_openssh() {
     parity::checkout(&mut desktop);
 }
 
+#[test]
+#[ignore = "run scripts/dev/smoke_native_workspace.py with the fake Codex fixture"]
+fn native_fake_codex_over_openssh() {
+    let (mut desktop, _) = attach();
+    let scope = Scope {
+        project: desktop.binding.project.clone(),
+        provider: Provider::Codex,
+    };
+    assert!(matches!(
+        desktop.request(Command::Choices(scope.clone())),
+        Reply::Choices(_)
+    ));
+    let Reply::Session(session) = desktop.request(Command::Start(scope, Options::default())) else {
+        panic!("could not create a native Codex session")
+    };
+    desktop.request(Command::Send(
+        session.key.clone(),
+        "Run over the VM WebSocket.".into(),
+        Options::default(),
+    ));
+    let mut streamed = String::new();
+    desktop.until(|notice| match notice {
+        Notice::Event(event) => match *event {
+            Event::Codex(event) if event.method == "item/agentMessage/delta" => {
+                streamed.push_str(event.params["delta"].as_str().unwrap());
+                None
+            }
+            Event::Codex(event) if event.method == "turn/completed" => Some(()),
+            Event::Completed(_, Err(error)) => panic!("native Codex request failed: {error}"),
+            _ => None,
+        },
+        _ => None,
+    });
+    assert!(streamed.contains("Codex ran over the VM WebSocket."));
+}
+
 mod parity;
 
 #[test]

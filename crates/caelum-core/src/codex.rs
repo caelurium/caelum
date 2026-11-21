@@ -217,7 +217,13 @@ impl CodexProvider {
         }
 
         let (process_id, writer, reader) = if let Some(access) = &self.inner.remote {
-            let url = access.codex().map_err(CodexError::Transport)?;
+            let url = access.codex().map_err(|error| {
+                if error.contains("CAELUM_CODEX_AUTH_REQUIRED") {
+                    CodexError::NotAuthenticated
+                } else {
+                    CodexError::Transport(error)
+                }
+            })?;
             let (writer, reader) = websocket::open(access, &url)?;
             (None, writer, reader)
         } else {
@@ -315,10 +321,13 @@ impl CodexProvider {
             // requests, even for a background session. Never restart a turn.
             let subscribed = Self::list_sessions_on(project, &connection, false).and_then(|list| {
                 for thread in list.threads.into_iter().filter(|t| t.is_working) {
-                    connection.request(
+                    match connection.request(
                         "thread/resume",
                         json!({"threadId":thread.id,"excludeTurns":true}),
-                    )?;
+                    ) {
+                        Ok(_) | Err(CodexError::Rpc(_)) => {}
+                        Err(error) => return Err(error),
+                    }
                 }
                 Ok(())
             });
@@ -427,7 +436,7 @@ pub enum CodexError {
     NotInstalled,
     #[error("Codex executable was not found at '{0}'. Check the configured Codex CLI path.")]
     ExecutableNotFound(PathBuf),
-    #[error("Codex is not signed in. Run `codex login` in a terminal, then try again.")]
+    #[error("Codex is not signed in. Run `codex login` in a terminal on the machine running Codex, then try again.")]
     NotAuthenticated,
     #[error("could not check Codex authentication using '{executable}': {source}")]
     CheckAuthentication {

@@ -10,6 +10,7 @@ struct Connection {
     status: Status,
     client: Option<Client>,
     reads: Vec<(u64, Command)>,
+    initial: Option<Status>,
 }
 
 #[derive(Default)]
@@ -27,6 +28,7 @@ impl Connections {
             Ok(c) => (Some(c), Status::Connecting),
             Err(e) => (None, Status::Disconnected(e)),
         };
+        let initial = client.is_none().then(|| status.clone());
         self.0.insert(
             id.into(),
             Connection {
@@ -34,6 +36,7 @@ impl Connections {
                 status,
                 client,
                 reads: vec![],
+                initial,
             },
         );
     }
@@ -52,29 +55,60 @@ impl Connections {
     pub(crate) fn submit(
         &mut self,
         local: &mut Runtime,
+        app: &Workspace,
+        wake: Option<Waker>,
         request: u64,
         mut command: Command,
     ) -> Result<(), String> {
         let Some(id) = Binding::owner(&mut command).and_then(|p| checkout_id(p)) else {
             return local.submit(request, command);
         };
+        if !self.0.contains_key(id)
+            && app.can_open_vm_session(id)
+            && super::unavailable(app, id).is_none()
+            && let (Some(target), Some(wake)) = (
+                app.remote
+                    .saved
+                    .checkouts
+                    .get(id)
+                    .and_then(|checkout| checkout.native_target()),
+                wake,
+            )
+        {
+            self.ensure(id, target, wake);
+        }
         let lane = self
             .0
             .get_mut(id)
-            .ok_or("Select this VM session to connect.")?;
+            .ok_or("Could not connect to the ready VM checkout.")?;
         let command = lane.binding.outgoing(command)?;
         if lane.status == Status::Connecting
             && lane.reads.len() < 128
             && matches!(
                 &command,
                 Command::Choices(_)
+                    | Command::Start(_, _)
                     | Command::Details(_)
                     | Command::Resume(_)
                     | Command::List(_)
                     | Command::ListArchived(_)
                     | Command::History(..)
+                    | Command::CodexControlHistory(..)
+                    | Command::Export(..)
+                    | Command::Send(..)
                     | Command::Task(
-                        Task::Directory { .. }
+                        Task::AttachPullRequest { .. }
+                            | Task::Details { .. }
+                            | Task::EncodeImage { .. }
+                            | Task::Feedback { .. }
+                            | Task::Image { .. }
+                            | Task::Merge { .. }
+                            | Task::ReviewCache { .. }
+                            | Task::ReviewFiles { .. }
+                            | Task::SetAutoMerge { .. }
+                            | Task::UpdateBranch { .. }
+                            | Task::Worktrees { .. }
+                            | Task::Directory { .. }
                             | Task::Git { .. }
                             | Task::Diff { .. }
                             | Task::File { .. }
@@ -99,6 +133,9 @@ impl Connections {
     pub(super) fn drain(&mut self, app: &Workspace) -> Vec<(String, Notice)> {
         let mut batch = Vec::new();
         self.0.retain(|id, lane| {
+            if let Some(status) = lane.initial.take() {
+                batch.push((id.clone(), Notice::Status(status)));
+            }
             if let Some(reason) = super::unavailable(app, id) {
                 batch.push((
                     id.clone(),
@@ -130,7 +167,16 @@ impl Connections {
                                     }
                                 }
                             } else if matches!(s, Status::Disconnected(_)) {
-                                lane.reads.clear();
+                                for (request, _) in lane.reads.drain(..) {
+                                    batch.push((
+                                        id.clone(),
+                                        Notice::Event(Box::new(Event::Completed(
+                                            request,
+                                            Err("The VM disconnected before this action was sent."
+                                                .into()),
+                                        ))),
+                                    ));
+                                }
                             }
                             Notice::Status(s)
                         }
@@ -150,6 +196,7 @@ impl Connections {
                 binding: Binding::new(id, &target).unwrap(),
                 client: None,
                 reads: vec![],
+                initial: None,
                 status: if offline {
                     Status::Disconnected("VM disconnected. Your draft is saved.".into())
                 } else {
@@ -159,3 +206,7 @@ impl Connections {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "connections_tests.rs"]
+mod tests;

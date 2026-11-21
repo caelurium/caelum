@@ -15,13 +15,17 @@ use std::{
     process::Stdio,
     time::Duration,
 };
-use tokio::process::{Child, Command};
+use tokio::{
+    io::AsyncReadExt,
+    process::{Child, Command},
+};
 
 pub(super) struct Tunnel {
     pub child: Child,
     // Child::wait closes its stdin; keep the master session's lifetime distinct
     // from its exit observer.
     _keepalive: tokio::process::ChildStdin,
+    _stderr: tokio::task::JoinHandle<Vec<u8>>,
     pub access: std::sync::Arc<Access>,
     _pin: tempfile::TempDir,
 }
@@ -207,14 +211,18 @@ async fn connect(
     repository: &str,
     root: &str,
 ) -> Result<Tunnel, String> {
-    let pin = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let pin = tempfile::Builder::new()
+        .prefix("caelum-")
+        .tempdir_in("/tmp")
+        .map_err(|e| e.to_string())?;
     let known = pin.path().join("known_hosts");
     fs::write(&known, endpoint.pin).map_err(|e| e.to_string())?;
     let socket = pin.path().join("control");
     let dir = checkout_quote(root);
     // Opening the session channel confirms the master can accept multiplexed
     // requests. Keep it alive until the desktop detaches or SSH loses the VM.
-    let remote = format!("cd -P {dir} && test \"$PWD\" = {dir} && test \"$(git rev-parse --show-toplevel)\" = \"$PWD\" && git remote get-url origin && exec cat >/dev/null");
+    let script = format!("cd -P {dir} && test \"$PWD\" = {dir} && test \"$(git rev-parse --show-toplevel)\" = \"$PWD\" && git remote get-url origin && exec cat >/dev/null");
+    let remote = format!("sh -c {} caelum-vm", checkout_quote(&script));
     let mut child = Command::new("ssh")
         .args([
             "-F",
@@ -258,29 +266,81 @@ async fn connect(
         .arg(remote)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| format!("Start OpenSSH: {e}"))?;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+    let stderr = child.stderr.take().expect("piped stderr");
+    let stderr_task =
+        tokio::spawn(async move { read_diagnostic(stderr).await.unwrap_or_default() });
     let mut origin = String::new();
     let mut reader = BufReader::new(child.stdout.take().expect("piped stdout").take(8192));
-    tokio::time::timeout(Duration::from_secs(15), reader.read_line(&mut origin))
-        .await
-        .map_err(|_| "SSH timed out verifying the VM checkout.")?
-        .map_err(|e| e.to_string())?;
+    let verified =
+        tokio::time::timeout(Duration::from_secs(15), reader.read_line(&mut origin)).await;
+    drop(reader);
+    let diagnostic = match verified {
+        Ok(Ok(_)) => None,
+        Ok(Err(error)) => Some(format!("SSH could not verify the VM checkout: {error}")),
+        Err(_) => Some("SSH timed out verifying the VM checkout.".to_owned()),
+    };
+    if let Some(error) = diagnostic {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        return Err(with_diagnostic(
+            error,
+            stderr_task.await.unwrap_or_default(),
+        ));
+    }
     if !origin.ends_with('\n')
         || !crate::remote::github_slug(origin.trim())
             .is_some_and(|r| r.eq_ignore_ascii_case(repository))
     {
-        return Err("SSH could not verify the VM host key and Git checkout. Check the machine and refresh its connection.".into());
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        return Err(with_diagnostic(
+            "SSH could not verify the VM host key and Git checkout. Check the machine and refresh its connection.".into(),
+            stderr_task.await.unwrap_or_default(),
+        ));
     }
     Ok(Tunnel {
         _keepalive: child.stdin.take().expect("piped stdin"),
+        _stderr: stderr_task,
         child,
         access: std::sync::Arc::new(Access::new(socket, endpoint.host, root.to_owned())),
         _pin: pin,
     })
+}
+
+async fn read_diagnostic(
+    mut reader: impl tokio::io::AsyncRead + Unpin,
+) -> std::io::Result<Vec<u8>> {
+    const LIMIT: usize = 8192;
+    let mut saved = Vec::new();
+    let mut buffer = [0; 1024];
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            return Ok(saved);
+        }
+        let remaining = LIMIT.saturating_sub(saved.len());
+        saved.extend_from_slice(&buffer[..read.min(remaining)]);
+    }
+}
+
+fn with_diagnostic(message: String, bytes: Vec<u8>) -> String {
+    let detail = String::from_utf8_lossy(&bytes)
+        .chars()
+        .filter(|c| !c.is_control() || *c == ' ')
+        .take(512)
+        .collect::<String>()
+        .trim()
+        .to_owned();
+    if detail.is_empty() {
+        message
+    } else {
+        format!("{message} {detail}")
+    }
 }
 
 #[cfg(test)]

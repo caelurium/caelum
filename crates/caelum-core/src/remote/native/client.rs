@@ -54,6 +54,7 @@ pub struct Client {
     retry: mpsc::Sender<()>,
     stop: watch::Sender<bool>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    ssh: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Client {
@@ -98,7 +99,7 @@ impl Client {
             tx,
             wake: wake.clone(),
         };
-        std::thread::Builder::new()
+        let ssh = std::thread::Builder::new()
             .name("native-workspace-ssh".into())
             .spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
@@ -127,6 +128,7 @@ impl Client {
             retry,
             stop,
             wake,
+            ssh: Some(ssh),
         })
     }
 
@@ -178,7 +180,11 @@ impl Client {
 }
 impl Drop for Client {
     fn drop(&mut self) {
+        self.rx.close();
         self.stop.send_replace(true);
+        if let Some(ssh) = self.ssh.take() {
+            let _ = ssh.join();
+        }
     }
 }
 
@@ -217,9 +223,7 @@ async fn supervise(
 struct Workers(Option<Runtime>, Arc<super::Access>);
 impl Drop for Workers {
     fn drop(&mut self) {
-        self.1
-            .live
-            .store(false, std::sync::atomic::Ordering::Release);
+        self.1.close();
         if let Some(runtime) = self.0.take() {
             std::thread::spawn(move || drop(runtime));
         }
@@ -279,8 +283,9 @@ async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> Strin
                     deliver(link, out, Event::Questions(providers.questions.pending())).await;
                 }
                 let event = match event {
-                    Event::Codex(ref e) if e.method == "codex/processExited"
-                        && brokers_attached => return "VM Codex WebSocket disconnected.".into(),
+                    Event::Codex(ref e) if e.method == "codex/processExited" => {
+                        return "VM Codex WebSocket disconnected.".into()
+                    }
                     Event::Approvals(_) | Event::Questions(_) if !brokers_attached => continue,
                     Event::Approvals(_) => Event::Approvals(providers.approvals.pending()),
                     Event::Questions(_) => Event::Questions(providers.questions.pending()),

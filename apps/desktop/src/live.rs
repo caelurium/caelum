@@ -580,10 +580,10 @@ impl Live {
                     }
                     continue;
                 }
-                if let Err(error) = self
-                    .native
-                    .submit(self.runtime.as_mut().unwrap(), id, command)
-                {
+                let wake = self.waker();
+                let app = &self.app;
+                let runtime = self.runtime.as_mut().unwrap();
+                if let Err(error) = self.native.submit(runtime, app, wake, id, command) {
                     self.apply(Event::Completed(id, Err(error)));
                     changed = true;
                 }
