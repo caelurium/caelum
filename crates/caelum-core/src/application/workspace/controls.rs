@@ -44,11 +44,7 @@ impl Workspace {
                 Some("Use a single-line title of 1–200 characters.".into());
             return false;
         }
-        if self
-            .pending
-            .values()
-            .any(|p| matches!(p, Pending::RegenerateTitle(_,key) if key == owner))
-        {
+        if self.sessions[index].title_state.updating(owner) {
             self.sessions[index].error = Some(
                 "An automatic title update is finishing. Retry the rename in a moment.".into(),
             );
@@ -121,9 +117,7 @@ impl Workspace {
             Ok(Reply::Done) => Status::Finished(match op {
                 Operation::Rename(title) => {
                     s.title = title;
-                    s.title_state.manual = true;
-                    s.title_state.turns = 0;
-                    s.title_state.barrier = self.next_request;
+                    s.title_state = super::titles::TitleState::Manual;
                     "Session title saved.".into()
                 }
                 Operation::Export(path) => format!("Exported conversation to {}", path.display()),

@@ -356,10 +356,10 @@ impl Workspace {
                     }
                 });
             if let Some(title) =
-                title.filter(|title| !title.is_empty() && !session.title_state.manual)
+                title.filter(|title| !title.is_empty() && !session.title_state.manual())
             {
                 session.title = title.into();
-                session.title_state.barrier = self.next_request;
+                session.title_state.note_live_rename(self.next_request);
             }
         }
         for index in completed {
