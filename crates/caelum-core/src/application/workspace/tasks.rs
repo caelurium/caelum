@@ -32,7 +32,7 @@ impl Workspace {
                 .services
                 .reviews
                 .get(&(project.clone(), url.clone()))
-                .and_then(|review| review.details.as_ref());
+                .and_then(|review| review.details());
             if details.is_none_or(|details| {
                 details.head_ref_oid != *head
                     || details.state != "OPEN"

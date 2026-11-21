@@ -19,7 +19,11 @@ fn fixture() -> (Workspace, (String, String)) {
         .or_default()
         .pull_requests
         .push(details.pull_request.clone());
-    app.services.reviews.entry(key.clone()).or_default().details = Some(details);
+    app.services
+        .reviews
+        .entry(key.clone())
+        .or_default()
+        .set_details(details);
     (app, key)
 }
 
@@ -55,7 +59,7 @@ fn auto_merge_confirms_each_setting_and_rejects_details_read_before_or_during_th
         url: key.1.clone(),
     };
     for method in [Some(GitHubMergeMethod::Rebase), None] {
-        let old_details = app.services.reviews[&key].details.clone().unwrap();
+        let old_details = app.services.reviews[&key].details().cloned().unwrap();
         let before = start(&mut app, refresh.clone());
         let change = mutation(method);
         let request = start(&mut app, change.clone());
@@ -76,7 +80,7 @@ fn auto_merge_confirms_each_setting_and_rejects_details_read_before_or_during_th
                 )))),
             ));
             assert!(app.services.busy(&refresh));
-            let details = app.services.reviews[&key].details.as_ref().unwrap();
+            let details = app.services.reviews[&key].details().unwrap();
             assert_eq!(
                 details
                     .auto_merge_request
@@ -86,7 +90,7 @@ fn auto_merge_confirms_each_setting_and_rejects_details_read_before_or_during_th
             );
         }
         assert_eq!(app.services.checkouts[&key.0].pull_requests.len(), 1);
-        let confirmed = app.services.reviews[&key].details.clone().unwrap();
+        let confirmed = app.services.reviews[&key].details().cloned().unwrap();
         app.apply(Event::Completed(
             commands[0].0,
             Ok(Reply::Task(TaskReply::Details(Box::new(confirmed)))),
@@ -144,8 +148,7 @@ fn auto_merge_shares_the_mutation_lock_across_refresh_and_keeps_errors_retryable
         .unwrap()
         .contains("not enabled"));
     assert!(app.services.reviews[&key]
-        .details
-        .as_ref()
+        .details()
         .unwrap()
         .auto_merge_request
         .is_none());
@@ -163,8 +166,7 @@ fn auto_merge_shares_the_mutation_lock_across_refresh_and_keeps_errors_retryable
     ));
     assert_eq!(app.active_project.as_deref(), Some("/other"));
     assert!(app.services.reviews[&key]
-        .details
-        .as_ref()
+        .details()
         .unwrap()
         .auto_merge_request
         .is_some());
@@ -173,8 +175,7 @@ fn auto_merge_shares_the_mutation_lock_across_refresh_and_keeps_errors_retryable
     assert!(app.services.reviews[&key].notice.is_none());
     app.apply(Event::Completed(disable, Err("Permission denied".into())));
     assert!(app.services.reviews[&key]
-        .details
-        .as_ref()
+        .details()
         .unwrap()
         .auto_merge_request
         .is_some());
@@ -186,21 +187,17 @@ fn auto_merge_completions_do_not_overwrite_a_newer_review_head() {
     let change = mutation(Some(GitHubMergeMethod::Squash));
     let request = start(&mut app, change.clone());
     app.services.refresh_review(&key.0, &key.1);
-    let details = app
-        .services
+    app.services
         .reviews
         .get_mut(&key)
         .unwrap()
-        .details
-        .as_mut()
-        .unwrap();
-    details.head_ref_oid = "b".repeat(40);
+        .edit_details(|details| details.head_ref_oid = "b".repeat(40));
     assert!(app.services.busy(&change));
     app.apply(Event::Completed(
         request,
         Ok(result(Some(GitHubMergeMethod::Squash))),
     ));
-    let details = app.services.reviews[&key].details.as_ref().unwrap();
+    let details = app.services.reviews[&key].details().unwrap();
     assert_eq!(details.head_ref_oid, "b".repeat(40));
     assert!(details.auto_merge_request.is_none());
     assert!(app.commands().iter().any(|(_, command)| matches!(command, Command::Task(Task::Details { project, url }) if (project,url) == (&key.0,&key.1))));
@@ -216,10 +213,13 @@ fn auto_merge_admission_rejects_stale_heads_and_closed_or_draft_reviews() {
     ] {
         let (mut app, key) = fixture();
         let mut details =
-            serde_json::to_value(app.services.reviews[&key].details.as_ref().unwrap()).unwrap();
+            serde_json::to_value(app.services.reviews[&key].details().unwrap()).unwrap();
         details[field] = value;
-        app.services.reviews.get_mut(&key).unwrap().details =
-            Some(serde_json::from_value(details).unwrap());
+        app.services
+            .reviews
+            .get_mut(&key)
+            .unwrap()
+            .set_details(serde_json::from_value(details).unwrap());
         app.task(mutation(Some(GitHubMergeMethod::Squash)));
         assert!(app.commands().is_empty(), "{field}");
     }
@@ -239,7 +239,7 @@ fn auto_merge_removes_associations_only_when_github_confirms_the_pr_merged() {
     ));
     assert!(app.services.checkouts[&key.0].pull_requests.is_empty());
     assert_eq!(
-        app.services.reviews[&key].details.as_ref().unwrap().state,
+        app.services.reviews[&key].details().unwrap().state,
         "MERGED"
     );
     assert_eq!(

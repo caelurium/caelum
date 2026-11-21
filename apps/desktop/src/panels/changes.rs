@@ -106,7 +106,7 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
                             .services
                             .reviews
                             .get(key)?
-                            .files
+                            .files()
                             .iter()
                             .find(|f| f.path == path)
                             .map(|file| (key, file))
@@ -134,7 +134,7 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
                                 .review
                                 .as_ref()
                                 .and_then(|key| l.app.services.reviews.get(key))
-                                .and_then(|r| r.files.iter().find(|f| f.path == path))
+                                .and_then(|r| r.files().iter().find(|f| f.path == path))
                                 .and_then(|f| f.patch.clone())
                                 .unwrap_or_default()
                         } else {
@@ -201,7 +201,7 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
                         && let Some((project, url)) = l.panels.review.clone()
                         && let Some(r) = l.app.services.reviews.get(&(project.clone(), url.clone()))
                         && !r.cached()
-                        && let (Some(page), Some(head)) = (r.next_page, r.head())
+                        && let (Some(page), Some(head)) = (r.next_page(), r.head())
                     {
                         l.app.task(Task::ReviewFiles {
                             project,

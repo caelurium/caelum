@@ -7,13 +7,8 @@ impl Services {
         task: &Task,
         reply: Result<TaskReply, String>,
     ) -> Vec<Task> {
-        let current = self.current(id, task);
-        self.generations.remove(&id);
-        if self.latest.get(&task.slot()) == Some(&id) {
-            self.loading.remove(&task.slot());
-        }
+        let current = self.finish_slot(task, id);
         if let Task::Update(job) = task {
-            self.latest.remove(&task.slot());
             self.revision += 1;
             let result = reply.and_then(|reply| match reply {
                 TaskReply::Update(reply) => Ok(reply),
@@ -32,7 +27,8 @@ impl Services {
         let reply = match reply {
             Ok(reply) => reply,
             Err(error) => {
-                self.errors.insert(task.slot(), error.clone());
+                self.requests
+                    .insert(task.slot(), requests::Slot::Failed(error.clone()));
                 if let Some((url, _)) = task.review() {
                     self.reviews
                         .entry((task.project().into(), url.into()))
@@ -219,19 +215,7 @@ impl Services {
                     .entry((project.clone(), url.clone()))
                     .or_default();
 
-                if review.details.is_none() && cached.details.pull_request.url == *url {
-                    if let Some(files) = cached
-                        .files
-                        .filter(|f| f.base_oid == cached.details.base_ref_oid)
-                    {
-                        review.files = files.files;
-                        review.base = Some(files.base_oid);
-                        review.next_page = files.next_page;
-                        review.files_loaded = true;
-                    }
-                    review.details = Some(cached.details);
-                    review.source = ReviewSource::Cache;
-                }
+                review.accept_cache(*cached, url);
             }
             (Task::Details { project, url }, TaskReply::Details(details)) => {
                 if details.state == "MERGED" {
@@ -260,9 +244,8 @@ impl Services {
                 }
                 let head = details.head_ref_oid.clone();
                 let base = details.base_ref_oid.clone();
-                review.details = Some(*details);
-                review.source = ReviewSource::GitHub(id);
-                if !review.files_loaded {
+                review.accept_details(id, *details);
+                if !review.files_loaded() {
                     next.push(Task::ReviewFiles {
                         project: project.clone(),
                         url: url.clone(),
@@ -292,7 +275,7 @@ impl Services {
                 Task::ReviewFiles {
                     project,
                     url,
-                    base,
+                    head,
                     page,
                     ..
                 },
@@ -302,23 +285,12 @@ impl Services {
                     .reviews
                     .entry((project.clone(), url.clone()))
                     .or_default();
-                if files.base_oid != *base || (*page > 1 && review.base.as_ref() != Some(base)) {
+                if !review.apply_file_page(head, *page, files) {
                     review.error = Some(
-                        "PR base changed; refresh the review before loading more files".into(),
+                        "PR revision or page changed; refresh the review before loading more files"
+                            .into(),
                     );
-                    return next;
                 }
-                if *page == 1 {
-                    review.files.clear();
-                }
-                for file in files.files {
-                    if !review.files.iter().any(|f| f.path == file.path) {
-                        review.files.push(file);
-                    }
-                }
-                review.base = Some(files.base_oid);
-                review.next_page = files.next_page;
-                review.files_loaded = true;
             }
             (
                 Task::Feedback {
@@ -382,14 +354,7 @@ impl Services {
                     }
                     .into(),
                 );
-                if let Some(details) = review
-                    .details
-                    .as_mut()
-                    .filter(|details| details.head_ref_oid == result.head_ref_oid)
-                {
-                    details.state = result.state;
-                    details.auto_merge_request = result.auto_merge_request;
-                }
+                review.confirm_auto_merge(result);
                 next.push(Task::Details {
                     project: project.clone(),
                     url: url.clone(),

@@ -198,8 +198,7 @@ fn changing_reviews_during_auto_merge_keeps_the_original_owner() {
     assert_eq!(l.panels.review.as_ref().unwrap().0, "/other");
     assert!(
         l.app.services.reviews[&original]
-            .details
-            .as_ref()
+            .details()
             .unwrap()
             .auto_merge_request
             .is_some()

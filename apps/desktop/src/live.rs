@@ -585,9 +585,9 @@ impl Live {
             .panels
             .restoring_review()
             .and_then(|key| self.app.services.reviews.get(key).map(|r| (key.clone(), r)))
-            && review.files_loaded
+            && review.files_loaded()
             && !review.cached()
-            && let (Some(page), Some(head)) = (review.next_page, review.head())
+            && let (Some(page), Some(head)) = (review.next_page(), review.head())
         {
             self.app.task(caelum_core::application::Task::ReviewFiles {
                 project: key.0,

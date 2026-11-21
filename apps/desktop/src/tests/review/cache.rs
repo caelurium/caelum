@@ -57,7 +57,7 @@ fn cached_reviews_show_files_without_presenting_old_checks_as_current() {
         rt.update(|s, _| {
             let l = s.live.as_mut().unwrap();
             let owner = l.panels.review.clone().unwrap();
-            let details = l.app.services.reviews[&owner].details.clone().unwrap();
+            let details = l.app.services.reviews[&owner].details().cloned().unwrap();
             let request = l
                 .app
                 .commands()
