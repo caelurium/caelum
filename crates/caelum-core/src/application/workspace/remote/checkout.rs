@@ -235,8 +235,29 @@ impl Workspace {
     }
 
     pub fn check_vm_destination(&mut self, id: &str, project: String) {
+        self.dismiss_vm_destination(id);
         self.remote.branch_checks.insert(id.into(), project);
         self.select_remote(id);
+    }
+
+    /// A branch check belongs to one launch, not to every session already on
+    /// this VM. A cancelled read cannot admit a later launch from another worktree.
+    pub fn dismiss_vm_destination(&mut self, id: &str) {
+        if self.remote.branch_checks.remove(id).is_none() {
+            return;
+        }
+        match self.remote.jobs.get(id) {
+            Some(Job::Busy(r)) if matches!(self.pending.get(r),Some(Pending::Remote(Lane::MatchCheckout(owner,_))) if owner==id) =>
+            {
+                let r = *r;
+                self.pending.remove(&r);
+                self.remote.jobs.remove(id);
+            }
+            Some(Job::Failed(_)) => {
+                self.remote.jobs.remove(id);
+            }
+            _ => {}
+        }
     }
 
     pub fn refresh_remote(&mut self, id: &str) {

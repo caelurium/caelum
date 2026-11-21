@@ -200,6 +200,31 @@ fn pending_vm_plans_preserve_old_timers_and_require_explicit_manual_stop() {
 }
 
 #[test]
+fn a_late_branch_match_cannot_admit_a_new_launch_or_block_reopening_saved_work() {
+    let mut app = Workspace::default();
+    let (id, r, _) = created(&mut app);
+    app.apply(Event::Completed(
+        r,
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "main"))),
+    ));
+    app.check_vm_destination(&id, "/tree/a".into());
+    let (old, _) = app.commands().pop().unwrap();
+    app.check_vm_destination(&id, "/tree/b".into());
+    let (new, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(
+        old,
+        Ok(Reply::Remote(prepared_vm(machine("vm"), "main"))),
+    ));
+    assert!(app
+        .open_vm_session(&id, Some(crate::application::Provider::Codex))
+        .is_none());
+    app.apply(Event::Completed(new, Err("VM is on main".into())));
+    app.dismiss_vm_destination(&id);
+    assert!(app.open_vm_session(&id, None).is_some());
+    assert!(app.sessions.iter().all(|s| s.remote_id.is_none()));
+}
+
+#[test]
 fn the_vm_folder_chooser_discovers_only_the_current_validated_project_without_starting_a_local_session(
 ) {
     use caelum_protocol::ProjectInfo;
