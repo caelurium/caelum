@@ -10,7 +10,7 @@ impl Access {
     pub(crate) fn checkout_command(
         &self,
         cmd: &Command,
-        branches: &std::sync::Mutex<crate::session_branches::SessionBranches>,
+        branches: &crate::session_branches::SessionBranches,
     ) -> Option<Result<Reply, String>> {
         if !self.live.load(std::sync::atomic::Ordering::Acquire)
             || !commands::admitted(cmd, &self.root)
@@ -52,10 +52,7 @@ impl Access {
                 .block_on(self.search(query, ProjectSearchMode::Files))
                 .map(TaskReply::Search),
             Task::Git { .. } => self.io.block_on(self.status()).map(|s| {
-                let updates = branches
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .refresh_checkout(&s);
+                let updates = branches.refresh_checkout(&s);
                 TaskReply::Git(s, updates)
             }),
             Task::Diff { path, .. } => self.io.block_on(self.diff(path)).map(TaskReply::Diff),

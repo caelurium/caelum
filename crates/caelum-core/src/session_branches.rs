@@ -1,14 +1,11 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use caelum_protocol::{
     CodexEvent, GitRepositoryStatus, OpenCodeEvent, SessionBranchUpdate, SessionDetails,
 };
 
 use crate::{
+    blocking_actor::BlockingActor,
     database::{SessionBranchHistory, WorkspaceDatabase},
     git::GitClient,
     projects::Project,
@@ -29,53 +26,56 @@ struct Execution {
 
 #[derive(Default)]
 struct Tracking {
+    vm: Option<Arc<crate::remote::native::Access>>,
+    database: Option<WorkspaceDatabase>,
     branches: HashMap<Key, SessionBranchHistory>,
     active: HashMap<Key, Execution>,
 }
 
 /// Attribute checkout branches only to known, unambiguous execution.
+/// Operations block and must run on synchronous background workers.
 #[derive(Clone)]
 pub struct SessionBranches {
-    vm: Option<Arc<crate::remote::native::Access>>,
-    database: Option<WorkspaceDatabase>,
-    tracking: Arc<Mutex<Tracking>>,
+    actor: BlockingActor<Tracking>,
 }
 
 impl SessionBranches {
     pub fn new(database: Option<WorkspaceDatabase>) -> Self {
-        Self {
-            vm: None,
-            database,
-            tracking: Arc::new(Mutex::new(Tracking::default())),
-        }
+        Self::with_vm(None, database)
     }
+
     pub(crate) fn forwarded(vm: Arc<crate::remote::native::Access>) -> Self {
         let database = vm.metadata.as_ref().map(|m| m.branches.clone());
+        Self::with_vm(Some(vm), database)
+    }
+
+    fn with_vm(
+        vm: Option<Arc<crate::remote::native::Access>>,
+        database: Option<WorkspaceDatabase>,
+    ) -> Self {
         Self {
-            vm: Some(vm),
-            ..Self::new(database)
+            actor: BlockingActor::spawn(
+                "caelum-session-branches",
+                Tracking {
+                    vm,
+                    database,
+                    ..Tracking::default()
+                },
+            ),
         }
     }
-    fn context(&self, path: &str) -> Option<crate::git::GitBranchContext> {
-        match &self.vm {
-            Some(vm) if path == vm.root => vm.io.block_on(vm.branch_context()).ok(),
-            Some(_) => None,
-            None => GitClient::new().branch_context(path).ok().flatten(),
-        }
-    }
-    fn key(&self, path: &str, provider: &str, id: &str) -> Option<Key> {
-        if id.is_empty() {
-            return None;
-        }
-        Some(Key {
-            path: Project::for_provider(path, self.vm.as_deref())
-                .ok()?
-                .path()
-                .to_string_lossy()
-                .into_owned(),
-            provider: provider.into(),
-            session: id.into(),
-        })
+
+    pub(crate) fn reset(&self, database: WorkspaceDatabase) -> Result<(), String> {
+        self.actor
+            .call(move |tracking| {
+                let vm = tracking.vm.clone();
+                *tracking = Tracking {
+                    vm,
+                    database: Some(database),
+                    ..Tracking::default()
+                };
+            })
+            .ok_or_else(|| "Session branch worker stopped".into())
     }
 
     pub fn codex_event(&self, event: &CodexEvent) -> Option<SessionBranchUpdate> {
@@ -114,27 +114,12 @@ impl SessionBranches {
         path: &str,
         provider: &str,
         id: &str,
-        mut details: SessionDetails,
+        details: SessionDetails,
     ) -> SessionDetails {
-        let Some(key) = self.key(path, provider, id) else {
-            return details;
-        };
-        let mut tracking = self
-            .tracking
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(saved) = self.recorded(&mut tracking, &key) {
-            details.branch = saved.branch;
-            details.branches = saved.branches;
-        } else if details.branch_is_current {
-            details.branch = None;
-            details.branches.clear();
-        } else if let Some(branch) = &details.branch {
-            self.record(&mut tracking, key, Some(branch.clone()));
-            details.branches = vec![branch.clone()];
-        }
-        details.branch_is_current = false;
-        details
+        let key = Key::new(path, provider, id);
+        self.actor
+            .call(move |tracking| tracking.details(key, details))
+            .expect("session branch worker stopped")
     }
 
     /// Keep an unambiguous execution's branch current while its tools are running.
@@ -143,28 +128,10 @@ impl SessionBranches {
         let Some(root) = status.repository_root.as_ref().map(PathBuf::from) else {
             return Vec::new();
         };
-        let mut tracking = self
-            .tracking
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let keys: Vec<_> = tracking
-            .active
-            .iter()
-            .filter(|(_, execution)| !execution.ambiguous && execution.root == root)
-            .map(|(key, _)| key.clone())
-            .collect();
-        if keys.is_empty() {
-            return Vec::new();
-        }
-        let Some(context) = self.context(&status.project_path) else {
-            return Vec::new();
-        };
-        if context.root != root {
-            return Vec::new();
-        }
-        keys.into_iter()
-            .filter_map(|key| self.record(&mut tracking, key, context.branch.clone()))
-            .collect()
+        let path = status.project_path.clone();
+        self.actor
+            .call(move |tracking| tracking.refresh_checkout(&path, root))
+            .unwrap_or_default()
     }
 
     fn execution(
@@ -175,59 +142,138 @@ impl SessionBranches {
         turn: Option<&str>,
         starting: bool,
     ) -> Option<SessionBranchUpdate> {
-        let key = self.key(path, provider, id)?;
-        let mut tracking = self
-            .tracking
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let key = Key::new(path, provider, id);
+        let turn = turn.map(str::to_owned);
+        self.actor
+            .call(move |tracking| tracking.execution(key, turn, starting))
+            .flatten()
+    }
+
+    fn disconnect(&self, path: &str, provider: &'static str) {
+        let path = path.to_owned();
+        let _ = self.actor.call(move |tracking| {
+            tracking
+                .active
+                .retain(|key, _| key.path != path || key.provider != provider);
+        });
+    }
+}
+
+impl Tracking {
+    fn context(&self, path: &str) -> Option<crate::git::GitBranchContext> {
+        match &self.vm {
+            Some(vm) if path == vm.root => vm.io.block_on(vm.branch_context()).ok(),
+            Some(_) => None,
+            None => GitClient::new().branch_context(path).ok().flatten(),
+        }
+    }
+
+    fn resolve_key(&self, mut key: Key) -> Option<Key> {
+        if key.session.is_empty() {
+            return None;
+        }
+        key.path = Project::for_provider(&key.path, self.vm.as_deref())
+            .ok()?
+            .path()
+            .to_string_lossy()
+            .into_owned();
+        Some(key)
+    }
+
+    fn details(&mut self, key: Key, mut details: SessionDetails) -> SessionDetails {
+        let Some(key) = self.resolve_key(key) else {
+            return details;
+        };
+        if let Some(saved) = self.recorded(&key) {
+            details.branch = saved.branch;
+            details.branches = saved.branches;
+        } else if details.branch_is_current {
+            details.branch = None;
+            details.branches.clear();
+        } else if let Some(branch) = &details.branch {
+            self.record(key, Some(branch.clone()));
+            details.branches = vec![branch.clone()];
+        }
+        details.branch_is_current = false;
+        details
+    }
+
+    fn refresh_checkout(&mut self, path: &str, root: PathBuf) -> Vec<SessionBranchUpdate> {
+        let keys: Vec<_> = self
+            .active
+            .iter()
+            .filter(|(_, execution)| !execution.ambiguous && execution.root == root)
+            .map(|(key, _)| key.clone())
+            .collect();
+        if keys.is_empty() {
+            return Vec::new();
+        }
+        let Some(context) = self.context(path) else {
+            return Vec::new();
+        };
+        if context.root != root {
+            return Vec::new();
+        }
+        keys.into_iter()
+            .filter_map(|key| self.record(key, context.branch.clone()))
+            .collect()
+    }
+
+    fn execution(
+        &mut self,
+        key: Key,
+        turn: Option<String>,
+        starting: bool,
+    ) -> Option<SessionBranchUpdate> {
+        let key = self.resolve_key(key)?;
         if !starting {
-            let active = tracking.active.get(&key)?;
-            if active.turn.as_deref() != turn {
+            let active = self.active.get(&key)?;
+            if active.turn != turn {
                 return None;
             }
-            let active = tracking.active.remove(&key).unwrap();
+            let active = self.active.remove(&key).unwrap();
             if active.ambiguous {
                 return None;
             }
             if let Some(context) = self.context(&key.path) {
                 if context.root == active.root {
-                    return self.record(&mut tracking, key, context.branch);
+                    return self.record(key, context.branch);
                 }
             }
             return None;
         }
-        if tracking
+        if self
             .active
             .get(&key)
-            .is_some_and(|active| active.turn.as_deref() == turn)
+            .is_some_and(|active| active.turn == turn)
         {
             return None;
         }
         let context = self.context(&key.path)?;
         let mut ambiguous = false;
-        for (other, active) in &mut tracking.active {
+        for (other, active) in &mut self.active {
             if other != &key && active.root == context.root {
                 active.ambiguous = true;
                 ambiguous = true;
             }
         }
-        tracking.active.insert(
+        self.active.insert(
             key.clone(),
             Execution {
                 root: context.root,
-                turn: turn.map(str::to_owned),
+                turn,
                 ambiguous,
             },
         );
 
         if !ambiguous {
-            return self.record(&mut tracking, key, context.branch);
+            return self.record(key, context.branch);
         }
         None
     }
 
-    fn recorded(&self, tracking: &mut Tracking, key: &Key) -> Option<SessionBranchHistory> {
-        if let Some(saved) = tracking.branches.get(key) {
+    fn recorded(&mut self, key: &Key) -> Option<SessionBranchHistory> {
+        if let Some(saved) = self.branches.get(key) {
             return Some(saved.clone());
         }
         let saved = self
@@ -235,17 +281,12 @@ impl SessionBranches {
             .as_ref()?
             .session_branch(&key.path, &key.provider, &key.session)
             .ok()??;
-        tracking.branches.insert(key.clone(), saved.clone());
+        self.branches.insert(key.clone(), saved.clone());
         Some(saved)
     }
 
-    fn record(
-        &self,
-        tracking: &mut Tracking,
-        key: Key,
-        branch: Option<String>,
-    ) -> Option<SessionBranchUpdate> {
-        let saved = self.recorded(tracking, &key);
+    fn record(&mut self, key: Key, branch: Option<String>) -> Option<SessionBranchUpdate> {
+        let saved = self.recorded(&key);
         if saved.as_ref().is_some_and(|saved| saved.branch == branch) {
             return None;
         }
@@ -270,23 +311,21 @@ impl SessionBranches {
             branch: branch.clone(),
             branches: branches.clone(),
         };
-        tracking
-            .branches
+        self.branches
             .insert(key, SessionBranchHistory { branch, branches });
         Some(update)
     }
-
-    fn disconnect(&self, path: &str, provider: &str) {
-        let mut tracking = self
-            .tracking
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        tracking
-            .active
-            .retain(|key, _| key.path != path || key.provider != provider);
-    }
 }
 
+impl Key {
+    fn new(path: &str, provider: &str, id: &str) -> Self {
+        Self {
+            path: path.to_owned(),
+            provider: provider.to_owned(),
+            session: id.to_owned(),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,6 +417,28 @@ mod tests {
             created: None,
             location: None,
         });
+    }
+
+    #[test]
+    fn resetting_through_one_handle_replaces_tracking_for_every_clone() {
+        let fixture = Fixture::new();
+        let tracker = SessionBranches::new(None);
+        let clone = tracker.clone();
+        let path = fixture.path();
+        codex(&clone, path, "session", "old", "turn/started");
+        let database = fixture.database();
+        database
+            .record_session_branch(path, "codex", "session", Some("restored"))
+            .unwrap();
+        tracker.reset(database).unwrap();
+        git(&fixture.0, &["checkout", "-b", "unowned"]);
+        codex(&clone, path, "session", "old", "turn/completed");
+        assert_eq!(
+            clone
+                .details(path, "codex", "session", native(None, false))
+                .branches,
+            ["restored"]
+        );
     }
 
     #[test]
