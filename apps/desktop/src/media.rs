@@ -194,7 +194,7 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
             let l = live_mut(s);
             l.media.selected = Some((owner.clone(), media.clone()));
             l.media.zoom = None;
-            l.panels.overlay = Some(Screen::Image);
+            l.panels.set_overlay(Some(Screen::Image));
         })
 }
 pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> El {

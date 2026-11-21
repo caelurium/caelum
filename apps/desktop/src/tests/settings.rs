@@ -334,12 +334,12 @@ fn settings_dropdown_escape_dismisses_only_the_foremost_surface() {
                 .is_none()
         );
         assert_eq!(
-            rt.state.live.as_ref().unwrap().panels.overlay,
+            rt.state.live.as_ref().unwrap().panels.overlay(),
             Some(crate::panels::Screen::Settings)
         );
         key(&mut rt, Key::Escape, Mods::default());
         advance(&mut rt, 0.3);
-        assert!(rt.state.live.as_ref().unwrap().panels.overlay.is_none());
+        assert!(rt.state.live.as_ref().unwrap().panels.overlay().is_none());
         assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     }
 }

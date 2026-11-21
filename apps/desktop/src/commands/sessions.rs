@@ -153,7 +153,7 @@ pub(super) fn sessions(s: &Workspace, k: &Kit, index: usize) -> El {
 fn select_provider_session(s: &mut Workspace, index: usize) {
     let l = live_mut(s);
     l.app.select(index);
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.sessions_search.focused = false;
     l.commands.sessions_selected = None;

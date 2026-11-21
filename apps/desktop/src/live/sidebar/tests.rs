@@ -1,4 +1,4 @@
-use super::{State, age};
+use super::{Recency, State, age};
 use caelum_core::application::{
     Command, Event, Provider, Reply, Scope, SessionScope, Task, TaskReply, Workspace,
 };
@@ -67,14 +67,23 @@ fn recency_polling_changes_only_visible_labels_and_hidden_feeds_stop_scheduling(
     state.poll(&mut app, "", false, &mut tx, false);
     let now = caelum_core::application::presentation::now();
     app.sessions[index].last_activity = Some(now - 90_000);
-    state.now = now - 60_000;
+    state.set_display_clock(now - 60_000);
     state.visible = vec![caelum_core::application::FeedSession::Local(index)];
     assert!(state.poll(&mut app, "", false, &mut tx, true));
     assert!(!state.poll(&mut app, "", false, &mut tx, true));
-    assert!(state.deadline.is_some());
+    assert!(matches!(
+        state.recency,
+        Recency::Showing {
+            wake_at: Some(_),
+            ..
+        }
+    ));
     state.hidden();
     assert!(!state.poll(&mut app, "", false, &mut tx, true));
-    assert!(state.deadline.is_none());
+    assert!(matches!(
+        state.recency,
+        Recency::Showing { wake_at: None, .. }
+    ));
 }
 
 #[test]

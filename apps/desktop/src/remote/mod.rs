@@ -57,7 +57,6 @@ pub(crate) struct State {
     mounted: Option<(String, setup::Dock)>,
     menu: Option<provider::Menu>,
     inspection: Option<popup::Inspection>,
-    pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,
     checked_deadlines: std::collections::HashSet<(caelum_core::remote::MachineId, i64)>,
 }

@@ -43,7 +43,7 @@ pub(crate) fn enter(s: &mut Workspace) {
     if live(s).app.selected.is_some() && super::native::selected(live(s)).is_some() {
         let l = live_mut(s);
         l.panels.screen = Screen::Conversation;
-        l.panels.overlay = None;
+        l.panels.set_overlay(None);
         l.sync_editors();
         l.focus();
         return;
@@ -76,7 +76,7 @@ pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
 
 fn show(s: &mut Workspace, focus_draft: bool) {
     let l = live_mut(s);
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
     l.remote.inspection = None;
@@ -116,11 +116,11 @@ pub(crate) fn manage(s: &mut Workspace, id: &str) {
 
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let mut changed = false;
-    if l.panels.overlay == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
-        l.panels.overlay = None;
+    if l.panels.overlay() == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
+        l.panels.set_overlay(None);
         changed = true;
     }
-    if l.panels.overlay != Some(Screen::VmStats) {
+    if l.panels.overlay() != Some(Screen::VmStats) {
         l.remote.inspection = None;
     }
     if !l.remote.restored && l.app.restored() {
@@ -147,7 +147,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         if l.app.remote.saved.selected.as_deref() != Some(&id) {
             l.app.dismiss_vm_destination(&id);
             l.remote.open_when_ready = None;
-        } else if l.panels.overlay.is_none()
+        } else if l.panels.overlay().is_none()
             && !l.app.remote.jobs.contains_key(&id)
             && super::native::open(l, &id, intent)
         {

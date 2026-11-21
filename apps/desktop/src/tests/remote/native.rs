@@ -192,7 +192,7 @@ fn saved_opencode_vm_draft_opens_a_separate_codex_session_without_submitting() {
     fill(&mut rt, &format!("live-draft-{i}"), "/stats");
     key(&mut rt, Key::Enter, Mods::default());
     assert_eq!(live(&rt.state).drafts[i].text, "/stats");
-    assert!(live(&rt.state).panels.overlay.is_none());
+    assert!(live(&rt.state).panels.overlay().is_none());
     click(&mut rt, "native-new-codex");
     let l = live_mut(&mut rt.state);
     let fresh = l.app.selected.unwrap();
@@ -277,7 +277,7 @@ fn remote_provider_settings_use_the_selected_vm_without_mutating_laptop_defaults
         crate::remote::scene(s, "native-connected");
         let l = live_mut(s);
         l.panels.screen = crate::panels::Screen::Remote;
-        l.panels.overlay = Some(crate::panels::Screen::Settings);
+        l.panels.set_overlay(Some(crate::panels::Screen::Settings));
         l.panels.settings_page = crate::settings::Page::Providers;
         l.app.active_project = None;
         l.app.remote.saved.selected = Some("checkout-example".into());

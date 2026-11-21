@@ -392,7 +392,7 @@ fn project_vm_group_owns_its_worktree_rows_and_removal_preserves_other_checkouts
     advance(&mut rt, 0.1);
     click(&mut rt, "remove-remote-parked");
     assert_eq!(
-        live(&rt.state).panels.overlay,
+        live(&rt.state).panels.overlay(),
         Some(Screen::RemoveVm),
         "{:?}",
         element(&rt, "remove-remote-parked")

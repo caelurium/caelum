@@ -22,14 +22,31 @@ enum Menu {
     Filter,
 }
 
+enum Recency {
+    Paused {
+        displayed_at: u64,
+    },
+    Showing {
+        displayed_at: u64,
+        wake_at: Option<u64>,
+    },
+}
+
+impl Recency {
+    fn displayed_at(&self) -> u64 {
+        match self {
+            Self::Paused { displayed_at } | Self::Showing { displayed_at, .. } => *displayed_at,
+        }
+    }
+}
+
 pub struct State {
     badges: badge::State,
     discovered: std::collections::HashSet<caelum_core::application::Scope>,
     pub project: Option<String>,
     menu: Menu,
-    pub now: u64,
+    recency: Recency,
     visible: Vec<FeedSession>,
-    deadline: Option<u64>,
     query: Option<(Option<String>, String, bool)>,
     request_scope: Option<(SessionScope, Option<String>)>,
     selected: Option<FeedSession>,
@@ -42,9 +59,10 @@ impl Default for State {
             discovered: Default::default(),
             project: None,
             menu: Menu::Closed,
-            now: caelum_core::application::presentation::now(),
+            recency: Recency::Paused {
+                displayed_at: caelum_core::application::presentation::now(),
+            },
             visible: Vec::new(),
-            deadline: None,
             query: None,
             request_scope: None,
             selected: None,
@@ -53,6 +71,14 @@ impl Default for State {
 }
 
 impl State {
+    pub fn displayed_at(&self) -> u64 {
+        self.recency.displayed_at()
+    }
+
+    pub fn set_display_clock(&mut self, displayed_at: u64) {
+        self.recency = Recency::Paused { displayed_at };
+    }
+
     pub fn discover(&mut self, app: &mut Application) {
         self.discovered
             .retain(|scope| app.project_is_open(&scope.project));
@@ -79,7 +105,7 @@ impl State {
     }
     pub fn hidden(&mut self) {
         self.visible.clear();
-        self.deadline = None;
+        self.set_display_clock(self.displayed_at());
         self.close();
     }
     pub fn poll(
@@ -133,21 +159,25 @@ impl State {
                 .visible
                 .iter()
                 .filter_map(|row| row.last_activity(app))
-                .any(|at| age(Some(at), self.now).0 != age(Some(at), now).0);
-            self.now = now;
+                .any(|at| age(Some(at), self.displayed_at()).0 != age(Some(at), now).0);
             let deadline = self
                 .visible
                 .iter()
                 .filter_map(|row| age(row.last_activity(app), now).1)
                 .min();
-            if deadline != self.deadline || self.deadline.is_some_and(|at| now >= at) {
-                self.deadline = deadline;
-                if let Some(at) = deadline {
-                    tx.wake_after(std::time::Duration::from_millis(
-                        at.saturating_sub(now).max(1),
-                    ));
-                }
+            if let Some(at) = deadline
+                && !matches!(self.recency, Recency::Showing { wake_at: Some(wake), .. } if wake == at && now < wake)
+            {
+                tx.wake_after(std::time::Duration::from_millis(
+                    at.saturating_sub(now).max(1),
+                ));
             }
+            self.recency = Recency::Showing {
+                displayed_at: now,
+                wake_at: deadline,
+            };
+        } else {
+            self.set_display_clock(self.displayed_at());
         }
         changed
     }
@@ -359,7 +389,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
 }
 
 pub(super) fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
-    if live(s).panels.overlay.is_some() {
+    if live(s).panels.overlay().is_some() {
         return;
     }
     match live(s).feed.menu {

@@ -70,7 +70,7 @@ impl Scope {
             project: l.app.active_project.clone(),
             screen: l.panels.screen,
             inspector: l.panels.inspector,
-            overlay: l.panels.overlay,
+            overlay: l.panels.overlay(),
             settings: l.panels.settings_page,
             models: l.models.is_open(),
             side: l.commands.side_owner,

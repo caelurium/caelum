@@ -245,7 +245,7 @@ fn jump(s: &mut Workspace, index: usize, id: &str, tx: &mut Tx) {
     }
     l.app.select(index);
     l.current_prompt = Some(id.into());
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.search.focused = false;
     tx.scroll_center_in_instant(

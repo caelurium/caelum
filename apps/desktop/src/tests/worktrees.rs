@@ -342,7 +342,7 @@ fn worktree_management_keeps_its_project_and_missing_rows_cannot_navigate() {
             .as_deref(),
         Some(root)
     );
-    assert!(rt.state.live.as_ref().unwrap().panels.overlay.is_none());
+    assert!(rt.state.live.as_ref().unwrap().panels.overlay().is_none());
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn worktree_form_searches_bases_and_captures_project_provider_and_branch() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.1);
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::CreateWorktree)
     );
     assert!(element(&rt, "worktree-base-trigger").focused);
@@ -423,7 +423,7 @@ fn worktree_form_searches_bases_and_captures_project_provider_and_branch() {
     );
     click(&mut rt, "option0");
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::CreateWorktree)
     );
     click(&mut rt, "worktree-branch");
@@ -475,7 +475,7 @@ fn worktree_form_searches_bases_and_captures_project_provider_and_branch() {
     });
     advance(&mut rt, 0.3);
     let l = rt.state.live.as_ref().unwrap();
-    assert!(l.panels.overlay.is_none());
+    assert!(l.panels.overlay().is_none());
     assert_eq!(
         l.app.sessions[l.app.selected.unwrap()].scope.provider,
         caelum_core::application::Provider::OpenCode

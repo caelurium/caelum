@@ -15,11 +15,38 @@ pub struct Form {
     project: String,
     provider: Provider,
     branch: TextEdit,
-    base: String,
     search: TextEdit,
     menu: bool,
-    initialized: bool,
-    submitted: bool,
+    phase: Phase,
+}
+
+enum Phase {
+    Loading,
+    Editing {
+        base: String,
+        failure: Option<String>,
+    },
+    Submitted(Create),
+    Created {
+        base: String,
+    },
+}
+
+struct Create {
+    base: String,
+    branch: String,
+    directory: String,
+}
+
+impl Create {
+    fn task(&self, project: &str) -> Task {
+        Task::CreateWorktree {
+            project: project.into(),
+            branch: self.branch.clone(),
+            base: self.base.clone(),
+            directory: self.directory.clone(),
+        }
+    }
 }
 
 pub struct RenameForm {
@@ -30,8 +57,21 @@ pub struct RenameForm {
 
 impl Form {
     pub fn sync(&mut self, app: &Application) -> bool {
-        if self.initialized {
-            return false;
+        match &self.phase {
+            Phase::Submitted(create) if !app.services.busy(&create.task(&self.project)) => {
+                self.phase = match app.services.error(&create.task(&self.project)) {
+                    Some(error) => Phase::Editing {
+                        base: create.base.clone(),
+                        failure: Some(error.to_owned()),
+                    },
+                    None => Phase::Created {
+                        base: create.base.clone(),
+                    },
+                };
+                return true;
+            }
+            Phase::Loading => {}
+            _ => return false,
         }
         let Some(listing) = app
             .services
@@ -41,20 +81,33 @@ impl Form {
         else {
             return false;
         };
-        self.base.clone_from(&listing.default_base);
+        self.phase = Phase::Editing {
+            base: listing.default_base.clone(),
+            failure: None,
+        };
         self.branch
             .replace_text(caelum_core::worktrees::suggested_branch(listing));
         self.branch.set_selection(0, self.branch.text.len());
         self.branch.focused = true;
-        self.initialized = true;
         true
     }
-    fn task(&self, app: &Application) -> Task {
-        Task::CreateWorktree {
-            project: self.project.clone(),
+
+    fn create(&self, app: &Application) -> Option<Create> {
+        let Phase::Editing { base, .. } = &self.phase else {
+            return None;
+        };
+        Some(Create {
             branch: self.branch.text.trim().into(),
-            base: self.base.clone(),
+            base: base.clone(),
             directory: app.preferences.worktree_directory.clone(),
+        })
+    }
+
+    fn base(&self) -> Option<&str> {
+        match &self.phase {
+            Phase::Editing { base, .. } | Phase::Created { base } => Some(base),
+            Phase::Submitted(create) => Some(&create.base),
+            Phase::Loading => None,
         }
     }
 }
@@ -65,19 +118,16 @@ pub fn open(s: &mut Workspace, project: String, provider: Provider) {
         project: project.clone(),
         provider,
         branch: TextEdit::new(""),
-        base: String::new(),
         search: TextEdit::new(""),
         menu: false,
-        initialized: false,
-        submitted: false,
+        phase: Phase::Loading,
     };
     form.sync(&l.app);
     l.app.task(Task::Worktrees {
         project,
         directory: l.app.preferences.worktree_directory.clone(),
     });
-    l.panels.worktree = Some(form);
-    l.panels.overlay = Some(Screen::CreateWorktree);
+    l.panels.open_worktree(form);
 }
 
 pub fn rename_control(
@@ -190,29 +240,30 @@ fn submit_rename(s: &mut Workspace) {
 
 fn submit(s: &mut Workspace) {
     let l = live_mut(s);
-    let Some(form) = &mut l.panels.worktree else {
+    let Some(form) = l.panels.worktree_mut() else {
         return;
     };
-    let task = form.task(&l.app);
-    if !form.initialized
-        || form.branch.text.trim().is_empty()
-        || l.app.services.busy(&task)
-        || (form.submitted && l.app.services.error(&task).is_none())
-    {
+    let Some(create) = form.create(&l.app) else {
+        return;
+    };
+    let task = create.task(&form.project);
+    if form.branch.text.trim().is_empty() || l.app.services.busy(&task) {
         return;
     }
     l.app.launch_worktree(task, form.provider);
-    form.submitted = true;
+    form.phase = Phase::Submitted(create);
     l.panels.screen = Screen::Conversation;
 }
 
 pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let l = live(s);
-    let Some(form) = &l.panels.worktree else {
+    let Some(form) = l.panels.worktree() else {
         return col();
     };
-    let task = form.task(&l.app);
-    let busy = l.app.services.busy(&task);
+    let task = form.create(&l.app).map(|create| create.task(&form.project));
+    let busy = matches!(form.phase, Phase::Submitted(_))
+        || task.as_ref().is_some_and(|task| l.app.services.busy(task));
+    let editable = task.is_some() && !busy;
     let refresh = Task::Worktrees {
         project: form.project.clone(),
         directory: l.app.preferences.worktree_directory.clone(),
@@ -231,12 +282,11 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         ),
         k,
     ));
-    if let Some(error) = l
-        .app
-        .services
-        .error(&task)
-        .or_else(|| l.app.services.error(&refresh))
-    {
+    let error = match &form.phase {
+        Phase::Editing { failure, .. } => failure.as_deref(),
+        _ => None,
+    };
+    if let Some(error) = error.or_else(|| l.app.services.error(&refresh)) {
         fields = fields.child(ui::notice("Couldn't create worktree", error, k));
     }
     if let Some(listing) = listing {
@@ -248,32 +298,40 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         branches.retain(|b| b.to_lowercase().contains(&query));
         let picker = Select::new("worktree-base", &branches)
             .label("Start from")
-            .current(Some(&form.base))
+            .current(form.base())
             .appearance(SelectAppearance::Field)
             .width(360.0)
-            .disabled(busy)
+            .disabled(!editable)
             .open(form.menu)
             .on_toggle(|s: &mut Workspace| {
-                let f = live_mut(s).panels.worktree.as_mut().unwrap();
+                let Some(f) = live_mut(s).panels.worktree_mut() else {
+                    return;
+                };
                 f.menu = !f.menu;
                 f.search.clear();
                 f.search.focused = f.menu;
             })
             .on_close(|s: &mut Workspace| {
-                let f = live_mut(s).panels.worktree.as_mut().unwrap();
+                let Some(f) = live_mut(s).panels.worktree_mut() else {
+                    return;
+                };
                 f.menu = false;
                 f.search.focused = false;
             })
             .on_choose(|s: &mut Workspace, value, _| {
-                let f = live_mut(s).panels.worktree.as_mut().unwrap();
-                f.base = value.into();
+                let Some(f) = live_mut(s).panels.worktree_mut() else {
+                    return;
+                };
+                if let Phase::Editing { base, .. } = &mut f.phase {
+                    *base = value.into();
+                }
                 f.menu = false;
                 f.search.focused = false;
             })
             .search(
                 ui::field(&form.search, "Find base branch", "Search branches…", k)
                     .edit_menu("worktree-base-search", |s| {
-                        Some(&mut live_mut(s).panels.worktree.as_mut()?.search)
+                        Some(&mut live_mut(s).panels.worktree_mut()?.search)
                     }),
             )
             .build(k, layers)
@@ -282,9 +340,9 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .child(ui::caption("New branch", k))
             .child(
                 ui::field(&form.branch, "New branch", "work/my-change", k)
-                    .disabled(busy)
+                    .disabled(!editable)
                     .edit_menu("worktree-branch", |s| {
-                        Some(&mut live_mut(s).panels.worktree.as_mut()?.branch)
+                        Some(&mut live_mut(s).panels.worktree_mut()?.branch)
                     })
                     .on_input_key(|s: &mut Workspace, ev, _| {
                         if ev.key != Key::Enter {
@@ -322,7 +380,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .build(k),
             );
     }
-    if form.submitted && !busy && l.app.services.error(&task).is_none() {
+    if matches!(form.phase, Phase::Created { .. }) {
         fields = fields.child(ui::caption(
             "Worktree created. It's available in the sidebar worktree list.",
             k,
@@ -354,7 +412,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 .child(
                     ui::Button::new("Cancel")
                         .variant(ButtonVariant::GhostMuted)
-                        .on_press(|s: &mut Workspace| live_mut(s).panels.overlay = None)
+                        .on_press(|s: &mut Workspace| live_mut(s).panels.set_overlay(None))
                         .build(k),
                 )
                 .child(
@@ -364,11 +422,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                         "Create worktree"
                     })
                     .variant(ButtonVariant::Contrast)
-                    .disabled(
-                        busy || !form.initialized
-                            || form.branch.text.trim().is_empty()
-                            || (form.submitted && l.app.services.error(&task).is_none()),
-                    )
+                    .disabled(!editable || form.branch.text.trim().is_empty())
                     .on_press(submit)
                     .build(k)
                     .key("create-worktree"),

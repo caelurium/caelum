@@ -36,7 +36,7 @@ fn open(s: &mut Workspace) {
     let l = live_mut(s);
     l.app.dismiss_vm_handoff();
     l.remote.form = super::picker::Form::for_entry(l);
-    l.panels.overlay = Some(Screen::CreateVm);
+    l.panels.set_overlay(Some(Screen::CreateVm));
     l.remote.folders.reset();
     l.app.remote.picker = None;
     if l.app.remote.inventory.is_some() {
@@ -171,7 +171,7 @@ fn browse(s: &mut Workspace, tx: &mut Tx) {
         move |s: &mut Workspace, result, _| {
             let l = live_mut(s);
             if l.remote.folders.generation != generation
-                || l.panels.overlay != Some(Screen::CreateVm)
+                || l.panels.overlay() != Some(Screen::CreateVm)
                 || l.app.remote.picker.is_some()
             {
                 return;

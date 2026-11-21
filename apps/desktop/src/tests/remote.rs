@@ -52,7 +52,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     click(&mut rt, "open-create-vm");
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
-        assert_eq!(l.panels.overlay, Some(crate::panels::Screen::CreateVm));
+        assert_eq!(l.panels.overlay(), Some(crate::panels::Screen::CreateVm));
         assert!(l.app.remote.saved.checkouts.is_empty());
         let (id, project) = l
             .app
@@ -95,7 +95,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
     click(&mut rt, "create-remote");
     let l = rt.state.live.as_mut().unwrap();
     assert_eq!(l.panels.screen, crate::panels::Screen::Remote);
-    assert!(l.panels.overlay.is_none());
+    assert!(l.panels.overlay().is_none());
     let creates: Vec<_> = l
         .app
         .commands()

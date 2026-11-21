@@ -398,10 +398,10 @@ pub fn select_change(s: &mut Workspace, project: String, path: String) {
         .change_positions
         .entry((project.clone(), path.clone()))
         .or_default();
-    live.panels.pending_scroll = Some((
-        "changes-diff/scroll".into(),
-        position.get().unwrap_or([0.0, 0.0]),
-    ));
+    live.panels.pending_scroll = Some(super::ScrollRestore {
+        target: super::ScrollTarget::Change((project.clone(), path.clone())),
+        offset: position.get().unwrap_or([0.0, 0.0]),
+    });
     live.panels.change_file = Some((project.clone(), path.clone()));
     live.panels.change_diff = DiffState::new(diff::parse(""));
     live.panels.change_hash = 0;

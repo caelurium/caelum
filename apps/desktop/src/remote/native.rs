@@ -93,7 +93,7 @@ pub(crate) fn open(l: &mut Live, id: &str, intent: SessionIntent) -> bool {
     }
     l.reveal_new_session();
     l.panels.screen = Screen::Conversation;
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.archived = false;
     l.session_menu = None;
     l.sync_editors();

@@ -91,9 +91,9 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         None
     } else if inspected.is_some() {
         inspected
-    } else if l.panels.screen == Screen::Remote && l.panels.overlay.is_none() {
+    } else if l.panels.screen == Screen::Remote && l.panels.overlay().is_none() {
         l.app.remote.saved.selected.as_deref()
-    } else if l.panels.screen == Screen::Conversation && l.panels.overlay.is_none() {
+    } else if l.panels.screen == Screen::Conversation && l.panels.overlay().is_none() {
         super::native::selected(l)
     } else {
         None
@@ -299,7 +299,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             .children((live(s).panels.screen == Screen::Remote).then(|| {
                 ui::Button::new("Changes")
                     .on_press(|s: &mut Workspace| {
-                        live_mut(s).panels.overlay = None;
+                        live_mut(s).panels.set_overlay(None);
                         super::open_changes(s);
                     })
                     .build(k)
