@@ -163,13 +163,10 @@ impl Workspace {
                         }
                     }
                     Pending::Notify => {}
-                    Pending::Load => self.persistence_error = Some(error),
-                    Pending::Save(_, mut commands) => {
-                        self.saving = false;
-                        commands.append(&mut self.durable_outgoing);
-                        self.durable_outgoing = commands;
-                        self.persistence_error = Some(error);
+                    Pending::Load => {
+                        self.store_loaded(request, Err(error));
                     }
+                    Pending::Save => self.store_saved(request, Err(error)),
                     Pending::Remote(_)
                     | Pending::CheckHandoff(..)
                     | Pending::Home(_)
@@ -330,10 +327,11 @@ impl Workspace {
                 self.sessions[index].details = Some(details);
             }
             (Pending::Load, Reply::Snapshot(snapshot)) => {
-                self.store_ready = true;
+                if !self.store_loaded(request, Ok(snapshot.as_deref())) {
+                    return;
+                }
                 if let Some(snapshot) = snapshot {
                     let snapshot = *snapshot;
-                    self.saved = Some(snapshot.clone());
                     self.home.restore(snapshot.home);
                     self.remote.saved = snapshot.remote;
                     self.managed_worktrees = snapshot.managed_worktrees;
@@ -455,11 +453,7 @@ impl Workspace {
                     }
                 }
             }
-            (Pending::Save(snapshot, mut commands), Reply::Done) => {
-                self.saved = Some(*snapshot);
-                self.saving = false;
-                self.ready_outgoing.append(&mut commands);
-            }
+            (Pending::Save, Reply::Done) => self.store_saved(request, Ok(())),
             (Pending::Commands(scope), Reply::Commands(commands)) => {
                 self.provider_commands.insert(scope, commands);
             }

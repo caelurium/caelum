@@ -17,7 +17,7 @@ impl Live {
         match store.lock() {
             Ok(lock) => self.store_lock = Some(lock),
             Err(error) => {
-                self.app.persistence_error = Some(error);
+                self.app.store_unavailable(error);
                 return;
             }
         }

@@ -55,11 +55,7 @@ impl Workspace {
         self.outgoing.retain(keep);
         self.ready_outgoing.retain(keep);
         self.durable_outgoing.retain(keep);
-        for pending in self.pending.values_mut() {
-            if let Pending::Save(_, commands) = pending {
-                commands.retain(keep);
-            }
-        }
+        self.persistence.retain_saving_commands(keep);
         let error = "VM connection closed. Delivery is unconfirmed; check the session history before retrying.";
         ids.into_iter()
             .map(|r| Event::Completed(r, Err(error.into())))
