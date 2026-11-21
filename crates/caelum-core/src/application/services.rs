@@ -1,7 +1,11 @@
 //! Scoped files, checkout and head-pinned review coordination. Renderers never
 //! own subprocesses, pagination or response admission.
 mod completion;
+mod requests;
+mod review;
 mod review_cache;
+
+pub use review::Review;
 
 use super::{Preferences, ProviderRuntime};
 use crate::{files, git::GitClient, github};
@@ -484,78 +488,6 @@ pub struct Checkout {
     pub error: Option<String>,
 }
 
-#[derive(Default, PartialEq, Eq)]
-enum ReviewSource {
-    #[default]
-    Unloaded,
-    GitHub(u64),
-    Cache,
-}
-
-#[derive(Default)]
-pub struct Review {
-    generation: u64,
-    source: ReviewSource,
-    pub details: Option<GitHubPullRequestDetails>,
-    pub files: Vec<GitHubPullRequestFile>,
-    pub files_loaded: bool,
-    pub base: Option<String>,
-    pub next_page: Option<u32>,
-    pub discussion: Vec<GitHubReviewComment>,
-    pub reviews: Vec<GitHubReviewComment>,
-    pub threads: Vec<GitHubReviewThread>,
-    pub cursors: BTreeMap<String, Option<String>>,
-    pub selected_comments: HashSet<String>,
-    pub error: Option<String>,
-    pub notice: Option<String>,
-}
-
-impl Review {
-    pub fn cached(&self) -> bool {
-        self.source == ReviewSource::Cache
-    }
-    pub fn expected_base(&self) -> Option<&str> {
-        self.details.as_ref().map(|d| d.base_ref_oid.as_str())
-    }
-    pub fn head(&self) -> Option<&str> {
-        self.details.as_ref().map(|d| d.head_ref_oid.as_str())
-    }
-    pub fn address_prompt(&self) -> Option<String> {
-        let details = self.details.as_ref()?;
-        let mut comments = Vec::new();
-        for c in self.discussion.iter().chain(&self.reviews) {
-            if self.selected_comments.contains(&c.id) {
-                comments.push(format!("{}\n{}", c.url, c.body));
-            }
-        }
-        for thread in &self.threads {
-            for c in &thread.comments {
-                if self.selected_comments.contains(&c.id) {
-                    comments.push(format!(
-                        "{}:{} ({}, {}{})\n{}\n{}\n{}",
-                        thread.path,
-                        thread.line.or(thread.original_line).unwrap_or(0),
-                        thread.diff_side,
-                        if thread.is_resolved {
-                            "resolved"
-                        } else {
-                            "open"
-                        },
-                        if thread.is_outdated { ", outdated" } else { "" },
-                        c.url,
-                        c.diff_hunk.as_deref().unwrap_or_default(),
-                        c.body
-                    ));
-                }
-            }
-        }
-        if comments.is_empty() {
-            return None;
-        }
-        Some(format!("Address these selected review comments for {} at head {}. Verify each against the current checkout before changing code.\n\n{}", details.pull_request.url, details.head_ref_oid, comments.join("\n\n---\n\n")))
-    }
-}
-
 struct Discovered {
     url: String,
     request: u64,
@@ -565,17 +497,13 @@ struct Discovered {
 pub struct Services {
     pub images: BTreeMap<(String, String), String>,
     pub revision: u64,
-    errors: HashMap<String, String>,
+    requests: HashMap<String, requests::Slot>,
     pub update: Option<UpdateCheck>,
     pub updater: crate::updates::State,
     pub checkouts: BTreeMap<String, Checkout>,
     pub reviews: BTreeMap<(String, String), Review>,
-    latest: HashMap<String, u64>,
-    loading: HashSet<String>,
     discovered: HashMap<(String, String), Option<Discovered>>,
     merged_pull_requests: HashSet<String>,
-    review_owners: HashMap<String, (String, String)>,
-    generations: HashMap<u64, u64>,
 }
 
 impl Services {
@@ -598,9 +526,9 @@ impl Services {
         let current = self
             .reviews
             .get(&(project.into(), found.url.clone()))
-            .filter(|r| matches!(r.source, ReviewSource::GitHub(id) if id > found.request));
+            .filter(|r| r.newer_than(found.request));
         let pr = if let Some(review) = current {
-            let details = review.details.as_ref()?;
+            let details = review.details()?;
             if details.state != "OPEN" || details.head_ref_name != branch {
                 return None;
             }
@@ -644,56 +572,11 @@ impl Services {
         let key = (project.into(), url.into());
         let review = self.reviews.entry(key.clone()).or_default();
         review.generation += 1;
-        review.files.clear();
-        review.base = None;
-        review.files_loaded = false;
-        review.next_page = None;
-        review.cursors.clear();
-        review.discussion.clear();
-        review.reviews.clear();
-        review.threads.clear();
-        review.selected_comments.clear();
-        let mutation = Task::UpdateBranch {
-            project: project.into(),
-            url: url.into(),
-            head: String::new(),
-        }
-        .slot();
-        for (slot, owner) in &self.review_owners {
-            if *owner == key && *slot != mutation {
-                self.latest.remove(slot);
-                self.loading.remove(slot);
-            }
-        }
-    }
-    pub(super) fn current(&self, id: u64, task: &Task) -> bool {
-        if self.latest.get(&task.slot()) != Some(&id) {
-            return false;
-        }
-        if task.mutates_review() {
-            return true;
-        }
-        if let Some((url, head)) = task.review() {
-            let Some(review) = self.reviews.get(&(task.project().into(), url.into())) else {
-                return false;
-            };
-            if self.generations.get(&id) != Some(&review.generation)
-                || head.is_some_and(|head| review.head() != Some(head))
-                || matches!(task, Task::ReviewFiles { base, .. } if review.expected_base() != Some(base))
-            {
-                return false;
-            }
-        }
-        true
-    }
-    pub fn busy(&self, task: &Task) -> bool {
-        self.loading.contains(&task.slot())
-    }
-    pub fn error(&self, task: &Task) -> Option<&str> {
-        self.errors.get(&task.slot()).map(String::as_str)
+        review.clear_files();
+        review.clear_feedback();
+        self.invalidate_review_reads(&key);
     }
     pub(super) fn start(&mut self, task: &Task, id: u64) {
-        self.errors.remove(&task.slot());
         if let Task::SetAutoMerge { project, url, .. } = task {
             self.invalidate_details(project, url);
             self.reviews
@@ -709,19 +592,11 @@ impl Services {
                 checkout.stats_filter = key;
             }
         }
-        self.latest.insert(task.slot(), id);
-        self.loading.insert(task.slot());
+        self.start_slot(task, id);
         self.checkouts
             .entry(task.project().into())
             .or_default()
             .error = None;
-        if let Some((url, _)) = task.review() {
-            let key = (task.project().into(), url.into());
-            let review = self.reviews.entry(key.clone()).or_default();
-            review.error = None;
-            self.generations.insert(id, review.generation);
-            self.review_owners.insert(task.slot(), key);
-        }
     }
 
     fn invalidate_details(&mut self, project: &str, url: &str) {
@@ -730,7 +605,6 @@ impl Services {
             url: url.into(),
         }
         .slot();
-        self.latest.remove(&slot);
-        self.loading.remove(&slot);
+        self.requests.remove(&slot);
     }
 }

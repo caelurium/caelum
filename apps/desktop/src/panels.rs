@@ -362,11 +362,11 @@ impl Panels {
             let mut hash = std::collections::hash_map::DefaultHasher::new();
             key.hash(&mut hash);
             review.head().hash(&mut hash);
-            for file in &review.files {
+            for file in review.files() {
                 (&file.path, &file.patch, &file.previous_path, &file.status).hash(&mut hash);
             }
             let revision = hash.finish();
-            if !review.files_loaded
+            if !review.files_loaded()
                 && !self.diff.files().is_empty()
                 && self.review_restore.is_none()
             {
@@ -376,28 +376,28 @@ impl Panels {
                     .and_then(|p| p.get())
                     .map(|position| (key.clone(), position));
             }
-            if review.files_loaded && self.diff_hash != revision {
+            if review.files_loaded() && self.diff_hash != revision {
                 crate::code_view::replace_files(
                     &mut self.diff,
-                    crate::code_view::review_files(&review.files),
+                    crate::code_view::review_files(review.files()),
                 );
                 self.diff_hash = revision;
                 self.annotations_hash = 0;
                 if self.review_file.is_none() {
-                    self.review_file = review.files.first().map(|f| f.path.clone());
+                    self.review_file = review.files().first().map(|f| f.path.clone());
                 }
                 changed = true;
             }
-            if review.files_loaded
+            if review.files_loaded()
                 && self
                     .review_restore
                     .as_ref()
                     .is_some_and(|(owner, _)| owner == key)
-                && (review.next_page.is_none()
+                && (review.next_page().is_none()
                     || self
                         .review_file
                         .as_ref()
-                        .is_none_or(|path| review.files.iter().any(|f| &f.path == path)))
+                        .is_none_or(|path| review.files().iter().any(|f| &f.path == path)))
             {
                 let (target, offset) = self.review_restore.take().unwrap();
                 self.pending_scroll = Some(ScrollRestore {

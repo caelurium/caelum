@@ -63,7 +63,7 @@ pub(super) fn review(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(error) = &review.error {
         notices = notices.child(
             ui::notice(
-                if review.details.is_some() {
+                if review.details().is_some() {
                     "Review request failed"
                 } else {
                     "Review unavailable"
@@ -88,7 +88,7 @@ pub(super) fn review(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(notice) = &review.notice {
         notices = notices.child(label(notice, k));
     }
-    let Some(details) = &review.details else {
+    let Some(details) = review.details() else {
         return content.child(scroll(if review.error.is_some() {
             notices
         } else {
@@ -279,7 +279,7 @@ fn review_files_view(
     let kit = k.clone();
     let query = live(s).panels.review_search.text.to_lowercase();
     let indices: Vec<_> = review
-        .files
+        .files()
         .iter()
         .enumerate()
         .filter(|(_, f)| f.path.to_lowercase().contains(&query))
@@ -295,13 +295,13 @@ fn review_files_view(
             move |s: &Workspace, i| {
                 format!(
                     "review-file-{}",
-                    live(s).app.services.reviews[&owner].files[keys[i]].path
+                    live(s).app.services.reviews[&owner].files()[keys[i]].path
                 )
                 .into()
             },
             move |s: &Workspace, i| {
                 let r = &live(s).app.services.reviews[&lookup];
-                let f = &r.files[indices[i]];
+                let f = &r.files()[indices[i]];
                 let path = f.path.clone();
                 let count = r.threads.iter().filter(|t| t.path == path).count();
                 let detail = format!(
@@ -401,13 +401,13 @@ fn review_files_view(
     } else {
         nav.w(224.0)
     };
-    let mut code = if !review.files_loaded {
+    let mut code = if !review.files_loaded() {
         ui::skeleton("Loading changed files", 6, k).grow(1.0)
     } else {
         diff_view(s, k, true)
     };
     if let Some(file) = review
-        .files
+        .files()
         .iter()
         .find(|f| live(s).panels.review_file.as_ref() == Some(&f.path))
     {
@@ -532,7 +532,7 @@ fn review_files_view(
         );
     if !review.cached()
         && let (Some(page), Some(head), Some(base)) =
-            (review.next_page, review.head(), review.expected_base())
+            (review.next_page(), review.head(), review.expected_base())
     {
         body = body.child(
             action(

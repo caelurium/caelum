@@ -26,12 +26,13 @@ state machine; types cannot establish that an external event is current.
 | [Desktop completion](../apps/desktop/src/completion.rs), [sidebar](../apps/desktop/src/live/sidebar.rs), and [remote stats](../apps/desktop/src/remote/stats.rs) | Mention application owns the request, editor and captured selection. Sidebar recency timers exist only while active; auto-stop refresh is keyed to the machine and deadline. |
 | [Desktop preview](../apps/desktop/src/state.rs) | A streaming response owns its clock and visible text; stopping consumes that phase. Only turns with tools have disclosure state. |
 | [Conversation activity](../crates/caelum-core/src/application/conversation.rs) and [entries](../crates/caelum-core/src/application/conversation/entry.rs) | Idle cannot also be retrying. Only a user prompt can be awaiting its provider echo; only a tool can run in the background. Provider status labels remain display data, independent of the typed progress phase. |
+| [Review snapshots](../crates/caelum-core/src/application/services/review.rs) and [service requests](../crates/caelum-core/src/application/services/requests.rs) | Cached or live details own file pages for that base and head. Pagination accepts only the expected next page. A running slot owns its request and revision pin; a failed slot has no active request, and read invalidation does not release a mutation lock. |
 
-## Remaining candidates
+## Scope boundaries
 
-| Owner | State currently split across fields | Invariant to encode |
-| --- | --- | --- |
-| [Review and service requests](../crates/caelum-core/src/application/services.rs) | Review source and details are separate; request slots share latest/loading/error maps | Tie cached/live details and file pages to a verified revision. A loading slot owns its request; refresh can retain visible data while a new request is pending. |
+The candidates identified by this audit are covered above. Independent choices
+and measurements, such as sidebar visibility or token counts, are not combined
+into a phase enum merely because they appear on the same screen.
 
 Updates, OpenCode connection slots, conversation controls, relocation, and remote
 checkout and turn lifecycles already use phase enums. Review their event

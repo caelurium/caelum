@@ -248,7 +248,10 @@ fn review_refresh_and_tab_navigation_preserve_exact_patch_reading_position() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         let r = l.app.services.reviews.values_mut().next().unwrap();
-        r.files[1].patch.as_mut().unwrap().push('\n');
+        let mut files = r.files().to_vec();
+        files[1].patch.as_mut().unwrap().push('\n');
+        let next = r.next_page();
+        crate::evaluation::seed_review_files(r, files, next);
         l.app.services.revision += 1;
     });
     advance(&mut rt, 0.3);
@@ -264,8 +267,8 @@ fn review_refresh_and_tab_navigation_preserve_exact_patch_reading_position() {
         .values()
         .next()
         .unwrap()
-        .files
-        .clone();
+        .files()
+        .to_vec();
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.services.refresh_review(
             "/evaluation",
@@ -276,8 +279,7 @@ fn review_refresh_and_tab_navigation_preserve_exact_patch_reading_position() {
     rt.update(|s, _| {
         let services = &mut s.live.as_mut().unwrap().app.services;
         let review = services.reviews.values_mut().next().unwrap();
-        review.files = files.clone();
-        review.files_loaded = true;
+        crate::evaluation::seed_review_files(review, files.clone(), None);
         services.revision += 1;
     });
     advance(&mut rt, 0.3);
@@ -310,9 +312,7 @@ fn review_refresh_and_tab_navigation_preserve_exact_patch_reading_position() {
     rt.update(|s, _| {
         let services = &mut s.live.as_mut().unwrap().app.services;
         let review = services.reviews.values_mut().next().unwrap();
-        review.files = files[..25].to_vec();
-        review.files_loaded = true;
-        review.next_page = Some(2);
+        crate::evaluation::seed_review_files(review, files[..25].to_vec(), Some(2));
         services.revision += 1;
     });
     advance(&mut rt, 0.3);
@@ -328,8 +328,7 @@ fn review_refresh_and_tab_navigation_preserve_exact_patch_reading_position() {
     rt.update(|s, _| {
         let services = &mut s.live.as_mut().unwrap().app.services;
         let review = services.reviews.values_mut().next().unwrap();
-        review.files = files.clone();
-        review.next_page = None;
+        crate::evaluation::seed_review_files(review, files.clone(), None);
         services.revision += 1;
     });
     advance(&mut rt, 0.3);
