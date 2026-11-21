@@ -19,17 +19,17 @@ fn workspace() -> Workspace {
         .reviews
         .entry(("/repository".into(), URL.into()))
         .or_default()
-        .details = Some(
-        serde_json::from_value(json!({
-            "number": 42, "title": "Feature", "url": URL, "isDraft": false,
-            "body": "", "state": "OPEN", "author": null, "baseRefName": "main",
-            "headRefName": "feature", "headRefOid": "a".repeat(40),
-            "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
-            "additions": 1, "deletions": 0, "changedFiles": 1,
-            "reviewDecision": null, "statusCheckRollup": []
-        }))
-        .unwrap(),
-    );
+        .set_details(
+            serde_json::from_value(json!({
+                "number": 42, "title": "Feature", "url": URL, "isDraft": false,
+                "body": "", "state": "OPEN", "author": null, "baseRefName": "main",
+                "headRefName": "feature", "headRefOid": "a".repeat(40),
+                "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
+                "additions": 1, "deletions": 0, "changedFiles": 1,
+                "reviewDecision": null, "statusCheckRollup": []
+            }))
+            .unwrap(),
+        );
     app
 }
 
@@ -137,9 +137,9 @@ fn unavailable_sessions_and_missing_review_metadata_do_not_redirect_navigation()
                     .get_mut(&("/repository".into(), URL.into()))
                     .unwrap();
                 if unavailable == "loading" {
-                    review.details = None;
+                    review.clear_details();
                 } else {
-                    review.details.as_mut().unwrap().head_ref_name.clear();
+                    review.edit_details(|details| details.head_ref_name.clear());
                 }
             }
         }

@@ -15,7 +15,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
     let target = l.panels.review.as_ref();
     let details = target
         .and_then(|key| l.app.services.reviews.get(key))
-        .and_then(|review| review.details.as_ref());
+        .and_then(|review| review.details());
     let mut navigation = row().w_full().center_y().gap(8.0).child(
         quiet_button(&ui::BACK, "Back to session")
             .on_press(|s: &mut Workspace| {

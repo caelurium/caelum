@@ -13,15 +13,16 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
             .reviews
             .get_mut(&(project.clone(), url.clone()))
             .unwrap();
-        let details = review.details.take().unwrap();
+        let details = review.details().cloned().unwrap();
         let cached = caelum_core::github::CachedReview {
             files: Some(caelum_protocol::GitHubPullRequestFiles {
-                files: review.files.clone(),
+                files: review.files().to_vec(),
                 base_oid: details.base_ref_oid.clone(),
                 next_page: None,
             }),
             details,
         };
+        review.clear_details();
         l.app.services.refresh_review(&project, &url);
         l.app.task(caelum_core::application::Task::ReviewCache {
             project: project.clone(),
@@ -59,7 +60,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         if name == "overview-stale" {
             review.error = Some("GitHub is unavailable. Showing the last loaded review.".into());
         } else {
-            let details = review.details.as_mut().unwrap();
+            let mut details = review.details().cloned().unwrap();
             details.pull_request.title = "Keep navigation, drafts and review context consistent across multiple projects and linked worktrees".into();
             details.head_ref_name =
                 "feature/preserve-session-context-during-background-review-refresh".into();
@@ -68,6 +69,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
             details.body = (1..=12)
                 .map(|i| format!("### Review area {i}\n\nPreserve the selected session, its draft and reading position while background changes arrive. Keep long branch names readable and make failed checks easy to find before reviewing the description.\n\n- Keep each response with its requesting checkout.\n- Restore the selected file after refreshing a review.\n\n"))
                 .collect();
+            review.set_details(details);
         }
         l.app.services.revision += 1;
         return;
@@ -119,18 +121,16 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         .reviews
         .entry((project.into(), url.into()))
         .or_default();
-    review.details=Some(serde_json::from_value(json!({"number":95,"title":"Restore native workspace parity","url":url,"isDraft":false,"body":"Native composer, continuous review and durable session workflows.","state":"OPEN","author":{"login":"ch55secake"},"baseRefName":"feat/rune-design-parity","headRefName":"feat/rune-native-cutover","headRefOid":"a".repeat(40),"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":34,"deletions":8,"changedFiles":3,"reviewDecision":"APPROVED","statusCheckRollup":[{"__typename":"CheckRun","name":"Native interactions","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/caelurium/caelum/actions","startedAt":"2026-11-07T10:00:00Z","completedAt":"2026-11-07T10:02:43Z"},{"__typename":"StatusContext","context":"Provider adapters","state":"SUCCESS","targetUrl":"https://github.com/caelurium/caelum/actions"}]})).unwrap());
-    review.files=vec![
+    let mut details: caelum_protocol::GitHubPullRequestDetails = serde_json::from_value(json!({"number":95,"title":"Restore native workspace parity","url":url,"isDraft":false,"body":"Native composer, continuous review and durable session workflows.","state":"OPEN","author":{"login":"ch55secake"},"baseRefName":"feat/rune-design-parity","headRefName":"feat/rune-native-cutover","headRefOid":"a".repeat(40),"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":34,"deletions":8,"changedFiles":3,"reviewDecision":"APPROVED","statusCheckRollup":[{"__typename":"CheckRun","name":"Native interactions","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/caelurium/caelum/actions","startedAt":"2026-11-07T10:00:00Z","completedAt":"2026-11-07T10:02:43Z"},{"__typename":"StatusContext","context":"Provider adapters","state":"SUCCESS","targetUrl":"https://github.com/caelurium/caelum/actions"}]})).unwrap();
+    let mut files = vec![
         caelum_protocol::GitHubPullRequestFile {path:"src/workspace.rs".into(),status:"modified".into(),previous_path:None,additions:3,deletions:1,patch:Some("@@ -1,4 +1,6 @@\n pub fn restore(session: &mut Session) {\n-    session.reset();\n+    session.restore_draft();\n+    session.restore_reading_position();\n+    session.focus();\n }\n ".into())},
         caelum_protocol::GitHubPullRequestFile {path:"src/composer.rs".into(),status:"renamed".into(),previous_path:Some("src/input.rs".into()),additions:1,deletions:1,patch:Some("@@ -1 +1 @@\n-const HEIGHT: f32 = 56.0;\n+const MAX_HEIGHT: f32 = 180.0;".into())},
         caelum_protocol::GitHubPullRequestFile {path:"assets/icon.png".into(),status:"modified".into(),previous_path:None,additions:0,deletions:0,patch:None}
     ];
-    review.files_loaded = true;
-    review.details.as_mut().unwrap().base_ref_oid = "b".repeat(40);
-    review.base = Some("b".repeat(40));
+    details.base_ref_oid = "b".repeat(40);
     review.threads=(0..2).map(|n|serde_json::from_value(json!({"id":format!("thread-{n}"),"path":"src/workspace.rs","line":n+2,"startLine":null,"originalLine":n+2,"diffSide":"RIGHT","isResolved":n==1,"isOutdated":false,"comments":[{"id":format!("comment-{n}"),"body":if n==0 {"Keep newer navigation intact while a restore is pending."} else {"Reading position now survives refresh. Looks good."},"url":url,"author":{"login":"reviewer"},"createdAt":"2026-11-07T10:00:00Z","state":null,"diffHunk":null}],"nextCursor":null})).unwrap()).collect();
     for n in 0..9 {
-        review.files.push(caelum_protocol::GitHubPullRequestFile {
+        files.push(caelum_protocol::GitHubPullRequestFile {
             path: format!("crates/core/src/session_{n}.rs"),
             status: "modified".into(),
             previous_path: None,
@@ -146,7 +146,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
             )),
         });
     }
-    review.details.as_mut().unwrap().changed_files = review.files.len() as u64;
+    details.changed_files = files.len() as u64;
     let comments = [
         "The two-tab review flow is much easier to navigate. Please keep inline feedback visible beside each changed line.",
         "I checked the compact layout. The destination session should stay visible when selecting feedback.",
@@ -157,7 +157,6 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
     review.selected_comments.insert("comment-0".into());
     if name.starts_with("overview") {
         review.selected_comments.clear();
-        let details = review.details.as_mut().unwrap();
         details.body = "## A calmer native workspace\n\nThis follow-up brings the review and conversation surfaces back together, while keeping each session's **draft, attachments and reading position** independent.\n\n### What changed\n\n- A focused worktree form with a searchable starting branch\n- Compact background commands with a full output reader\n- Content-sized user messages and temporary archive Undo\n\n### Review notes\n\nUse the files tab to review the shared Rust changes, then select feedback to send to the current session.".into();
         if name == "overview-empty" {
             details.body.clear();
@@ -178,7 +177,6 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
     }
     if name.starts_with("merge-") {
         review.selected_comments.clear();
-        let details = review.details.as_mut().unwrap();
         details.body = "A focused native workspace refinement, ready for review.".into();
         match name {
             "merge-blocked" | "merge-auto-enabled" | "merge-auto-error" => {
@@ -206,6 +204,8 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
             _ => {}
         }
     }
+    review.set_details(details);
+    seed_review_files(review, files, None);
     for kind in ["Discussion", "Reviews", "Threads"] {
         review.cursors.insert(kind.into(), None);
     }
@@ -215,7 +215,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         .checkouts
         .get_mut(project)
         .unwrap()
-        .pull_requests = vec![review.details.as_ref().unwrap().pull_request.clone()];
+        .pull_requests = vec![review.details().unwrap().pull_request.clone()];
     l.app.services.revision += 1;
     if name == "mentions" {
         l.sync_editors();
@@ -241,9 +241,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
                 .reviews
                 .get_mut(&(project.into(), url.into()))
                 .unwrap();
-            r.details = None;
-            r.files.clear();
-            r.files_loaded = false;
+            r.clear_details();
             l.app.services.revision += 1;
         }
         if matches!(name, "review-error" | "merge-auto-error") {
@@ -255,7 +253,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
                 .get_mut(&(project.into(), url.into()))
                 .unwrap();
             if name == "review-error" {
-                r.details = None;
+                r.clear_details();
                 r.error =
                     Some("GitHub is unavailable. Check your connection and try again.".into());
             } else {
@@ -269,4 +267,58 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
             super::finish_fixture_reads(state.live.as_mut().unwrap());
         }
     }
+}
+
+pub(super) fn large(live: &mut crate::live::Live) {
+    let url = "https://github.com/example/evaluation/pull/1";
+    let review = live
+        .app
+        .services
+        .reviews
+        .entry(("/evaluation".into(), url.into()))
+        .or_default();
+    review.set_details(serde_json::from_value(json!({"number":1,"title":"Large review workload","url":url,"isDraft":true,"body":"Deterministic, offline review workload.","state":"OPEN","author":null,"baseRefName":"main","headRefName":"evaluation","headRefOid":"a".repeat(40),"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","additions":10000,"deletions":10000,"changedFiles":300,"reviewDecision":null,"statusCheckRollup":[]})).unwrap());
+    let files = (0..300)
+        .map(|i| caelum_protocol::GitHubPullRequestFile {
+            path: format!("src/file-{i}.rs"),
+            status: "modified".into(),
+            previous_path: None,
+            additions: 100,
+            deletions: 100,
+            patch: Some(format!(
+                "@@ -1,100 +1,100 @@\n{}",
+                (0..100)
+                    .map(|n| format!("-let value_{n} = {n};\n+let value_{n} = {};\n", n + 1))
+                    .collect::<String>()
+            )),
+        })
+        .collect();
+    seed_review_files(review, files, None);
+    let checkout = live
+        .app
+        .services
+        .checkouts
+        .entry("/evaluation".into())
+        .or_default();
+    checkout
+        .pull_requests
+        .push(review.details().unwrap().pull_request.clone());
+}
+
+pub(crate) fn seed_review_files(
+    review: &mut caelum_core::application::Review,
+    files: Vec<caelum_protocol::GitHubPullRequestFile>,
+    next_page: Option<u32>,
+) {
+    let head = review.head().unwrap().to_owned();
+    let base_oid = review.expected_base().unwrap().to_owned();
+    assert!(review.apply_file_page(
+        &head,
+        1,
+        caelum_protocol::GitHubPullRequestFiles {
+            files,
+            base_oid,
+            next_page
+        }
+    ));
 }

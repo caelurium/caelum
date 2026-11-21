@@ -2,6 +2,8 @@
 mod feed;
 mod models;
 mod review;
+#[cfg(test)]
+pub(crate) use review::seed_review_files;
 mod scenes;
 
 use crate::Workspace;
@@ -31,39 +33,7 @@ pub fn workspace() -> Workspace {
         ]})).collect();
         session.conversation.history(Provider::Codex, &turns, false);
     }
-    let url = "https://github.com/example/evaluation/pull/1";
-    let review = live
-        .app
-        .services
-        .reviews
-        .entry(("/evaluation".into(), url.into()))
-        .or_default();
-    review.details = Some(serde_json::from_value(json!({"number":1,"title":"Large review workload","url":url,"isDraft":true,"body":"Deterministic, offline review workload.","state":"OPEN","author":null,"baseRefName":"main","headRefName":"evaluation","headRefOid":"a".repeat(40),"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","additions":10000,"deletions":10000,"changedFiles":300,"reviewDecision":null,"statusCheckRollup":[]})).unwrap());
-    review.files_loaded = true;
-    review.files = (0..300)
-        .map(|i| caelum_protocol::GitHubPullRequestFile {
-            path: format!("src/file-{i}.rs"),
-            status: "modified".into(),
-            previous_path: None,
-            additions: 100,
-            deletions: 100,
-            patch: Some(format!(
-                "@@ -1,100 +1,100 @@\n{}",
-                (0..100)
-                    .map(|n| format!("-let value_{n} = {n};\n+let value_{n} = {};\n", n + 1))
-                    .collect::<String>()
-            )),
-        })
-        .collect();
-    let checkout = live
-        .app
-        .services
-        .checkouts
-        .entry("/evaluation".into())
-        .or_default();
-    checkout
-        .pull_requests
-        .push(review.details.as_ref().unwrap().pull_request.clone());
+    review::large(live);
     live.app.select(0);
     state
 }

@@ -22,7 +22,7 @@ impl Workspace {
             .services
             .reviews
             .get(&(project.clone(), url.clone()))
-            .is_none_or(|review| review.details.is_none())
+            .is_none_or(|review| review.details().is_none())
         {
             self.task(crate::application::Task::ReviewCache {
                 project: project.clone(),
@@ -40,8 +40,7 @@ impl Workspace {
             .services
             .reviews
             .get(&(project.into(), url.into()))?
-            .details
-            .as_ref()?
+            .details()?
             .head_ref_name;
         if head.is_empty() {
             return None;

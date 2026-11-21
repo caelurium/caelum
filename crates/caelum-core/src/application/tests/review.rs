@@ -27,7 +27,11 @@ fn search_and_review_pages_reject_late_results_from_old_targets() {
     assert_eq!(app.services.checkouts["/a"].search_query, "new");
     let key = ("/a".into(), "https://github.com/a/b/pull/1".into());
     let details: caelum_protocol::GitHubPullRequestDetails = serde_json::from_value(json!({"number":1,"title":"PR","url":key.1,"isDraft":false,"body":"","state":"OPEN","author":null,"baseRefName":"main","headRefName":"feature","headRefOid":"new","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":1,"deletions":0,"changedFiles":1,"reviewDecision":null,"statusCheckRollup":[]})).unwrap();
-    app.services.reviews.entry(key.clone()).or_default().details = Some(details);
+    app.services
+        .reviews
+        .entry(key.clone())
+        .or_default()
+        .set_details(details);
     app.task(Task::ReviewFiles {
         project: key.0.clone(),
         url: key.1.clone(),
@@ -46,7 +50,7 @@ fn search_and_review_pages_reject_late_results_from_old_targets() {
             },
         ))),
     ));
-    assert!(!app.services.reviews[&key].files_loaded);
+    assert!(!app.services.reviews[&key].files_loaded());
 }
 
 fn discover_pull_request(
@@ -165,15 +169,16 @@ fn same_head_refresh_rejects_old_pages_without_unlocking_an_active_mutation() {
     let mut app = Workspace::default();
     let key = ("/a".to_owned(), "https://github.com/a/b/pull/1".to_owned());
     let details = serde_json::from_value(json!({"number":1,"title":"PR","url":key.1,"isDraft":false,"body":"","state":"OPEN","author":null,"baseRefName":"main","headRefName":"feature","headRefOid":"head","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":1,"deletions":0,"changedFiles":1,"reviewDecision":null,"statusCheckRollup":[]})).unwrap();
-    app.services.reviews.entry(key.clone()).or_default().details = Some(details);
+    app.services
+        .reviews
+        .entry(key.clone())
+        .or_default()
+        .set_details(details);
     app.services
         .reviews
         .get_mut(&key)
         .unwrap()
-        .details
-        .as_mut()
-        .unwrap()
-        .base_ref_oid = "base".into();
+        .edit_details(|details| details.base_ref_oid = "base".into());
     let files = Task::ReviewFiles {
         project: key.0.clone(),
         url: key.1.clone(),
@@ -207,7 +212,7 @@ fn same_head_refresh_rejects_old_pages_without_unlocking_an_active_mutation() {
             },
         ))),
     ));
-    assert!(app.services.reviews[&key].files_loaded);
+    assert!(app.services.reviews[&key].files_loaded());
     app.apply(Event::Completed(update, Ok(Reply::Task(TaskReply::Done))));
     assert!(!app.services.busy(&mutation));
     assert!(app.services.reviews[&key].notice.is_some());
