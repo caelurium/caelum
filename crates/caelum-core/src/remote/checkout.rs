@@ -62,6 +62,8 @@ pub enum Phase {
 pub struct Checkout {
     pub source: Source,
     pub phase: Phase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defaults: Option<ProviderDefaults>,
     /// Canonical Git worktree on this VM. Older snapshots resolve it on refresh.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
@@ -71,6 +73,14 @@ pub struct Checkout {
     pub other_threads: Vec<super::Thread>,
     #[serde(default)]
     pub pinned_stats: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProviderDefaults {
+    pub(crate) provider: crate::application::Provider,
+    pub(crate) options: BTreeMap<String, crate::application::Options>,
+    pub(crate) favorites: BTreeMap<String, Vec<String>>,
 }
 
 impl Checkout {

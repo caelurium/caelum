@@ -10,8 +10,9 @@ impl Store {
             return Ok(None);
         };
         let mut changed = false;
-        for (id, c) in &state.remote.checkouts {
-            if state.remote.imported_profiles.contains(id) {
+        for (id, c) in &mut state.remote.checkouts {
+            let imported = state.remote.imported_profiles.contains(id);
+            if imported && c.defaults.is_some() {
                 continue;
             }
             let Some(machine) = c.machine() else {
@@ -46,6 +47,17 @@ impl Store {
             if old.sessions.iter().any(|s| s.scope.project != root)
                 || old.projects.iter().any(|p| p.path != root)
             {
+                continue;
+            }
+            if c.defaults.is_none() {
+                c.defaults = Some(crate::remote::ProviderDefaults {
+                    provider: old.preferences.default_provider,
+                    options: old.preferences.providers,
+                    favorites: old.preferences.favorite_models,
+                });
+                changed = true;
+            }
+            if imported {
                 continue;
             }
             let start = state.sessions.len();

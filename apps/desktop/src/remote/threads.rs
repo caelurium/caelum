@@ -17,13 +17,21 @@ pub(super) fn button(k: &Kit) -> El {
 
 pub(crate) fn start(s: &mut Workspace, id: &str) {
     let l = live_mut(s);
-    let Some(c) = l.app.remote.saved.checkouts.get(id) else {
+    if !l.app.remote.saved.checkouts.contains_key(id) {
         return;
-    };
+    }
     let provider = if l.panels.overlay == Some(Screen::Launcher) {
         l.panels.launch_provider
     } else {
-        c.thread.provider
+        let project = caelum_core::remote::native::project_key(id);
+        l.app
+            .selected
+            .map(|i| &l.app.sessions[i])
+            .filter(|s| s.scope.project == project)
+            .map_or_else(
+                || l.app.default_provider_for(Some(&project)),
+                |s| s.scope.provider,
+            )
     };
     super::checkout::session(s, id, Some(provider));
 }

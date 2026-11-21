@@ -16,6 +16,7 @@ pub use chat::Chat;
 pub use chat::Continuation;
 pub use chat::Message;
 pub(crate) use checkout::github_slug;
+pub use checkout::ProviderDefaults;
 pub use checkout::PublishedBase;
 pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
