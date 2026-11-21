@@ -29,18 +29,18 @@ pub fn activity(session: &Session, needs_input: bool) -> Option<Activity> {
         (ActivityKind::Input, "Waiting for input".into())
     } else if session.submitting() {
         (ActivityKind::Working, "Working…".into())
-    } else if session.conversation.working {
-        if session.conversation.retrying {
+    } else if session.conversation.working() {
+        if session.conversation.retrying() {
             (ActivityKind::Retrying, "Retrying…".into())
         } else if let Some(entry) = session
             .conversation
             .entries
             .iter()
             .rev()
-            .take_while(|e| e.kind != EntryKind::User)
-            .find(|e| !e.complete && !e.background)
+            .take_while(|e| e.kind() != EntryKind::User)
+            .find(|e| !e.complete() && !e.background())
         {
-            match entry.kind {
+            match entry.kind() {
                 EntryKind::Reasoning => (ActivityKind::Thinking, "Thinking…".into()),
                 EntryKind::Assistant => (ActivityKind::Responding, "Responding…".into()),
                 EntryKind::Tool => {

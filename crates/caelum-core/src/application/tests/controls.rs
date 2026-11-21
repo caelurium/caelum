@@ -80,11 +80,11 @@ fn native_compaction_and_shells_reconcile_without_resurrecting_execution() {
         &json!({"shell":{"id":"background","status":"running","command":"test"}}),
     );
     conversation.settle();
-    assert!(!conversation.entries[1].complete);
+    assert!(!conversation.entries[1].complete());
     conversation.apply(Provider::OpenCode, "session.shell.ended", &json!({"shell":{"id":"background","status":"exited","exit":1,"command":"test"},"output":{"output":"failure"}}));
-    assert!(!conversation.working);
-    assert!(conversation.entries[1].complete);
-    assert!(conversation.entries[1].status.contains("failed"));
+    assert!(!conversation.working());
+    assert!(conversation.entries[1].complete());
+    assert!(conversation.entries[1].status().contains("failed"));
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn shell_events_win_over_old_lists_and_stop_stays_with_its_owner() {
     ));
     assert!(app.sessions[index].shells.is_empty());
     let entry = app.sessions[index].conversation.entries.last().unwrap();
-    assert!(entry.complete);
+    assert!(entry.complete());
     assert_eq!(entry.output, "retained output");
     assert_eq!(entry.started_at, Some(1000));
     assert!(app.services.checkouts["/a"].shell_output.is_empty());

@@ -55,7 +55,7 @@ fn repeated_prompts_and_older_pages_do_not_duplicate_or_adopt_the_wrong_message(
         true,
     );
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries[1].optimistic);
+    assert!(conversation.entries[1].optimistic());
     conversation.history(
         Provider::OpenCode,
         &[
@@ -65,7 +65,7 @@ fn repeated_prompts_and_older_pages_do_not_duplicate_or_adopt_the_wrong_message(
         false,
     );
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries.iter().all(|entry| !entry.optimistic));
+    assert!(conversation.entries.iter().all(|entry| !entry.optimistic()));
     conversation.history(
         Provider::OpenCode,
         &[json!({"id":"old","type":"user","text":"again"})],
@@ -100,7 +100,11 @@ fn an_unmatched_image_prompt_cannot_block_reconciliation_of_later_turns() {
                 "{provider:?} turn {turn}"
             );
             assert_eq!(
-                conversation.entries.iter().filter(|e| e.optimistic).count(),
+                conversation
+                    .entries
+                    .iter()
+                    .filter(|e| e.optimistic())
+                    .count(),
                 1
             );
             assert_eq!(conversation.entries[0].id, "local-image");
@@ -120,13 +124,13 @@ fn one_refresh_adopts_all_pending_prompts_once_without_consuming_a_later_repeat(
     ];
     conversation.history(Provider::OpenCode, &history, false);
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries.iter().all(|entry| !entry.optimistic));
+    assert!(conversation.entries.iter().all(|entry| !entry.optimistic()));
     conversation.optimistic("local-third".into(), "again".into());
     for _ in 0..2 {
         conversation.history(Provider::OpenCode, &history, false);
         assert_eq!(conversation.entries.len(), 3);
         assert!(
-            conversation.entries[2].optimistic,
+            conversation.entries[2].optimistic(),
             "an old echo is not the new submission"
         );
     }
@@ -136,7 +140,7 @@ fn one_refresh_adopts_all_pending_prompts_once_without_consuming_a_later_repeat(
         false,
     );
     assert_eq!(conversation.entries.len(), 3);
-    assert!(conversation.entries.iter().all(|entry| !entry.optimistic));
+    assert!(conversation.entries.iter().all(|entry| !entry.optimistic()));
 }
 
 #[test]
@@ -154,14 +158,14 @@ fn image_context_matching_preserves_older_messages_and_distinct_captures() {
     conversation.history(Provider::OpenCode, std::slice::from_ref(&old), true);
     conversation.history(Provider::OpenCode, &[old], false);
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries[1].optimistic);
+    assert!(conversation.entries[1].optimistic());
 
     conversation.history(Provider::OpenCode, &[json!({
         "id":"different","type":"user","text":super::super::composer::with_context("Describe this", &[other]),
     })], false);
     assert_eq!(conversation.entries.len(), 3);
     assert!(
-        conversation.entries[1].optimistic,
+        conversation.entries[1].optimistic(),
         "same filename is not the same captured image"
     );
     for _ in 0..2 {
@@ -173,7 +177,7 @@ fn image_context_matching_preserves_older_messages_and_distinct_captures() {
             false,
         );
         assert_eq!(conversation.entries.len(), 3);
-        assert!(conversation.entries.iter().all(|entry| !entry.optimistic));
+        assert!(conversation.entries.iter().all(|entry| !entry.optimistic()));
         let entry = conversation
             .entries
             .iter()

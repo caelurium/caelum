@@ -244,7 +244,7 @@ fn question_choices_take_keyboard_focus_and_escape_dismisses_only_the_question()
     rt.update(|s, _| {
         let session = &mut s.live.as_mut().unwrap().app.sessions[0];
         session.remote_id = Some("thread".into());
-        session.conversation.working = true;
+        session.conversation.set_working(true);
     });
     let mut request = prompt("codex", "thread", "choice");
     request.fields = vec![
@@ -391,7 +391,7 @@ fn native_side_questions_preserve_main_draft_focus_and_reject_late_answers() {
     rt.update(|s, _| {
         let session = &mut s.live.as_mut().unwrap().app.sessions[1];
         session.remote_id = Some("existing".into());
-        session.conversation.working = true;
+        session.conversation.set_working(true);
     });
     fill(&mut rt, "live-draft-1", "Keep the main draft");
     fill(&mut rt, "live-draft-1", "/btw Why does this work?");

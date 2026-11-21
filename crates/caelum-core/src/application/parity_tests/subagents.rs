@@ -39,8 +39,8 @@ fn background_subagents_stay_running_until_the_report_and_reconcile_with_history
     let success = json!({"id":"task", "metadata":part["metadata"], "content":part["content"], "_created":1100});
     live.apply(Provider::OpenCode, "session.tool.success", &success);
     live.settle();
-    assert!(!live.entries[0].complete);
-    assert!(live.entries[0].background);
+    assert!(!live.entries[0].complete());
+    assert!(live.entries[0].background());
     assert!(live.entries[0].output.is_empty());
     assert_eq!(
         presentation::Tool::from_entry(&live.entries[0], 2000).timing,
@@ -56,7 +56,7 @@ fn background_subagents_stay_running_until_the_report_and_reconcile_with_history
         assert_eq!(conversation.entries.len(), 1);
         let entry = &conversation.entries[0];
         assert_eq!(entry.id, "opencode-tool-task");
-        assert!(entry.complete);
+        assert!(entry.complete());
         let tool = presentation::Tool::from_entry(entry, 9000);
         assert_eq!(tool.output, "Found the café handler.");
         assert_eq!(tool.outcome, presentation::Outcome::Success);
@@ -80,7 +80,7 @@ fn completion_only_pages_keep_results_and_merge_when_older_launches_arrive() {
         let done = result("msg_done", 2500, state);
         conversation.history(Provider::OpenCode, &[done], false);
         let entry = &conversation.entries[0];
-        assert_eq!(entry.kind, EntryKind::Tool);
+        assert_eq!(entry.kind(), EntryKind::Tool);
         assert!(Subagent::from_entry(entry).is_some());
         let tool = presentation::Tool::from_entry(entry, 9000);
         assert_eq!(tool.output, "Found the café handler.");
@@ -107,13 +107,13 @@ fn a_late_report_does_not_finish_a_newer_round_in_the_same_child() {
     );
     conversation.apply(Provider::OpenCode, "session.synthetic", &first);
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries[0].complete);
-    assert!(!conversation.entries[1].complete);
+    assert!(conversation.entries[0].complete());
+    assert!(!conversation.entries[1].complete());
     let mut second = result("msg_second", 5000, "error");
     second["text"] = "Second round failed".into();
     conversation.apply(Provider::OpenCode, "session.synthetic", &second);
     assert_eq!(conversation.entries.len(), 2);
-    assert!(conversation.entries[1].complete);
+    assert!(conversation.entries[1].complete());
     assert_eq!(conversation.entries[0].output, "Found the café handler.");
     assert_eq!(conversation.entries[1].output, "Second round failed");
     assert_eq!(
@@ -170,7 +170,7 @@ fn paged_handoffs_finish_after_the_report_has_already_joined_another_task() {
         );
         assert_eq!(conversation.entries.len(), 2);
         for entry in &conversation.entries {
-            assert!(entry.complete);
+            assert!(entry.complete());
             assert_eq!(entry.metadata["ended"], 2500);
             assert_eq!(
                 entry.output,
@@ -209,11 +209,11 @@ fn reports_arriving_in_reverse_order_recover_each_rounds_own_outcome() {
         crate::application::subagents::running(&conversation.entries),
         0
     );
-    assert_eq!(conversation.entries[0].status, "completed");
+    assert_eq!(conversation.entries[0].status(), "completed");
     assert_eq!(conversation.entries[0].metadata["ended"], 2000);
     assert!(conversation.entries[0].output.is_empty());
     assert_eq!(conversation.entries[1].output, "Found the café handler.");
-    assert_eq!(conversation.entries[2].status, "error");
+    assert_eq!(conversation.entries[2].status(), "error");
     assert_eq!(conversation.entries[2].output, "Next round failed");
 }
 
@@ -225,12 +225,12 @@ fn foreground_results_keep_output_and_unrelated_markup_stays_literal() {
         "<subagent sessionID=\"ses_child\" state=\"completed\">\nResult\n</subagent>".into();
     let mut conversation = Conversation::default();
     conversation.history(Provider::OpenCode, &[message], false);
-    assert!(conversation.entries[0].complete);
+    assert!(conversation.entries[0].complete());
     assert_eq!(conversation.entries[0].output, "Result");
     let mut literal = result("msg_literal", 3000, "completed");
     literal["metadata"]["source"] = "plugin".into();
     conversation.history(Provider::OpenCode, std::slice::from_ref(&literal), false);
-    assert_eq!(conversation.entries[1].kind, EntryKind::Status);
+    assert_eq!(conversation.entries[1].kind(), EntryKind::Status);
     assert_eq!(conversation.entries[1].text, literal["text"]);
 }
 

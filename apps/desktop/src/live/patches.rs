@@ -36,7 +36,7 @@ impl Inputs {
             return false;
         };
         cached.position = position;
-        cached.kind == entry.kind && cached.name == entry.name && cached.input == entry.input
+        cached.kind == entry.kind() && cached.name == entry.name && cached.input == entry.input
     }
 
     fn remove(&mut self, key: &Key) {
@@ -57,7 +57,7 @@ impl Inputs {
                 key.clone(),
                 Source {
                     position,
-                    kind: entry.kind,
+                    kind: entry.kind(),
                     name: entry.name.clone(),
                     input: entry.input.clone(),
                 },

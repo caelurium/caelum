@@ -36,7 +36,7 @@ fn completed_outputs_keep_the_used_agent_and_full_turn_duration() {
         .conversation
         .entries
         .iter()
-        .find(|entry| entry.kind == crate::application::EntryKind::Assistant)
+        .find(|entry| entry.kind() == crate::application::EntryKind::Assistant)
         .unwrap();
     assert_eq!(open_code.metadata["agent"], "build");
     assert_eq!(open_code.metadata["outputDurationMs"], 4000);
@@ -77,7 +77,7 @@ fn completed_outputs_keep_the_used_agent_and_full_turn_duration() {
         .conversation
         .entries
         .iter()
-        .find(|entry| entry.kind == crate::application::EntryKind::Assistant)
+        .find(|entry| entry.kind() == crate::application::EntryKind::Assistant)
         .unwrap();
     assert_eq!(codex.metadata["agent"], "plan");
     assert_eq!(codex.metadata["outputDurationMs"], 5000);

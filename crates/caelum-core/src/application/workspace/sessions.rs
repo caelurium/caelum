@@ -192,14 +192,14 @@ impl Workspace {
                 }
                 session.observe_archive(archived, request);
                 if session.revision == 0 {
-                    session.conversation.working = summary.working;
+                    session.conversation.set_working(summary.working);
                     update_summary(session, summary, request);
                 }
             } else {
                 let mut session = Session::new(scope.clone());
                 session.remote_id = Some(summary.key.id.clone());
                 session.invalidate_history();
-                session.conversation.working = summary.working;
+                session.conversation.set_working(summary.working);
                 session.restore_archive(archived, request);
                 update_summary(&mut session, summary, request);
                 self.sessions.push(session);

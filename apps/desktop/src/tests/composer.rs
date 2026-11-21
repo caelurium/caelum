@@ -20,7 +20,7 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
             rt.update(|s, _| {
                 s.inspector.set_open(inspector);
                 let l = s.live.as_mut().unwrap();
-                l.app.sessions[0].conversation.working = true;
+                l.app.sessions[0].conversation.set_working(true);
                 l.app.sessions[0].queue = (0..3)
                     .map(|i| caelum_core::application::QueuedPrompt {
                         text: format!("Follow-up {i}"),

@@ -47,7 +47,7 @@ fn output<'a>(app: &'a Application, project: &str, remote: &str, id: &str) -> Op
                 && !session.shells.iter().any(|shell| shell.id == id)
         })
         .flat_map(|session| session.conversation.entries.iter().rev())
-        .find(|entry| entry.id == key && entry.background && entry.complete)
+        .find(|entry| entry.id == key && entry.background() && entry.complete())
     {
         return Some(&entry.output);
     }

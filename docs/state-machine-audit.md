@@ -25,12 +25,12 @@ state machine; types cannot establish that an external event is current.
 | [Desktop worktree form](../apps/desktop/src/worktree.rs) and [panels](../apps/desktop/src/panels.rs) | A submitted worktree owns its launch inputs; worktree and VM removal overlays own their payloads. A closed file find has no match cursor, and scroll restoration checks the active file or diff owner. |
 | [Desktop completion](../apps/desktop/src/completion.rs), [sidebar](../apps/desktop/src/live/sidebar.rs), and [remote stats](../apps/desktop/src/remote/stats.rs) | Mention application owns the request, editor and captured selection. Sidebar recency timers exist only while active; auto-stop refresh is keyed to the machine and deadline. |
 | [Desktop preview](../apps/desktop/src/state.rs) | A streaming response owns its clock and visible text; stopping consumes that phase. Only turns with tools have disclosure state. |
+| [Conversation activity](../crates/caelum-core/src/application/conversation.rs) and [entries](../crates/caelum-core/src/application/conversation/entry.rs) | Idle cannot also be retrying. Only a user prompt can be awaiting its provider echo; only a tool can run in the background. Provider status labels remain display data, independent of the typed progress phase. |
 
 ## Remaining candidates
 
 | Owner | State currently split across fields | Invariant to encode |
 | --- | --- | --- |
-| [Conversation activity and entries](../crates/caelum-core/src/application/conversation.rs) | Working/retrying flags, entry kind, completion, provider status, background | Model provider activity separately from timing. Give each entry kind the lifecycle and payload it supports; accept unknown provider statuses at the decoding boundary. |
 | [Review and service requests](../crates/caelum-core/src/application/services.rs) | Review source and details are separate; request slots share latest/loading/error maps | Tie cached/live details and file pages to a verified revision. A loading slot owns its request; refresh can retain visible data while a new request is pending. |
 
 Updates, OpenCode connection slots, conversation controls, relocation, and remote

@@ -305,7 +305,7 @@ fn compaction_milestones_stream_expand_copy_and_survive_history_refresh() {
         let c = &mut s.live.as_mut().unwrap().app.sessions[0].conversation;
         c.apply(Provider::OpenCode, "session.compaction.ended", &serde_json::json!({"inputID":"compact","_created":200}));
         c.history(Provider::OpenCode, &[serde_json::json!({"id":"compact","type":"compaction","summary":"","status":"completed"})], false);
-        c.working = false;
+        c.set_working(false);
     });
     advance(&mut rt, 0.5);
     assert_eq!(

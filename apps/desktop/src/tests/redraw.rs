@@ -110,13 +110,13 @@ fn background_unread_retry_and_title_changes_invalidate_the_view() {
         let mut state = state(provider);
         let l = state.live.as_mut().unwrap();
 
-        l.app.sessions[1].conversation.working = true;
+        l.app.sessions[1].conversation.set_working(true);
         assert!(l.apply_events([delta(provider, "background", "first")]));
         assert!(l.app.sessions[1].unread);
         assert!(!l.apply_events([delta(provider, "background", " second")]));
-        l.app.sessions[1].conversation.retrying = true;
+        l.app.sessions[1].conversation.set_retrying(true);
         assert!(l.apply_events([delta(provider, "background", " resumed")]));
-        assert!(!l.app.sessions[1].conversation.retrying);
+        assert!(!l.app.sessions[1].conversation.retrying());
         let mut renamed = delta(provider, "background", " renamed");
         match &mut renamed {
             Event::Codex(e) => e.params["thread"] = json!({"id":"background","name":"New title"}),
@@ -214,7 +214,7 @@ fn mixed_batches_keep_completion_errors_and_permission_requests_immediate() {
         ),
     ]));
     assert!(!l.app.sessions[1].working());
-    assert!(l.app.sessions[1].conversation.entries[0].complete);
+    assert!(l.app.sessions[1].conversation.entries[0].complete());
     assert_eq!(
         l.app.sessions[1].conversation.entries[0].text,
         "first second third final"

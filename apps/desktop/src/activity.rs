@@ -32,8 +32,8 @@ pub fn session_activity(
             .entries
             .iter()
             .rev()
-            .take_while(|e| e.kind != EntryKind::User)
-            .any(|e| !e.complete && !e.background)
+            .take_while(|e| e.kind() != EntryKind::User)
+            .any(|e| !e.complete() && !e.background())
     {
         Some(Activity {
             kind: ActivityKind::Background,
@@ -104,7 +104,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
     let preview = patch && !live(s).collapsed_patches.contains(&(index, id.clone()));
     let open = if patch { preview } else { expanded };
     let running = presentation.outcome == Outcome::Running;
-    let reasoning = entry.kind == EntryKind::Reasoning;
+    let reasoning = entry.kind() == EntryKind::Reasoning;
     let has_details = !presentation.output.is_empty()
         || !presentation.error.is_empty()
         || !presentation.details.is_empty()
@@ -624,7 +624,7 @@ fn tool_output(
 
 pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
     let outcome = if entry.error.is_empty() {
-        caelum_core::application::presentation::outcome(&entry.status, entry.complete)
+        caelum_core::application::presentation::outcome(entry.status(), entry.complete())
     } else {
         Outcome::Failure
     };
@@ -715,7 +715,7 @@ pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                 .child(
                     Markdown::new(summary)
                         .selectable(true)
-                        .streaming(!entry.complete)
+                        .streaming(!entry.complete())
                         .on_link_tx(move |s: &mut Workspace, url, tx| {
                             panels::open_link(s, index, url, tx)
                         })

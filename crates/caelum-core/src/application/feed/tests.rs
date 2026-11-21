@@ -108,7 +108,7 @@ fn active_session_branches_follow_checkout_changes_and_detach_without_losing_his
             (None, false),
             (Some("feature/reattached"), false),
         ] {
-            app.sessions[0].conversation.working = working;
+            app.sessions[0].conversation.set_working(working);
             refresh_branch(&mut app, "/alpha", branch);
             assert_eq!(app.session_branch(&app.sessions[0]), branch);
             assert_eq!(app.session_branch(&app.sessions[1]), None);
