@@ -30,7 +30,7 @@ fn small_destination_picker_keeps_creation_separate_from_attaching() {
         (footer.rect[1] - initial.rect[1]).abs() < 1. && footer.visible[3] >= 28.,
         "{footer:?}"
     );
-    assert!(!footer.focusable);
+    assert!(footer.focusable);
     click(&mut rt, "handoff-existing-vm");
     assert!(rt.find("attach-vm-vm-example").is_some() && rt.find("create-remote").is_none());
     let app = &mut rt.state.live.as_mut().unwrap().app;
@@ -67,22 +67,20 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         l.apply(Event::Completed(
             id,
             Ok(Reply::Remote(Outcome::Source(Source {
-                published_tip: None,
+                published_tip: Some("a".repeat(40)),
                 account: "example-account".into(),
                 project,
                 repository: "example/project".into(),
-                base: "main".into(),
+                base: "feat/remote-ui".into(),
                 environment: None,
             }))),
         ));
     });
     advance(&mut rt, 0.2);
-    assert!(!element(&rt, "create-remote").focusable);
-    fill(&mut rt, "remote-branch", "main");
-    assert!(!element(&rt, "create-remote").focusable);
-    assert!(element(&rt, "vm-branch-error").visible[3] > 0.);
-    fill(&mut rt, "remote-branch", "feat/remote-ui");
-    assert!(rt.find("vm-branch-error").is_none());
+    assert_eq!(
+        element(&rt, "handoff-base").text.as_deref(),
+        Some("feat/remote-ui")
+    );
     click(&mut rt, "vm-size-Large");
     click(&mut rt, "vm-lifetime-Until stopped");
     assert!(
@@ -111,7 +109,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         panic!("{creates:?}")
     };
     assert_eq!(source.repository, "example/project");
-    assert_eq!(source.base, "main");
+    assert_eq!(source.base, "feat/remote-ui");
     assert_eq!(plan.branch, "feat/remote-ui");
     assert_eq!(plan.size, caelum_core::remote::Size::Large);
     assert_eq!(plan.lifetime, caelum_core::remote::Lifetime::UntilStopped);

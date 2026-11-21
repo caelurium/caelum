@@ -8,7 +8,7 @@ use crate::{
 
 fn source() -> Source {
     Source {
-        published_tip: None,
+        published_tip: Some("a".repeat(40)),
         project: "/local/project".into(),
         repository: "example/project".into(),
         account: "owner".into(),
@@ -20,8 +20,6 @@ fn created(app: &mut Workspace) -> (String, u64, Plan) {
     app.remote.picker = Some(Picker::Ready(source()));
     let id = app
         .create_remote(
-            "main",
-            "feat/new",
             Size::Small,
             Lifetime::HalfHour,
             crate::application::Provider::OpenCode,
@@ -166,6 +164,18 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         .attach_remote(vm.clone(), Some(Provider::OpenCode))
         .is_none());
     assert_eq!(attach(&mut app, Some(Provider::OpenCode)), Some(id.clone()));
+    assert!(app.open_vm_session(&id, Some(Provider::OpenCode)).is_none());
+    let cmds = app.commands();
+    let [(req, Command::Remote(Operation::MatchCheckout(project, target)))] = cmds.as_slice()
+    else {
+        panic!("{cmds:?}")
+    };
+    assert_eq!(project, &source().project);
+    assert_eq!(target.machine, vm.key);
+    app.apply(Event::Completed(
+        *req,
+        Ok(Reply::Remote(prepared_vm(vm.clone(), "main"))),
+    ));
     let index = app.open_vm_session(&id, Some(Provider::OpenCode)).unwrap();
     let c = &app.remote.saved.checkouts[&id];
     assert_eq!(c.thread, original);
@@ -202,6 +212,8 @@ fn the_vm_folder_chooser_discovers_only_the_current_validated_project_without_st
             .unwrap()
     };
     let old = choose(&mut app, "/alias/old");
+    app.project_roots
+        .insert("/projects/new".into(), "/projects/main".into());
     let new = choose(&mut app, "/alias/new");
     let resolved = |req, path: &str| {
         Event::Completed(
@@ -251,7 +263,7 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
     };
     assert_eq!(
         (target.machine.id.as_str(), base.as_str(), branch.as_str()),
-        ("vm-a", "main", "feat/new")
+        ("vm-a", "main", "main")
     );
     let (other, _, _) = created(&mut restored);
     restored.apply(Event::Completed(
