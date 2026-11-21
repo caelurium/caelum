@@ -265,11 +265,28 @@ fn former_vm_profile_is_imported_once_without_replacing_the_laptop_selection() {
     legacy.sessions[i].remote_id = Some("ses_prior".into());
     legacy.sessions[i].draft = "in VM editor".into();
     legacy.sessions[i].options.model = Some("custom/model".into());
+    legacy.preferences.default_provider = Provider::OpenCode;
+    legacy
+        .preferences
+        .providers
+        .insert("opencode".into(), legacy.sessions[i].options.clone());
+    legacy
+        .preferences
+        .favorite_models
+        .insert("opencode".into(), vec!["vm-only".into()]);
     old.save(&legacy.snapshot()).unwrap();
     for _ in 0..2 {
         let state = main.load_workspace().unwrap().unwrap();
         assert_eq!(state.sessions.len(), 2);
         assert_eq!(state.selected, Some(local));
+        let defaults = state.remote.checkouts[&id].defaults.as_ref().unwrap();
+        assert_eq!(defaults.options["opencode"], legacy.sessions[i].options);
+        assert_eq!(defaults.favorites["opencode"], ["vm-only"]);
+        assert_eq!(defaults.provider, Provider::OpenCode);
+        assert_eq!(state.preferences.default_provider, Provider::Codex);
+        assert!(
+            state.preferences.providers.is_empty() && state.preferences.favorite_models.is_empty()
+        );
         assert_eq!(state.sessions[1].scope.project, project_key(&id));
         assert_eq!(state.sessions[1].remote_id.as_deref(), Some("ses_prior"));
         assert_eq!(state.sessions[1].draft, "in VM editor");

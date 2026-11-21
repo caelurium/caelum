@@ -82,14 +82,7 @@ impl Workspace {
     pub fn new_session(&mut self, scope: Scope) -> usize {
         let mut session = Session::new(scope.clone());
         session.record_activity(crate::application::presentation::now());
-        if crate::remote::native::checkout_id(&scope.project).is_none() {
-            session.options = self
-                .preferences
-                .providers
-                .get(scope.provider.as_str())
-                .cloned()
-                .unwrap_or_default();
-        }
+        session.options = self.provider_options(&scope).cloned().unwrap_or_default();
         if let Some(choices) = self.choices.get(&scope) {
             if session.options.model.is_none() {
                 session.options.model = choices.default_model.clone();

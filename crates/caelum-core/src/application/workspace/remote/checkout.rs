@@ -137,6 +137,7 @@ impl Workspace {
         self.remote.saved.checkouts.insert(
             id.clone(),
             Checkout {
+                defaults: None,
                 source,
                 phase: Phase::Create(plan),
                 root: None,
@@ -208,6 +209,7 @@ impl Workspace {
             self.remote.saved.checkouts.insert(
                 id.clone(),
                 Checkout {
+                    defaults: None,
                     source,
                     root: None,
                     thread: Thread::for_checkout(),

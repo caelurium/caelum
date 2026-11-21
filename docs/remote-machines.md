@@ -64,8 +64,10 @@ sessions does not submit a message.
 The Boat key needs the [`ssh` action](https://docs.boat.dev/ssh-access).
 Caelum installs its matching Linux peer on first use and uses the VM’s own
 provider configuration and credentials. Drafts and session settings are kept
-on this computer, scoped to their account, machine and repository. Drafts from
-the earlier separate-window preview are imported on startup.
+on this computer, scoped to their account, machine and repository. **Save as
+default** in a VM session sets the model, effort and agent for new sessions on
+that checkout. Provider defaults, favourite models and drafts from the earlier
+separate-window preview are imported on startup.
 
 If SSH drops, you can keep editing. Caelum tries to reconnect once; if the VM
 has stopped, **Resume** it from machine stats and reconnect in the same session.

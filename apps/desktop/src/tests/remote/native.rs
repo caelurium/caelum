@@ -2,6 +2,59 @@ use super::*;
 use crate::live::{live, live_mut};
 
 #[test]
+fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_and_other_vms() {
+    use caelum_core::application::Options;
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| crate::remote::scene(s, "native-connected"));
+    advance(&mut rt, 0.2);
+    let slot = live(&rt.state).app.selected.unwrap();
+    let scope = live(&rt.state).app.sessions[slot].scope.clone();
+    let options = Options {
+        model: Some("on-vm".into()),
+        effort: Some("high".into()),
+        agent: Some("plan".into()),
+    };
+    rt.update(|s, _| {
+        let app = &mut live_mut(s).app;
+        let mut second = app.remote.saved.checkouts["checkout-example"].clone();
+        if let caelum_core::remote::Phase::Ready { machine, .. } = &mut second.phase {
+            machine.key.id = "vm-two".into();
+        }
+        app.remote
+            .saved
+            .checkouts
+            .insert("other-checkout".into(), second);
+        app.sessions[slot].options = options.clone();
+        app.options_changed(slot);
+        app.toggle_favorite_model(&scope, "on-vm");
+    });
+    let preferences = live(&rt.state).app.preferences.clone();
+    click(&mut rt, "model-trigger");
+    click(&mut rt, "save-provider-defaults");
+    key(&mut rt, Key::Escape, Mods::default());
+    click(&mut rt, "new-session");
+    let app = &mut live_mut(&mut rt.state).app;
+    let fresh = app.selected.unwrap();
+    assert_ne!(fresh, slot);
+    assert_eq!(app.sessions[fresh].options, options);
+    assert_eq!(app.preferences.providers, preferences.providers);
+    assert_eq!(
+        app.preferences.default_provider,
+        preferences.default_provider
+    );
+    let other = app
+        .open_vm_session("other-checkout", Some(scope.provider))
+        .unwrap();
+    assert_eq!(app.sessions[other].options, Options::default());
+    assert!(app.favorite_models(&app.sessions[other].scope).is_none());
+    assert_eq!(app.favorite_models(&scope).unwrap(), ["on-vm"]);
+    assert!(app.commands().iter().all(|(_, c)| !matches!(
+        c,
+        Command::Send(..) | Command::Start(..) | Command::Enqueue(..)
+    )));
+}
+
+#[test]
 fn first_send_keeps_its_vm_and_options_when_the_user_switches_back_to_a_boat_chat() {
     use caelum_core::application::{SessionKey, Summary};
     let mut rt = design_runtime("", (800., 620.));

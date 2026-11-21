@@ -227,20 +227,37 @@ fn picker(
 fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let app = &live(s).app;
     let provider = live(s).panels.settings_provider;
+    let destination = app
+        .active_project
+        .as_deref()
+        .and_then(|p| app.native_checkout(p));
+    let detail = destination.map(|c| {
+        format!(
+            "Defaults for new sessions on {}. Adjust each session in the composer.",
+            c.title()
+        )
+    });
     let mut body = col().w_full().child(heading(
         "Providers",
-        "Defaults for new sessions. Adjust each session in the composer.",
+        detail
+            .as_deref()
+            .unwrap_or("Defaults for new sessions. Adjust each session in the composer."),
         k,
     ));
     let mut defaults = row().gap(4.0);
     for p in Provider::ALL {
+        let destination = app.active_project.clone();
         defaults = defaults.child(
             ui::tab(
                 ui::provider_name(p),
-                app.preferences.default_provider == p,
+                app.default_provider_for(destination.as_deref()) == p,
                 k,
             )
-            .on_press(move |s: &mut Workspace| live_mut(s).app.preferences.default_provider = p)
+            .on_press(move |s: &mut Workspace| {
+                live_mut(s)
+                    .app
+                    .set_default_provider_for(destination.as_deref(), p)
+            })
             .grow(1.0)
             .key(format!("default-provider-{}", p.as_str())),
         );
@@ -306,12 +323,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(error) = app.notices.get(&scope) {
         body = body.child(ui::notice("Connection unavailable", error, k));
     }
-    let options = app
-        .preferences
-        .providers
-        .get(provider.as_str())
-        .cloned()
-        .unwrap_or_default();
+    let options = app.provider_options(&scope).cloned().unwrap_or_default();
     let model = choices.and_then(|c| {
         c.models.iter().find(|m| {
             Some(m.id.as_str()) == options.model.as_deref().or(c.default_model.as_deref())
@@ -338,6 +350,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     {
         efforts.push(saved.clone());
     }
+    let effort_scope = scope.clone();
     body = body.child(setting_row(
         "Reasoning effort",
         "",
@@ -349,18 +362,15 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             &efforts,
             options.effort.as_deref().unwrap_or("Model default"),
             move |s, value| {
-                live_mut(s)
-                    .app
-                    .preferences
-                    .providers
-                    .entry(provider.as_str().into())
-                    .or_default()
-                    .effort = (value != "Model default").then(|| value.into());
+                live_mut(s).app.edit_provider_options(&effort_scope, |o| {
+                    o.effort = (value != "Model default").then(|| value.into())
+                });
             },
         ),
         k,
     ));
     if provider == Provider::OpenCode {
+        let agent_scope = scope.clone();
         let mut agents = vec!["Provider default".into()];
         if let Some(choices) = choices {
             agents.extend(choices.agents.iter().map(|a| a.id.clone()));
@@ -376,13 +386,9 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 &agents,
                 options.agent.as_deref().unwrap_or("Provider default"),
                 move |s, value| {
-                    live_mut(s)
-                        .app
-                        .preferences
-                        .providers
-                        .entry(provider.as_str().into())
-                        .or_default()
-                        .agent = (value != "Provider default").then(|| value.into());
+                    live_mut(s).app.edit_provider_options(&agent_scope, |o| {
+                        o.agent = (value != "Provider default").then(|| value.into())
+                    });
                 },
             ),
             k,
@@ -392,10 +398,9 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(model) = &options.model {
         let id = model.clone();
         let favorite = app
-            .preferences
-            .favorite_models
-            .get(provider.as_str())
+            .favorite_models(&scope)
             .is_some_and(|f| f.contains(model));
+        let favorite_scope = scope.clone();
         actions = actions.child(
             Button::new(if favorite {
                 "★ Remove favourite"
@@ -404,17 +409,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             })
             .variant(ButtonVariant::GhostMuted)
             .on_press(move |s: &mut Workspace| {
-                let favorites = live_mut(s)
-                    .app
-                    .preferences
-                    .favorite_models
-                    .entry(provider.as_str().into())
-                    .or_default();
-                if favorites.contains(&id) {
-                    favorites.retain(|f| f != &id);
-                } else {
-                    favorites.push(id.clone());
-                }
+                live_mut(s).app.toggle_favorite_model(&favorite_scope, &id);
             })
             .build(k),
         );
@@ -424,11 +419,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             Button::new("Reset provider defaults")
                 .variant(ButtonVariant::GhostMuted)
                 .on_press(move |s: &mut Workspace| {
-                    live_mut(s)
-                        .app
-                        .preferences
-                        .providers
-                        .remove(provider.as_str());
+                    live_mut(s).app.reset_provider_options(&scope);
                 })
                 .build(k),
         ),

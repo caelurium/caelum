@@ -1,3 +1,4 @@
+mod defaults;
 mod requests;
 
 use super::{Pending, Workspace};
@@ -85,10 +86,8 @@ impl Workspace {
         if !ready {
             return None;
         }
-        let i = self.new_session(Scope {
-            project,
-            provider: new.unwrap_or(checkout.thread.provider),
-        });
+        let provider = new.unwrap_or_else(|| self.default_provider_for(Some(&project)));
+        let i = self.new_session(Scope { project, provider });
         Some(i)
     }
 

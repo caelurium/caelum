@@ -220,9 +220,7 @@ fn view(s: &Workspace, k: &Kit) -> (El, f32) {
         Owner::Session(i, _) => l.app.sessions[*i].options.model.as_deref(),
         Owner::Defaults(scope) => l
             .app
-            .preferences
-            .providers
-            .get(scope.provider.as_str())
+            .provider_options(scope)
             .and_then(|o| o.model.as_deref()),
     }
     .unwrap_or_default()
@@ -369,12 +367,11 @@ fn view(s: &Workspace, k: &Kit) -> (El, f32) {
                 .variant(ButtonVariant::GhostMuted)
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
-                    if l.app.sessions[index].scope == scope {
-                        l.app.preferences.providers.insert(
-                            scope.provider.as_str().into(),
-                            l.app.sessions[index].options.clone(),
-                        );
-                        l.app.preferences.default_provider = scope.provider;
+                    if l.app.sessions[index].scope == scope && !l.app.sessions[index].forgotten {
+                        let options = l.app.sessions[index].options.clone();
+                        l.app.edit_provider_options(&scope, |o| *o = options);
+                        l.app
+                            .set_default_provider_for(Some(&scope.project), scope.provider);
                     }
                 })
                 .build(k)
