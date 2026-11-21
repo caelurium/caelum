@@ -175,13 +175,7 @@ impl Workspace {
             .conversation
             .optimistic(format!("local-{}", self.next_request + 1), prompt.clone());
         if session.remote_id.is_none() {
-            session.title = prompt
-                .lines()
-                .next()
-                .unwrap_or(&prompt)
-                .chars()
-                .take(60)
-                .collect();
+            session.first_prompt_title(&prompt);
             if session.native_handoff.is_some() {
                 self.check_native_start(index, prompt);
             } else {

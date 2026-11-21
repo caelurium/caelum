@@ -369,17 +369,15 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
-                                session.native_handoff = saved.native_handoff;
-                                if let Some(h) = &session.native_handoff {
-                                    session.conversation.handoff(&h.chat);
+                                if let Some(h) = saved.native_handoff {
+                                    session.restore_handoff(h);
                                 }
                                 session.vm_link = saved.vm_link;
                                 session.loaded = saved.remote_id.is_none();
                                 session.remote_id = saved.remote_id;
-                                session.title = saved.title;
+                                session.restore_title(saved.title, saved.manual_title);
                                 session.last_activity = saved.last_activity;
                                 session.title_state.turns = saved.title_refresh_turns;
-                                session.title_state.manual = saved.manual_title;
                                 session.options = saved.options;
                                 session.options_dirty = true;
                                 session.draft = saved.draft;

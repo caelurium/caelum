@@ -72,6 +72,7 @@ fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_
     use crate::application::{Options, SessionKey, Summary};
     let mut app = Workspace::default();
     let local = local(&mut app);
+    app.sessions[local].title = "Review the checkout".into();
     let req = reading(&mut app, local);
     ready(&mut app, req);
     app.confirm_vm_handoff(VmDestination::Existing(machine("vm")));
@@ -96,6 +97,7 @@ fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_
     assert_eq!(app.sessions[slot].draft, app.sessions[local].draft);
     assert!(app.commands().is_empty());
     assert!(app.send(slot, "Continue work".into()));
+    assert_eq!(app.sessions[slot].title, "Review the checkout");
     let mut commands = app.commands();
     let (req, Command::Remote(Operation::Prepare(t, branch, None))) = commands.pop().unwrap()
     else {

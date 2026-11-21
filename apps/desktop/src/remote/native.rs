@@ -239,7 +239,7 @@ pub(super) fn scene(s: &mut Workspace, offline: bool) {
     open(l, id, SessionIntent::New);
     let i = l.app.selected.unwrap();
     l.app.sessions[i].remote_id = Some("codex-thread-example".into());
-    l.app.sessions[i].title = "Review the VM checkout".into();
+    l.app.sessions[i].title = "Verify the VM checkout is on the published worktree branch before running the integration tests".into();
     l.app.sessions[i].draft = "Check the tests for this change.".into();
     l.drafts[i].replace_text(&l.app.sessions[i].draft);
     l.app.sessions[i].conversation.history(Provider::Codex, &[serde_json::json!({

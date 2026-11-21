@@ -39,7 +39,7 @@ impl Workspace {
         if !self.control_owner(index, owner) {
             return false;
         }
-        if title.is_empty() || title.chars().count() > 200 || title.chars().any(char::is_control) {
+        if !super::titles::valid_title(title) {
             self.sessions[index].error =
                 Some("Use a single-line title of 1–200 characters.".into());
             return false;

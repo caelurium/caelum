@@ -1,5 +1,127 @@
 use super::*;
 
+#[test]
+fn a_restored_handoff_uses_its_source_title_for_resume_and_completion_notifications() {
+    use crate::remote::{native::project_key, Chat, Continuation, Message};
+    let project = project_key("checkout-example");
+    let mut previous = Workspace::default();
+    let i = connected(&mut previous, Provider::Codex, &project, "thread-example");
+    let owner = previous.sessions[i].key().unwrap();
+    let mut saved = previous.snapshot();
+    let chat = Chat {
+        messages: vec![Message::User("Earlier fixture message".into())],
+        clipped: false,
+    };
+    let wire = chat.prompt("Check the tests");
+    let name = "Review the checkout";
+    saved.sessions[i].native_handoff = Some(Continuation {
+        id: "handoff-example".into(),
+        title: name.into(),
+        chat,
+        base: None,
+    });
+    // An earlier build saved Codex's first-message preview as the window title.
+    saved.sessions[i].title = wire.clone();
+    saved.sessions[i].draft = "Keep this edit".into();
+    let mut app = Workspace::default();
+    app.enable_store("/unused-in-reducer-test".into());
+    let load = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(
+        load,
+        Ok(Reply::Snapshot(Some(Box::new(saved)))),
+    ));
+    assert_eq!(app.sessions[i].title, name);
+    assert_eq!(app.snapshot().sessions[i].title, name);
+
+    let reads = |app: &mut Workspace| {
+        let commands = after_saves(app);
+        assert!(!commands.iter().any(|(_, cmd)| matches!(
+            cmd,
+            Command::Start(..) | Command::Send(..) | Command::Enqueue(..) | Command::Rename(..)
+        )));
+        commands
+    };
+    let resume = reads(&mut app)
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Resume(k) if k == &owner))
+        .unwrap()
+        .0;
+    let mut thread = summary(owner.scope.clone(), &owner.id);
+    // The provider clipped its preview inside the JSON, before the current user's text.
+    thread.title = wire.split_once("fixture message").unwrap().0.into();
+    app.apply(Event::Completed(resume, Ok(Reply::Session(thread))));
+    let history = reads(&mut app)
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::History(k, _) if k == &owner))
+        .unwrap()
+        .0;
+    app.apply(Event::Completed(history, Ok(page(vec![], false))));
+    // The frontmost conversation is local and happens to use the same Codex ID.
+    let local = connected(&mut app, Provider::Codex, "/local/project", &owner.id);
+    app.apply(codex(&project, &owner.id, "turn/started", json!({})));
+    app.apply(codex(&project, &owner.id, "turn/completed", json!({})));
+    let notices: Vec<_> = reads(&mut app)
+        .into_iter()
+        .filter_map(|(_, cmd)| match cmd {
+            Command::Notify(n) => Some(n),
+            _ => None,
+        })
+        .collect();
+    let [notice] = notices.as_slice() else {
+        panic!("{notices:?}")
+    };
+    assert_eq!(notice.title, "Caelum · Session finished");
+    assert_eq!(notice.target.as_ref(), Some(&owner));
+    assert_eq!(notice.body, name);
+    assert_eq!(app.selected, Some(local));
+    assert_eq!(app.sessions[i].draft, "Keep this edit");
+}
+
+#[test]
+fn discovering_a_vm_handoff_without_a_local_title_then_receiving_its_real_name() {
+    let project = crate::remote::native::project_key("checkout-example");
+    let scope = scope(Provider::Codex, &project);
+    let mut app = Workspace::default();
+    let list = discover_session_list(&mut app, &scope, false);
+    let mut thread = summary(scope, "thread-example");
+    thread.title = "Conversation continued from Caelum. Previous messages (context…".into();
+    app.apply(Event::Completed(
+        list,
+        Ok(Reply::Sessions(vec![thread.clone()])),
+    ));
+    let i = app
+        .sessions
+        .iter()
+        .position(|s| s.key().as_ref() == Some(&thread.key))
+        .unwrap();
+    assert_eq!(app.sessions[i].title, "Continued session");
+
+    // An envelope-shaped live name is not a rename: it must not block an earlier read.
+    app.refresh(i);
+    let resume = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Resume(k) if k == &thread.key))
+        .unwrap()
+        .0;
+    app.apply(codex(
+        &project,
+        &thread.key.id,
+        "thread/name/updated",
+        json!({"threadName": thread.title}),
+    ));
+    thread.title = "Conversation continued from Caelum on the release branch".into();
+    app.apply(Event::Completed(resume, Ok(Reply::Session(thread.clone()))));
+    assert_eq!(app.sessions[i].title, thread.title);
+    app.apply(codex(
+        &project,
+        &thread.key.id,
+        "thread/name/updated",
+        json!({"threadName": "Review CI results\nMore detail"}),
+    ));
+    assert_eq!(app.sessions[i].title, "Review CI results");
+}
+
 fn connected(app: &mut Workspace, provider: Provider, project: &str, id: &str) -> usize {
     let index = app.new_session(scope(provider, project));
     app.sessions[index].remote_id = Some(id.into());
@@ -36,21 +158,30 @@ fn succeeded(app: &mut Workspace, index: usize, turn: usize) {
     ));
 }
 
-fn requests(app: &mut Workspace) -> Vec<(u64, SessionKey)> {
-    let mut titles = Vec::new();
+fn after_saves(app: &mut Workspace) -> Vec<(u64, Command)> {
+    let mut result = Vec::new();
     loop {
         let commands = app.commands();
         if commands.is_empty() {
-            return titles;
+            return result;
         }
         for (request, command) in commands {
             match command {
-                Command::RegenerateTitle(key) => titles.push((request, key)),
                 Command::Save(..) => app.apply(Event::Completed(request, Ok(Reply::Done))),
-                _ => {}
+                other => result.push((request, other)),
             }
         }
     }
+}
+
+fn requests(app: &mut Workspace) -> Vec<(u64, SessionKey)> {
+    after_saves(app)
+        .into_iter()
+        .filter_map(|(request, command)| match command {
+            Command::RegenerateTitle(key) => Some((request, key)),
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]

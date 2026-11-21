@@ -518,20 +518,19 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                             })
                             .unwrap_or("caelum"),
                     )
+                    .key("toolbar-project")
                     .font(k.ty.ui)
                     .color(k.c.text_muted)
                     .max_w(160.0)
-                    .min_w(0.0)
-                    .truncate()
-                    .shrink(),
+                    .max_lines(1),
                 )
                 .child(text("/").font(k.ty.ui).color(k.c.text_faint))
                 .child(
                     text(s.title().to_owned())
+                        .key("toolbar-session-title")
                         .font(k.ty.ui_medium)
                         .color(k.c.text_base)
-                        .truncate()
-                        .min_w(0.0)
+                        .max_lines(1)
                         .shrink(),
                 )
                 .children(live::session_attention(s, &k)),

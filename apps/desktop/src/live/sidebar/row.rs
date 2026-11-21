@@ -62,7 +62,7 @@ impl Card<'_> {
                     text(self.title)
                         .font(k.ty.ui_medium)
                         .color(k.c.text_base)
-                        .truncate()
+                        .max_lines(1)
                         .w_full(),
                 )
                 .child(bottom),

@@ -350,10 +350,7 @@ impl Workspace {
                         None
                     }
                 });
-            if let Some(title) =
-                title.filter(|title| !title.is_empty() && !session.title_state.manual)
-            {
-                session.title = title.into();
+            if title.is_some_and(|title| session.suggest_title(title)) {
                 session.title_state.barrier = self.next_request;
             }
         }

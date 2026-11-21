@@ -3,12 +3,20 @@ mod requests;
 
 use super::{Pending, Workspace};
 use crate::{
-    application::{Command, Event, Provider, Reply, Scope},
+    application::{Command, Event, Provider, Reply, Scope, Session},
     remote::{
         native::{checkout_id, project_key, SessionIntent},
-        Job, Operation, Outcome, Phase, VmLink,
+        Continuation, Job, Operation, Outcome, Phase, VmLink,
     },
 };
+
+impl Session {
+    pub(in crate::application::workspace) fn restore_handoff(&mut self, handoff: Continuation) {
+        self.suggest_title(&handoff.title);
+        self.conversation.handoff(&handoff.chat);
+        self.native_handoff = Some(handoff);
+    }
+}
 
 impl Workspace {
     pub fn checkout_directory<'a>(&'a self, project: &'a str) -> &'a str {
@@ -59,10 +67,8 @@ impl Workspace {
                 s.options.model = thread.model;
                 s.options.effort = thread.effort;
             }
-            s.title.clone_from(&h.title);
             s.draft = thread.draft;
-            s.conversation.handoff(&h.chat);
-            s.native_handoff = Some(h);
+            s.restore_handoff(h);
             return Some(i);
         }
         let eligible = |index: usize| {

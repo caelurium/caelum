@@ -2,6 +2,51 @@ use super::*;
 use crate::live::{live, live_mut};
 
 #[test]
+fn long_titles_leave_the_breadcrumb_and_session_footers_in_their_own_rows() {
+    for size in [(800., 620.), (1440., 900.)] {
+        let mut rt = design_runtime("", size);
+        rt.update(|s, _| {
+            crate::remote::scene(s, "native-connected");
+            let app = &mut live_mut(s).app;
+            app.sessions[app.selected.unwrap()].title = "Review".into();
+        });
+        advance(&mut rt, 0.2);
+        let i = live(&rt.state).app.selected.unwrap();
+        let toolbar = element(&rt, "toolbar");
+        let normal_width = element(&rt, "toolbar-project").rect[2];
+        rt.update(|s, _| {
+            live_mut(s).app.sessions[i].title = format!(
+                "Review {}\nA second line\n\nA third line",
+                "a long session title ".repeat(20)
+            );
+        });
+        advance(&mut rt, 0.3);
+        let card = element(&rt, &format!("live-session-{i}"));
+        let next = element(&rt, "vm-session-checkout-example/checkout-example");
+        let branch = rt
+            .elements()
+            .into_iter()
+            .find(|e| {
+                !e.exiting
+                    && e.path.starts_with(&card.path)
+                    && e.text.as_deref() == Some("dev-01 · feat/remote-checkout")
+            })
+            .expect("VM branch footer");
+        let bottom = |e: &ElementInfo| e.rect[1] + e.rect[3];
+        assert!(branch.rect[1] >= card.rect[1] && bottom(&branch) <= bottom(&card));
+        assert!(bottom(&element(&rt, &format!("session-actions-{i}"))) <= bottom(&card));
+        assert!(bottom(&card) <= next.rect[1]);
+        let title = element(&rt, "toolbar-session-title");
+        assert!(title.rect[1] >= toolbar.rect[1] && bottom(&title) <= bottom(&toolbar));
+        assert!(
+            title.rect[2] > 0.
+                && title.rect[0] + title.rect[2] <= element(&rt, "workspace-trigger").rect[0]
+        );
+        assert!((element(&rt, "toolbar-project").rect[2] - normal_width).abs() < 1.);
+    }
+}
+
+#[test]
 fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_and_other_vms() {
     use caelum_core::application::Options;
     let mut rt = design_runtime("", (800., 620.));

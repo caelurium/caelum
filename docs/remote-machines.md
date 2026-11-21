@@ -124,6 +124,8 @@ published commit.
 Choose an existing VM, or choose the size and auto-stop time and click
 **Create VM**. While Boat prepares the checkout, a progress card takes the
 place of the message editor. The editor returns with a copy of your unsent draft.
+When you continue a named session, its title follows it to the VM. The toolbar,
+sidebar row and completion notifications all use the VM session’s current title.
 Your original session and draft stay on the laptop.
 If the VM already had a conversation, its row stays in **Sessions**.
 
