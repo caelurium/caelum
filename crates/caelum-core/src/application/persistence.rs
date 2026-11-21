@@ -9,6 +9,7 @@ use std::{
 };
 
 mod migration;
+mod remote_history;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -154,6 +155,8 @@ impl Preferences {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedSession {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm_link: Option<crate::remote::VmLink>,
     #[serde(default)]
     pub last_activity: Option<u64>,
     pub scope: Scope,
@@ -181,6 +184,8 @@ pub struct SavedSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub version: u32,
+    #[serde(default)]
+    pub remote: crate::remote::Saved,
     #[serde(default)]
     pub home: super::HomeDraft,
     pub projects: Vec<ProjectInfo>,
@@ -257,6 +262,7 @@ impl Store {
             value["preferences"]["themeFamily"] = "vercel".into();
             value["preferences"]["accentColor"] = "theme".into();
         }
+        remote_history::retire_vm_sessions(&mut value);
         let state: Snapshot = serde_json::from_value(value)
             .map_err(|e| format!("Cannot read saved workspace: {e}"))?;
         if state.version != 1 {

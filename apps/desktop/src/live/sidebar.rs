@@ -2,11 +2,13 @@
 mod badge;
 mod projects;
 mod requests;
+mod row;
 mod session;
+mod vm;
 
 use std::rc::Rc;
 
-use caelum_core::application::{SessionScope, Workspace as Application};
+use caelum_core::application::{FeedSession, SessionScope, Workspace as Application};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text, text_input};
 use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
 
@@ -26,11 +28,11 @@ pub struct State {
     pub project: Option<String>,
     menu: Menu,
     pub now: u64,
-    visible: Vec<usize>,
+    visible: Vec<FeedSession>,
     deadline: Option<u64>,
     query: Option<(Option<String>, String, bool)>,
     request_scope: Option<(SessionScope, Option<String>)>,
-    selected: Option<usize>,
+    selected: Option<FeedSession>,
 }
 
 impl Default for State {
@@ -97,21 +99,14 @@ impl State {
             self.project = None;
             changed = true;
         }
-        let project = self.project.clone().or_else(|| {
-            (app.preferences.session_scope == SessionScope::CurrentProject)
-                .then(|| {
-                    app.active_project
-                        .as_ref()
-                        .map(|p| app.group_path(p).to_owned())
-                })
-                .flatten()
-        });
+        let project = app.feed_project(self.project.as_deref()).map(str::to_owned);
+        let selected = app.selected_feed_session();
         let request_scope = (app.preferences.session_scope, project.clone());
         if self.request_scope.as_ref() != Some(&request_scope) {
             app.refresh_feed_pull_requests(self.project.as_deref());
             self.request_scope = Some(request_scope);
             tx.scroll_to_y("requests-scroll", 0.0);
-        } else if self.selected != app.selected
+        } else if self.selected != selected
             && let Some(path) = app.active_project.clone()
             && app.feed_includes_project(&path, self.project.as_deref())
         {
@@ -119,31 +114,31 @@ impl State {
         }
         let query = (project, query.to_owned(), archived);
         if self.query.as_ref() != Some(&query) {
-            let rows = app.session_feed(self.project.as_deref(), &query.1, archived);
+            let rows = app.sidebar_sessions(self.project.as_deref(), &query.1, archived);
             self.visible.retain(|i| rows.contains(i));
             tx.scroll_to_y("sidebar-scroll", 0.0);
             self.query = Some(query);
         }
-        if self.selected != app.selected {
+        if self.selected != selected {
             self.menu = Menu::Closed;
-            self.selected = app.selected;
-            if let Some(index) = app.selected {
-                tx.scroll_into_view(format!("live-session-{index}"));
+            self.selected = selected;
+            if let Some(row) = &self.selected {
+                tx.scroll_into_view(row::key(row));
             }
+            changed = true;
         }
         if clock && !app.window_background {
             let now = caelum_core::application::presentation::now();
             changed |= self
                 .visible
                 .iter()
-                .filter_map(|&i| app.sessions.get(i))
-                .any(|s| age(s.last_activity, self.now).0 != age(s.last_activity, now).0);
+                .filter_map(|row| row.last_activity(app))
+                .any(|at| age(Some(at), self.now).0 != age(Some(at), now).0);
             self.now = now;
             let deadline = self
                 .visible
                 .iter()
-                .filter_map(|&i| app.sessions.get(i))
-                .filter_map(|s| age(s.last_activity, now).1)
+                .filter_map(|row| age(row.last_activity(app), now).1)
                 .min();
             if deadline != self.deadline || self.deadline.is_some_and(|at| now >= at) {
                 self.deadline = deadline;
@@ -155,6 +150,16 @@ impl State {
             }
         }
         changed
+    }
+}
+
+impl super::Live {
+    pub(crate) fn reveal_new_session(&mut self) {
+        self.feed.project = None;
+        self.feed.close();
+        self.feed.selected = None;
+        self.panels.sessions.clear();
+        self.panels.archived = false;
     }
 }
 
@@ -183,7 +188,7 @@ fn age(at: Option<u64>, now: u64) -> (String, Option<u64>) {
 
 pub fn sidebar(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let rows = Rc::new(l.app.session_feed(
+    let rows = Rc::new(l.app.sidebar_sessions(
         l.feed.project.as_deref(),
         &l.panels.sessions.text,
         l.panels.archived,
@@ -215,14 +220,16 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
             .growth(rune::GrowthSpec::default())
             .virtual_rows(
                 rows.len(),
-                session::HEIGHT,
-                move |_: &Workspace, row| format!("live-session-{}", keys[row]).into(),
-                move |s: &Workspace, row| {
-                    session::view(s, &kit, builders[row], row, builders.len())
+                row::HEIGHT,
+                move |_: &Workspace, i| row::key(&keys[i]).into(),
+                move |s: &Workspace, i| match &builders[i] {
+                    FeedSession::Local(index) => session::view(s, &kit, *index, i, builders.len()),
+                    FeedSession::Vm(link) => vm::view(s, &kit, link, i, builders.len()),
                 },
             )
+            .virtual_rows_version(rows.as_ref())
             .on_visible_rows(move |s: &mut Workspace, range| {
-                live_mut(s).feed.visible = range.filter_map(|i| visible.get(i).copied()).collect();
+                live_mut(s).feed.visible = range.filter_map(|i| visible.get(i).cloned()).collect();
                 false
             })
     };

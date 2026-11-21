@@ -37,6 +37,7 @@ pub struct Live {
     pub completion: crate::completion::Menu,
     pub composer: crate::composer::State,
     pub home: crate::home::State,
+    pub remote: crate::remote::State,
     pub commands: crate::commands::State,
     pub models: crate::models::Picker,
     pub notifications: crate::notifications::State,
@@ -104,6 +105,7 @@ impl Live {
             completion: Default::default(),
             composer: Default::default(),
             home: Default::default(),
+            remote: Default::default(),
             commands: Default::default(),
             models: Default::default(),
             notifications: Default::default(),
@@ -165,10 +167,7 @@ impl Live {
 
     pub fn new_session(&mut self) {
         self.schedule();
-        self.feed.project = None;
-        self.feed.close();
-        self.panels.sessions.clear();
-        self.panels.archived = false;
+        self.reveal_new_session();
         let Some(project) = self.app.active_project.clone() else {
             self.panels.overlay = Some(crate::panels::Screen::Launcher);
             return;
@@ -182,6 +181,10 @@ impl Live {
     }
 
     pub fn focus(&mut self) {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            crate::remote::focus(self);
+            return;
+        }
         if self.panels.screen == crate::panels::Screen::Home {
             self.home.editor.focused = true;
             return;
@@ -280,6 +283,19 @@ impl Live {
         if self.panels.overlay != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
         }
+        if self.panels.overlay != Some(crate::panels::Screen::VmHandoff) {
+            self.app.dismiss_vm_handoff();
+        }
+        if !matches!(
+            self.panels.overlay,
+            Some(
+                crate::panels::Screen::CreateVm
+                    | crate::panels::Screen::RemotePicker
+                    | crate::panels::Screen::VmHandoff
+            )
+        ) {
+            self.app.remote.picker = None;
+        }
         self.app.apply(event);
         self.sync_editors();
         if self.panels.overlay == Some(crate::panels::Screen::Fork)
@@ -335,6 +351,16 @@ impl Live {
     }
 
     pub fn working(&self) -> bool {
+        if self.panels.screen == crate::panels::Screen::Remote {
+            return self
+                .app
+                .remote
+                .saved
+                .selected
+                .as_ref()
+                .and_then(|id| self.app.remote.saved.checkouts.get(id))
+                .is_some_and(|c| c.thread.turn.run().is_some());
+        }
         self.panels.screen == crate::panels::Screen::Conversation
             && self
                 .app
@@ -344,6 +370,12 @@ impl Live {
 
     pub fn stop(&mut self) {
         self.schedule();
+        if self.panels.screen == crate::panels::Screen::Remote {
+            if let Some(id) = self.app.remote.saved.selected.clone() {
+                self.app.interrupt_remote(&id);
+            }
+            return;
+        }
         if let Some(index) = self.app.selected {
             self.app.cancel(index);
         }
@@ -467,6 +499,7 @@ impl Live {
         }
         let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
         changed |= self.apply_events(events);
+        changed |= crate::remote::sync(self, tx);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
         if self.last_selected != self.app.selected
@@ -636,7 +669,7 @@ impl Live {
         changed
     }
 
-    fn schedule(&self) {
+    pub(crate) fn schedule(&self) {
         if let Some(wake) = &self.wake {
             wake();
         }

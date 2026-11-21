@@ -17,6 +17,7 @@ mod models;
 mod notifications;
 mod panels;
 mod questions;
+mod remote;
 mod select;
 mod settings;
 mod shells;
@@ -434,7 +435,13 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     }
     let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
-    let main = if home::is_home(s) {
+    let remote = s
+        .live
+        .as_ref()
+        .is_some_and(|l| l.panels.screen == panels::Screen::Remote);
+    let main = if remote {
+        remote::screen(s, &k, padding, cx.is_reduced_motion(), &mut layers)
+    } else if home::is_home(s) {
         home::view(s, &k, cx.is_reduced_motion(), &mut layers)
     } else {
         col()
@@ -454,7 +461,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let main = if s.live.as_ref().is_some_and(|live| {
         matches!(
             live.panels.screen,
-            panels::Screen::Home | panels::Screen::Review
+            panels::Screen::Home | panels::Screen::Review | panels::Screen::Remote
         )
     }) {
         main
@@ -488,10 +495,23 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                     text(
                         s.live
                             .as_ref()
-                            .filter(|_| !home::is_home(s))
-                            .and_then(|live| live.app.active_project.as_ref())
-                            .and_then(|path| std::path::Path::new(path).file_name())
-                            .and_then(|name| name.to_str())
+                            .and_then(|l| match l.panels.screen {
+                                panels::Screen::Remote => l
+                                    .app
+                                    .remote
+                                    .saved
+                                    .selected
+                                    .as_ref()
+                                    .and_then(|id| l.app.remote.saved.checkouts.get(id))
+                                    .and_then(|c| c.source.repository.rsplit('/').next()),
+                                panels::Screen::Home => None,
+                                _ => l
+                                    .app
+                                    .active_project
+                                    .as_ref()
+                                    .and_then(|path| std::path::Path::new(path).file_name())
+                                    .and_then(|name| name.to_str()),
+                            })
                             .unwrap_or("caelum"),
                     )
                     .font(k.ty.ui)

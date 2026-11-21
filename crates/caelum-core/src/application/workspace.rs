@@ -11,6 +11,7 @@ mod persistence;
 mod projects;
 mod queue;
 mod relocation;
+mod remote;
 mod review;
 mod sessions;
 mod subagents;
@@ -26,6 +27,10 @@ pub use fork::HistoryAction;
 pub use home::Home;
 pub use home::HomeDraft;
 pub use projects::ProjectMove;
+pub use remote::handoff::HandoffPhase;
+pub use remote::handoff::HandoffSource;
+pub use remote::handoff::VmDestination;
+pub use remote::handoff::VmHandoff;
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -37,6 +42,7 @@ use super::{
 };
 
 pub struct Session {
+    vm_link: Option<crate::remote::VmLink>,
     pub scope: Scope,
     pub remote_id: Option<String>,
     relocation: relocation::Relocation,
@@ -98,6 +104,7 @@ pub struct Session {
 impl Session {
     fn new(scope: Scope) -> Self {
         Self {
+            vm_link: None,
             scope,
             remote_id: None,
             relocation: Default::default(),
@@ -212,6 +219,7 @@ impl Session {
 }
 
 enum Pending {
+    Remote(remote::Lane),
     ConversationControl(usize, SessionKey, controls::Operation),
     Fork(fork::Request),
     Home(home::Request),
@@ -262,7 +270,9 @@ enum Pending {
 #[derive(Default)]
 pub struct Workspace {
     fork: Option<ForkPicker>,
+    handoff: Option<VmHandoff>,
     pub home: Home,
+    pub remote: crate::remote::State,
     pub window_background: bool,
     pub conversation_hidden: bool,
     pub projects: Vec<ProjectInfo>,

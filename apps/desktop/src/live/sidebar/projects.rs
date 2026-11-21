@@ -13,13 +13,9 @@ pub(super) fn filter(s: &Workspace) -> Select {
         caelum_core::application::SessionScope::AllProjects => "All projects".to_owned(),
         caelum_core::application::SessionScope::CurrentProject => l
             .app
-            .active_project
-            .as_ref()
+            .feed_project(None)
             .map_or("Current project".into(), |p| {
-                format!(
-                    "Current · {}",
-                    crate::checkouts::project_name(&l.app, l.app.group_path(p))
-                )
+                format!("Current · {}", crate::checkouts::project_name(&l.app, p))
             }),
     };
     let choices = std::iter::once(Choice::new("", default))
@@ -78,7 +74,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             .w_full()
             .key(crate::code_view::source_key(&path, "project-group"))
             .role("group")
-            .label(format!("{} project and worktrees", project.name))
+            .label(format!("{} project and checkouts", project.name))
             .child(crate::context::project(
                 k.interactive(
                     row()
@@ -157,6 +153,10 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
         if let Some((trees, tree_height)) = crate::checkouts::sidebar(s, k, &path) {
             group = group.child(trees);
             height += tree_height;
+        }
+        if let Some((vms, vm_height)) = crate::remote::sidebar(s, k, &path) {
+            group = group.child(vms);
+            height += vm_height;
         }
         projects = projects.child(group);
     }

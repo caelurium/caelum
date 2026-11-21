@@ -484,7 +484,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
     content
 }
 
-fn output_font(k: &Kit) -> rune::TextStyle {
+pub(crate) fn output_font(k: &Kit) -> rune::TextStyle {
     rune::TextStyle {
         size: 12.0,
         line_height: 20.0,
@@ -492,7 +492,7 @@ fn output_font(k: &Kit) -> rune::TextStyle {
     }
 }
 
-fn output_rail(body: El, color: rune::Color) -> El {
+pub(crate) fn output_rail(body: El, color: rune::Color) -> El {
     col().w_full().child(
         col()
             .w_full()

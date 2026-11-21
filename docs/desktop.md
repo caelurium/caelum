@@ -36,24 +36,31 @@ Search text filters sessions only. Active session rows and branch searches follo
 the current Git branch of each session's checkout, including external switches.
 Archived rows use their recorded session branch.
 
+**Sessions** also lists chats on [Boat VMs](remote-machines.md). The server icon
+and machine name identify the checkout. A new VM chat appears as soon as you
+create it, even before its first message. Select any of the VM’s chats to
+return to its transcript and draft.
+
 **Needs input** appears on a session row when its agent has a question or approval
 waiting. In the open conversation, the same label appears beside the session title.
 When there is no pending input, **PR #… · Changes requested** links directly to
 review feedback on a branch that session worked on. Use **Back to session** to
 return to the conversation and its draft.
 
-**⇧⌘N** opens the project/provider launcher; **⌘N** reuses that project's
-draft for the default provider chosen in Settings. Each session retains an
+**⇧⌘N** opens the launcher for local projects, worktrees and ready [Boat VMs](remote-machines.md).
+Choose the provider and destination for the new session. **⌘N** reuses a local
+project’s draft for the default provider chosen in Settings; on an idle VM it
+starts a fresh chat on that checkout with the current provider. Each session retains an
 independent draft and reading position. Hover a
-session to close it with **×**. A temporary notice names the archived session and
+local session to close it with **×**. A temporary notice names the archived session and
 offers **Undo**; it expires after eight unengaged seconds and pauses while hovered,
 keyboard-focused or restoring. Undo preserves newer navigation. Session actions and
-custom context menus also offer archive/reconnect. Hover any session row for its
+custom context menus also offer archive/reconnect. Hover a local session row for its
 **…** popover; actions belong to that row, including background sessions. Escape
 returns focus to its button. Use the archive icon beside
 **Sessions** to switch between active and archived sessions. The **+** beside
-**Sessions**, just before the archive icon, starts a session with the default
-provider chosen in Settings → Providers. **Refresh sessions** reloads active
+**Sessions**, just before the archive icon, does the same as **⌘N**.
+**Refresh sessions** reloads active
 session history and model, effort and agent catalogues across all open
 projects and their worktrees, including catalogues for drafts and busy sessions.
 

@@ -11,6 +11,18 @@ import time
 root = Path(__file__).resolve().parents[3]
 scenes = ("", "inspector", "compact", "settings", "providers", "provider-error", "notifications", "storage", "about", "models", "models-empty", "launcher", "session", "timeline", "timeline-empty", "usage", "usage-loading", "stats", "stats-empty", "stats-loading", "stats-error", "commands", "shells", "working", "thinking", "retrying", "stopping", "empty", "error", "review-loading", "review-error", "discussion", "tools", "review", "checks", "mentions", "images", "image-preview", "files", "files-loading", "changes-empty", "approval", "questions", "crowded", "worktrees", "worktrees-loading", "worktrees-error")
 interactions = {
+    "vm-tool-output": ("remote-trace", []),
+    "vm-reasoning-summary": ("remote-trace", [{"t": 0.2, "key": "vm-tool-checkout-example-test-call"}, {"t": 0.45, "key": "vm-summary-checkout-example-summary"}]),
+    "vm-first-effort": ("remote-model-draft", [{"t": 0.1, "key": "vm-provider-trigger"}, {"t": 0.22, "key": "option0"}, {"t": 0.34, "key": "vm-model-trigger"}, {"t": 0.46, "key": "vm-model-item-example/reasoner"}, {"t": 0.58, "key": "vm-effort-trigger"}, {"t": 0.7, "key": "option3"}, {"t": 0.82, "key": "vm-effort-trigger"}]),
+    "vm-first-model": ("remote-model-draft", [{"t": 0.2, "key": "vm-model-trigger"}, {"t": 0.4, "key": "vm-model-item-example/fast"}, {"t": 0.65, "key": "vm-model-trigger"}]),
+    "vm-session-launcher": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True, "shift": True}, {"t": 0.5, "key": "launch-provider-codex"}]),
+    "vm-session-sidebar": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.3, "type": "key", "name": "n", "cmd": True}]),
+    "remote-provider": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.35, "key": "vm-provider-trigger"}]),
+    "remote-sessions": ("remote-machine", [{"t": 0.1, "type": "key", "name": "Escape"}, {"t": 0.25, "key": "vm-threads"}, {"t": 0.45, "key": "new-vm-session"}, {"t": 0.7, "key": "vm-threads"}]),
+    "remote-create-ready": ("remote-create", [{"t": 0.25, "key": "remote-branch"}, {"t": 0.4, "paste": "feat/health-check"}]),
+    "remote-remove": ("remote-working", [{"t": 0.25, "key": "remove-remote-checkout-example"}]),
+    "home-continue-on-vm": ("home-draft", [{"t": 0.25, "key": "continue-on-vm"}]),
+    "remote-handoff-new": ("remote-handoff", [{"t": 0.25, "key": "handoff-new-vm"}]),
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
     "question-pending": ("questions", [{"t": 0.25, "key": "question-submit-fixture"}]),
     "session-feed-filter": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}]),
@@ -78,7 +90,11 @@ scenes += ("tool-output-long", "vercel-tool-output-long", "tool-search", "vercel
 scenes += ("composer-empty", "composer-multiline", "composer-queued", "composer-queue-error", "composer-attachments")
 scenes += ("composer-long", "composer-attachment-status", "composer-attachment-preview", "composer-image-preview")
 scenes += ("models-settings",)
-scenes += ("fork", "edit-branch", "rewind-checkpoint", "rename-session")
+scenes += ("fork",)
+scenes += ("remote-working", "remote-creating", "remote-setup-failed", "remote-stopped")
+scenes += ("remote-machine", "remote-changes", "remote-picker", "remote-settings", "remote-create")
+scenes += ("edit-branch", "rewind-checkpoint", "rename-session")
+scenes += ("remote-handoff",)
 scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 

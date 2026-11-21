@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 base64 = "0.23"
+boat-sdk = { git = "https://github.com/caelurium/boat-sdk-rs", tag = "v0.6.0" }
 caelum-protocol = { path = "../caelum-protocol" }
 ignore = "0.4"
 notify = "8.2"
@@ -19,4 +20,17 @@ serde_json.workspace = true
 sha2 = "0.11"
 tempfile = "3"
 thiserror.workspace = true
-tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
+time = { version = "0.3", features = ["parsing"] }
+tokio = { version = "1", features = ["rt", "time", "sync", "macros", "process"] }
+zeroize = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+secret-service = { version = "5", features = ["rt-tokio-crypto-rust"] }
+
+[dev-dependencies]
+tempfile = "3"
+wiremock = "0.6"

@@ -34,3 +34,12 @@ core project validation as the CLI. It does not dispatch commands or prompts.
 Workspace JSON is private, atomically replaced and locked for the desktop's
 lifetime. Migration copies legacy data and preserves the sources. Credentials
 remain provider-owned; they do not belong in workspace snapshots or branch metadata.
+
+**Settings → Remote machines** authenticates a Boat key before saving it to macOS
+Keychain or Linux Secret Service. Disconnect removes it. The adapter exposes
+account-scoped machine metadata and process names, not desktop access URLs,
+environment secrets or process arguments. On a remote checkout, Boat hosts
+Codex and OpenCode and controls their in-VM credentials and tool permissions.
+Expanding a VM tool call reads its published event for that machine and
+conversation. The selected call’s command and text output stay in memory;
+the workspace saves only the summary and a reference for reopening it.

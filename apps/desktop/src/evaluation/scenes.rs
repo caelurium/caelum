@@ -5,6 +5,40 @@ use crate::{Workspace, panels};
 type Scene = (&'static str, fn(&mut Workspace));
 
 pub(crate) const SCENES: &[Scene] = &[
+    ("remote-creating", |s| {
+        crate::remote::scene(s, "remote-creating")
+    }),
+    ("remote-working", |s| {
+        crate::remote::scene(s, "remote-working")
+    }),
+    ("remote-trace", |s| crate::remote::scene(s, "remote-trace")),
+    ("remote-setup-failed", |s| {
+        crate::remote::scene(s, "remote-setup-failed")
+    }),
+    ("remote-stopped", |s| {
+        crate::remote::scene(s, "remote-stopped")
+    }),
+    ("remote-create", |s| {
+        crate::remote::scene(s, "remote-create")
+    }),
+    ("remote-handoff", |s| {
+        crate::remote::scene(s, "remote-handoff")
+    }),
+    ("remote-machine", |s| {
+        crate::remote::scene(s, "remote-machine")
+    }),
+    ("remote-model-draft", |s| {
+        crate::remote::scene(s, "remote-model-draft")
+    }),
+    ("remote-changes", |s| {
+        crate::remote::scene(s, "remote-changes")
+    }),
+    ("remote-picker", |s| {
+        crate::remote::scene(s, "remote-picker")
+    }),
+    ("remote-settings", |s| {
+        crate::remote::scene(s, "remote-settings")
+    }),
     ("subagent-running", |s| {
         crate::subagents::scene(s, "running")
     }),
