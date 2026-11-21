@@ -37,8 +37,10 @@ pub(super) fn owner(l: &Live) -> Option<&str> {
             Some(&link.checkout)
         }
         Inspection::Remote(id)
-            if l.panels.screen == Screen::Remote
-                && l.app.remote.saved.selected.as_ref() == Some(id) =>
+            if (l.panels.screen == Screen::Remote
+                && l.app.remote.saved.selected.as_ref() == Some(id))
+                || (l.panels.screen == Screen::Conversation
+                    && super::native::selected(l) == Some(id)) =>
         {
             Some(id)
         }
@@ -84,14 +86,6 @@ fn machine(s: &Workspace, k: &Kit, id: &str) -> El {
     let l = live(s);
     let c = &l.app.remote.saved.checkouts[id];
     let mut body = col().w_full().gap(8.0);
-    if c.machine().is_some() {
-        body = body.child(super::stats::details(s, k, id, c));
-    } else {
-        body = body.child(super::status::status(&l.app.remote, id, c).view(k));
-    }
-    if let Some(Job::Failed(error)) = l.app.remote.jobs.get(id) {
-        body = body.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
-    }
     if let Some(Inspection::Local { index, home, .. }) = l.remote.inspection.as_ref() {
         let index = *index;
         let source = if home.is_some() {
@@ -99,29 +93,40 @@ fn machine(s: &Workspace, k: &Kit, id: &str) -> El {
         } else {
             HandoffSource::Composer(index)
         };
-        body = body.child(ui::divider(k)).child(
-            row()
-                .flex_wrap()
-                .gap(4.0)
-                .child(
-                    ui::Button::new("Open VM conversation")
-                        .disabled(!l.app.can_open_linked_vm(index))
-                        .on_press(move |s: &mut Workspace| {
-                            if owner(live(s)).is_some() && live_mut(s).app.open_linked_vm(index) {
-                                super::checkout::enter(s);
-                            }
-                        })
-                        .build(k)
-                        .key("open-linked-vm"),
-                )
-                .child(
-                    ui::Button::new("Choose another VM…")
-                        .variant(ButtonVariant::GhostMuted)
-                        .disabled(l.app.handoff_blocker(source).is_some())
-                        .on_press(move |s: &mut Workspace| super::handoff::begin(s, source))
-                        .build(k),
-                ),
-        );
+        body = body
+            .child(
+                row()
+                    .flex_wrap()
+                    .gap(4.0)
+                    .child(
+                        ui::Button::new("Open VM conversation")
+                            .disabled(!l.app.can_open_linked_vm(index))
+                            .on_press(move |s: &mut Workspace| {
+                                if owner(live(s)).is_some() && live_mut(s).app.open_linked_vm(index)
+                                {
+                                    super::checkout::enter(s);
+                                }
+                            })
+                            .build(k)
+                            .key("open-linked-vm"),
+                    )
+                    .child(
+                        ui::Button::new("Choose another VM…")
+                            .variant(ButtonVariant::GhostMuted)
+                            .disabled(l.app.handoff_blocker(source).is_some())
+                            .on_press(move |s: &mut Workspace| super::handoff::begin(s, source))
+                            .build(k),
+                    ),
+            )
+            .child(ui::divider(k));
+    }
+    if c.machine().is_some() {
+        body = body.child(super::stats::details(s, k, id, c));
+    } else {
+        body = body.child(super::status::status(&l.app.remote, id, c).view(k));
+    }
+    if let Some(Job::Failed(error)) = l.app.remote.jobs.get(id) {
+        body = body.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
     }
     col()
         .w_full()

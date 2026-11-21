@@ -1,9 +1,13 @@
 use super::{checkout, conversation};
 use crate::{Workspace, live::live_mut, panels::Screen, settings::Page};
-use caelum_core::remote::*;
+use caelum_core::{application::Provider, remote::*};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) fn scene(s: &mut Workspace, name: &str) {
+    if matches!(name, "native-connected" | "native-offline") {
+        super::native::scene(s, name == "native-offline");
+        return;
+    }
     let l = live_mut(s);
     let source = Source {
         project: l.app.projects[0].path.clone(),
@@ -17,7 +21,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             "main"
         }
         .into(),
-        published_tip: (name == "remote-handoff").then(|| "a".repeat(40)),
+        published_tip: Some("a".repeat(40)),
         environment: (name != "remote-create").then(|| "project".into()),
     };
     let machine = Machine {
@@ -83,7 +87,10 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     l.app.active_project = None;
     l.app.remote.saved.selected = Some(id.clone());
     let mut c = Checkout {
+        defaults: None,
         source,
+        lifetime: Lifetime::Hour,
+        root: Some("/home/user/project".into()),
         phase: Phase::Ready {
             machine: machine.clone(),
             branch: "feat/remote-checkout".into(),
@@ -92,6 +99,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         other_threads: vec![],
         thread: Thread {
             conversation: Some("thread-example".into()),
+            provider: Provider::OpenCode,
             last_activity: Some(l.feed.now - 120_000),
             lines: vec![
                 Line::new(Speaker::You, "Add a health check and show me the changes."),
@@ -109,6 +117,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             use caelum_core::application::Provider;
             use caelum_protocol::{ProviderChoice, ProviderModelChoice};
             c.thread = Thread {
+                provider: Provider::OpenCode,
                 draft: "Review the changes on this branch.".into(),
                 ..Default::default()
             };

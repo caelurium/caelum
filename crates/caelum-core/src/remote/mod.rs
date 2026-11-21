@@ -7,6 +7,7 @@ mod git;
 mod harness;
 mod lifetime;
 mod models;
+pub mod native;
 mod runtime;
 mod stats;
 mod tools;
@@ -15,6 +16,7 @@ pub use chat::Chat;
 pub use chat::Continuation;
 pub use chat::Message;
 pub(crate) use checkout::github_slug;
+pub use checkout::ProviderDefaults;
 pub use checkout::PublishedBase;
 pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
@@ -51,12 +53,12 @@ impl fmt::Debug for Credential {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Host {
     Boat,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MachineId {
     pub host: Host,
     pub account: String,
@@ -98,6 +100,7 @@ pub enum Operation {
     Disconnect,
     Discover(String),
     DiscoverHandoff(String),
+    MatchCheckout(String, Target),
     Create(Source, Plan),
     Prepare(Target, String, Option<String>),
     Power(MachineId, bool),
@@ -121,7 +124,11 @@ pub enum Outcome {
     Source(Source),
     Machine(Machine),
     Waiting(Machine),
-    Prepared(Machine, String),
+    Prepared {
+        machine: Machine,
+        branch: String,
+        root: String,
+    },
     Lifetime(Machine),
     Accepted(Run),
     Rejected(String),
@@ -149,12 +156,15 @@ pub struct State {
     pub delete_errors: std::collections::HashMap<String, String>,
     pub removed: Vec<String>,
     pub(crate) deleted_during_inventory: Vec<MachineId>,
+    pub(crate) native_requests: std::collections::BTreeMap<u64, String>,
+    pub(crate) branch_checks: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Default)]
 pub enum Connection {
     #[default]
     Idle,
+    SignedOut,
     Loading(u64),
     Failed(String),
 }

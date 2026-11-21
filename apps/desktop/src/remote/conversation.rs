@@ -40,7 +40,7 @@ pub(super) fn set_focus(l: &mut Live, focused: bool) {
 pub(super) fn restore(l: &mut Live, tx: &mut Tx) -> bool {
     let next = l.app.remote.saved.selected.as_ref().and_then(|id| {
         let c = l.app.remote.saved.checkouts.get(id)?;
-        Some((c.thread.editor_key(id), Dock::for_checkout(c)))
+        Some((c.thread.editor_key(id), Dock::for_checkout(l, id, c)))
     });
     let previous = l
         .remote
@@ -127,7 +127,7 @@ pub(super) fn view(
     let l = live(s);
     let key = c.thread.editor_key(id);
     let branch = super::status::branch(c);
-    let dock = Dock::for_checkout(c);
+    let dock = Dock::for_checkout(l, id, c);
     let body = col()
         .w_full()
         .h_full()

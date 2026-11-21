@@ -4,8 +4,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::super::AttachmentKind;
 use super::{Conversation, Entry, EntryKind};
 
-pub(super) fn merge(conversation: &mut Conversation, history: Vec<Entry>, older: bool) {
+pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, older: bool) {
     let mut live = std::mem::take(&mut conversation.entries);
+    let mut before = conversation.handoff_rows(&mut live, &mut history);
     let ids: HashSet<_> = history.iter().map(|entry| entry.id.as_str()).collect();
     let optimistic = if older || !live.iter().any(|entry| entry.optimistic) {
         BTreeMap::new()
@@ -18,7 +19,6 @@ pub(super) fn merge(conversation: &mut Conversation, history: Vec<Entry>, older:
         .position(|entry| ids.contains(entry.id.as_str()))
         .or_else(|| optimistic.first_key_value().map(|(&index, _)| index))
         .unwrap_or(if older { 0 } else { live.len() });
-    let mut before = Vec::new();
     let mut after = Vec::new();
     let mut existing = BTreeMap::new();
     for (index, entry) in live.drain(..).enumerate() {

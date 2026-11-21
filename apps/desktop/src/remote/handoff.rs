@@ -10,6 +10,25 @@ use rune_kit::{ButtonVariant, IconButtonVariant, Kit, ScrollBar};
 
 pub(crate) fn button(s: &Workspace, k: &Kit, session: Option<usize>) -> El {
     let l = live(s);
+    if let Some(id) = session
+        .and_then(|i| caelum_core::remote::native::checkout_id(&l.app.sessions[i].scope.project))
+    {
+        let id = id.to_owned();
+        let pinned = l
+            .app
+            .remote
+            .saved
+            .checkouts
+            .get(&id)
+            .and_then(|c| super::stats::pinned(s, k, &id, c));
+        let button = crate::quiet_button(&ui::SERVER, "Machine stats")
+            .expanded(l.panels.overlay == Some(Screen::VmStats))
+            .on_press(move |s: &mut Workspace| super::popup::inspect_remote(live_mut(s), &id))
+            .build(k)
+            .size(32., 32.)
+            .key("continue-on-vm");
+        return row().center_y().gap(4.).child(button).children(pinned);
+    }
     let linked = session.and_then(|i| l.app.linked_vm(i));
     let blocker = session
         .filter(|_| linked.is_none())

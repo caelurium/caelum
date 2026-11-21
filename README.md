@@ -27,7 +27,7 @@ The repository also provides a `nix develop` shell. See [development setup](docs
 ## Documentation
 
 - [Desktop guide](docs/desktop.md) — sessions, commands, files, worktrees, settings and shortcuts
-- [Remote machines](docs/remote-machines.md) — run Codex or OpenCode on Boat and publish from the VM
+- [Remote machines](docs/remote-machines.md) — run a Codex session on Boat and publish from the VM
 - [Pull requests](docs/pull-requests.md) — discovery, review feedback, checks and merging
 - [CLI guide](docs/cli.md) — terminal sessions and opening desktop projects
 - [Codex setup](docs/codex.md) · [OpenCode setup](docs/opencode.md)

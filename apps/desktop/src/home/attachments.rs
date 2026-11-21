@@ -22,6 +22,18 @@ pub(super) fn drop_files(s: &mut Workspace, paths: &[PathBuf]) {
 }
 
 pub(super) fn choose_file(s: &mut Workspace, tx: &mut Tx) {
+    if live(s)
+        .app
+        .home
+        .draft
+        .project
+        .as_deref()
+        .and_then(caelum_core::remote::native::checkout_id)
+        .is_some()
+    {
+        crate::panels::show(s, crate::panels::Screen::Files);
+        return;
+    }
     let generation = live(s).app.home.generation();
     tx.open_file(
         FileDialogOptions {

@@ -16,10 +16,12 @@ use crate::projects::{Project, ProjectError};
 
 mod auto_merge;
 pub(crate) mod cache;
+mod host;
 mod identity;
 mod review;
 pub use auto_merge::set_pull_request_auto_merge;
 pub use cache::CachedReview;
+use host::Gh;
 pub use review::{pull_request_feedback, pull_request_files};
 
 /// Uses gh's existing authentication and repository/remote selection. Network
@@ -44,17 +46,17 @@ pub fn pull_request_details(
 }
 
 fn query_details(
-    executable: &Path,
+    executable: &(impl Gh + ?Sized),
     project_path: impl AsRef<Path>,
     url: &str,
     timeout: Duration,
 ) -> Result<GitHubPullRequestDetails, GitHubError> {
     pull_request_url(url)?;
-    let project = Project::open(project_path)?;
+    let project = executable.project(project_path.as_ref())?;
     let mut command = github_command(executable, project.path());
     command.args(["pr", "view", url, "--json", "number,title,url,isDraft,body,state,author,baseRefName,baseRefOid,headRefName,headRefOid,mergeable,mergeStateStatus,additions,deletions,changedFiles,reviewDecision,statusCheckRollup,autoMergeRequest"]);
-    let output = checked_output(command, timeout)?;
-    let mut details: GitHubPullRequestDetails = serde_json::from_slice(&output.stdout)?;
+    let output = executable.output(command, timeout)?;
+    let mut details: GitHubPullRequestDetails = serde_json::from_slice(&output)?;
     identity::check(
         executable,
         project.path(),
@@ -84,7 +86,7 @@ pub fn merge_pull_request(
 }
 
 fn merge_request(
-    executable: &Path,
+    executable: &(impl Gh + ?Sized),
     project_path: impl AsRef<Path>,
     url: &str,
     method: GitHubMergeMethod,
@@ -97,7 +99,7 @@ fn merge_request(
         .path_segments()
         .ok_or(GitHubError::InvalidUrl)?
         .collect();
-    let project = Project::open(project_path)?;
+    let project = executable.project(project_path.as_ref())?;
     let mut command = github_command(executable, project.path());
     let method = match method {
         GitHubMergeMethod::Merge => "merge",
@@ -120,8 +122,8 @@ fn merge_request(
         "-f",
         &format!("sha={head_oid}"),
     ]);
-    let output = checked_output(command, timeout)?;
-    let response: GitHubMergeResult = serde_json::from_slice(&output.stdout)?;
+    let output = executable.output(command, timeout)?;
+    let response: GitHubMergeResult = serde_json::from_slice(&output)?;
     if !response.merged {
         return Err(GitHubError::Command(response.message));
     }
@@ -143,7 +145,7 @@ pub fn update_pull_request_branch(
 }
 
 fn update_branch_request(
-    executable: &Path,
+    executable: &(impl Gh + ?Sized),
     project_path: impl AsRef<Path>,
     url: &str,
     head_oid: &str,
@@ -155,7 +157,7 @@ fn update_branch_request(
         .path_segments()
         .ok_or(GitHubError::InvalidUrl)?
         .collect();
-    let project = Project::open(project_path)?;
+    let project = executable.project(project_path.as_ref())?;
     let mut command = github_command(executable, project.path());
     command.args([
         "api",
@@ -170,8 +172,7 @@ fn update_branch_request(
         "-f",
         &format!("expected_head_sha={head_oid}"),
     ]);
-
-    checked_output(command, timeout)?;
+    executable.output(command, timeout)?;
     Ok(())
 }
 
@@ -207,12 +208,12 @@ fn pull_request_url(url: &str) -> Result<reqwest::Url, GitHubError> {
 }
 
 fn query_pull_request(
-    executable: &Path,
+    executable: &(impl Gh + ?Sized),
     project_path: impl AsRef<Path>,
     branch: &str,
     timeout: Duration,
 ) -> Result<Option<GitHubPullRequest>, GitHubError> {
-    let project = Project::open(project_path)?;
+    let project = executable.project(project_path.as_ref())?;
     if branch.is_empty() {
         return Ok(None);
     }
@@ -224,16 +225,16 @@ fn query_pull_request(
             "--json",
             "number,title,url,isDraft,baseRefName,reviewDecision",
         ]);
-    let output = checked_output(command, timeout)?;
-    let requests: Vec<GitHubPullRequest> = serde_json::from_slice(&output.stdout)?;
+    let output = executable.output(command, timeout)?;
+    let requests: Vec<GitHubPullRequest> = serde_json::from_slice(&output)?;
     if requests.len() > 1 {
         return Err(GitHubError::Command(format!("Multiple open pull requests match branch '{branch}'; the session association is ambiguous")));
     }
     Ok(requests.into_iter().next())
 }
 
-fn github_command(executable: &Path, project_path: &Path) -> Command {
-    let mut command = Command::new(executable);
+fn github_command(executable: &(impl Gh + ?Sized), project_path: &Path) -> Command {
+    let mut command = Command::new(executable.program());
     command
         .current_dir(project_path)
         .env_remove("GH_REPO")

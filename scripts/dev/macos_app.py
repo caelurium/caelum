@@ -23,6 +23,9 @@ def stage(root: Path, binary: Path) -> Path:
     temporary.replace(executable)
     shutil.copy2(root / "apps/desktop/assets/icon.icns", resources / "icon.icns")
     version = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    # A Dev bundle may have been staged by an older checkout.
+    if (resources / "vm-peers").is_dir():
+        shutil.rmtree(resources / "vm-peers")
     checkout = hashlib.sha256(os.fsencode(root.resolve())).hexdigest()[:12]
     data = dict(
         CFBundleName="Caelum Dev", CFBundleDisplayName="Caelum Dev",

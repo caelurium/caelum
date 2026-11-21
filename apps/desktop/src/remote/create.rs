@@ -40,8 +40,8 @@ fn open(s: &mut Workspace) {
     l.remote.folders.reset();
     l.app.remote.picker = None;
     if l.app.remote.inventory.is_some() {
-        if let Some(path) = l.app.active_project.clone() {
-            l.app.remote_picker(path);
+        if let Some(path) = super::checkout::launch_source(l) {
+            l.app.remote_picker(path.to_owned());
         }
     } else if matches!(l.app.remote.connection, Connection::Idle) {
         // A saved credential can be used even before Settings has been visited.
@@ -108,7 +108,7 @@ fn projects(s: &Workspace, k: &Kit) -> El {
         .app
         .projects
         .iter()
-        .filter(|p| l.app.group_path(&p.path) == p.path)
+        .filter(|p| caelum_core::remote::native::checkout_id(&p.path).is_none())
     {
         let path = project.path.clone();
         items = items.child(
