@@ -28,10 +28,8 @@ impl Workspace {
             self.finish_move_check(request, index, result);
             return;
         }
-        if let Pending::RegenerateTitle(index, key) = pending {
-            if self.sessions[index].key().as_ref() == Some(&key) {
-                self.refresh_title(index);
-            }
+        if let Pending::RegenerateTitle(index) = pending {
+            self.finish_title_update(index, request);
             return;
         }
         if let Pending::Attachment(index, name) = pending {
@@ -290,8 +288,10 @@ impl Workspace {
                                 session.remote_id = saved.remote_id;
                                 session.title = saved.title;
                                 session.last_activity = saved.last_activity;
-                                session.title_state.turns = saved.title_refresh_turns;
-                                session.title_state.manual = saved.manual_title;
+                                session.title_state = super::titles::TitleState::restored(
+                                    saved.manual_title,
+                                    saved.title_refresh_turns,
+                                );
                                 session.options = saved.options;
                                 session.options_dirty = true;
                                 session.draft = saved.draft;
