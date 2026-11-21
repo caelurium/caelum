@@ -211,7 +211,7 @@ enum Pending {
     RemoveQueued(usize, String),
     Control(usize),
     Generate(usize, String, u64),
-    RegenerateTitle(usize, SessionKey),
+    RegenerateTitle(usize),
     Notify,
     Load,
     Save,
@@ -322,10 +322,7 @@ fn update_summary(session: &mut Session, summary: Summary, request: u64) {
             session.record_activity(at);
         }
     }
-    if !session.title_state.manual
-        && request > session.title_state.barrier
-        && !summary.title.trim().is_empty()
-    {
+    if session.title_state.allows_snapshot(request) && !summary.title.trim().is_empty() {
         session.title = summary.title;
     }
     if summary.options.model.is_some() && !session.options_dirty {

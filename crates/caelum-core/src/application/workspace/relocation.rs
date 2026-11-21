@@ -321,7 +321,7 @@ impl Pending {
             | Self::RemoveQueued(i, _)
             | Self::Control(i)
             | Self::Generate(i, _, _)
-            | Self::RegenerateTitle(i, _)
+            | Self::RegenerateTitle(i)
             | Self::Archive(i)
             | Self::DeleteSession(i)
             | Self::Attachment(i, _)

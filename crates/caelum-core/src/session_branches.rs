@@ -20,8 +20,40 @@ struct Key {
 
 struct Execution {
     root: PathBuf,
-    turn: Option<String>,
-    ambiguous: bool,
+    identity: Identity,
+    attribution: Attribution,
+}
+
+enum Attribution {
+    Exclusive,
+    Ambiguous,
+}
+
+enum Identity {
+    Codex(String),
+    OpenCode(Option<u64>),
+}
+
+impl Identity {
+    fn same_start(&self, incoming: &Self) -> bool {
+        match (self, incoming) {
+            (Self::Codex(left), Self::Codex(right)) => left == right,
+            (Self::OpenCode(_), Self::OpenCode(_)) => true,
+            _ => false,
+        }
+    }
+
+    fn accepts_end(&self, incoming: &Self) -> bool {
+        match (self, incoming) {
+            (Self::OpenCode(Some(start)), Self::OpenCode(Some(end))) => end >= start,
+            _ => self.same_start(incoming),
+        }
+    }
+}
+
+enum ExecutionEvent {
+    Started(Identity),
+    Finished(Identity),
 }
 
 #[derive(Default)]
@@ -83,12 +115,18 @@ impl SessionBranches {
             self.disconnect(&event.project_path, "codex");
         }
         let id = event.params.get("threadId").and_then(|id| id.as_str())?;
-        let turn = event.params.pointer("/turn/id").and_then(|id| id.as_str());
-        match event.method.as_str() {
-            "turn/started" => self.execution(&event.project_path, "codex", id, turn, true),
-            "turn/completed" => self.execution(&event.project_path, "codex", id, turn, false),
-            _ => None,
-        }
+        let turn = event
+            .params
+            .pointer("/turn/id")?
+            .as_str()
+            .filter(|id| !id.is_empty())?;
+        let identity = Identity::Codex(turn.into());
+        let change = match event.method.as_str() {
+            "turn/started" => ExecutionEvent::Started(identity),
+            "turn/completed" => ExecutionEvent::Finished(identity),
+            _ => return None,
+        };
+        self.execution(&event.project_path, "codex", id, change)
     }
 
     pub fn opencode_event(&self, event: &OpenCodeEvent) -> Option<SessionBranchUpdate> {
@@ -96,17 +134,15 @@ impl SessionBranches {
             self.disconnect(&event.project_path, "opencode");
         }
         let id = event.data.get("sessionID").and_then(|id| id.as_str())?;
-        match event.event_type.as_str() {
-            "session.execution.started" => {
-                self.execution(&event.project_path, "opencode", id, None, true)
-            }
+        let identity = Identity::OpenCode(event.created);
+        let change = match event.event_type.as_str() {
+            "session.execution.started" => ExecutionEvent::Started(identity),
             "session.execution.succeeded"
             | "session.execution.failed"
-            | "session.execution.interrupted" => {
-                self.execution(&event.project_path, "opencode", id, None, false)
-            }
-            _ => None,
-        }
+            | "session.execution.interrupted" => ExecutionEvent::Finished(identity),
+            _ => return None,
+        };
+        self.execution(&event.project_path, "opencode", id, change)
     }
 
     pub fn details(
@@ -139,13 +175,11 @@ impl SessionBranches {
         path: &str,
         provider: &str,
         id: &str,
-        turn: Option<&str>,
-        starting: bool,
+        event: ExecutionEvent,
     ) -> Option<SessionBranchUpdate> {
         let key = Key::new(path, provider, id);
-        let turn = turn.map(str::to_owned);
         self.actor
-            .call(move |tracking| tracking.execution(key, turn, starting))
+            .call(move |tracking| tracking.execution(key, event))
             .flatten()
     }
 
@@ -202,7 +236,9 @@ impl Tracking {
         let keys: Vec<_> = self
             .active
             .iter()
-            .filter(|(_, execution)| !execution.ambiguous && execution.root == root)
+            .filter(|(_, execution)| {
+                matches!(execution.attribution, Attribution::Exclusive) && execution.root == root
+            })
             .map(|(key, _)| key.clone())
             .collect();
         if keys.is_empty() {
@@ -219,54 +255,53 @@ impl Tracking {
             .collect()
     }
 
-    fn execution(
-        &mut self,
-        key: Key,
-        turn: Option<String>,
-        starting: bool,
-    ) -> Option<SessionBranchUpdate> {
+    fn execution(&mut self, key: Key, event: ExecutionEvent) -> Option<SessionBranchUpdate> {
         let key = self.resolve_key(key)?;
-        if !starting {
-            let active = self.active.get(&key)?;
-            if active.turn != turn {
-                return None;
-            }
-            let active = self.active.remove(&key).unwrap();
-            if active.ambiguous {
-                return None;
-            }
-            if let Some(context) = self.context(&key.path) {
-                if context.root == active.root {
-                    return self.record(key, context.branch);
+        let identity = match event {
+            ExecutionEvent::Started(identity) => identity,
+            ExecutionEvent::Finished(identity) => {
+                let active = self.active.get(&key)?;
+                if !active.identity.accepts_end(&identity) {
+                    return None;
                 }
+                let active = self.active.remove(&key).unwrap();
+                if matches!(active.attribution, Attribution::Ambiguous) {
+                    return None;
+                }
+                if let Some(context) = self.context(&key.path) {
+                    if context.root == active.root {
+                        return self.record(key, context.branch);
+                    }
+                }
+                return None;
             }
-            return None;
-        }
+        };
         if self
             .active
             .get(&key)
-            .is_some_and(|active| active.turn == turn)
+            .is_some_and(|active| active.identity.same_start(&identity))
         {
             return None;
         }
         let context = self.context(&key.path)?;
-        let mut ambiguous = false;
+        let mut attribution = Attribution::Exclusive;
         for (other, active) in &mut self.active {
             if other != &key && active.root == context.root {
-                active.ambiguous = true;
-                ambiguous = true;
+                active.attribution = Attribution::Ambiguous;
+                attribution = Attribution::Ambiguous;
             }
         }
+        let exclusive = matches!(attribution, Attribution::Exclusive);
         self.active.insert(
             key.clone(),
             Execution {
                 root: context.root,
-                turn,
-                ambiguous,
+                identity,
+                attribution,
             },
         );
 
-        if !ambiguous {
+        if exclusive {
             return self.record(key, context.branch);
         }
         None
@@ -526,6 +561,30 @@ mod tests {
                 .branch,
             None
         );
+    }
+
+    #[test]
+    fn older_opencode_completion_cannot_end_branch_tracking_for_a_new_execution() {
+        let fixture = Fixture::new();
+        let tracker = SessionBranches::new(None);
+        let path = fixture.path();
+        let event = |kind: &str, at| {
+            tracker.opencode_event(&OpenCodeEvent {
+                project_path: path.into(),
+                event_type: kind.into(),
+                data: json!({"sessionID": "session"}),
+                id: None,
+                created: Some(at),
+                location: None,
+            })
+        };
+        event("session.execution.started", 200).unwrap();
+        assert!(event("session.execution.succeeded", 100).is_none());
+
+        git(&fixture.0, &["checkout", "-b", "feature/current"]);
+        let updates = tracker.refresh_checkout(&GitClient::new().repository_status(path).unwrap());
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].branch.as_deref(), Some("feature/current"));
     }
 
     #[test]
