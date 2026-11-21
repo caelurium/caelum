@@ -205,7 +205,6 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
         });
         let session = &mut l.app.sessions[index];
         session.remote_id = Some("restored-session".into());
-        session.loaded = true;
         session.draft = "Keep this café draft".into();
         session.options.model = Some("local/model".into());
         session.options.effort = Some("low".into());

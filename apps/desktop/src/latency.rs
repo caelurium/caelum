@@ -100,7 +100,7 @@ impl State {
                         *drawn = true;
                     }
                     if pending.target.is_some_and(|i| {
-                        live.app.sessions[i].loaded && !live.app.sessions[i].loading
+                        live.app.sessions[i].loaded() && !live.app.sessions[i].loading()
                     }) {
                         pending.mark.record("ready", commits);
                         false

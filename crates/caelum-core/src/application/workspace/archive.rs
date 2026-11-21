@@ -1,5 +1,14 @@
 use super::{Pending, Workspace};
-use crate::application::Command;
+use crate::application::{presentation::now, Command};
+
+const NOTICE_DURATION_MS: u64 = 8_000;
+
+pub(super) struct Notice {
+    index: usize,
+    replacement: Option<usize>,
+    last_tick: u64,
+    remaining: u64,
+}
 
 impl Workspace {
     pub fn archive(&mut self, index: usize, archived: bool) {
@@ -54,8 +63,10 @@ impl Workspace {
         self.remembered_checkouts
             .retain(|_, remembered| *remembered != index);
         self.dismiss_archive(index);
-        if self.archive_replacement == Some(index) {
-            self.archive_replacement = None;
+        if let Some(notice) = &mut self.archive_notice {
+            if notice.replacement == Some(index) {
+                notice.replacement = None;
+            }
         }
         if selected {
             self.select_archive_replacement(index);
@@ -63,36 +74,58 @@ impl Workspace {
     }
 
     pub fn undo_archive(&mut self) {
-        if let Some(index) = self.last_archived {
-            let select =
-                self.archive_replacement.is_some() && self.selected == self.archive_replacement;
-            self.set_archived(index, false, select);
+        if let Some(notice) = &self.archive_notice {
+            let select = notice.replacement.is_some() && self.selected == notice.replacement;
+            self.set_archived(notice.index, false, select);
         }
+    }
+
+    pub fn last_archived(&self) -> Option<usize> {
+        self.archive_notice.as_ref().map(|notice| notice.index)
     }
 
     /// Presentation lifetime starts at successful archival, and pauses during interaction.
     pub fn tick_archive_notice(&mut self, now: u64, engaged: bool) -> bool {
-        let Some(index) = self.last_archived else {
+        let Some(notice) = &mut self.archive_notice else {
             return false;
         };
-        let Some((last, remaining)) = self.archive_clock.as_mut() else {
-            return false;
-        };
-        if !engaged && !self.sessions[index].archiving {
-            *remaining = remaining.saturating_sub(now.saturating_sub(*last));
+        if !engaged && !self.sessions[notice.index].archiving {
+            notice.remaining = notice
+                .remaining
+                .saturating_sub(now.saturating_sub(notice.last_tick));
         }
-        *last = now;
-        if *remaining == 0 {
-            self.dismiss_archive(index);
+        notice.last_tick = now;
+        if notice.remaining == 0 {
+            self.archive_notice = None;
             return true;
         }
         false
     }
 
     pub fn dismiss_archive(&mut self, index: usize) {
-        if self.last_archived == Some(index) {
-            self.last_archived = None;
-            self.archive_clock = None;
+        if self.last_archived() == Some(index) {
+            self.archive_notice = None;
+        }
+    }
+
+    pub(super) fn reset_archive_notice(&mut self, index: usize) {
+        if let Some(notice) = self
+            .archive_notice
+            .as_mut()
+            .filter(|notice| notice.index == index)
+        {
+            notice.last_tick = now();
+            notice.remaining = NOTICE_DURATION_MS;
+        }
+    }
+
+    pub(super) fn set_notice_replacement(&mut self, index: usize, replacement: usize) {
+        if let Some(notice) = self
+            .archive_notice
+            .as_mut()
+            .filter(|notice| notice.index == index)
+        {
+            notice.replacement = Some(replacement);
         }
     }
 
@@ -107,9 +140,12 @@ impl Workspace {
             return false;
         }
         self.archive_notice_revision = revision;
-        self.last_archived = Some(index);
-        self.archive_clock = Some((crate::application::presentation::now(), 8_000));
-        self.archive_replacement = None;
+        self.archive_notice = Some(Notice {
+            index,
+            replacement: None,
+            last_tick: now(),
+            remaining: NOTICE_DURATION_MS,
+        });
         true
     }
 
@@ -185,7 +221,7 @@ impl Workspace {
                 if self.selected == Some(index) {
                     let replacement = self.select_archive_replacement(index);
                     if owns_notice {
-                        self.archive_replacement = Some(replacement);
+                        self.set_notice_replacement(index, replacement);
                     }
                 }
             } else {

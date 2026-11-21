@@ -216,7 +216,6 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             let session = &mut l.app.sessions[index];
             session.title = title.into();
             session.draft = format!("Independent draft for {title}");
-            session.loaded = true;
             if provider == Provider::Codex {
                 session.conversation.working = true;
             } else {
@@ -817,7 +816,6 @@ pub fn design() -> Workspace {
         live.app.sessions[i].last_activity = Some(live.feed.now - (i as u64 + 1) * 900_000);
     }
     let session = &mut live.app.sessions[0];
-    session.loaded = true;
     session.options.model = Some("Test model".into());
     session.options.effort = Some("Medium".into());
     session.draft = sample.draft.clone();

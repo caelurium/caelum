@@ -85,7 +85,7 @@ fn dismissal_recovery_and_late_events_cannot_replace_a_newer_failure_or_turn() {
     .into_iter()
     .enumerate()
     {
-        app.sessions[0].loaded = false;
+        app.sessions[0].invalidate_history();
         let at = 500 + index as u64 * 200;
         app.apply(failed(at));
         assert!(app.sessions[0].conversation.failure.notice().is_some());
@@ -144,7 +144,7 @@ fn unsupported_capability_has_recovery_guidance_and_copyable_provider_details() 
 fn current_history_restores_failures_but_an_obsolete_refresh_cannot_resurrect_them() {
     use caelum_protocol::SessionHistoryPage;
     let mut app = workspace();
-    app.sessions[0].loaded = false;
+    app.sessions[0].invalidate_history();
     let page = || {
         Reply::History(SessionHistoryPage {
             data: vec![

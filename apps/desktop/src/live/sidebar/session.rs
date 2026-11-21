@@ -44,7 +44,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         "Working…"
     } else if error.is_some() {
         "Error"
-    } else if session.loading {
+    } else if session.loading() {
         "Loading…"
     } else if session.unread {
         "Unread"

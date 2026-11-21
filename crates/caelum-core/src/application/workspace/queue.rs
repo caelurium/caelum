@@ -5,7 +5,7 @@ impl Workspace {
     pub fn resume_queue(&mut self, index: usize) {
         self.sessions[index].queue_paused = false;
         self.sessions[index].error = None;
-        if !self.sessions[index].loaded || self.sessions[index].disconnected {
+        if !self.sessions[index].loaded() || self.sessions[index].disconnected {
             self.refresh(index);
         }
         self.advance_queue(index);

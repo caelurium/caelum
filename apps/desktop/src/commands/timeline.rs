@@ -218,14 +218,14 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         format!("{count} prompts · ↑↓ Navigate · ↵ Jump · Esc Close"),
         k,
     ));
-    if session.next_cursor.is_some() {
+    if session.next_cursor().is_some() {
         body = body.child(
-            Button::new(if session.loading {
+            Button::new(if session.loading() {
                 "Loading…"
             } else {
                 "Load earlier prompts"
             })
-            .disabled(session.loading)
+            .disabled(session.loading())
             .on_press(move |s: &mut Workspace| live_mut(s).app.older(index))
             .build(k),
         );

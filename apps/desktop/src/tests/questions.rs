@@ -39,7 +39,6 @@ fn question_dock_restores_the_exact_draft_after_a_failed_answer_and_retry() {
     rt.update(|s, tx| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[0].remote_id = Some("thread".into());
-        l.app.sessions[0].loaded = true;
         l.app.attach(
             0,
             Attachment::new("src/main.rs".into(), "saved context".into(), None, false),
@@ -392,7 +391,6 @@ fn native_side_questions_preserve_main_draft_focus_and_reject_late_answers() {
     rt.update(|s, _| {
         let session = &mut s.live.as_mut().unwrap().app.sessions[1];
         session.remote_id = Some("existing".into());
-        session.loaded = true;
         session.conversation.working = true;
     });
     fill(&mut rt, "live-draft-1", "Keep the main draft");

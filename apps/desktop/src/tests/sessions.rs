@@ -67,7 +67,6 @@ fn session_popover_roves_without_selecting_its_background_owner() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[1].remote_id = Some("background".into());
-        l.app.sessions[1].loaded = true;
         l.app.sessions[0].conversation.working = true;
     });
     let (x, y) = rt.find("session-actions-1").unwrap();
@@ -160,9 +159,9 @@ fn refresh_sessions_button_refreshes_every_open_session() {
     click(&mut rt, "refresh-sessions");
 
     let app = &mut rt.state.live.as_mut().unwrap().app;
-    assert!(app.sessions[0].loading);
-    assert!(app.sessions[1].loading);
-    assert!(app.sessions[2].loading);
+    assert!(app.sessions[0].loading());
+    assert!(app.sessions[1].loading());
+    assert!(app.sessions[2].loading());
     let commands = app.commands();
     assert!(commands.iter().any(|(_, command)| {
         matches!(command, Command::Choices(scope)
@@ -183,7 +182,7 @@ fn sessions_slash_command_opens_provider_history_and_resumes_a_selected_session(
         let app = &mut s.live.as_mut().unwrap().app;
         app.sessions[0].remote_id = Some("old-codex-session".into());
         app.sessions[0].title = "Earlier Codex work".into();
-        app.sessions[0].loaded = false;
+        app.sessions[0].invalidate_history();
     });
     fill(&mut rt, "live-draft-0", "/sessions");
     key(&mut rt, Key::Enter, Mods::default());
@@ -342,7 +341,6 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
             let session = &mut s.live.as_mut().unwrap().app.sessions[0];
             session.scope.provider = provider;
             session.remote_id = Some("remote-session".into());
-            session.loaded = true;
         });
         click(&mut rt, "live-draft-0");
         rt.paste("Provider draft");
@@ -386,7 +384,7 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         });
         assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(1));
         assert_eq!(rt.state.live.as_ref().unwrap().app.sessions.len(), 2);
-        assert_eq!(rt.state.live.as_ref().unwrap().app.last_archived, Some(0));
+        assert_eq!(rt.state.live.as_ref().unwrap().app.last_archived(), Some(0));
         advance(&mut rt, 0.4);
         click(&mut rt, "undo-archive");
         let (request, command) = rt

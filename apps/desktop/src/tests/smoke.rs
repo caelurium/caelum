@@ -49,7 +49,7 @@ fn real_provider_discovery_and_history_smoke() {
                 "history failed: {:?}",
                 session.error
             );
-            if session.loaded && !session.loading {
+            if session.loaded() && !session.loading() {
                 assert!(
                     !session.conversation.entries.is_empty(),
                     "choose a project with nonempty history"

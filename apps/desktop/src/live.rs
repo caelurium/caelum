@@ -424,7 +424,7 @@ impl Live {
             panel.sync(&self.app);
         }
         changed |= self.tick_archive(caelum_core::application::presentation::now());
-        if self.app.last_archived.is_some() {
+        if self.app.last_archived().is_some() {
             tx.wake_after(std::time::Duration::from_millis(100));
         }
         if self.evaluation {

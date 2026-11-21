@@ -7,7 +7,7 @@ impl Workspace {
     pub fn will_queue(&self, index: usize) -> bool {
         let session = &self.sessions[index];
         session.working()
-            || session.loading
+            || session.loading()
             || !session.queue.is_empty()
             || !session.inbox.items.is_empty()
             || self

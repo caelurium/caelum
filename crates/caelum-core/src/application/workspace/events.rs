@@ -195,8 +195,12 @@ impl Workspace {
                 continue;
             }
             if disconnected {
+                let first_disconnect = !session.disconnected;
                 let recover =
-                    !session.disconnected && (session.working() || self.selected == Some(index));
+                    first_disconnect && (session.working() || self.selected == Some(index));
+                if first_disconnect {
+                    session.cancel_history_read();
+                }
                 session.revision += 1;
                 session.conversation.working = false;
                 session.queue_paused = true;
@@ -205,7 +209,7 @@ impl Workspace {
                     "Provider disconnected. Refresh this session to reconnect and recover history."
                         .into(),
                 );
-                if recover && !session.submitting && !session.loading {
+                if recover && !session.submitting && !session.loading() {
                     completed.push(index);
                 }
                 continue;
@@ -322,7 +326,7 @@ impl Workspace {
             {
                 session.queue_paused = true;
             }
-            if was_working && !session.working() && session.loaded {
+            if was_working && !session.working() && session.loaded() {
                 completed.push(index);
             }
             if method == "error" || method == "permission.reply.failed" {
