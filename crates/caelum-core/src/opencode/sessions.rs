@@ -160,8 +160,7 @@ impl OpenCodeProvider {
         } else {
             None
         };
-        // Include the initial variant atomically. Switching it before the first
-        // prompt creates an effort-update history item on the provider side.
+
         let model = model
             .or(fallback.as_deref())
             .map(|model| model_ref(model, effort))
@@ -358,7 +357,7 @@ impl OpenCodeProvider {
             ));
         }
         let route = format!("/api/session/{id}");
-        // Recheck provider-owned queues and background work in addition to the UI's admission.
+
         if !self.inbox(path, id)?.is_empty() || !self.background_shells(path, id)?.is_empty() {
             return Err(OpenCodeError::Protocol(
                 "Finish queued prompts and background commands before rewinding.".into(),
@@ -443,8 +442,6 @@ impl OpenCodeProvider {
                 Some(total)
             });
         Ok(SessionDetails {
-            // VCS metadata belongs to the directory, not this session. The
-            // desktop supplies the branch recorded during session execution.
             branch: None,
             branches: Vec::new(),
             branch_is_current: false,
@@ -540,7 +537,7 @@ impl OpenCodeProvider {
         session_id: &str,
     ) -> Result<OpenCodeSession, OpenCodeError> {
         let mut session = self.session_metadata(server, project, session_id)?;
-        // Only callers consuming activity need the runtime's fresh active map.
+
         session.is_working = server.active_sessions()?.contains(&session.id);
         Ok(session)
     }

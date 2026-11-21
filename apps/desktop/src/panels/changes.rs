@@ -192,8 +192,7 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
             .on_visible_file(move |s, index| {
                 if review {
                     let l = s.live.as_mut().unwrap();
-                    // A partial refresh page must not replace the file we are
-                    // restoring with its temporary first visible file.
+
                     if l.panels.review_restore.is_none() {
                         l.panels.review_file =
                             l.panels.diff.files().get(index).map(|f| f.path().into());

@@ -1,6 +1,5 @@
 name: CI
 on:
-  # Main commits are checked by the release workflow's reusable CI run.
   pull_request:
   workflow_call:
     inputs:
@@ -176,7 +175,6 @@ jobs:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
         with:
-          # PR and release packaging use the same dependency cache.
           shared-key: aarch64-apple-darwin-build
       - name: Build and verify native app, DMG and CLI archive
         env:
@@ -208,7 +206,6 @@ jobs:
           retention-days: 14
   linux-desktop:
     name: Linux desktop
-    # Recovery of historical macOS-only tags omits Linux; every PR includes it.
     if: ${{ github.event_name == 'pull_request' || inputs.linux_desktop }}
     uses: ./.github/workflows/linux-desktop.yml
     with:

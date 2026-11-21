@@ -28,7 +28,6 @@ fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
         let count = app.sessions.len();
         app.commands();
 
-        // Discovered sessions have never been selected, so there is no remembered entry.
         app.select_project("/main");
         assert_eq!(app.selected, Some(recent));
         assert_eq!(app.sessions.len(), count);
@@ -37,7 +36,6 @@ fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
             matches!(command, Command::Resume(key) if key.id == "recent" && key.scope.provider == provider)
         }));
 
-        // An empty main-checkout placeholder must not obscure the project's real sessions.
         app.new_session(scope(provider, "/main"));
         app.select(other);
         let count = app.sessions.len();
@@ -45,7 +43,6 @@ fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
         assert_eq!(app.selected, Some(recent));
         assert_eq!(app.sessions.len(), count);
 
-        // Recall the user's chosen session ahead of newer activity in the same group.
         app.select(older);
         app.select(other);
         app.select_project("/main");
@@ -69,7 +66,6 @@ fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
         }
         assert_eq!(app.sessions[other].draft, "Other project's draft");
 
-        // A genuinely empty project still gets one reusable draft in its own checkout.
         app.select_project("/empty");
         let empty = app.selected.unwrap();
         assert_eq!(app.sessions[empty].scope.project, "/empty");
@@ -340,7 +336,6 @@ fn closed_projects_reject_late_open_and_worktree_discovery_without_changing_navi
         .iter()
         .any(|(_, c)| matches!(c, Command::Open(_) | Command::List(_))));
 
-    // Creation may already have handed off to Open when the project is closed.
     app.open_project("/main".into());
     let open = app
         .commands()
@@ -392,7 +387,6 @@ fn closed_projects_reject_late_open_and_worktree_discovery_without_changing_navi
     assert_eq!(app.projects.len(), 1);
     assert_eq!(app.selected, Some(1));
 
-    // A pending background Undo cannot select a project after it was closed.
     app.projects.push(ProjectInfo {
         path: "/main".into(),
         name: "Main".into(),

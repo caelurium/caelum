@@ -65,7 +65,6 @@ class Handler(BaseHTTPRequestHandler):
                         os.unlink(marker)
                         for name, kind in [("frm_external", "form.replied"), ("frm_cancelled", "form.cancelled")]:
                             FORMS.pop(name, None)
-                            # No location: snapshots/created events establish ownership.
                             event = {"type": kind, "data": {"id": name, "sessionID": "ses_fake", "answer": {"q0": ["external"]}}}
                             self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
                     self.wfile.write(b": keepalive\n\n")

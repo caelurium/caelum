@@ -77,14 +77,13 @@ impl Workspace {
                 if open {
                     self.check_discovered_move(i, destination, self.next_request + 1);
                 } else {
-                    // Supersede an intermediate target even if its rebind is waiting on a mutation.
                     let source_open = self.project_is_open(&session.scope.project);
                     if session.relocation.pending() {
                         self.sessions[i].relocation = Relocation::Settled(self.next_request);
                         self.pending.retain(|_, p| !matches!(p, Pending::Resume(j, _) | Pending::History(j, _, _) if *j == i));
                         self.sessions[i].loading = false;
                     }
-                    // The source resume checks Git before opening a linked checkout.
+
                     if source_open {
                         self.refresh(i);
                     }
@@ -100,8 +99,7 @@ impl Workspace {
 
     pub(super) fn check_discovered_move(&mut self, index: usize, destination: &str, observed: u64) {
         let session = &self.sessions[index];
-        // Concurrent project lists are ordered by when they started, not by when
-        // their verification was scheduled. A newer target supersedes either phase.
+
         let barrier = match &session.relocation {
             Relocation::Checking { observed, .. } => *observed,
             other => other.request(),
@@ -166,7 +164,6 @@ impl Workspace {
                         && !change.linked_worktree =>
                 {
                     if destination == &from.scope.project {
-                        // It moved back before an intermediate checkout could be adopted.
                         self.sessions[index].relocation = Relocation::Settled(request);
                         self.refresh(index);
                     } else {
@@ -223,8 +220,7 @@ impl Workspace {
         let Relocation::Verified { change, request } = &self.sessions[index].relocation else {
             return;
         };
-        // Local operations keep their original owner until they finish. This
-        // also covers mutations waiting for the durable submission snapshot.
+
         if self
             .pending
             .values()
@@ -257,8 +253,7 @@ impl Workspace {
             })
             .to_owned();
         let source_open = self.project_is_open(&change.from.scope.project);
-        // Completions from the previous checkout cannot change the new scope's
-        // history, activity, inbox, or branch metadata, including error replies.
+
         self.pending
             .retain(|_, pending| !pending.location_read(index));
         let session = &mut self.sessions[index];

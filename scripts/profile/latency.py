@@ -45,7 +45,6 @@ def summarize(records):
             return
         metrics[name].append((end - start) / 1000)
 
-    # Thread scheduling can put records on the writer queue out of timestamp order.
     for row in sorted((r for r in records if "at_us" in r), key=lambda r: r["at_us"]):
         kind, phase, label = row["kind"], row["phase"], row["label"]
         at = row["at_us"]
@@ -86,7 +85,6 @@ def summarize(records):
             start = tools.pop(tool, None)
             if start:
                 elapsed("tool.observed_call_to_result", start[0], at)
-                # Provider timestamps are milliseconds; never mix them with local time.
                 if start[1] and row["value"]:
                     elapsed("tool.provider_call_to_result", start[1] * 1000, row["value"] * 1000)
                 last_tool[owner] = at

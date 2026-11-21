@@ -17,8 +17,6 @@ pub(super) struct Inputs {
     bytes: usize,
 }
 
-// These are the inputs to Tool::from_entry's patch and paths projection. Cache
-// negative results as well; shell output and ordinary text need no preview work.
 struct Source {
     position: usize,
     kind: EntryKind,
@@ -95,8 +93,7 @@ impl Live {
                 .map(|source| source.position);
             let entry = self.app.sessions.get(*index).and_then(|session| {
                 let entries = &session.conversation.entries;
-                // Older history can prepend entries; live/history reconciliation
-                // can also replace or remove them. Never trust a cached slot's ID.
+
                 position
                     .and_then(|i| entries.get(i).filter(|e| &e.id == id).map(|e| (i, e)))
                     .or_else(|| entries.iter().enumerate().find(|(_, e)| &e.id == id))
@@ -118,8 +115,7 @@ impl Live {
                     &tool.patch,
                 );
             }
-            // Oversized inputs remain correct through the uncached path. Keep
-            // empty patch results too, so incomplete arguments aren't reparsed.
+
             self.patch_inputs.remember(key, position, entry);
         }
         if self.patches.len() > MAX_ENTRIES {

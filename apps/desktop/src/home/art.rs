@@ -49,7 +49,6 @@ impl Motion {
         let phase = match *self {
             Self::Rest => now.rem_euclid(PERIOD),
             Self::Orbit { phase, last } => {
-                // Hidden windows do not draw. Resume gently after a long gap.
                 (phase + (now - last).clamp(0.0, 0.1)).rem_euclid(PERIOD)
             }
         };
@@ -68,8 +67,6 @@ impl Compositor {
     fn prepare(&mut self, f: &Frame<'_, Workspace>) {
         let key = f.device_key();
         if self.prepared.as_ref().is_none_or(|(old, _)| *old != key) {
-            // Only the offline fixture waits. Native windows show the cached PNG
-            // while shader compilation and texture upload run off the UI thread.
             let preparation = if f.rt.state.live.as_ref().is_some_and(|l| l.fixture) {
                 Preparation::Ready(Box::new(gpu::Resources::new(f.device, f.queue, f.format)))
             } else {

@@ -10,8 +10,7 @@ pub(super) fn tool(entry: &mut Entry) {
     if entry.name != "subagent" || child_id(entry).is_none() {
         return;
     }
-    // The tool can finish as soon as the child is launched. That is not the
-    // subagent's completion; the later synthetic report finishes the task.
+
     if entry.error.is_empty() && entry.metadata["status"] == "running" {
         entry.complete = false;
         entry.status = "running".into();
@@ -88,8 +87,7 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
             }
         }
     }
-    // Retain the report's identity on its task. An older history page can still
-    // contain another handoff from that run after the synthetic row is consumed.
+
     let mut reports: Vec<_> = entries
         .iter()
         .enumerate()
@@ -144,8 +142,7 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
         if let Some(ended) = ended {
             task.metadata["ended"] = ended.into();
         }
-        // A follow-up to an already-running child joins that run. Finish the
-        // earlier pending handoffs too, keeping the report on its latest task.
+
         for earlier in joined.into_iter().filter(|&i| i != call) {
             let task = &mut entries[earlier];
             if ended
@@ -155,8 +152,6 @@ pub(super) fn reconcile(entries: &mut Vec<Entry>) {
                 continue;
             }
             if task.complete {
-                // A late earlier report can refine a handoff previously joined
-                // to a later run, but must not replace a task's own result.
                 let newer_join = task.background
                     && task.error.is_empty()
                     && !task.metadata["subagentReport"].is_string()

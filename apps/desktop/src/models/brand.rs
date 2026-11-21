@@ -38,8 +38,6 @@ impl Brand {
     }
 
     pub(super) fn model(id: &str, name: &str, connection: &str) -> Option<Self> {
-        // Inspect the model family before the gateway serving it. Keep unknown
-        // custom catalogues under their actual connection instead of guessing.
         for value in [id.rsplit('/').next().unwrap_or(id), name] {
             let value = value.to_ascii_lowercase();
             let brand = if value.starts_with("claude") {
@@ -100,8 +98,6 @@ impl Brand {
     }
 
     pub(super) fn glyph(self) -> &'static Icon {
-        // Rune reads the path elements directly, so its view must match the
-        // source SVG's viewBox (the SVG's width/height are only display sizes).
         macro_rules! mark {
             ($name:literal, $view:literal) => {
                 &Icon {

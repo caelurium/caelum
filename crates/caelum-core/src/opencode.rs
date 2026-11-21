@@ -141,8 +141,7 @@ impl OpenCodeProvider {
         )];
         let models = server.request_json(Method::GET, "/api/model", &query, None)?;
         let agents = server.request_json(Method::GET, "/api/agent", &query, None)?;
-        // Provider names include custom endpoints and routed services. Keep the
-        // native provider ID as a fallback if this optional metadata is unavailable.
+
         let providers = server
             .request_json(Method::GET, "/api/provider", &query, None)
             .ok();
@@ -499,8 +498,7 @@ impl OpenCodeProvider {
                 .into_iter()
                 .filter_map(|path| {
                     let server = servers.remove(&path)?.retire();
-                    // Invalidate recovery and clear forms before a replacement
-                    // slot can be registered. No provider I/O holds the map.
+
                     self.inner
                         .questions
                         .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
@@ -557,7 +555,7 @@ fn select_model(
     let selected_model = selected_model.or(fallback.as_deref()).ok_or_else(|| {
         OpenCodeError::Protocol("no model available for the selected effort".into())
     })?;
-    // Changing models resets the variant; an empty effort explicitly selects the base model.
+
     let selected_effort = effort.unwrap_or_else(|| {
         if model.is_some_and(|model| session.model.as_deref() != Some(model)) {
             ""

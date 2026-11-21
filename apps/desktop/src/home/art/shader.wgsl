@@ -33,7 +33,6 @@ fn srgb(rgb: vec3<f32>) -> vec3<f32> {
 }
 
 fn glyph(index: u32, within: vec2<f32>) -> f32 {
-    // Half-texel padding keeps filtering within this glyph's cell.
     let at = vec2<f32>(f32(index) * 16.0, 0.0) + clamp(within * vec2<f32>(16.0, 28.0), vec2<f32>(0.5), vec2<f32>(15.5, 27.5));
     return textureSampleLevel(glyphs, glyph_sampler, at / vec2<f32>(160.0, 28.0), 0.0).r;
 }
@@ -55,8 +54,6 @@ fn ink(at: vec2<i32>, within: vec2<f32>, phase: f32, background: vec3<f32>) -> v
     }
     var energy = 1.0;
     if u.animation.y > 0.5 {
-        // Independent, slow changes in character brightness. Geometry and
-        // glyph density stay fixed, so the disc reads as a steady orbit.
         let seed = hash(vec2<u32>(at));
         let offset = f32(seed & 1023u) / 1024.0 * 6.2831853;
         energy += 0.20 * sin(phase * f32(3u + ((seed >> 10u) & 3u)) + offset)
@@ -71,15 +68,12 @@ fn sky(grid: vec2<f32>, phase: f32) -> vec3<f32> {
     if any(at < vec2<i32>(0)) || any(at >= vec2<i32>(300, 100)) {
         return background;
     }
-    // Sparse, fixed stars use the same ASCII atlas. Most are tiny points;
-    // occasional plus signs pick out a brighter star in the distance.
     let tile = vec2<u32>(at) / vec2<u32>(8u);
     let seed = hash(tile);
     let star = tile * vec2<u32>(8u) + vec2<u32>((seed >> 8u) & 7u, (seed >> 16u) & 7u);
     if (seed & 255u) >= 56u || any(vec2<u32>(at) != star) {
         return background;
     }
-    // Stars sit behind the artwork and never fill the black hole's void.
     let uv = (vec2<f32>(star) + 0.5) / vec2<f32>(300.0, 100.0);
     if length((uv - vec2<f32>(0.52, 0.46)) / vec2<f32>(0.18, 0.20)) < 1.0
         || textureLoad(cells, at, 0).a != 0u {
@@ -104,17 +98,12 @@ fn sky(grid: vec2<f32>, phase: f32) -> vec3<f32> {
     let background = sky(grid, phase);
     var colour: vec3<f32>;
     if u.animation.y > 0.5 {
-        // The two sides of the disc stream in opposite directions. Integer cell
-        // travel and whole shimmer frequencies keep the clock wrap continuous.
         let travel = clamp(43.0 - floor(grid.y), -16.0, 16.0) * 6.0;
         let shift = u.animation.x * travel;
         let moving = grid - vec2<f32>(shift, 0.0);
         let within = fract(moving);
         let source = floor(moving) + vec2<f32>(shift, 0.0);
         let at = vec2<i32>(floor(source));
-        // Read the supplied density and colour at each moving character's new
-        // position. Interpolate on that same glyph footprint, keeping the disc
-        // and void in place without double-exposed or rotating characters.
         colour = mix(ink(at, within, phase, background), ink(at + vec2<i32>(1, 0), within, phase, background), fract(source.x));
     } else {
         colour = ink(vec2<i32>(floor(grid)), fract(grid), 0.0, background);

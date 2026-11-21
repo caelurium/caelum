@@ -70,7 +70,7 @@ pub(crate) fn poll(live: &mut Live, tx: &mut Tx) -> bool {
         if matches!(live.app.services.updater.phase, Phase::Idle) {
             let job = live.app.services.updater.startup();
             live.app.task(Task::Update(job));
-            // The regular command drain already ran in this poll.
+
             tx.wake_after(std::time::Duration::ZERO);
         }
     }

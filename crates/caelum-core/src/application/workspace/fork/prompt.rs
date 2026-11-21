@@ -71,8 +71,6 @@ pub(super) fn recover(provider: Provider, text: &str, user: &Value) -> Result<Dr
         );
     }
     Ok(Draft {
-        // Keep original Markdown source when possible; never place provider-only
-        // reminder envelopes back into the user's editable composer.
         text: if text.contains("<system-reminder>") {
             presentation::visible_text(text)
         } else {

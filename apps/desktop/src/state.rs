@@ -207,8 +207,6 @@ impl Workspace {
     }
 }
 
-// The frame clock is virtual in headless runs, so the same interaction is reproducible.
-// Advance every session, including those currently hidden behind another selection.
 pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
     if let Some(live) = &mut s.live {
         if !s.sidebar.is_open() {

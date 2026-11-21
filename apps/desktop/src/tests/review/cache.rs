@@ -35,7 +35,7 @@ fn cached_reviews_show_files_without_presenting_old_checks_as_current() {
         ] {
             assert!(rt.find(key).is_none(), "{key}");
         }
-        // The extra cache label must fit with the inspector at minimum size.
+
         rt.update(|s, _| s.inspector.set_open(true));
         advance(&mut rt, 0.3);
         for key in ["review-cached", "review-refresh", "review-github"] {
@@ -53,7 +53,7 @@ fn cached_reviews_show_files_without_presenting_old_checks_as_current() {
         advance(&mut rt, 0.3);
         let before = diff_offset(&rt);
         assert!(before > 900.0);
-        // Refresh metadata in place: unchanged commits keep the mounted diff.
+
         rt.update(|s, _| {
             let l = s.live.as_mut().unwrap();
             let owner = l.panels.review.clone().unwrap();

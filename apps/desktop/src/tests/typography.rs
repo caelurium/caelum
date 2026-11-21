@@ -4,8 +4,7 @@ use rune::{Span, TextStyle, text::TextSystem};
 #[test]
 fn native_font_selection_keeps_faces_wrapping_and_monospace_fallbacks() {
     let app = spec();
-    // Exercise the app's real family list at Retina scale, including fonts that
-    // a generic-only list reaches through Rune's symbol/script fallbacks.
+
     let _fonts = rune::text::with_families(app.families.0, app.families.1);
     let mut previous = TextSystem::new(&[], ("system-ui", "ui-monospace"));
     let mut current = TextSystem::new(&[], app.families);
@@ -52,10 +51,7 @@ fn native_font_selection_keeps_faces_wrapping_and_monospace_fallbacks() {
                                 a.font().data.as_ref() == b.font().data.as_ref(),
                                 "{context}: font face"
                             );
-                            // Resolving SF before shaping also supplies its named
-                            // italic weight's hidden axes. Upright and monospace
-                            // instances are unchanged; all line geometry above
-                            // must still agree, including italic text.
+
                             if !italic || a.text_range().start >= code {
                                 assert_eq!(
                                     a.normalized_coords(),

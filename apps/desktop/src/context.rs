@@ -166,8 +166,6 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     if let Some((origin, scope, waited)) = l.context.paste.take()
         && scope == Scope::of(l)
     {
-        // Clipboard requests capture the presented input, so wait for the menu's
-        // closing commit to return focus before using Rune's guarded paste route.
         if l.focus_key.as_deref() == Some(&origin) {
             tx.request_paste();
         } else if !waited {
@@ -254,8 +252,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         }
         menu = menu.item(row);
     }
-    // The source is already mounted in a virtual row or pane. Return focus there,
-    // rather than to the synthetic trigger that Menu normally wraps.
+
     menu.build(k, layers);
     let surface = layers
         .pop()
@@ -629,8 +626,7 @@ pub fn session(el: El, index: usize) -> El {
                     .enabled(!crate::live::archive_disabled(live(s), index)),
             );
         }
-        // Restoring the row itself would follow the list's selected session.
-        // Its action button keeps keyboard focus on the right-clicked owner.
+
         show(
             s,
             at,

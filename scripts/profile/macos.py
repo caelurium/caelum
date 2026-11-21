@@ -37,8 +37,6 @@ def processes():
 
 
 def coalition(pid):
-    # WebKit XPC helpers have PPID 1. LaunchServices' resource coalition, rather
-    # than the process name or launch time, associates them with the right app.
     text = output("lsappinfo", "info", "-only", "LSApplicationMemberCoalitionIDKey", "-app", str(pid))
     match = re.search(r'"LSApplicationMemberCoalitionIDKey"=(\d+)', text)
     return int(match[1]) if match else None

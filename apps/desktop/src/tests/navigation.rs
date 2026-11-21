@@ -52,7 +52,7 @@ fn returning_to_a_project_restores_its_active_worktree_session() {
                 click(&mut rt, &crate::code_view::source_key("/other", "project"));
                 reveal(&mut rt, &format!("live-session-{other_session}"));
                 click(&mut rt, &format!("live-session-{other_session}"));
-                // Settle fixture reads so the return navigation can issue a fresh refresh.
+
                 rt.update(|s, _| {
                     let app = &mut s.live.as_mut().unwrap().app;
                     for (id, command) in app.commands() {
@@ -123,8 +123,7 @@ fn presented_focus_tracks_pointer_tab_accessibility_and_removal() {
     };
     click(&mut rt, "live-draft-0");
     check(&rt);
-    // Moving between controls (including controls outside the editor) must be
-    // observed even though no application handler changes its state.
+
     for _ in 0..40 {
         key(&mut rt, Key::Tab, Mods::default());
         advance(&mut rt, 0.05);

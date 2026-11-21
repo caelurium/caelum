@@ -118,7 +118,7 @@ fn desktop_shutdown_saves_the_latest_editor_and_releases_the_workspace_lock() {
         provider: Provider::Codex,
     });
     let mut saved = app.snapshot();
-    saved.selected = None; // Restore offline drafts without contacting a provider.
+    saved.selected = None;
     saved.sessions[0].draft = "saved draft".into();
     store.save(&saved).unwrap();
     let (send, receive) = mpsc::channel();
@@ -224,7 +224,7 @@ fn project_links_wait_for_restore_and_keep_drafts_when_the_app_is_running() {
         &mut rune::Tx::default(),
     );
     assert!(state.live.as_ref().unwrap().app.error.is_some());
-    // This reducer-only instance must not try to write the sentinel path on drop.
+
     let live = state.live.as_mut().unwrap();
     live.app = Application::default();
     live.drafts.clear();

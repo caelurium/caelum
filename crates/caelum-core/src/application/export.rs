@@ -90,7 +90,7 @@ pub(super) fn save(
             );
         }
     }
-    // Do not truncate an existing destination on provider, format, or write failure.
+
     let write = || -> std::io::Result<()> {
         let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap_or(Path::new(".")))?;
         let mut out = std::io::BufWriter::new(file.as_file_mut());

@@ -10,14 +10,13 @@ impl ProviderRuntime {
         if from.scope.provider != Provider::OpenCode {
             return Err("Invalid OpenCode relocation target".into());
         }
-        // A list or SSE event is only a hint. Ask the destination for this exact ID;
-        // the old directory may have been renamed or deleted since the last launch.
+
         let (project, archived) = self
             .opencode
             .session_location(destination, &from.id)
             .map_err(|e| e.to_string())?;
         if project.path != destination {
-            return Ok(Reply::Done); // The listing predates another move.
+            return Ok(Reply::Done);
         }
         if from.scope.project != destination {
             self.opencode
@@ -55,8 +54,7 @@ impl ProviderRuntime {
                     .opencode
                     .session_location(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string())?;
-                // Git, rather than an ID cached by either client, establishes
-                // that this is another checkout of the same scoped project.
+
                 if project.path == key.scope.project {
                     return Err("OpenCode session moved during refresh; refresh again".into());
                 }
@@ -70,8 +68,7 @@ impl ProviderRuntime {
                             .iter()
                             .any(|tree| tree.available && tree.project.path == project.path)
                     });
-                // No history or mutation is sent against the stale scope. The
-                // workspace first adopts the new checkout, then resumes there.
+
                 Ok(Reply::SessionMoved(OpenCodeMove {
                     from: key.clone(),
                     project,

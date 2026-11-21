@@ -63,9 +63,7 @@ fn files(
         let output = checked_output(command, Duration::from_secs(10))?;
         Ok(serde_json::from_slice(&output.stdout)?)
     };
-    // Files are read from the canonical PR, never the local working-tree diff.
-    // Details already supplied the expected base/head. Validate after reading
-    // each page so a changed revision cannot enter the review or its cache.
+
     let files: Vec<GitHubPullRequestFile> = serde_json::from_value(api(&format!(
         "{endpoint}/files?per_page={PAGE_SIZE}&page={page}"
     ))?)?;

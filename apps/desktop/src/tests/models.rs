@@ -52,7 +52,7 @@ fn company_search_and_connection_filters_keep_duplicate_model_identity() {
         element(&rt, "model-result-count").text.as_deref(),
         Some("1 model")
     );
-    // Navigation elsewhere must not redirect this captured picker selection.
+
     rt.update(|s, _| s.live.as_mut().unwrap().app.select(0));
     key(&mut rt, Key::Enter, Mods::default());
     let app = &rt.state.live.as_ref().unwrap().app;

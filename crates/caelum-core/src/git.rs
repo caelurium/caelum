@@ -424,9 +424,7 @@ fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError> {
             .map(|position| offset + position)
             .ok_or(GitError::MalformedStatus)?;
         let record = &output[offset..end];
-        // Porcelain v2 includes the index object ID, so staging another version
-        // of an already-staged file is observable even when its XY code is unchanged.
-        // Renames are disabled above; paths may contain spaces and newlines.
+
         let (xy, path) = match record.first() {
             Some(b'?') if record.starts_with(b"? ") => (&b"??"[..], &record[2..]),
             Some(b'1' | b'u') => {

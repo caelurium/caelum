@@ -30,7 +30,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
             self.end_headers()
-            # Headers alone are not a subscription acknowledgement.
             time.sleep(0.1)
             subscribed = True
             self.wfile.write(b'data: {"type":"server.connected","data":{}}\n\n')

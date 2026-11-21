@@ -40,7 +40,6 @@ def run(package: Path, app: Path | None, root: Path) -> None:
                    "CAELUM_STATE": str(home / "workspace.json"), "PATH": f"{providers}:{os.environ['PATH']}",
                    "CAELUM_UPDATE_ROOT": str(root), "CAELUM_UPDATE_TARGET": str(target),
                    "CAELUM_UPDATE_ASSET": asset.name}
-    # Compile using the caller's Cargo home/toolchain, then isolate only the test/app.
     built = subprocess.check_output(["cargo", "test", "--locked", "--timings", "-p", "caelum-core", "--lib", "--no-run", "--message-format=json"], text=True)
     executables = [record["executable"] for line in built.splitlines()
                    if (record := json.loads(line)).get("executable") and record.get("profile", {}).get("test")]

@@ -356,7 +356,7 @@ fn title_cadence_survives_restart_and_old_snapshots_default_to_zero() {
     succeeded(&mut app, index, 1);
     succeeded(&mut app, index, 2);
     let mut saved = serde_json::to_value(app.snapshot()).unwrap();
-    // Snapshots from manual title refreshes may still contain the old cooldown.
+
     saved["sessions"][index]["title_refreshed_at"] = json!(1_000);
     let snapshot: Snapshot = serde_json::from_value(saved.clone()).unwrap();
     let mut restored = Workspace::default();

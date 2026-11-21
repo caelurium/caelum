@@ -16,7 +16,6 @@ permissions:
   contents: read
 
 concurrency:
-  # Version-bump pushes must not replace the original main release run.
   group: release-${{ github.workflow }}-${{ inputs.tag || (github.event.head_commit.author.name == 'github-actions[bot]' && github.sha) || github.ref }}
   cancel-in-progress: false
 

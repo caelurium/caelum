@@ -129,8 +129,6 @@ impl Workspace {
                 .get(&session.scope.project)
                 .and_then(|checkout| checkout.git.as_ref())
             {
-                // Active rows describe where the next prompt runs. A known
-                // detached HEAD must not fall back to a recorded branch.
                 return git.branch.as_deref();
             }
         }

@@ -32,7 +32,6 @@ impl CheckoutWatch {
                     ) =>
                 {
                     for path in event.paths {
-                        // Git's own reads create index locks; refreshing those would loop.
                         if path.components().any(|c| c.as_os_str() == ".git")
                             && path
                                 .file_name()
@@ -56,7 +55,7 @@ impl CheckoutWatch {
                         }
                     }
                 }
-                // An overflow/error invalidates the snapshot as well.
+
                 Err(_) => dirty.extend(roots.values().flatten().cloned()),
                 _ => {}
             }

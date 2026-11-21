@@ -54,8 +54,6 @@ pub fn search_ranges(text: &str, query: &str) -> Vec<std::ops::Range<usize>> {
         .unwrap_or_default()
 }
 
-// Keep literal code and whitespace intact. Only presentation markup outside code
-// is hidden; in particular an internal reminder must never trigger an image read.
 fn markdown_parts(text: &str, streaming: bool) -> (String, Vec<Media>) {
     let mut fence: Option<(char, usize)> = None;
     let mut reminder = false;
@@ -797,7 +795,6 @@ impl MergeReadiness {
     }
 }
 
-// GitHub timestamps are UTC RFC3339. Convert the civil date without local timezones.
 fn timestamp(value: &str) -> Option<u64> {
     let date = value.get(..10)?;
     let parts: Vec<i64> = date

@@ -88,7 +88,6 @@ fn clicked(s: &mut Workspace, target: Option<SessionKey>) {
             Some(target.map_or(Activation::App, Activation::Session));
     }
     if let Some(handle) = &s.handle {
-        // This also recreates a closed window and restores a minimized one.
         handle.open();
     }
 }

@@ -54,8 +54,7 @@ impl History {
     pub fn update(&mut self, data: &[Value], older: bool) -> BTreeMap<String, (u64, u64)> {
         let incoming: Vec<_> = data.iter().filter_map(Message::read).collect();
         let ids: HashSet<_> = incoming.iter().map(|message| message.id.as_str()).collect();
-        // Match the transcript's ordered page merge, including overlapping and
-        // delayed refreshes. IDs and timestamps alone need not sort by turn.
+
         let insertion = self
             .messages
             .iter()
@@ -97,15 +96,12 @@ impl History {
         for message in &self.messages {
             match &message.kind {
                 Kind::User => {
-                    // Steering input is still part of the original execution.
                     if !in_turn {
                         start = message.created;
                         in_turn = true;
                     }
                 }
                 Kind::Assistant(outputs) => {
-                    // A page can begin midway through a turn. Later steering
-                    // must not stand in for its still-unloaded original prompt.
                     in_turn = true;
                     for id in outputs {
                         last_output = Some(id);

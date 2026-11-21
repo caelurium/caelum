@@ -26,8 +26,6 @@ fn idle_polling_profile() {
         l.evaluation = false;
         l.fixture = true;
         if tools {
-            // Eight mounted rows at the end of a 2,000-entry history: four
-            // patch inputs (100 changed lines) and four 64 KiB shell outputs.
             let c = &mut l.app.sessions[0].conversation;
             let seed = c.entries.last().unwrap().clone();
             for i in 0..8 {
@@ -83,7 +81,6 @@ fn idle_polling_profile() {
         let mut persistence = Vec::new();
         for _ in 0..360 {
             if streaming {
-                // Changes to background transcript output are not persisted.
                 for session in &mut l.app.sessions[1..6] {
                     session
                         .conversation
@@ -110,8 +107,7 @@ fn idle_polling_profile() {
             "{}",
             json!({"workload":label,"poll":stats(polls),"persistence":stats(persistence)})
         );
-        // Prevent Live::drop from flushing the synthetic store to disk.
-        // All outstanding commands above were handled synchronously in memory.
+
         l.app = Application::default();
         l.drafts.clear();
     }

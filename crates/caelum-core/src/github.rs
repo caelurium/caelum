@@ -49,8 +49,6 @@ fn query_details(
     url: &str,
     timeout: Duration,
 ) -> Result<GitHubPullRequestDetails, GitHubError> {
-    // Use the URL returned by discovery, so forks and different worktrees cannot
-    // accidentally resolve the same PR number in a different repository.
     pull_request_url(url)?;
     let project = Project::open(project_path)?;
     let mut command = github_command(executable, project.path());
@@ -64,8 +62,7 @@ fn query_details(
         Some(&details.pull_request.url),
         timeout,
     )?;
-    // Reviews, persisted associations and file pages are keyed by the requested
-    // URL. Keep that identity after verifying the redirect so caches still join.
+
     url.clone_into(&mut details.pull_request.url);
     Ok(details)
 }
@@ -107,8 +104,7 @@ fn merge_request(
         GitHubMergeMethod::Squash => "squash",
         GitHubMergeMethod::Rebase => "rebase",
     };
-    // The API confirms whether a merge actually happened and enforces repository
-    // rules. Pin it to the displayed head, including when the branch is updated.
+
     command.args([
         "api",
         "--hostname",
@@ -174,8 +170,7 @@ fn update_branch_request(
         "-f",
         &format!("expected_head_sha={head_oid}"),
     ]);
-    // GitHub merges the latest base into the remote PR branch asynchronously.
-    // A successful request is only acceptance; the UI waits for a new head.
+
     checked_output(command, timeout)?;
     Ok(())
 }
@@ -377,8 +372,6 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    // Allow cold executable startup under parallel load. The hung-process test
-    // uses its own short deadline to check timeout and cleanup behavior.
     const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
     struct Fixture(PathBuf);

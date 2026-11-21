@@ -44,8 +44,6 @@ def release_has_linux(tag: str) -> bool:
     if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", tag):
         raise SystemExit(f"Invalid release tag: {tag!r}")
     path = "scripts/release/asset-layout.json"
-    # A missing tag is an error; only a successfully inspected tree without the
-    # manifest is a legacy macOS-only release.
     present = subprocess.check_output(["git", "ls-tree", "--name-only", tag, "--", path], text=True).strip()
     if not present:
         return False
@@ -60,8 +58,6 @@ def gh(*args: str) -> str:
 
 
 def release_for_tag(repository: str, tag: str) -> dict | None:
-    # REST's tag endpoint cannot find drafts. Resolve the pending tag through
-    # GraphQL, then use REST for asset digests and the publication endpoint.
     owner, name = repository.split("/", maxsplit=1)
     result = json.loads(gh(
         "api", "graphql", "-f",
@@ -118,8 +114,6 @@ def verify_remote_assets(repository: str, tag: str, release: dict, expected: dic
         if expected is not None and checksums != expected:
             raise SystemExit("Uploaded checksums do not match the verified build artifacts.")
         for name, digest in checksums.items():
-            # GitHub hashes release assets at upload. Older assets without a
-            # digest are downloaded and hashed instead of being assumed valid.
             remote_digest = assets[name].get("digest")
             if not remote_digest:
                 gh("release", "download", tag, "--repo", repository, "--pattern", name, "--dir", temp)
@@ -201,8 +195,6 @@ def publish(repository: str, tag: str, directory: Path, *, linux: bool = True, i
                 *(["--prerelease"] if "-" in tag else []),
             )
 
-    # Only drafts can be repaired. Published releases always take the read-only
-    # path above, including recovery after publication but before tap updates.
     release = release_for_tag(repository, tag)
     if release is None or not release["draft"]:
         raise SystemExit("Release changed while preparing it; rerun to inspect the published assets.")

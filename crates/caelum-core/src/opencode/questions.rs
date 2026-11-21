@@ -78,7 +78,6 @@ pub(super) fn sync_questions(
             .ok_or_else(|| OpenCodeError::Protocol("form list has no data array".into()))?;
         let requests = forms
             .iter()
-            // Global MCP forms do not belong to a conversation.
             .filter(|form| form["sessionID"].as_str().is_some_and(valid_session_id))
             .map(|form| question_request(server, project, form))
             .collect::<Result<Vec<_>, _>>()?;

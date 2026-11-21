@@ -130,7 +130,7 @@ fn corruption_unavailable_storage_and_oversized_records_are_cache_misses() {
     large.body = "x".repeat(MAX_ENTRY_BYTES);
     fixture.cache().save_details(&large, timestamp());
     assert!(fixture.cache().load(URL).is_none());
-    let unavailable = Cache(fixture.0.clone()); // A directory cannot be opened as SQLite.
+    let unavailable = Cache(fixture.0.clone());
     unavailable.save_details(&details(), timestamp());
     assert!(unavailable.load(URL).is_none());
 }
@@ -159,7 +159,7 @@ fn eviction_bounds_record_count_bytes_and_reclaims_disk_space() {
             .unwrap(),
         128
     );
-    // Touch the oldest survivor; byte eviction must now keep it over newer rows.
+
     tx.execute("UPDATE entries SET used=1000 WHERE key='12'", [])
         .unwrap();
     prune(&tx, 128, 3 * 8192).unwrap();

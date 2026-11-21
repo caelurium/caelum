@@ -20,8 +20,8 @@ use super::complete;
 use crate::Workspace;
 
 define_class!(
-    // NSObject has no subclassing requirements. The ivar is a thread-safe Rune
-    // handle: native callbacks queue work rather than touching UI state.
+
+
     #[unsafe(super = NSObject)]
     #[name = "CaelumNotificationDelegate"]
     #[ivars = AppHandle<Workspace>]
@@ -32,14 +32,14 @@ define_class!(
     unsafe impl UNUserNotificationCenterDelegate for Delegate {
         #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
         fn present(&self, _: &UNUserNotificationCenter, _: &UNNotification, completion: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>) {
-            // Core has already applied the foreground/background preference.
-            // Sound is the existing volume-controlled effect, not a second alert.
+
+
             completion.call((UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::List,));
         }
 
         #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
         fn response(&self, _: &UNUserNotificationCenter, response: &UNNotificationResponse, completion: &DynBlock<dyn Fn()>) {
-            // Dismissing a banner must not activate the app.
+
             if *response.actionIdentifier() == *unsafe { UNNotificationDefaultActionIdentifier } {
                 let target = target(&response.notification().request().content());
                 self.ivars().update(move |s, _| super::clicked(s, target));
@@ -51,7 +51,7 @@ define_class!(
 
 pub(super) struct Client {
     center: Retained<UNUserNotificationCenter>,
-    // UNUserNotificationCenter retains its delegate weakly.
+
     _delegate: Retained<Delegate>,
     handle: AppHandle<Workspace>,
 }
@@ -63,8 +63,7 @@ impl Client {
         {
             return Err("Native notifications require an app bundle; run make dev".into());
         }
-        // Register before NSApplication finishes launching so clicks can also
-        // reach a cold app. Authorization is requested only on first delivery.
+
         let center = UNUserNotificationCenter::currentNotificationCenter();
         let delegate: Retained<Delegate> =
             unsafe { msg_send![super(Delegate::alloc().set_ivars(handle.clone())), init] };
@@ -92,7 +91,6 @@ impl Client {
                     if let Some(error) = error_message(error) {
                         complete(&handle, id, Err(error));
                     } else if !granted.as_bool() {
-                        // Denial is a system preference, not a failed provider operation.
                         complete(&handle, id, Ok(Reply::Done));
                     } else {
                         let handle = handle.clone();
@@ -120,7 +118,7 @@ fn content(notification: &Notification) -> Retained<UNMutableNotificationContent
         let json =
             NSString::from_str(&serde_json::to_string(target).expect("serializable session key"));
         let info = NSDictionary::from_slices(&[ns_string!("caelum.session")], &[&*json]);
-        // Both keys and values are immutable, property-list-compatible strings.
+
         unsafe { content.setUserInfo(info.cast_unchecked()) };
     }
     content
@@ -134,7 +132,6 @@ fn target(content: &objc2_user_notifications::UNNotificationContent) -> Option<S
 }
 
 fn error_message(error: *mut NSError) -> Option<String> {
-    // The system owns a nullable NSError for the duration of each callback.
     unsafe { error.as_ref() }.map(|error| error.localizedDescription().to_string())
 }
 

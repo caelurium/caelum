@@ -151,7 +151,7 @@ fn reconnect_discards_old_checkout_reads_and_late_lists_cannot_duplicate_the_ses
         stale_list,
         Ok(Reply::Sessions(vec![summary(key.scope.clone(), &key.id)])),
     ));
-    // A duplicate completion cannot rebind the session a second time.
+
     moved(&mut app, request, key, "/stale");
     assert_eq!(app.sessions.len(), 1);
     assert_eq!(app.sessions[index].scope.project, "/new");
@@ -408,7 +408,7 @@ fn real_moved_session_reconnection_smoke() {
         for event in runtime.drain() {
             app.apply(event);
         }
-        // No persisted workspace, prompts, archive, title, or control commands.
+
         for (request, command) in app.commands() {
             if matches!(&command, Command::Resume(key) if key.id == id)
                 || (discover

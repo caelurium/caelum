@@ -22,7 +22,6 @@ TOOL_SHA256 = {
 }
 MACHINES = {"x86_64": 62, "aarch64": 183}
 SYSTEM = {"libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1", "libresolv.so.2", "libutil.so.1"}
-# GPU loader/driver libraries belong to the host; never override its graphics stack.
 HOST_GRAPHICS = re.compile(r"lib(?:vulkan|GL|EGL|GLX|GLdispatch|drm|gbm|nvidia).*\.so")
 DLOPEN = (
     "libX11.so.6", "libX11-xcb.so.1", "libXcursor.so.1", "libXi.so.6",
@@ -80,19 +79,15 @@ def bundle_libraries(binary: Path, destination: Path, arch: str) -> None:
         shutil.copy2(source, target)
         audit_elf(target, arch)
         subprocess.run(["patchelf", "--set-rpath", "$ORIGIN", str(target)], check=True)
-        # Keep Debian's licensing/source references alongside every redistributed library.
         package = library_package(source)
         copyright_file = Path("/usr/share/doc") / package / "copyright"
         if not copyright_file.is_file():
             raise SystemExit(f"Missing copyright notice for {name} ({package})")
         shutil.copy2(copyright_file, notices / f"{package}.copyright")
-    # RUNPATH is confined to these ELFs. Provider/git/gh subprocesses inherit no
-    # AppImage LD_LIBRARY_PATH override that could break their system libraries.
     subprocess.run(["patchelf", "--set-rpath", "$ORIGIN/../lib", str(binary)], check=True)
 
 
 def library_package(source: Path) -> str:
-    # Ubuntu's merged-/usr symlinks and dpkg's recorded paths need not agree.
     candidates = [source, source.resolve()]
     candidates.extend(Path("/usr") / path.relative_to("/") for path in list(candidates) if str(path).startswith("/lib/"))
     candidates.extend(Path("/") / path.relative_to("/usr") for path in list(candidates) if str(path).startswith("/usr/lib/"))

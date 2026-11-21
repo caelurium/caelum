@@ -136,7 +136,6 @@ fn restored_duration_spans_every_step_and_ends_at_execution_completion() {
     assert_eq!(tool.started_at, Some(10_000));
     assert_eq!(tool.metadata["ended"], 118_000);
 
-    // An output after an idle boundary must not inherit the previous prompt.
     conversation.history(Provider::OpenCode, &[json!({
         "id":"orphan", "type":"assistant", "agent":"build", "time":{"created":300_000,"completed":301_000}, "content":[{"type":"text","text":"No prompt loaded"}]
     })], false);

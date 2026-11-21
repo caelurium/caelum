@@ -252,8 +252,7 @@ impl Store {
         };
         let mut value: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|e| format!("Cannot read saved workspace: {e}"))?;
-        // The former black-surface override is now a complete theme. Migrate at
-        // the read boundary so the next snapshot contains only the new setting.
+
         if value["preferences"]["blackBackgrounds"] == true {
             value["preferences"]["themeFamily"] = "vercel".into();
             value["preferences"]["accentColor"] = "theme".into();

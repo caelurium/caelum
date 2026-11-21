@@ -207,8 +207,7 @@ impl Workspace {
         session.stopping = true;
         session.queue_paused = true;
         session.revision += 1;
-        // First-send startup/admission can be in flight. Wait for acceptance
-        // before cancelling, or cancel creation before submitting the prompt.
+
         if !session.submitting {
             if let Some(key) = session.key() {
                 self.request(Command::Cancel(key), Pending::Cancel(index));

@@ -108,8 +108,6 @@ fn managed_worktrees_exclude_external_checkouts_and_survive_storage_changes() {
         .branches
         .contains(&"unused-branch".into()));
 
-    // An explicitly opened checkout can own its own Caelum worktrees even when
-    // another open project shares the same Git repository and branch catalogue.
     let drain = |app: &mut Workspace| {
         let mut outgoing = Vec::new();
         loop {

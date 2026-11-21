@@ -298,7 +298,7 @@ fn ownership_is_revalidated_before_history_and_every_operation() {
         .resume_with_history(service.path(), "ses_read")
         .unwrap();
     service.requests();
-    // Prior successful ownership must not authorize a moved or mismatched session.
+
     for invalid in [
         json!({"directory": "/another-checkout"}),
         json!({"id": "ses_other"}),
@@ -519,7 +519,7 @@ fn resume_locates_a_moved_session_only_in_a_verified_linked_checkout() {
         ],
     );
     service.configure(json!({"directory": destination.0}));
-    // Mutations and ordinary history still reject the stale checkout.
+
     assert!(matches!(
         service.provider.cancel_turn(service.path(), "ses_read"),
         Err(OpenCodeError::SessionNotInProject)
@@ -601,7 +601,7 @@ fn relocation_keeps_repository_subdirectory_scopes() {
             ],
         );
         let source = service.path().join("src");
-        // Install the same fake connection for the scoped source directory.
+
         let slot = Arc::new(ServerSlot::default());
         slot.connect(&service.provider.inner.processes, |_| {
             Ok(service.server.clone())

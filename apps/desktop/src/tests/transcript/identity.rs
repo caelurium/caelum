@@ -30,7 +30,6 @@ fn transcript_keys_follow_same_length_replacements_reorders_and_visibility() {
     assert!(shown(&rt, 0, "a") && shown(&rt, 0, "b"));
     assert!(!shown(&rt, 0, "hidden"));
 
-    // A count-only version would retain the old identity after this replacement.
     rt.update(|s, tx| {
         let entries = &mut s.live.as_mut().unwrap().app.sessions[0]
             .conversation
@@ -58,7 +57,6 @@ fn transcript_keys_follow_same_length_replacements_reorders_and_visibility() {
     advance(&mut rt, 0.3);
     assert!(element(&rt, &row(0, "b")).rect[1] < element(&rt, &row(0, "replacement")).rect[1]);
 
-    // Both the provider-entry count and visible-row count stay unchanged.
     rt.update(|s, tx| {
         let entries = &mut s.live.as_mut().unwrap().app.sessions[0]
             .conversation
@@ -71,7 +69,6 @@ fn transcript_keys_follow_same_length_replacements_reorders_and_visibility() {
     assert!(!shown(&rt, 0, "b"));
     assert!(shown(&rt, 0, "replacement") && shown(&rt, 0, "hidden"));
 
-    // Completion changes visibility even without a text or entry-count change.
     rt.update(|s, _| {
         let entry = &mut s.live.as_mut().unwrap().app.sessions[0]
             .conversation
@@ -112,7 +109,6 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
     assert!(shown(&rt, 0, "answer-25"), "initial jump");
     let before = element(&rt, &row(0, "answer-25")).rect[1];
 
-    // Unchanged keys must still rebuild the mounted row's content and handlers.
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.sessions[0]
             .conversation
@@ -128,7 +124,6 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
     );
     assert!((element(&rt, &row(0, "answer-25")).rect[1] - before).abs() < 1.0);
 
-    // A hidden prepend shifts source positions without changing any visible key.
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.sessions[0].conversation.history(
             Provider::OpenCode,
@@ -156,7 +151,6 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
     assert!((element(&rt, &row(0, "answer-25")).rect[1] - before).abs() < 1.0);
     assert_eq!(rt.scroll_at_bottom("live-transcript-0"), Some(false));
 
-    // The other session deliberately has the same provider entry IDs.
     click(&mut rt, "live-session-1");
     rt.update(|_, tx| tx.scroll_center_in_instant("live-rows-1", row(1, "answer-25")));
     advance(&mut rt, 0.5);

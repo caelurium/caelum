@@ -17,7 +17,6 @@ struct Server(Arc<Mutex<Received>>);
 
 #[zbus::interface(name = "org.freedesktop.Notifications")]
 impl Server {
-    // The freedesktop wire protocol fixes this argument list.
     #[allow(clippy::too_many_arguments)]
     fn notify(
         &self,

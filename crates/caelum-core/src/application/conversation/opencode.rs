@@ -260,7 +260,7 @@ impl Conversation {
                 if !complete {
                     self.working = true;
                 }
-                // This is a new live tool snapshot, not a historical prefix.
+
                 if let Some(index) = self.entries.iter().position(|e| e.id == entry.id) {
                     self.entries[index] = entry;
                 } else {

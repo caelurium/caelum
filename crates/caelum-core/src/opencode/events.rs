@@ -48,17 +48,14 @@ pub(super) fn spawn_event_listener(
                 let Ok(event) = parse_event(&payload, &project_path) else {
                     return;
                 };
-                // Wait for the stream's first frame before admitting prompts or
-                // fetching snapshots: SSE subscriptions have no replay.
+
                 if let Some(ready) = ready.take() {
                     let _ = ready.send(());
                 }
                 if !server.alive.load(Ordering::Acquire) {
                     return;
                 }
-                // A resolution can arrive during the first snapshot, before
-                // its session is known locally. Invalidate that snapshot even
-                // when a location-less event cannot otherwise be routed yet.
+
                 if matches!(event.event_type.as_str(), "form.replied" | "form.cancelled")
                     && event
                         .location

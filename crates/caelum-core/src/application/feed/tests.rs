@@ -128,7 +128,6 @@ fn active_session_branches_follow_checkout_changes_and_detach_without_losing_his
         assert_eq!(details.branch.as_deref(), Some("feature/opened"));
         assert_eq!(details.branches, ["feature/earlier"]);
 
-        // Refreshing PR associations still includes every recorded session branch.
         for (request, command) in app.commands() {
             if matches!(command, Command::Task(Task::Discover { .. })) {
                 app.apply(Event::Completed(
@@ -242,7 +241,7 @@ fn selection_refresh_and_streamed_tokens_do_not_change_recency_but_turn_boundari
         json!({"threadId":"shared-id", "turn":{"id":"turn"}}),
     ));
     assert!(app.sessions[0].last_activity >= started);
-    // The completion refresh receives an older summary.
+
     let resume = app
         .commands()
         .into_iter()
