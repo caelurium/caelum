@@ -110,7 +110,7 @@ pub(crate) fn export(s: &mut Workspace, index: usize, format: ExportFormat, tx: 
         move |s: &mut Workspace, result, _| {
             let l = live_mut(s);
             if l.app.sessions[index].key().as_ref() != Some(&owner)
-                || l.app.sessions[index].forgotten
+                || l.app.sessions[index].forgotten()
             {
                 return;
             }

@@ -90,10 +90,14 @@ impl Workspace {
         let Some(s) = self.sessions.get_mut(index) else {
             return false;
         };
-        if s.key().as_ref() != Some(owner) || s.forgotten {
+        if s.key().as_ref() != Some(owner) || s.forgotten() {
             return false;
         }
-        if s.control_busy() || s.deleting || s.archiving || s.relocation.pending() || s.disconnected
+        if s.control_busy()
+            || s.deleting()
+            || s.archiving()
+            || s.relocation.pending()
+            || s.disconnected
         {
             s.error = Some("Wait for the session to finish its current operation and reconnect before retrying.".into());
             return false;
@@ -110,7 +114,7 @@ impl Workspace {
         result: Result<Reply, String>,
     ) {
         let s = &mut self.sessions[index];
-        if s.key().as_ref() != Some(&owner) || s.forgotten {
+        if s.key().as_ref() != Some(&owner) || s.forgotten() {
             return;
         }
         s.controls = match result {

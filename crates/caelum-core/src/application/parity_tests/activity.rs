@@ -212,7 +212,8 @@ fn session_activity_survives_gaps_and_obeys_waiting_retry_and_terminal_states() 
     let mut app = workspace();
     assert!(app.send(1, "Work on this".into()));
     assert_eq!(activity(&app.sessions[1], false).unwrap().kind, A::Working);
-    app.sessions[1].submitting = false;
+    let send = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(send, Ok(Reply::Done)));
     app.sessions[1].conversation.apply(
         Provider::Codex,
         "item/reasoning/summaryTextDelta",
@@ -238,8 +239,8 @@ fn session_activity_survives_gaps_and_obeys_waiting_retry_and_terminal_states() 
     assert_eq!(activity(&app.sessions[1], true).unwrap().kind, A::Input);
     app.cancel(1);
     assert_eq!(activity(&app.sessions[1], false).unwrap().kind, A::Stopping);
-    app.sessions[1].stopping = false;
-    app.sessions[1].conversation.settle();
+    let stop = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(stop, Ok(Reply::Done)));
     assert!(activity(&app.sessions[1], false).is_none());
     app.sessions[1].shells.push(
         serde_json::from_value(json!({"id":"shell","command":"cargo test","startedAt":1})).unwrap(),

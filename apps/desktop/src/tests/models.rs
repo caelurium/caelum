@@ -364,9 +364,9 @@ fn native_shortcuts_and_large_model_catalogue_keep_the_captured_owner() {
     advance(&mut rt, 0.3);
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     key(&mut rt, Key::Escape, Mods::default());
-    assert!(rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
 }
 
 #[test]
@@ -403,7 +403,7 @@ fn model_popover_stays_anchored_and_returns_focus_without_cancelling_work() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.4);
     assert!(!rt.state.live.as_ref().unwrap().models.is_open());
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     click(&mut rt, "model-trigger");
     rt.pointer_down(250.0, 80.0);
     rt.pointer_up(250.0, 80.0);
@@ -421,7 +421,7 @@ fn models_slash_command_opens_the_picker_for_the_current_session() {
     let live = rt.state.live.as_ref().unwrap();
     assert!(live.models.is_open());
     assert!(live.app.sessions[0].draft.is_empty());
-    assert!(!live.app.sessions[0].submitting);
+    assert!(!live.app.sessions[0].submitting());
     let commands = rt.state.live.as_mut().unwrap().app.commands();
     assert!(commands.iter().any(|(_, command)| {
         matches!(

@@ -22,7 +22,7 @@ pub fn session_activity(
     let running = caelum_core::application::subagents::running(&session.conversation.entries);
     use caelum_core::application::presentation::{Activity, ActivityKind};
     if running > 0
-        && !session.submitting
+        && !session.submitting()
         && !session.disconnected
         && activity
             .as_ref()

@@ -254,7 +254,7 @@ fn history_started_before_cancellation_cannot_resurrect_work() {
     workspace.apply(Event::Completed(cancel, Ok(Reply::Done)));
     workspace.apply(Event::Completed(history, Ok(page(Vec::new(), true))));
     assert!(!workspace.sessions[index].working());
-    assert!(!workspace.sessions[index].stopping);
+    assert!(!workspace.sessions[index].stopping());
 }
 
 #[test]

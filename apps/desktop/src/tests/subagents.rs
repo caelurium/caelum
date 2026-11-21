@@ -81,15 +81,31 @@ fn tasks_show_named_progress_complete_in_place_and_copy_prompt_and_result() {
 
 #[test]
 fn parent_activity_takes_precedence_while_subagents_are_running() {
-    use caelum_core::application::presentation::ActivityKind;
+    use caelum_core::application::{Command, Event, Reply, presentation::ActivityKind};
     let families = spec().families;
     let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = fixture((800.0, 620.0), "running");
     let state = &mut rt.state;
     let activity = |state: &Workspace| crate::activity::session_activity(state, 0).map(|a| a.kind);
-    state.live.as_mut().unwrap().app.sessions[0].submitting = true;
+    assert!(
+        state
+            .live
+            .as_mut()
+            .unwrap()
+            .app
+            .send(0, "Start turn".into())
+    );
     assert_eq!(activity(state), Some(ActivityKind::Working));
-    state.live.as_mut().unwrap().app.sessions[0].submitting = false;
+    {
+        let app = &mut state.live.as_mut().unwrap().app;
+        let request = app
+            .commands()
+            .into_iter()
+            .find(|(_, command)| matches!(command, Command::Send(..)))
+            .unwrap()
+            .0;
+        app.apply(Event::Completed(request, Ok(Reply::Done)));
+    }
     state.live.as_mut().unwrap().app.sessions[0]
         .conversation
         .working = true;
@@ -108,7 +124,7 @@ fn parent_activity_takes_precedence_while_subagents_are_running() {
             &json!({"inputID":"msg_compact", "_created": 1000}),
         );
     assert_eq!(activity(state), Some(ActivityKind::Working));
-    state.live.as_mut().unwrap().app.sessions[0].stopping = true;
+    state.live.as_mut().unwrap().app.cancel(0);
     assert_eq!(activity(state), Some(ActivityKind::Stopping));
     state.live.as_mut().unwrap().app.sessions[0].disconnected = true;
     assert!(activity(state).is_none());

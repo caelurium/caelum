@@ -1,6 +1,39 @@
 use super::*;
 
 #[test]
+fn delayed_enqueue_error_cannot_replace_an_in_flight_removal() {
+    let mut app = workspace();
+    app.sessions[0].conversation.working = true;
+    assert!(app.send(0, "Queued prompt".into()));
+    let (enqueue, Command::Enqueue(_, id, _)) = app.commands().pop().unwrap() else {
+        panic!("expected enqueue");
+    };
+    app.apply(opencode(
+        "session.inbox.enqueued",
+        json!({
+            "sessionID":"session-0",
+            "inboxID":id,
+            "item":{"type":"user","payload":{"text":"Queued prompt"}}
+        }),
+    ));
+    app.remove_queued(0, &id);
+    let (remove, Command::RemoveQueued(..)) = app.commands().pop().unwrap() else {
+        panic!("expected removal");
+    };
+
+    app.apply(Event::Completed(
+        enqueue,
+        Err("Enqueue response lost".into()),
+    ));
+    let item = &app.sessions[0].inbox.items[0];
+    assert!(item.pending());
+    assert!(item.removing());
+    assert!(item.error().is_none());
+    app.apply(Event::Completed(remove, Ok(Reply::Done)));
+    assert!(app.sessions[0].inbox.items.is_empty());
+}
+
+#[test]
 fn provider_inbox_retries_keep_identity_and_late_snapshots_cannot_resurrect_delivery() {
     let mut app = workspace();
     app.sessions[0].conversation.working = true;

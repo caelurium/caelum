@@ -206,7 +206,10 @@ fn choose(s: &mut Workspace, id: &str) {
         }
         Owner::Session(index, scope) => {
             let session = &mut l.app.sessions[index];
-            if session.scope != scope || session.archived || session.forgotten || session.archiving
+            if session.scope != scope
+                || session.archived()
+                || session.forgotten()
+                || session.archiving()
             {
                 close(s);
                 return;

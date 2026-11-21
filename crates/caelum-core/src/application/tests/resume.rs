@@ -127,7 +127,7 @@ fn bundled_resume_cannot_resurrect_cancelled_activity() {
         Ok(Reply::Resumed(summary, history(true))),
     ));
     assert!(!workspace.sessions[index].working());
-    assert!(!workspace.sessions[index].stopping);
+    assert!(!workspace.sessions[index].stopping());
     assert!(workspace.sessions[index].queue_paused);
 }
 

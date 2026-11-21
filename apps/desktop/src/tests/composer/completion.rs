@@ -86,5 +86,5 @@ fn command_completions_scroll_complete_run_and_dismiss_over_background_output() 
     let live = rt.state.live.as_ref().unwrap();
     assert!(live.models.is_open());
     assert_eq!(live.app.sessions[0].shells.len(), 8);
-    assert!(!live.app.sessions[0].stopping);
+    assert!(!live.app.sessions[0].stopping());
 }

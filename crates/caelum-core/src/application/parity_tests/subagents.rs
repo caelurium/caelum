@@ -270,7 +270,7 @@ fn opening_a_subagent_reuses_its_scoped_session_without_changing_parent_drafts()
     assert_eq!(resumes.len(), 1);
     assert_eq!(resumes[0].id, "ses_child");
     assert_eq!(resumes[0].scope.project, "/project");
-    app.sessions[child].forgotten = true;
+    app.sessions[child].archive_fixture(ArchiveFixture::Forgotten);
     assert!(app.open_subagent(0, "opencode-tool-task").is_none());
     assert!(app.open_subagent(0, "missing").is_none());
 }

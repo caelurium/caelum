@@ -352,3 +352,17 @@ fn provider_failure(s: &mut Workspace, rejected: bool) {
     session.draft = "Keep the next prompt editable.".into();
     l.sync_editors();
 }
+
+pub(super) fn activity(l: &mut crate::live::Live, name: &str) {
+    use caelum_core::application::Provider;
+    use serde_json::json;
+
+    l.app.sessions[0].remote_id = Some("fixture".into());
+    l.app.sessions[0].conversation.working = true;
+    match name {
+        "thinking" => l.app.sessions[0].conversation.apply(Provider::Codex, "item/reasoning/summaryTextDelta", &json!({"itemId":"thinking","delta":"Checking the original interactions before changing the layout."})),
+        "retrying" => l.app.sessions[0].conversation.retrying = true,
+        "stopping" => l.app.cancel(0),
+        _ => {}
+    }
+}

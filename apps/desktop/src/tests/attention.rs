@@ -18,7 +18,7 @@ fn workspace_menu_routes_file_search_and_changes_without_losing_the_draft() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.2);
     assert!(element(&rt, "workspace-trigger").focused);
-    assert!(!live(&rt.state).app.sessions[0].stopping);
+    assert!(!live(&rt.state).app.sessions[0].stopping());
     key(&mut rt, Key::Text(" ".into()), Mods::default());
     advance(&mut rt, 0.2);
     key(&mut rt, Key::Enter, Mods::default());

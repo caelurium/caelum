@@ -50,19 +50,17 @@ fn project_navigation_reuses_existing_sessions_before_blank_drafts() {
         for unavailable in ["archived", "forgotten", "archiving", "deleting"] {
             app.select(older);
             app.select(other);
-            let session = &mut app.sessions[older];
-            session.archived = unavailable == "archived";
-            session.forgotten = unavailable == "forgotten";
-            session.archiving = unavailable == "archiving";
-            session.deleting = unavailable == "deleting";
+            app.sessions[older].archive_fixture(match unavailable {
+                "archived" => ArchiveFixture::Stable(true),
+                "forgotten" => ArchiveFixture::Forgotten,
+                "archiving" => ArchiveFixture::Archiving,
+                "deleting" => ArchiveFixture::Deleting,
+                _ => unreachable!(),
+            });
             app.select_project("/main");
             assert_eq!(app.selected, Some(recent), "{unavailable}");
             assert_eq!(app.sessions.len(), count);
-            let session = &mut app.sessions[older];
-            session.archived = false;
-            session.forgotten = false;
-            session.archiving = false;
-            session.deleting = false;
+            app.sessions[older].archive_fixture(ArchiveFixture::Stable(false));
         }
         assert_eq!(app.sessions[other].draft, "Other project's draft");
 
@@ -165,7 +163,7 @@ fn closing_project_groups_keeps_sessions_work_and_drafts_through_reopen_and_rest
     assert_eq!(app.selected, Some(2));
     assert_eq!(app.sessions.len(), 3);
     assert!(app.sessions[1].working());
-    assert!(!app.sessions[1].archived);
+    assert!(!app.sessions[1].archived());
     assert_eq!(app.sessions[1].queue[0].text, "Next turn");
     assert!(
         app.commands().is_empty(),
@@ -410,7 +408,7 @@ fn closed_projects_reject_late_open_and_worktree_discovery_without_changing_navi
     app.close_project("/main");
     app.apply(Event::Completed(restore, Ok(Reply::Done)));
     assert_eq!(app.selected, Some(1));
-    assert!(!app.sessions[0].archived);
+    assert!(!app.sessions[0].archived());
     assert!(!app.project_is_open("/main"));
 }
 

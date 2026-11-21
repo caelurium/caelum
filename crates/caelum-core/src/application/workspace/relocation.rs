@@ -57,7 +57,7 @@ impl Workspace {
             return;
         };
         let known = self.sessions.iter().position(|s| {
-            !s.forgotten
+            !s.forgotten()
                 && s.scope.provider == Provider::OpenCode
                 && s.remote_id.as_deref() == Some(id)
         });
@@ -108,7 +108,7 @@ impl Workspace {
             || self.closed_since(destination, observed)
             || !self.has_open_checkout(destination)
             || session.relocation.destination() == Some(destination)
-            || session.forgotten
+            || session.forgotten()
         {
             return;
         }
@@ -152,7 +152,7 @@ impl Workspace {
         if request != *current {
             return;
         }
-        if !session.forgotten
+        if !session.forgotten()
             && session.key().as_ref() == Some(from)
             && !self.closed_since(destination, request)
             && self.has_open_checkout(destination)
@@ -235,7 +235,7 @@ impl Workspace {
             unreachable!()
         };
         let open = self.has_open_checkout(&change.project.path);
-        if self.sessions[index].forgotten
+        if self.sessions[index].forgotten()
             || self.sessions[index].key().as_ref() != Some(&change.from)
             || self.closed_since(&change.project.path, request)
             || (!open
@@ -257,10 +257,7 @@ impl Workspace {
             .retain(|_, pending| !pending.location_read(index));
         let session = &mut self.sessions[index];
         session.scope.project.clone_from(&change.project.path);
-        if request > session.archive_barrier {
-            session.archived = change.archived;
-            session.archive_barrier = request;
-        }
+        session.observe_archive(change.archived, request);
         session.cancel_history_read();
         session.error = None;
         session.details = None;
@@ -321,15 +318,15 @@ impl Pending {
             | Self::ConversationControl(i, _, _) => *i == index,
             Self::Enqueue(i, _)
             | Self::RemoveQueued(i, _)
-            | Self::Control(i, _)
+            | Self::Control(i)
             | Self::Generate(i, _, _)
             | Self::RegenerateTitle(i, _)
-            | Self::Archive(i, _, _, _)
+            | Self::Archive(i)
             | Self::DeleteSession(i)
             | Self::Attachment(i, _)
             | Self::Mention { index: i, .. }
-            | Self::Start(i, _)
-            | Self::Send(i, _, _)
+            | Self::Start(i)
+            | Self::Send(i)
             | Self::Cancel(i) => *i == index,
             Self::Request {
                 provider,

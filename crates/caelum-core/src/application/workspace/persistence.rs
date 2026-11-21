@@ -1,7 +1,7 @@
 mod compare;
 
 use super::{Pending, Workspace};
-use crate::application::{Command, QueuedPrompt, SavedSession, Snapshot, Store, Task};
+use crate::application::{Command, SavedSession, Snapshot, Store, Task};
 use std::collections::HashMap;
 
 type Requests = Vec<(u64, Command)>;
@@ -230,7 +230,7 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter_map(|(index, s)| {
-                if s.forgotten {
+                if s.forgotten() {
                     return None;
                 }
                 let saved_index = session_indices.len();
@@ -247,13 +247,10 @@ impl Workspace {
                     draft: s.draft.clone(),
                     attachments: s.attachments.clone(),
                     failed_prompt: s.failed_prompt.clone(),
-                    pending_submission: s.inflight_prompt.as_ref().map(|text| QueuedPrompt {
-                        text: text.clone(),
-                        options: s.inflight_options.clone(),
-                    }),
+                    pending_submission: s.pending_prompt().cloned(),
                     queue: s.queue.clone(),
-                    inbox: s.inbox.items.clone(),
-                    archived: s.archived,
+                    inbox: s.inbox.items.iter().map(|item| item.saved()).collect(),
+                    archived: s.archived(),
                     reading: s.reading,
                     unread: s.unread,
                 })

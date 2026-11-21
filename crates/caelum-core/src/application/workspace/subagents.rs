@@ -6,7 +6,7 @@ impl Workspace {
     /// scoped resume path. Merely rendering a task never loads a child session.
     pub fn open_subagent(&mut self, parent: usize, entry_id: &str) -> Option<usize> {
         let owner = self.sessions.get(parent)?;
-        if owner.forgotten || owner.scope.provider != Provider::OpenCode {
+        if owner.forgotten() || owner.scope.provider != Provider::OpenCode {
             return None;
         }
         let entry = owner
@@ -25,7 +25,7 @@ impl Workspace {
             .iter()
             .position(|s| s.scope == scope && s.remote_id.as_deref() == Some(&child));
         let index = if let Some(index) = existing {
-            if self.sessions[index].forgotten || self.sessions[index].archived {
+            if self.sessions[index].forgotten() || self.sessions[index].archived() {
                 return None;
             }
             index
@@ -46,8 +46,8 @@ impl Workspace {
         let child = self.sessions.get(child)?;
         let id = child.remote_id.as_deref()?;
         self.sessions.iter().position(|parent| {
-            !parent.forgotten
-                && !parent.archived
+            !parent.forgotten()
+                && !parent.archived()
                 && parent.scope == child.scope
                 && parent.remote_id.as_deref() != Some(id)
                 && parent

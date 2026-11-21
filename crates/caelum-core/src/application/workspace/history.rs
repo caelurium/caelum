@@ -92,10 +92,10 @@ impl Workspace {
     pub fn refresh(&mut self, index: usize) {
         let session = &mut self.sessions[index];
         if session.loading()
-            || session.submitting
+            || session.submitting()
             || session.relocation.pending()
             || session.rewinding()
-            || session.forgotten
+            || session.forgotten()
         {
             return;
         }
@@ -113,7 +113,7 @@ impl Workspace {
 
     pub fn older(&mut self, index: usize) {
         let session = &self.sessions[index];
-        if session.rewinding() || session.relocation.pending() || session.forgotten {
+        if session.rewinding() || session.relocation.pending() || session.forgotten() {
             return;
         }
         let (Some(key), State::Idle(Availability::Loaded(Some(cursor)))) =
