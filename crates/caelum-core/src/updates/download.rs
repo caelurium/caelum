@@ -66,14 +66,7 @@ pub(super) fn prepare(
     Prepared::new(release.clone(), destination, stage)
 }
 
-pub(super) async fn fetch(
-    client: &Client,
-    url: &str,
-    checksums: &str,
-    name: &str,
-    path: &std::path::Path,
-    progress: impl Fn(Progress),
-) -> Result<(), String> {
+async fn fetch_checksum(client: &Client, checksums: &str, name: &str) -> Result<String, String> {
     let mut response = client
         .get(checksums)
         .timeout(Duration::from_secs(15))
@@ -88,16 +81,30 @@ pub(super) async fn fetch(
         }
         manifest.extend_from_slice(&chunk);
     }
-    let expected = checksum(
+    checksum(
         std::str::from_utf8(&manifest).map_err(|e| e.to_string())?,
         name,
-    )?;
-    let mut response = client
-        .get(url)
-        .send()
-        .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Cannot download the update: {e}"))?;
+    )
+}
+
+pub(super) async fn fetch(
+    client: &Client,
+    url: &str,
+    checksums: &str,
+    name: &str,
+    path: &std::path::Path,
+    progress: impl Fn(Progress),
+) -> Result<(), String> {
+    // Overlap the requests, but don't write any payload until its checksum is known.
+    let (expected, mut response) =
+        tokio::try_join!(fetch_checksum(client, checksums, name), async {
+            client
+                .get(url)
+                .send()
+                .await
+                .and_then(|r| r.error_for_status())
+                .map_err(|e| format!("Cannot download the update: {e}"))
+        })?;
     let total = response.content_length();
     if total.is_some_and(|n| n > MAX_DOWNLOAD) {
         return Err("The update exceeds the 1 GiB download limit.".into());

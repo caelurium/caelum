@@ -53,17 +53,22 @@ impl Boat {
     ) -> Result<Source, String> {
         let git = crate::git::GitClient::new();
         let (repository, default) = git.published_source(project)?;
-        let (base, published_tip) = if handoff {
-            let published = git.handoff_base(project).await?;
-            (published.branch, Some(published.tip))
-        } else {
-            (default, None)
+        let branch = async {
+            if handoff {
+                let published = git.handoff_base(project).await?;
+                Ok((published.branch, Some(published.tip)))
+            } else {
+                Ok((default, None))
+            }
         };
-        let environment = self
-            .client
-            .environments(None)
-            .await
-            .map_err(|e| Step::ListEnvironments.error(e))?
+        let environments = async {
+            self.client
+                .environments(None)
+                .await
+                .map_err(|e| Step::ListEnvironments.error(e))
+        };
+        let ((base, published_tip), environments) = tokio::try_join!(branch, environments)?;
+        let environment = environments
             .environments
             .into_iter()
             .find(|e| suitable(e, &repository))

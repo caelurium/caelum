@@ -105,10 +105,10 @@ async fn launch_takes_ownership_when_the_previous_owner_exits_during_forwarding(
         .unwrap()
         .unwrap()
         .expect("new primary after owner disappearance");
-    assert!(current.release_name(name.as_str()).await.unwrap());
-    previous
-        .object_server()
-        .remove::<ExitingOwner, _>(OBJECT)
-        .await
-        .unwrap();
+    let (released, removed) = tokio::join!(
+        current.release_name(name.as_str()),
+        previous.object_server().remove::<ExitingOwner, _>(OBJECT),
+    );
+    assert!(released.unwrap());
+    removed.unwrap();
 }

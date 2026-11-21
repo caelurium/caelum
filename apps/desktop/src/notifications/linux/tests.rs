@@ -50,7 +50,8 @@ impl Server {
 #[tokio::test(flavor = "current_thread")]
 async fn notification_wire_contract_preserves_targets_and_bounds_active_identifiers() {
     let received = Arc::new(Mutex::new(Received::default()));
-    let service = Connection::session().await.unwrap();
+    let (service, connection) =
+        tokio::try_join!(Connection::session(), Connection::session()).unwrap();
     service
         .object_server()
         .at("/org/freedesktop/Notifications", Server(received.clone()))
@@ -60,7 +61,6 @@ async fn notification_wire_contract_preserves_targets_and_bounds_active_identifi
         .request_name("org.freedesktop.Notifications")
         .await
         .unwrap();
-    let connection = Connection::session().await.unwrap();
     let proxy = Proxy::new(
         &connection,
         "org.freedesktop.Notifications",

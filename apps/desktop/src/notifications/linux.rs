@@ -61,8 +61,10 @@ async fn run(
             "org.freedesktop.Notifications",
         )
         .await?;
-        let actions = proxy.receive_signal("ActionInvoked").await?;
-        let closed = proxy.receive_signal("NotificationClosed").await?;
+        let (actions, closed) = tokio::try_join!(
+            proxy.receive_signal("ActionInvoked"),
+            proxy.receive_signal("NotificationClosed"),
+        )?;
         Ok::<_, zbus::Error>((proxy, actions, closed))
     })
     .await

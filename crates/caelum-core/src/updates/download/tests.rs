@@ -84,7 +84,7 @@ fn only_exact_official_platform_release_urls_are_installable() {
     }
 }
 
-fn read_request(stream: &mut std::net::TcpStream) {
+fn read_request(stream: &mut std::net::TcpStream) -> String {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
@@ -94,20 +94,28 @@ fn read_request(stream: &mut std::net::TcpStream) {
         stream.read_exact(&mut byte).unwrap();
         bytes.push(byte[0]);
     }
+    String::from_utf8(bytes).unwrap()
 }
 
 #[test]
-fn downloads_and_verifies_a_real_http_response() {
+fn requests_asset_and_checksums_concurrently_then_verifies_the_download() {
     let directory = Directory::new();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
-        for body in [
-            format!("{}  asset\n", sha256_hex(&Sha256::digest(b"payload"))),
-            "payload".into(),
-        ] {
+        let mut requests = Vec::new();
+        for _ in 0..2 {
             let (mut stream, _) = listener.accept().unwrap();
-            read_request(&mut stream);
+            let request = read_request(&mut stream);
+            requests.push((request, stream));
+        }
+        for (request, mut stream) in requests {
+            let body = if request.starts_with("GET /checksums ") {
+                format!("{}  asset\n", sha256_hex(&Sha256::digest(b"payload")))
+            } else {
+                assert!(request.starts_with("GET /asset "), "{request}");
+                "payload".into()
+            };
             write!(
                 stream,
                 "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -122,7 +130,11 @@ fn downloads_and_verifies_a_real_http_response() {
         .unwrap();
     runtime.block_on(async {
         fetch(
-            &Client::builder().no_proxy().build().unwrap(),
+            &Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(5))
+                .build()
+                .unwrap(),
             &format!("{url}/asset"),
             &format!("{url}/checksums"),
             "asset",
