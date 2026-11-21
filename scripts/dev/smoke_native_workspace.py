@@ -106,8 +106,9 @@ async def exercise(home, remote, peer, phase):
         asyncssh.SSHServer, "127.0.0.1", 0, server_host_keys=[host],
         authorized_client_keys=str(home / "client.pub"), process_factory=attach, encoding=None,
     )
+    port = server.sockets[0].getsockname()[1]
     (home / "endpoint.json").write_text(json.dumps({
-        "ok": True, "type": "sshkey", "sshEndpoint": f"127.0.0.1:{server.get_port()}",
+        "ok": True, "type": "sshkey", "sshEndpoint": f"127.0.0.1:{port}",
         "sshUser": "user", "hostKey": host.export_public_key().decode().strip(),
     }))
     # Hold a handle to the real detached worker so teardown can also verify orderly shutdown.
