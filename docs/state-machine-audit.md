@@ -22,6 +22,9 @@ state machine; types cannot establish that an external event is current.
 | [Session titles](../crates/caelum-core/src/application/workspace/titles.rs) | A manual title cannot accrue automatic refresh turns. Automatic updates own the request ID and captured session key. |
 | [Questions](../crates/caelum-core/src/questions.rs) | Disabled brokers cannot hold requests. Only an awaiting question has a callback available to submit; its completion must match the exact answer attempt. |
 | [Branch attribution](../crates/caelum-core/src/session_branches.rs) | Exclusive and ambiguous executions are distinct. Codex events require a turn ID; OpenCode terminal events older than the active start are ignored when timestamps are available. |
+| [Desktop worktree form](../apps/desktop/src/worktree.rs) and [panels](../apps/desktop/src/panels.rs) | A submitted worktree owns its launch inputs; worktree and VM removal overlays own their payloads. A closed file find has no match cursor, and scroll restoration checks the active file or diff owner. |
+| [Desktop completion](../apps/desktop/src/completion.rs), [sidebar](../apps/desktop/src/live/sidebar.rs), and [remote stats](../apps/desktop/src/remote/stats.rs) | Mention application owns the request, editor and captured selection. Sidebar recency timers exist only while active; auto-stop refresh is keyed to the machine and deadline. |
+| [Desktop preview](../apps/desktop/src/state.rs) | A streaming response owns its clock and visible text; stopping consumes that phase. Only turns with tools have disclosure state. |
 
 ## Remaining candidates
 
@@ -29,9 +32,6 @@ state machine; types cannot establish that an external event is current.
 | --- | --- | --- |
 | [Conversation activity and entries](../crates/caelum-core/src/application/conversation.rs) | Working/retrying flags, entry kind, completion, provider status, background | Model provider activity separately from timing. Give each entry kind the lifecycle and payload it supports; accept unknown provider statuses at the decoding boundary. |
 | [Review and service requests](../crates/caelum-core/src/application/services.rs) | Review source and details are separate; request slots share latest/loading/error maps | Tie cached/live details and file pages to a verified revision. A loading slot owns its request; refresh can retain visible data while a new request is pending. |
-| [Desktop worktree form](../apps/desktop/src/worktree.rs) and [panels](../apps/desktop/src/panels.rs) | Form initialized/submitted flags, screen tags and optional payloads, file/search/review bookkeeping | Bind overlay contents and resource owners to their screens. In-flight creation must retain the submitted task rather than infer it from mutable fields. |
-| [Desktop completion](../apps/desktop/src/completion.rs), [sidebar](../apps/desktop/src/live/sidebar.rs), and [remote UI](../apps/desktop/src/remote/mod.rs) | Pending tuples, scheduled deadlines, optional owner-specific UI data | Keep request and timer identities with the states they can advance. Sort out independent focus, navigation, and rendering state before merging fields. |
-| [Desktop preview](../apps/desktop/src/state.rs) | Optional stream and separate turn flags | A streaming preview response owns its turn and clock rather than acting on whichever turn is last. |
 
 Updates, OpenCode connection slots, conversation controls, relocation, and remote
 checkout and turn lifecycles already use phase enums. Review their event

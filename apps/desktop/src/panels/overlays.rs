@@ -4,22 +4,130 @@ use rune_kit::{Dialog, Kit};
 use crate::Workspace;
 use crate::live::{live, live_mut};
 
-use super::Screen;
 use super::launcher::launcher;
+use super::{Panels, Screen};
+
+pub(super) enum Overlay {
+    Standard(StandardOverlay),
+    CreateWorktree(Box<crate::worktree::Form>),
+    RemoveVm(Removal),
+}
+
+macro_rules! standard_overlays {
+    ($($name:ident),+ $(,)?) => {
+        #[derive(Clone, Copy)]
+        pub(super) enum StandardOverlay {
+            $($name),+
+        }
+
+        impl StandardOverlay {
+            fn from_screen(screen: Screen) -> Option<Self> {
+                match screen {
+                    $(Screen::$name => Some(Self::$name),)+
+                    _ => None,
+                }
+            }
+
+            fn screen(self) -> Screen {
+                match self {
+                    $(Self::$name => Screen::$name,)+
+                }
+            }
+        }
+    };
+}
+
+standard_overlays!(
+    Attachment,
+    CreateVm,
+    Fork,
+    Image,
+    Launcher,
+    RemotePicker,
+    Rename,
+    Session,
+    Sessions,
+    Settings,
+    Shells,
+    Stats,
+    Timeline,
+    Usage,
+    VmHandoff,
+    VmStats,
+    VmThreads,
+    Worktrees,
+);
+
+pub(crate) struct Removal {
+    pub checkout: String,
+    pub machine: Option<caelum_core::remote::MachineId>,
+}
+
+impl Overlay {
+    fn screen(&self) -> Screen {
+        match self {
+            Self::Standard(screen) => screen.screen(),
+            Self::CreateWorktree(_) => Screen::CreateWorktree,
+            Self::RemoveVm(_) => Screen::RemoveVm,
+        }
+    }
+}
+
+impl Panels {
+    pub fn overlay(&self) -> Option<Screen> {
+        self.overlay.as_ref().map(Overlay::screen)
+    }
+
+    pub fn set_overlay(&mut self, screen: Option<Screen>) {
+        self.overlay = screen
+            .and_then(StandardOverlay::from_screen)
+            .map(Overlay::Standard);
+    }
+
+    pub(crate) fn open_worktree(&mut self, form: crate::worktree::Form) {
+        self.overlay = Some(Overlay::CreateWorktree(Box::new(form)));
+    }
+
+    pub(crate) fn open_removal(&mut self, removal: Removal) {
+        self.overlay = Some(Overlay::RemoveVm(removal));
+    }
+
+    pub(crate) fn worktree(&self) -> Option<&crate::worktree::Form> {
+        match &self.overlay {
+            Some(Overlay::CreateWorktree(form)) => Some(form),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn worktree_mut(&mut self) -> Option<&mut crate::worktree::Form> {
+        match &mut self.overlay {
+            Some(Overlay::CreateWorktree(form)) => Some(form),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn removal(&self) -> Option<&Removal> {
+        match &self.overlay {
+            Some(Overlay::RemoveVm(removal)) => Some(removal),
+            _ => None,
+        }
+    }
+}
 
 pub(super) fn close(s: &mut Workspace) {
     let l = live_mut(s);
-    match l.panels.overlay.take() {
+    let overlay = l.panels.overlay();
+    l.panels.set_overlay(None);
+    match overlay {
         Some(Screen::Fork) => l.app.dismiss_fork(),
         Some(Screen::VmHandoff | Screen::VmStats) => crate::remote::close_popup(l),
-        Some(Screen::RemoveVm) => l.remote.removing = None,
         _ => {}
     }
     l.focus();
 }
 
 pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
-    let Some(screen) = live(s).panels.overlay else {
+    let Some(screen) = live(s).panels.overlay() else {
         return;
     };
     if matches!(screen, Screen::VmHandoff | Screen::VmStats) {
@@ -41,10 +149,9 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         ),
         Screen::RemoveVm => (
             if live(s)
-                .remote
-                .removing
-                .as_ref()
-                .is_some_and(|(_, k)| k.is_some())
+                .panels
+                .removal()
+                .is_some_and(|removal| removal.machine.is_some())
             {
                 "Delete VM on Boat?"
             } else {
@@ -128,12 +235,13 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Worktrees => (560.0, crate::checkouts::manager_height(s)),
         Screen::RemoveVm => (
             460.0,
-            if live(s)
-                .remote
-                .removing
-                .as_ref()
-                .is_some_and(|(id, _)| live(s).app.remote.delete_errors.contains_key(id))
-            {
+            if live(s).panels.removal().is_some_and(|removal| {
+                live(s)
+                    .app
+                    .remote
+                    .delete_errors
+                    .contains_key(&removal.checkout)
+            }) {
                 292.0
             } else {
                 242.0

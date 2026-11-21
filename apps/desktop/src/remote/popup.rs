@@ -21,7 +21,7 @@ pub(super) enum Inspection {
 }
 
 pub(super) fn owner(l: &Live) -> Option<&str> {
-    if l.panels.overlay != Some(Screen::VmStats) {
+    if l.panels.overlay() != Some(Screen::VmStats) {
         return None;
     }
     match l.remote.inspection.as_ref()? {
@@ -56,14 +56,14 @@ pub(super) fn inspect_local(l: &mut Live, index: usize) -> bool {
         link,
         home: (l.panels.screen == Screen::Home).then(|| l.app.home.generation()),
     });
-    l.panels.overlay = Some(Screen::VmStats);
+    l.panels.set_overlay(Some(Screen::VmStats));
     l.schedule();
     true
 }
 
 pub(super) fn inspect_remote(l: &mut Live, id: &str) {
     l.remote.inspection = Some(Inspection::Remote(id.into()));
-    l.panels.overlay = Some(Screen::VmStats);
+    l.panels.set_overlay(Some(Screen::VmStats));
     l.schedule();
 }
 
@@ -76,7 +76,7 @@ pub(crate) fn clear(l: &mut Live) {
 fn close(s: &mut Workspace) {
     let l = live_mut(s);
     clear(l);
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.focus();
 }
 
@@ -136,7 +136,7 @@ fn machine(s: &Workspace, k: &Kit, id: &str) -> El {
 
 pub(crate) fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let l = live(s);
-    let (title, body, height) = if l.panels.overlay == Some(Screen::VmStats) {
+    let (title, body, height) = if l.panels.overlay() == Some(Screen::VmStats) {
         let Some(id) = owner(l) else {
             return;
         };

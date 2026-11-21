@@ -125,7 +125,7 @@ fn activate(s: &mut Workspace, project: Option<String>) {
     {
         let live = live::live_mut(s);
         live.panels.screen = panels::Screen::Conversation;
-        live.panels.overlay = None;
+        live.panels.set_overlay(None);
         live.app.open_project(project);
     }
     if let Some(handle) = &s.handle {

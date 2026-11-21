@@ -18,7 +18,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, link: &VmLink, position: usize, count
     let title = t.title();
     let project = crate::checkouts::project_name(app, app.group_path(&c.source.project));
     let provider = ui::provider_name(t.provider);
-    let age = super::age(t.last_activity, l.feed.now).0;
+    let age = super::age(t.last_activity, l.feed.displayed_at()).0;
     let destination = c
         .branch()
         .map_or_else(|| c.title().to_owned(), |b| format!("{} · {b}", c.title()));

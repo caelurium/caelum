@@ -53,9 +53,8 @@ pub(crate) struct State {
     mounted: Option<(String, setup::Dock)>,
     menu: Option<provider::Menu>,
     inspection: Option<popup::Inspection>,
-    pub(crate) removing: Option<(String, Option<caelum_core::remote::MachineId>)>,
     review: changes::Panel,
-    checked_deadline: Option<(caelum_core::remote::MachineId, i64)>,
+    auto_stop: Option<stats::AutoStop>,
 }
 
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {

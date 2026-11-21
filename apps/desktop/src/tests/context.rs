@@ -175,7 +175,7 @@ fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
         click(&mut rt, "workspace-trigger");
         assert!(!crate::context::is_open(&rt.state));
         assert!(
-            rt.state.live.as_ref().unwrap().panels.overlay.is_none(),
+            rt.state.live.as_ref().unwrap().panels.overlay().is_none(),
             "outside click only dismisses the menu"
         );
     }
@@ -476,7 +476,7 @@ fn context_menu_can_rename_the_clicked_worktree() {
     advance(&mut rt, 0.2);
 
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::Worktrees)
     );
     assert!(crate::worktree::is_renaming(&rt.state, path));

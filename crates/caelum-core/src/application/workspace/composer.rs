@@ -107,8 +107,8 @@ impl Workspace {
         path: String,
         project: String,
         replacement: String,
-    ) {
-        self.mention(index, false, token, path, project, replacement);
+    ) -> Option<u64> {
+        self.mention(index, false, token, path, project, replacement)
     }
 
     pub fn complete_side_mention(
@@ -118,8 +118,12 @@ impl Workspace {
         path: String,
         project: String,
         replacement: String,
-    ) {
-        self.mention(index, true, token, path, project, replacement);
+    ) -> Option<u64> {
+        self.mention(index, true, token, path, project, replacement)
+    }
+
+    pub fn mention_pending(&self, request: u64) -> bool {
+        matches!(self.pending.get(&request), Some(Pending::Mention { .. }))
     }
 
     fn mention(
@@ -130,10 +134,10 @@ impl Workspace {
         path: String,
         project: String,
         replacement: String,
-    ) {
+    ) -> Option<u64> {
         let session = &mut self.sessions[index];
         if session.attaching > 0 {
-            return;
+            return None;
         }
         let draft = if side {
             &session.side_draft
@@ -141,7 +145,7 @@ impl Workspace {
             &session.draft
         };
         if token.start > token.end || draft.get(token.start..token.end).is_none() {
-            return;
+            return None;
         }
         session.attaching += 1;
         if side {
@@ -164,7 +168,7 @@ impl Workspace {
         } else {
             Task::File { project, path }
         };
-        self.request(Command::Task(task), pending);
+        Some(self.request(Command::Task(task), pending))
     }
 
     pub fn dismiss_side_question(&mut self, index: usize) {

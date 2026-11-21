@@ -30,7 +30,7 @@ pub(crate) fn button(s: &Workspace, k: &Kit, session: Option<usize>) -> El {
             IconButtonVariant::GhostMuted
         })
         .expanded(matches!(
-            l.panels.overlay,
+            l.panels.overlay(),
             Some(Screen::VmHandoff | Screen::VmStats)
         ))
         .disabled(blocker.is_some())
@@ -43,7 +43,7 @@ pub(crate) fn button(s: &Workspace, k: &Kit, session: Option<usize>) -> El {
             }
             l.app.dismiss_vm_handoff();
             l.models = Default::default();
-            l.panels.overlay = Some(Screen::VmHandoff);
+            l.panels.set_overlay(Some(Screen::VmHandoff));
             if let Some(i) = session {
                 begin(s, HandoffSource::Composer(i));
             }
@@ -64,7 +64,7 @@ pub(super) fn begin(s: &mut Workspace, source: HandoffSource) {
         l.app.home.draft.text.clone_from(&l.home.editor.text);
     }
     l.remote.form = Default::default();
-    l.panels.overlay = Some(Screen::VmHandoff);
+    l.panels.set_overlay(Some(Screen::VmHandoff));
     l.app.begin_vm_handoff(source);
     l.schedule();
 }

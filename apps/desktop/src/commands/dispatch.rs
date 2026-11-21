@@ -47,7 +47,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
             l.commands.sessions_search.clear();
             l.commands.sessions_selected = None;
             l.commands.sessions_search.focused = true;
-            l.panels.overlay = Some(Screen::Sessions);
+            l.panels.set_overlay(Some(Screen::Sessions));
             l.app.discover_sessions(scope);
         }
         LocalCommand::Models => crate::models::open(s, None),
@@ -65,17 +65,17 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
         LocalCommand::Timeline => {
             l.commands.timeline_selected = l.current_prompt.clone();
             l.commands.timeline_current = l.current_prompt.clone();
-            l.panels.overlay = Some(Screen::Timeline);
+            l.panels.set_overlay(Some(Screen::Timeline));
             l.commands.search.focused = true;
         }
         LocalCommand::Usage => {
-            l.panels.overlay = Some(Screen::Usage);
+            l.panels.set_overlay(Some(Screen::Usage));
             let project = l.app.sessions[index].scope.project.clone();
             l.app.task(Task::Usage { project });
         }
         LocalCommand::Stats => {
             l.commands.stats_anchor = caelum_core::application::presentation::now();
-            l.panels.overlay = Some(Screen::Stats);
+            l.panels.set_overlay(Some(Screen::Stats));
             refresh_stats(s);
         }
         LocalCommand::SideQuestion => {

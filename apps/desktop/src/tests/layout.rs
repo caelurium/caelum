@@ -155,7 +155,7 @@ fn compact_live_inspector_and_modals_preserve_the_composer_and_focus() {
         );
         key(&mut rt, Key::Escape, Mods::default());
         advance(&mut rt, 0.4);
-        assert!(rt.state.live.as_ref().unwrap().panels.overlay.is_none());
+        assert!(rt.state.live.as_ref().unwrap().panels.overlay().is_none());
     }
     assert_eq!(
         rt.state.live.as_ref().unwrap().drafts[0].text,

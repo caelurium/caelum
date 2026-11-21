@@ -73,7 +73,7 @@ pub fn open(s: &mut Workspace, index: usize, id: &str) {
         attachment,
         offset: l.composer.editors[index].position.get().offset[1],
     });
-    l.panels.overlay = Some(Screen::Attachment);
+    l.panels.set_overlay(Some(Screen::Attachment));
 }
 
 pub fn sync(l: &mut crate::live::Live, tx: &mut Tx) -> bool {
@@ -94,13 +94,13 @@ pub fn sync(l: &mut crate::live::Live, tx: &mut Tx) -> bool {
         changed = true;
     }
     if l.composer.preview.as_ref().is_some_and(|preview| {
-        Some(preview.owner) != l.app.selected || l.panels.overlay != Some(Screen::Attachment)
+        Some(preview.owner) != l.app.selected || l.panels.overlay() != Some(Screen::Attachment)
     }) {
         let preview = l.composer.preview.take().unwrap();
-        if l.panels.overlay == Some(Screen::Attachment) {
-            l.panels.overlay = None;
+        if l.panels.overlay() == Some(Screen::Attachment) {
+            l.panels.set_overlay(None);
         }
-        if l.app.selected == Some(preview.owner) && l.panels.overlay.is_none() {
+        if l.app.selected == Some(preview.owner) && l.panels.overlay().is_none() {
             l.focus();
             tx.scroll_to_y("composer-editor", preview.offset);
         }

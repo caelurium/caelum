@@ -89,7 +89,7 @@ pub fn open(s: &mut Workspace, index: usize, id: String) {
         false,
     ));
     l.shell_panel = Some(panel);
-    l.panels.overlay = Some(Screen::Shells);
+    l.panels.set_overlay(Some(Screen::Shells));
 }
 fn header(
     app: &Application,

@@ -5,6 +5,9 @@ mod feedback;
 mod files;
 mod launcher;
 mod overlays;
+use overlays::Overlay;
+pub(crate) use overlays::Removal;
+
 mod queue;
 mod review;
 
@@ -73,13 +76,33 @@ type Target = (String, String);
 type Revision = (u64, Option<Target>, Option<Target>, Option<Target>);
 type CachedReview = (DiffState, u64, u64, Option<String>);
 
+enum ScrollTarget {
+    Document(Target),
+    Review(Target),
+    Change(Target),
+}
+
+struct ScrollRestore {
+    target: ScrollTarget,
+    offset: [f32; 2],
+}
+
+#[derive(Default)]
+enum Find {
+    #[default]
+    Closed,
+    Open {
+        cursor: Option<usize>,
+    },
+}
+
 pub struct Panels {
     pub settings_page: crate::settings::Page,
     pub settings_provider: caelum_core::application::Provider,
     pub settings_menu: Option<&'static str>,
     pub screen: Screen,
     pub inspector: Screen,
-    pub overlay: Option<Screen>,
+    overlay: Option<Overlay>,
     pub searching_sessions: bool,
     pub sessions: TextEdit,
     pub archived: bool,
@@ -94,8 +117,7 @@ pub struct Panels {
     expanded_threads: HashSet<String>,
     search: TextEdit,
     find: TextEdit,
-    finding: bool,
-    find_index: usize,
+    finding: Find,
     content_search: bool,
     pub review: Option<(String, String)>,
     review_file: Option<String>,
@@ -107,7 +129,7 @@ pub struct Panels {
     review_cache: std::collections::HashMap<Target, CachedReview>,
     pub pending_line: Option<(String, String, usize)>,
     active_document: Option<(String, String)>,
-    pending_scroll: Option<(String, [f32; 2])>,
+    pending_scroll: Option<ScrollRestore>,
     review_positions: std::collections::HashMap<(String, String), crate::code_view::Position>,
     active_review: Option<(String, String)>,
     review_restore: Option<(Target, [f32; 2])>,
@@ -116,7 +138,6 @@ pub struct Panels {
     change_positions: std::collections::HashMap<Target, crate::code_view::Position>,
     selection: Option<Selection>,
     preview_page: usize,
-    pub worktree: Option<crate::worktree::Form>,
     pub rename_worktree: Option<crate::worktree::RenameForm>,
     pub(crate) directory: TextEdit,
     directory_loaded: bool,
@@ -152,8 +173,7 @@ impl Default for Panels {
             expanded_threads: Default::default(),
             search: TextEdit::new(""),
             find: TextEdit::new(""),
-            finding: false,
-            find_index: 0,
+            finding: Find::Closed,
             content_search: false,
             review: None,
             review_file: None,
@@ -174,7 +194,6 @@ impl Default for Panels {
             change_positions: Default::default(),
             selection: None,
             preview_page: 0,
-            worktree: None,
             rename_worktree: None,
             directory: TextEdit::new(""),
             directory_loaded: false,
@@ -183,6 +202,18 @@ impl Default for Panels {
 }
 
 impl Panels {
+    fn open_find(&mut self) {
+        if matches!(self.finding, Find::Closed) {
+            self.finding = Find::Open { cursor: None };
+        }
+        self.find.focused = true;
+    }
+
+    fn close_find(&mut self) {
+        self.finding = Find::Closed;
+        self.find.focused = false;
+    }
+
     pub fn remember(&self, app: &mut Application) {
         for ((project, path), document) in &self.documents {
             if let Some(offset) = document.position.get() {
@@ -195,8 +226,27 @@ impl Panels {
         }
     }
     pub fn reveal_line(&mut self, tx: &mut Tx) {
-        if let Some((key, offset)) = self.pending_scroll.take() {
-            tx.scroll_to_instant(key, offset[0], offset[1]);
+        if let Some(restore) = self.pending_scroll.take() {
+            let key = match restore.target {
+                ScrollTarget::Document(target)
+                    if self.active_document.as_ref() == Some(&target) =>
+                {
+                    Some(format!(
+                        "{}/scroll",
+                        crate::code_view::source_key(&target.0, &target.1)
+                    ))
+                }
+                ScrollTarget::Review(target) if self.active_review.as_ref() == Some(&target) => {
+                    Some("diff/scroll".into())
+                }
+                ScrollTarget::Change(target) if self.change_file.as_ref() == Some(&target) => {
+                    Some("changes-diff/scroll".into())
+                }
+                _ => None,
+            };
+            if let Some(key) = key {
+                tx.scroll_to_instant(key, restore.offset[0], restore.offset[1]);
+            }
         }
         if let Some((project, path, line)) = &self.pending_line
             && self.active_document.as_ref() == Some(&(project.clone(), path.clone()))
@@ -211,7 +261,7 @@ impl Panels {
         }
     }
     pub fn sync(&mut self, app: &Application) -> bool {
-        let form_changed = self.worktree.as_mut().is_some_and(|form| form.sync(app));
+        let form_changed = self.worktree_mut().is_some_and(|form| form.sync(app));
         if self.change_file.as_ref().is_some_and(|(p, f)| {
             app.services
                 .checkouts
@@ -232,6 +282,9 @@ impl Panels {
                 .map(|f| (p.clone(), f.clone()))
         });
         if document != self.active_document {
+            if let Find::Open { cursor } = &mut self.finding {
+                *cursor = None;
+            }
             self.active_document = document.clone();
             if let Some((p, f)) = &document {
                 let saved = app.preferences.files.get(p);
@@ -241,10 +294,10 @@ impl Panels {
                         .copied()
                         .filter(|offset| offset.iter().all(|n| n.is_finite() && *n >= 0.0))
                     {
-                        self.pending_scroll = Some((
-                            format!("{}/scroll", crate::code_view::source_key(p, f)),
+                        self.pending_scroll = Some(ScrollRestore {
+                            target: ScrollTarget::Document((p.clone(), f.clone())),
                             offset,
-                        ));
+                        });
                     } else if let Some(line) = saved.and_then(|s| s.line.get(f)) {
                         self.pending_line = Some((p.clone(), f.clone(), *line));
                     }
@@ -257,9 +310,12 @@ impl Panels {
         if review != self.active_review {
             self.active_review = review.clone();
             if let Some(key) = review {
-                let pos = self.review_positions.entry(key).or_default();
+                let pos = self.review_positions.entry(key.clone()).or_default();
                 if let Some(offset) = pos.get() {
-                    self.pending_scroll = Some(("diff/scroll".into(), offset));
+                    self.pending_scroll = Some(ScrollRestore {
+                        target: ScrollTarget::Review(key),
+                        offset,
+                    });
                 }
             }
         }
@@ -343,8 +399,11 @@ impl Panels {
                         .as_ref()
                         .is_none_or(|path| review.files.iter().any(|f| &f.path == path)))
             {
-                let (_, offset) = self.review_restore.take().unwrap();
-                self.pending_scroll = Some(("diff/scroll".into(), offset));
+                let (target, offset) = self.review_restore.take().unwrap();
+                self.pending_scroll = Some(ScrollRestore {
+                    target: ScrollTarget::Review(target),
+                    offset,
+                });
             }
             let mut hash = std::collections::hash_map::DefaultHasher::new();
             for thread in &review.threads {
@@ -456,7 +515,7 @@ pub fn show(s: &mut Workspace, screen: Screen) {
         | Screen::Rename
         | Screen::Timeline
         | Screen::Usage
-        | Screen::Stats => live.panels.overlay = Some(screen),
+        | Screen::Stats => live.panels.set_overlay(Some(screen)),
         _ => live.panels.screen = screen,
     }
     if screen == Screen::Settings && !live.panels.directory_loaded {
@@ -553,15 +612,16 @@ pub(crate) fn find_files(s: &mut Workspace, content: bool) {
 }
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if live(s).panels.overlay.is_some() {
-        if live(s).panels.overlay == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
+    if live(s).panels.overlay().is_some() {
+        if live(s).panels.overlay() == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
             return crate::commands::fork_key(s, ev, tx);
         }
-        if live(s).panels.overlay == Some(Screen::Timeline) && matches!(ev.key, Key::Up | Key::Down)
+        if live(s).panels.overlay() == Some(Screen::Timeline)
+            && matches!(ev.key, Key::Up | Key::Down)
         {
             return crate::commands::timeline_key(s, ev, tx);
         }
-        if live(s).panels.overlay == Some(Screen::Sessions)
+        if live(s).panels.overlay() == Some(Screen::Sessions)
             && matches!(ev.key, Key::Up | Key::Down | Key::Enter)
         {
             return crate::commands::sessions_key(s, ev, tx);
@@ -580,9 +640,8 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         && live(s).panels.inspector == Screen::Files
     {
         let l = live_mut(s);
-        l.panels.finding = true;
-        l.panels.find.focused = true;
-    } else if ev.is_command('g') && live(s).panels.finding {
+        l.panels.open_find();
+    } else if ev.is_command('g') && matches!(live(s).panels.finding, Find::Open { .. }) {
         find_next(s, ev.mods.shift, tx);
     } else if ev.is_command('k') {
         s.sidebar.set_open(true);
@@ -592,9 +651,8 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         find_files(s, ev.is_command('f'));
     } else if ev.is_command(',') {
         show(s, Screen::Settings);
-    } else if ev.key == Key::Escape && live(s).panels.finding {
-        live_mut(s).panels.finding = false;
-        live_mut(s).panels.find.focused = false;
+    } else if ev.key == Key::Escape && matches!(live(s).panels.finding, Find::Open { .. }) {
+        live_mut(s).panels.close_find();
         live_mut(s).focus();
     } else if ev.key == Key::Escape && live(s).panels.searching_sessions {
         live_mut(s).panels.sessions.clear();

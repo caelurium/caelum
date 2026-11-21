@@ -10,7 +10,7 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar};
 pub(super) fn button(k: &Kit) -> El {
     ui::Button::new("Conversations…")
         .variant(ButtonVariant::GhostMuted)
-        .on_press(|s: &mut Workspace| live_mut(s).panels.overlay = Some(Screen::VmThreads))
+        .on_press(|s: &mut Workspace| live_mut(s).panels.set_overlay(Some(Screen::VmThreads)))
         .build(k)
         .key("vm-threads")
 }
@@ -20,7 +20,7 @@ pub(crate) fn start(s: &mut Workspace, id: &str) {
     let Some(c) = l.app.remote.saved.checkouts.get(id) else {
         return;
     };
-    let provider = if l.panels.overlay == Some(Screen::Launcher) {
+    let provider = if l.panels.overlay() == Some(Screen::Launcher) {
         l.panels.launch_provider
     } else {
         c.thread.provider
@@ -85,7 +85,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                     .on_press(move |s: &mut Workspace| {
                         let l = live_mut(s);
                         if l.app.switch_vm_thread(&id, &key) {
-                            l.panels.overlay = None;
+                            l.panels.set_overlay(None);
                             super::conversation::sync_editor(l);
                             super::conversation::focus(l);
                         }

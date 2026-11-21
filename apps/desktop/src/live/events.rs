@@ -43,7 +43,7 @@ impl Live {
             if let Event::UpdateProgress(id, progress) = event {
                 let updated = self.app.services.updater.progress(id, progress);
                 changed |= updated
-                    && self.panels.overlay == Some(crate::panels::Screen::Settings)
+                    && self.panels.overlay() == Some(crate::panels::Screen::Settings)
                     && self.panels.settings_page == crate::settings::Page::About;
                 continue;
             }
@@ -53,7 +53,7 @@ impl Live {
                         && mark.owner()
                             == caelum_core::diagnostics::session_owner(&self.app.sessions[i])
                 }) && self.panels.screen == crate::panels::Screen::Conversation
-                    && self.panels.overlay.is_none()
+                    && self.panels.overlay().is_none()
             });
             let before = (!changed).then(|| self.background_delta(&event)).flatten();
             self.apply(event);

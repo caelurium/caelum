@@ -120,7 +120,7 @@ fn reminders_are_absent_from_transcript_copy_and_timeline_with_stable_jumps() {
     key(&mut rt, Key::Down, Mods::default());
     key(&mut rt, Key::Enter, Mods::default());
     advance(&mut rt, 0.5);
-    assert!(rt.state.live.as_ref().unwrap().panels.overlay.is_none());
+    assert!(rt.state.live.as_ref().unwrap().panels.overlay().is_none());
     assert!(element(&rt, "live-entry-0-opencode-prompt").visible[3] > 20.0);
 }
 
@@ -234,7 +234,7 @@ fn editing_sending_background_streaming_and_stopping_stay_session_scoped() {
     assert!(!rt.state.sessions[1].working());
     assert!(
         rt.state.sessions[1].turns[0]
-            .response
+            .response()
             .ends_with("sample patch.")
     );
 
@@ -243,12 +243,12 @@ fn editing_sending_background_streaming_and_stopping_stay_session_scoped() {
     click(&mut rt, "send");
     advance(&mut rt, 0.5);
     click(&mut rt, "stop");
-    let stopped = rt.state.active().turns[1].response.clone();
+    let stopped = rt.state.active().turns[1].response().to_owned();
     assert!(!stopped.is_empty());
-    assert!(rt.state.active().turns[1].stopped);
+    assert!(rt.state.active().turns[1].stopped());
     advance(&mut rt, 6.0);
     assert_eq!(
-        rt.state.active().turns[1].response,
+        rt.state.active().turns[1].response(),
         stopped,
         "stop cancels future chunks"
     );
@@ -258,14 +258,14 @@ fn editing_sending_background_streaming_and_stopping_stay_session_scoped() {
     advance(&mut rt, 0.2);
     key(&mut rt, Key::Escape, Mods::default());
     assert!(!rt.state.active().working());
-    assert!(rt.state.active().turns[2].stopped);
+    assert!(rt.state.active().turns[2].stopped());
 }
 
 #[test]
 fn panes_theme_tools_and_diff_preserve_the_conversation_and_draft() {
     let mut rt = runtime((1280.0, 1000.0));
     let draft = rt.state.active().draft.text.clone();
-    let response = rt.state.active().turns[0].response.clone();
+    let response = rt.state.active().turns[0].response().to_owned();
     let clipboard = rune::clipboard::memory();
     rt.use_clipboard(&clipboard);
     click(&mut rt, "copy-0");
@@ -274,7 +274,7 @@ fn panes_theme_tools_and_diff_preserve_the_conversation_and_draft() {
         Some(response.as_str())
     );
     click(&mut rt, "tool-0");
-    assert!(rt.state.active().turns[0].expanded);
+    assert!(rt.state.active().turns[0].expanded());
     rt.set_system_dark(false);
     advance(&mut rt, 0.1);
     click(&mut rt, "inspector-toggle");
@@ -305,7 +305,7 @@ fn panes_theme_tools_and_diff_preserve_the_conversation_and_draft() {
     assert!(rt.state.sidebar.is_open());
     assert_eq!(rt.state.sidebar.width(), 278.0);
     assert_eq!(rt.state.active().draft.text, draft);
-    assert_eq!(rt.state.active().turns[0].response, response);
+    assert_eq!(rt.state.active().turns[0].response(), response);
 }
 
 #[test]

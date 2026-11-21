@@ -11,8 +11,95 @@ use rune_kit::{Kit, Placement, popover};
 #[derive(Default)]
 pub struct Menu {
     pub active: usize,
-    pub pending: Option<(usize, bool, String, usize, usize)>,
-    dismissed: Option<(usize, String, usize)>,
+    phase: Phase,
+}
+
+#[derive(Default)]
+enum Phase {
+    #[default]
+    Available,
+    Applying {
+        request: u64,
+        capture: Capture,
+    },
+    Dismissed(Capture),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EditorOwner {
+    Composer(usize),
+    SideQuestion(usize),
+}
+
+impl EditorOwner {
+    fn index(self) -> usize {
+        match self {
+            Self::Composer(index) | Self::SideQuestion(index) => index,
+        }
+    }
+
+    fn current(l: &crate::live::Live) -> Option<Self> {
+        let index = l.app.selected?;
+        Some(if l.commands.side_owner == Some(index) {
+            Self::SideQuestion(index)
+        } else {
+            Self::Composer(index)
+        })
+    }
+
+    fn editor(self, l: &crate::live::Live) -> Option<&TextEdit> {
+        match self {
+            Self::Composer(index) => l.drafts.get(index),
+            Self::SideQuestion(index) => {
+                (l.commands.side_owner == Some(index)).then_some(&l.commands.side_editor)
+            }
+        }
+    }
+}
+
+struct Capture {
+    owner: EditorOwner,
+    text: String,
+    anchor: usize,
+    focus: usize,
+}
+
+impl Capture {
+    fn new(owner: EditorOwner, editor: &TextEdit) -> Self {
+        Self {
+            owner,
+            text: editor.text.clone(),
+            anchor: editor.anchor,
+            focus: editor.focus,
+        }
+    }
+
+    fn matches(&self, l: &crate::live::Live) -> bool {
+        Some(self.owner) == EditorOwner::current(l)
+            && self.owner.editor(l).is_some_and(|editor| {
+                editor.focused
+                    && editor.preedit.is_none()
+                    && self.text == editor.text
+                    && self.anchor == editor.anchor
+                    && self.focus == editor.focus
+            })
+    }
+}
+
+pub fn sync(l: &mut crate::live::Live) {
+    if let Phase::Applying { request, capture } = &l.completion.phase {
+        if !l.app.mention_pending(*request) {
+            l.completion.phase = Phase::Available;
+        } else if !capture.matches(l) || l.panels.overlay().is_some() || l.models.is_open() {
+            cancel(l);
+        }
+    }
+}
+
+pub fn cancel(l: &mut crate::live::Live) {
+    if let Phase::Applying { capture, .. } = std::mem::take(&mut l.completion.phase) {
+        l.app.cancel_mentions(capture.owner.index());
+    }
 }
 
 #[derive(Clone)]
@@ -35,23 +122,16 @@ pub fn editor(s: &Workspace) -> Option<&TextEdit> {
 
 pub fn token(s: &Workspace) -> Option<Completion> {
     let l = live(s);
-    let index = l.app.selected?;
     let editor = editor(s)?;
     if !editor.focused
         || l.panels.screen != crate::panels::Screen::Conversation
         || editor.preedit.is_some()
-        || l.panels.overlay.is_some()
+        || l.panels.overlay().is_some()
         || l.models.is_open()
     {
         return None;
     }
-    if l.completion
-        .dismissed
-        .as_ref()
-        .is_some_and(|(i, text, caret)| {
-            *i == index && text == &editor.text && *caret == editor.focus
-        })
-    {
+    if matches!(&l.completion.phase, Phase::Dismissed(capture) if capture.matches(l)) {
         return None;
     }
     Completion::at(&editor.text, editor.anchor, editor.focus)
@@ -146,7 +226,9 @@ pub fn changed(s: &mut Workspace, _: &mut Tx) {
     crate::latency::edit(live(s));
     let l = live_mut(s);
     l.completion.active = 0;
-    l.completion.dismissed = None;
+    if matches!(l.completion.phase, Phase::Dismissed(_)) {
+        l.completion.phase = Phase::Available;
+    }
     if let Some(index) = l.app.selected {
         l.app.sessions[index].completion_generation += 1;
         if l.commands.side_owner == Some(index) {
@@ -166,20 +248,18 @@ pub fn changed(s: &mut Workspace, _: &mut Tx) {
 
 fn dismiss(s: &mut Workspace) {
     let l = live_mut(s);
-    if let Some(index) = l.app.selected {
-        let editor = if l.commands.side_owner == Some(index) {
-            &l.commands.side_editor
-        } else {
-            &l.drafts[index]
+    if let Some(owner) = EditorOwner::current(l) {
+        let Some(editor) = owner.editor(l) else {
+            return;
         };
-        l.completion.dismissed = Some((index, editor.text.clone(), editor.focus));
-        l.app.cancel_mentions(index);
-        l.completion.pending = None;
+        let capture = Capture::new(owner, editor);
+        l.app.cancel_mentions(owner.index());
+        l.completion.phase = Phase::Dismissed(capture);
     }
 }
 
 fn choose(s: &mut Workspace, choice: Choice, token: Completion, execute: bool, tx: &mut Tx) {
-    if live(s).panels.overlay.is_some()
+    if live(s).panels.overlay().is_some()
         || editor(s).is_none_or(|editor| {
             editor.preedit.is_some()
                 || Completion::at(&editor.text, editor.anchor, editor.focus).as_ref()
@@ -211,36 +291,35 @@ fn choose(s: &mut Workspace, choice: Choice, token: Completion, execute: bool, t
             choice.title
         };
         let l = live_mut(s);
-        if l.commands.side_owner == Some(index) {
+        let (capture, request) = if l.commands.side_owner == Some(index) {
             l.commands.side_editor.focused = true;
             let editor = &l.commands.side_editor;
-            l.completion.pending = Some((
-                index,
-                true,
-                editor.text.clone(),
-                editor.anchor,
-                editor.focus,
-            ));
+            let capture = Capture::new(EditorOwner::SideQuestion(index), editor);
             l.app.sessions[index]
                 .side_draft
                 .clone_from(&l.commands.side_editor.text);
-            l.app
-                .complete_side_mention(index, token, choice.value, choice.project, replacement);
+            let request = l.app.complete_side_mention(
+                index,
+                token,
+                choice.value,
+                choice.project,
+                replacement,
+            );
+            (capture, request)
         } else {
             l.drafts[index].focused = true;
             let editor = &l.drafts[index];
-            l.completion.pending = Some((
-                index,
-                false,
-                editor.text.clone(),
-                editor.anchor,
-                editor.focus,
-            ));
+            let capture = Capture::new(EditorOwner::Composer(index), editor);
             l.app.sessions[index]
                 .draft
                 .clone_from(&l.drafts[index].text);
-            l.app
-                .complete_mention(index, token, choice.value, choice.project, replacement);
+            let request =
+                l.app
+                    .complete_mention(index, token, choice.value, choice.project, replacement);
+            (capture, request)
+        };
+        if let Some(request) = request {
+            l.completion.phase = Phase::Applying { request, capture };
         }
     }
 }
@@ -255,7 +334,7 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(editor) = editor(s) else {
         return false;
     };
-    if !editor.focused || editor.preedit.is_some() || live(s).panels.overlay.is_some() {
+    if !editor.focused || editor.preedit.is_some() || live(s).panels.overlay().is_some() {
         return false;
     }
     let active = token(s);

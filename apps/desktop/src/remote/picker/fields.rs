@@ -38,7 +38,7 @@ pub(super) fn checkout(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -
             );
     }
     let owner = source.clone();
-    let screen = l.panels.overlay;
+    let screen = l.panels.overlay();
     let base = col()
         .min_w(0.0)
         .grow(1.0)

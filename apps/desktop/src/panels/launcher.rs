@@ -20,7 +20,7 @@ pub fn open_launcher(s: &mut Workspace) {
         .map(|c| c.thread.provider)
         .or_else(|| l.app.selected.map(|i| l.app.sessions[i].scope.provider))
         .unwrap_or(l.app.preferences.default_provider);
-    l.panels.overlay = Some(Screen::Launcher);
+    l.panels.set_overlay(Some(Screen::Launcher));
     l.commands.search.clear();
     l.commands.search.focused = true;
 }
@@ -210,7 +210,7 @@ fn launch(s: &mut Workspace, path: &str) {
         provider: l.panels.launch_provider,
     });
     l.sync_editors();
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.focus();
 }
