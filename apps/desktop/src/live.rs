@@ -169,7 +169,8 @@ impl Live {
         self.schedule();
         self.reveal_new_session();
         let Some(project) = self.app.active_project.clone() else {
-            self.panels.overlay = Some(crate::panels::Screen::Launcher);
+            self.panels
+                .set_overlay(Some(crate::panels::Screen::Launcher));
             return;
         };
         let provider = self.app.preferences.default_provider;
@@ -203,7 +204,7 @@ impl Live {
 
         self.sync_editors();
         self.menu = None;
-        self.panels.overlay = None;
+        self.panels.set_overlay(None);
         self.session_menu = None;
         if self.app.selected != selected || (!archived && !self.app.sessions[index].archived()) {
             self.panels.archived = false;
@@ -260,7 +261,7 @@ impl Live {
             && self.panels.screen != crate::panels::Screen::Home
         {
             self.panels.screen = crate::panels::Screen::Conversation;
-            self.panels.overlay = None;
+            self.panels.set_overlay(None);
             self.panels.archived = false;
             self.models = Default::default();
             self.commands.side_owner = None;
@@ -280,14 +281,14 @@ impl Live {
             Event::Completed(_, Ok(caelum_core::application::Reply::Snapshot(_)))
         );
 
-        if self.panels.overlay != Some(crate::panels::Screen::Fork) {
+        if self.panels.overlay() != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
         }
-        if self.panels.overlay != Some(crate::panels::Screen::VmHandoff) {
+        if self.panels.overlay() != Some(crate::panels::Screen::VmHandoff) {
             self.app.dismiss_vm_handoff();
         }
         if !matches!(
-            self.panels.overlay,
+            self.panels.overlay(),
             Some(
                 crate::panels::Screen::CreateVm
                     | crate::panels::Screen::RemotePicker
@@ -298,10 +299,10 @@ impl Live {
         }
         self.app.apply(event);
         self.sync_editors();
-        if self.panels.overlay == Some(crate::panels::Screen::Fork)
+        if self.panels.overlay() == Some(crate::panels::Screen::Fork)
             && self.app.fork_picker().is_none()
         {
-            self.panels.overlay = None;
+            self.panels.set_overlay(None);
             self.commands.search.focused = false;
             self.focus();
         }
@@ -313,7 +314,6 @@ impl Live {
         }
         for (index, session) in self.app.sessions.iter_mut().enumerate() {
             if let Some(caret) = session.completion_caret.take() {
-                self.completion.pending = None;
                 self.drafts[index].replace_text(&session.draft);
                 self.drafts[index].set_caret(caret);
                 self.drafts[index].focused = self.app.selected == Some(index);
@@ -321,7 +321,6 @@ impl Live {
             if let Some(caret) = session.side_completion_caret.take()
                 && self.commands.side_owner == Some(index)
             {
-                self.completion.pending = None;
                 self.commands.side_editor.replace_text(&session.side_draft);
                 self.commands.side_editor.set_caret(caret);
             }
@@ -335,14 +334,14 @@ impl Live {
                         .is_some_and(|i| !self.app.sessions[i].archived())))
         {
             if matches!(
-                self.panels.overlay,
+                self.panels.overlay(),
                 Some(
                     crate::panels::Screen::Launcher
                         | crate::panels::Screen::Worktrees
                         | crate::panels::Screen::CreateWorktree
                 )
             ) {
-                self.panels.overlay = None;
+                self.panels.set_overlay(None);
             }
             self.panels.archived = false;
             self.panels.screen = crate::panels::Screen::Conversation;
@@ -409,7 +408,7 @@ impl Live {
 
     pub fn poll(&mut self, tx: &mut Tx) -> bool {
         self.app.conversation_hidden = self.panels.screen != crate::panels::Screen::Conversation
-            || self.panels.overlay.is_some();
+            || self.panels.overlay().is_some();
         let mut changed = self.media.poll();
         changed |= crate::home::sync(self, tx);
         self.app.home.draft.text.clone_from(&self.home.editor.text);
@@ -454,24 +453,7 @@ impl Live {
                     .clone_from(&self.commands.side_editor.text);
             }
         }
-        if let Some((index, side, text, anchor, focus)) = &self.completion.pending {
-            let editor = if *side {
-                &self.commands.side_editor
-            } else {
-                &self.drafts[*index]
-            };
-            if self.app.selected != Some(*index)
-                || !editor.focused
-                || self.panels.overlay.is_some()
-                || self.models.is_open()
-                || editor.text != *text
-                || editor.anchor != *anchor
-                || editor.focus != *focus
-            {
-                self.app.cancel_mentions(*index);
-                self.completion.pending = None;
-            }
-        }
+        crate::completion::sync(self);
         if let Some(index) = self.app.selected {
             let completion = self
                 .commands
@@ -481,7 +463,7 @@ impl Live {
                 .filter(|draft| {
                     draft.focused
                         && draft.preedit.is_none()
-                        && self.panels.overlay.is_none()
+                        && self.panels.overlay().is_none()
                         && !self.models.is_open()
                 })
                 .and_then(|draft| {
@@ -499,6 +481,7 @@ impl Live {
         }
         let events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
         changed |= self.apply_events(events);
+        crate::completion::sync(self);
         changed |= crate::remote::sync(self, tx);
         changed |= self.app.acknowledge();
         changed |= self.sync_patches();
@@ -521,7 +504,7 @@ impl Live {
             if let Some(index) = self
                 .shell_panel
                 .as_ref()
-                .filter(|_| self.panels.overlay == Some(crate::panels::Screen::Shells))
+                .filter(|_| self.panels.overlay() == Some(crate::panels::Screen::Shells))
                 .map(|p| p.index)
                 .or(self.app.selected)
                 && !self.app.sessions[index].shells.is_empty()
@@ -723,7 +706,7 @@ pub fn open_project(_: &mut Workspace, tx: &mut Tx) {
             Ok(Some(path)) => {
                 let l = live_mut(s);
                 l.panels.screen = crate::panels::Screen::Conversation;
-                if l.panels.overlay == Some(crate::panels::Screen::Launcher) {
+                if l.panels.overlay() == Some(crate::panels::Screen::Launcher) {
                     l.app.launch_project(
                         path.to_string_lossy().into_owned(),
                         l.panels.launch_provider,

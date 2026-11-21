@@ -28,7 +28,7 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
         None
     } else if inspected.is_some() {
         inspected
-    } else if l.panels.screen == Screen::Remote && l.panels.overlay.is_none() {
+    } else if l.panels.screen == Screen::Remote && l.panels.overlay().is_none() {
         l.app.remote.saved.selected.as_deref()
     } else {
         None
@@ -42,24 +42,39 @@ pub(super) fn sync(l: &mut Live, tx: &mut Tx, now: Instant) {
     // A collapsed badge doesn't sample processes, but must still notice its known auto-stop.
     if let Phase::Ready { machine, .. } = &checkout.phase
         && let Some(stops) = machine.auto_stop_unix
-        && !l
-            .remote
-            .checked_deadline
-            .as_ref()
-            .is_some_and(|(m, t)| m == &machine.key && *t == stops)
     {
         let remaining = stops.saturating_add(6).saturating_sub(unix_now());
-        if remaining > 0 {
+        let owner = StopOwner {
+            machine: machine.key.clone(),
+            stops,
+        };
+        if remaining > 0
+            && !matches!(&l.remote.auto_stop, Some(AutoStop::Scheduled(current) | AutoStop::Checked(current)) if current == &owner)
+        {
             tx.wake_after(Duration::from_secs(remaining as u64));
-        } else {
+            l.remote.auto_stop = Some(AutoStop::Scheduled(owner));
+        } else if remaining <= 0
+            && !matches!(&l.remote.auto_stop, Some(AutoStop::Checked(current)) if current == &owner)
+        {
             let id = id.clone();
-            l.remote.checked_deadline = Some((machine.key.clone(), stops));
+            l.remote.auto_stop = Some(AutoStop::Checked(owner));
             l.app.refresh_remote(&id);
         }
     }
     if let Some(at) = l.app.monitor_remote(visible.as_deref(), now) {
         tx.wake_after(at.saturating_duration_since(now));
     }
+}
+
+#[derive(PartialEq, Eq)]
+pub(super) struct StopOwner {
+    machine: caelum_core::remote::MachineId,
+    stops: i64,
+}
+
+pub(super) enum AutoStop {
+    Scheduled(StopOwner),
+    Checked(StopOwner),
 }
 
 fn process(p: &Process) -> String {
@@ -252,7 +267,7 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             .children((live(s).panels.screen == Screen::Remote).then(|| {
                 ui::Button::new("Changes")
                     .on_press(|s: &mut Workspace| {
-                        live_mut(s).panels.overlay = None;
+                        live_mut(s).panels.set_overlay(None);
                         super::open_changes(s);
                     })
                     .build(k)

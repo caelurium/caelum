@@ -22,7 +22,7 @@ pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
 
 fn show(s: &mut Workspace, focus_draft: bool) {
     let l = live_mut(s);
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
     l.remote.inspection = None;
@@ -44,11 +44,11 @@ pub(crate) fn select(s: &mut Workspace, id: &str) {
 
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let mut changed = false;
-    if l.panels.overlay == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
-        l.panels.overlay = None;
+    if l.panels.overlay() == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
+        l.panels.set_overlay(None);
         changed = true;
     }
-    if l.panels.overlay != Some(Screen::VmStats) {
+    if l.panels.overlay() != Some(Screen::VmStats) {
         l.remote.inspection = None;
     }
     if !l.remote.restored && l.app.restored() {

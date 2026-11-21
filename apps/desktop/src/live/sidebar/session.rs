@@ -52,7 +52,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         ""
     };
     let provider = ui::provider_name(session.scope.provider);
-    let age = super::age(session.last_activity, l.feed.now).0;
+    let age = super::age(session.last_activity, l.feed.displayed_at()).0;
     let ink = if pending || waiting {
         k.c.warning.icon
     } else if error.is_some() {

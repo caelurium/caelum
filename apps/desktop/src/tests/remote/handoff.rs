@@ -109,7 +109,7 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     assert!(button.text.is_none() && button.rect[2] <= 32.);
     assert!((context[0] - (button.rect[0] + button.rect[2])).abs() <= 6.);
     click(&mut rt, "continue-on-vm");
-    assert_eq!(live(&rt.state).panels.overlay, Some(Screen::VmHandoff));
+    assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::VmHandoff));
     let popup = element(&rt, "vm-popover");
     assert!(popup.rect[1] + popup.rect[3] <= button.rect[1] && popup.rect[2] <= 420.);
     let old = live_mut(&mut rt.state)
@@ -171,7 +171,7 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     );
     click(&mut rt, "live-session-0");
     click(&mut rt, "continue-on-vm");
-    assert_eq!(live(&rt.state).panels.overlay, Some(Screen::VmStats));
+    assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::VmStats));
     assert_eq!(
         element(&rt, "vm-popover").label.as_deref(),
         Some("Machine stats")

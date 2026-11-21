@@ -22,7 +22,7 @@ struct Owner {
 impl Owner {
     fn active(&self, l: &Live) -> bool {
         l.panels.screen == Screen::Remote
-            && l.panels.overlay.is_none()
+            && l.panels.overlay().is_none()
             && l.app.remote.saved.selected.as_ref() == Some(&self.checkout)
             && l.app.can_switch_vm_thread(&self.checkout)
             && l.app

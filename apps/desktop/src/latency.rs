@@ -77,7 +77,7 @@ impl State {
                 Some(index) => {
                     live.app.selected == Some(index)
                         && live.panels.screen == Screen::Conversation
-                        && live.panels.overlay.is_none()
+                        && live.panels.overlay().is_none()
                 }
                 None => live.panels.screen == Screen::Home,
             };

@@ -284,7 +284,7 @@ fn history(state: &mut Workspace, action: caelum_core::application::HistoryActio
     ));
     l.commands.owner = Some(index);
     l.commands.search.focused = true;
-    l.panels.overlay = Some(panels::Screen::Fork);
+    l.panels.set_overlay(Some(panels::Screen::Fork));
     if action == caelum_core::application::HistoryAction::Rewind {
         let boundary = l.app.fork_picker().unwrap().points[1].boundary.clone();
         l.app.fork_at(&boundary);
@@ -365,4 +365,13 @@ pub(super) fn activity(l: &mut crate::live::Live, name: &str) {
         "stopping" => l.app.cancel(0),
         _ => {}
     }
+}
+
+pub(super) fn command_overlay(l: &mut crate::live::Live, name: &str) {
+    l.commands.owner = Some(0);
+    l.panels.set_overlay(Some(match name {
+        "timeline" | "timeline-empty" => crate::panels::Screen::Timeline,
+        "usage" | "usage-loading" => crate::panels::Screen::Usage,
+        _ => crate::panels::Screen::Stats,
+    }));
 }

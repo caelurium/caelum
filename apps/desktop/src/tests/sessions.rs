@@ -10,7 +10,7 @@ fn fork_slash_command_uses_the_chosen_turn_and_preserves_the_parent_editor() {
     key(&mut rt, Key::Enter, Mods::default());
     advance(&mut rt, 0.2);
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::Fork)
     );
     rt.update(|s,_| {
@@ -55,7 +55,7 @@ fn fork_slash_command_uses_the_chosen_turn_and_preserves_the_parent_editor() {
     });
     advance(&mut rt, 0.2);
     let l = rt.state.live.as_ref().unwrap();
-    assert_eq!(l.panels.overlay, None);
+    assert_eq!(l.panels.overlay(), None);
     assert_eq!(l.app.selected, Some(2));
     assert_eq!(l.drafts[0].text, "Unsent café draft");
     assert!(l.drafts[2].text.is_empty());
@@ -189,7 +189,7 @@ fn sessions_slash_command_opens_provider_history_and_resumes_a_selected_session(
     advance(&mut rt, 0.2);
 
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::Sessions)
     );
     assert!(rt.find("provider-session-0").is_some());
@@ -205,7 +205,7 @@ fn sessions_slash_command_opens_provider_history_and_resumes_a_selected_session(
 
     click(&mut rt, "provider-session-0");
     assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(0));
-    assert_eq!(rt.state.live.as_ref().unwrap().panels.overlay, None);
+    assert_eq!(rt.state.live.as_ref().unwrap().panels.overlay(), None);
     assert!(
         rt.state
             .live
@@ -290,7 +290,7 @@ fn closing_local_sessions_and_undo_keep_the_workspace_editable() {
         assert!(live.app.sessions[0].archived());
         assert_eq!(live.app.selected, Some(1));
         assert_eq!(live.app.sessions.len(), 2);
-        assert!(live.panels.overlay.is_none());
+        assert!(live.panels.overlay().is_none());
         assert_eq!(live.drafts[1].text, "Independent background draft");
         element(&rt, "live-draft-1");
         close_session(&mut rt, 1);

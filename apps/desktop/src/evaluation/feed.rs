@@ -16,7 +16,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
         return false;
     }
     let l = state.live.as_mut().unwrap();
-    l.feed.now = NOW;
+    l.feed.set_display_clock(NOW);
     for (i, session) in l.app.sessions.iter_mut().enumerate() {
         session.last_activity = Some(NOW - (i as u64 + 1) * 900_000);
     }

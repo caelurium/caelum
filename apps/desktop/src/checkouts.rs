@@ -58,7 +58,7 @@ pub fn manage(s: &mut Workspace, project: String) {
     let project = l.app.group_path(&project).to_owned();
     l.app.task(refresh_task(&l.app, &project));
     l.checkouts.project = Some(project);
-    l.panels.overlay = Some(Screen::Worktrees);
+    l.panels.set_overlay(Some(Screen::Worktrees));
 }
 
 pub fn removal(app: &Application, project: &str, path: &str) -> Option<Task> {
@@ -98,7 +98,7 @@ fn show_selected(l: &mut crate::live::Live) {
     l.feed.close();
     l.sync_editors();
     l.panels.screen = Screen::Conversation;
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.archived = false;
     l.session_menu = None;
     l.app.task(Task::Git {

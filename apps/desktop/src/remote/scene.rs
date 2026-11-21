@@ -43,7 +43,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     if name == "remote-handoff" {
         use caelum_core::application::{Command, Event, HandoffSource, Reply};
         l.app.sessions[0].remote_id = Some("source-session".into());
-        l.panels.overlay = Some(Screen::VmHandoff);
+        l.panels.set_overlay(Some(Screen::VmHandoff));
         l.app.begin_vm_handoff(HandoffSource::Composer(0));
         let (request, _) = l
             .app
@@ -66,16 +66,16 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     }
     if name == "remote-settings" {
         l.panels.settings_page = Page::Remote;
-        l.panels.overlay = Some(Screen::Settings);
+        l.panels.set_overlay(Some(Screen::Settings));
         return;
     }
     if matches!(name, "remote-picker" | "remote-create") {
         l.app.remote.picker = Some(Picker::Ready(source));
-        l.panels.overlay = Some(if name == "remote-create" {
+        l.panels.set_overlay(Some(if name == "remote-create" {
             Screen::CreateVm
         } else {
             Screen::RemotePicker
-        });
+        }));
         return;
     }
     let id = "checkout-example".to_owned();
@@ -92,7 +92,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         other_threads: vec![],
         thread: Thread {
             conversation: Some("thread-example".into()),
-            last_activity: Some(l.feed.now - 120_000),
+            last_activity: Some(l.feed.displayed_at() - 120_000),
             lines: vec![
                 Line::new(Speaker::You, "Add a health check and show me the changes."),
                 Line::new(

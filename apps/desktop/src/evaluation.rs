@@ -400,12 +400,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             | "stats-error"
             | "stats-empty"
     ) {
-        l.commands.owner = Some(0);
-        l.panels.overlay = Some(match name {
-            "timeline" | "timeline-empty" => crate::panels::Screen::Timeline,
-            "usage" | "usage-loading" => crate::panels::Screen::Usage,
-            _ => crate::panels::Screen::Stats,
-        });
+        scenes::command_overlay(l, name);
         if name == "timeline" {
             let session = &mut l.app.sessions[0];
             session.conversation = Default::default();
@@ -807,7 +802,8 @@ pub fn design() -> Workspace {
     for title in [&sample.title, "OpenCode session", &sample.secondary_title] {
         let i = live.app.new_session(scope.clone());
         live.app.sessions[i].title = title.into();
-        live.app.sessions[i].last_activity = Some(live.feed.now - (i as u64 + 1) * 900_000);
+        live.app.sessions[i].last_activity =
+            Some(live.feed.displayed_at() - (i as u64 + 1) * 900_000);
     }
     let session = &mut live.app.sessions[0];
     session.options.model = Some("Test model".into());
@@ -906,7 +902,7 @@ pub fn scene(state: &mut Workspace, name: &str) {
                 .unwrap()
                 .clone();
             l.media.selected = Some((project.into(), media));
-            l.panels.overlay = Some(crate::panels::Screen::Image);
+            l.panels.set_overlay(Some(crate::panels::Screen::Image));
         }
         return;
     }

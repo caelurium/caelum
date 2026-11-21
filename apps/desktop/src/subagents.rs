@@ -108,7 +108,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                     if l.app.open_subagent(index, &id).is_some() {
                         l.sync_editors();
                         l.panels.screen = Screen::Conversation;
-                        l.panels.overlay = None;
+                        l.panels.set_overlay(None);
                     }
                 })
                 .build(k)
