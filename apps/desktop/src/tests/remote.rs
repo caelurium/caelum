@@ -170,8 +170,8 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
                     project,
                     account: "example-account".into(),
                     repository: "example/project".into(),
-                    base: "main".into(),
-                    published_tip: None,
+                    base: "feature/launcher".into(),
+                    published_tip: Some("a".repeat(40)),
                     environment: None,
                 }))),
             ));
@@ -184,11 +184,11 @@ fn a_launcher_provider_survives_changing_the_project_before_creating_a_vm() {
     let choice = crate::code_view::source_key(project, "vm-project");
     click(&mut rt, &choice);
     publish_source(&mut rt);
-    fill(&mut rt, "remote-branch", "feature/launcher");
     click(&mut rt, "create-remote");
     let app = &mut live_mut(&mut rt.state).app;
     let c = &app.remote.saved.checkouts[app.remote.saved.selected.as_ref().unwrap()];
     assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(c.branch(), Some("feature/launcher"));
     assert!(c.thread.conversation.is_none());
     assert!(matches!(
         app.commands().as_slice(),
