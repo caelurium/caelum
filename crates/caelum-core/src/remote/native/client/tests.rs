@@ -13,19 +13,20 @@ fn losing_a_link_retires_the_send_and_only_admits_new_work_after_its_connected_n
         move || {
             let _ = wake.send(());
         },
-        async move |link, out| {
+        async move |attempt_state, out| {
             let (lost, signal) = tokio::sync::oneshot::channel::<()>();
-            let mut commands = activate(link);
+            let writer = attempt_state.activate();
             let (sent, observed) = blocking::channel();
             if attempt.send((lost, observed)).is_err() {
                 return "test receiver dropped".into();
             }
-            out.publish(Message::Connected(link.clone())).await;
+            out.publish(Message::Connected(writer)).await;
             tokio::pin!(signal);
             loop {
                 tokio::select! {
                     _=&mut signal=>return "tunnel closed".into(),
-                    cmd=commands.recv()=>if let Some(cmd)=cmd {
+                    cmd=attempt_state.next_request()=>if let Some(cmd)=cmd {
+                        attempt_state.pending.insert(cmd.0);
                         if sent.send(cmd).is_err() {
                             return "test command receiver dropped".into();
                         }

@@ -32,12 +32,23 @@ impl Metadata {
     }
 }
 
+enum ForwardMsg {
+    Ensure {
+        remote: u16,
+        reply: tokio::sync::oneshot::Sender<Result<u16, String>>,
+    },
+    Release {
+        remote: u16,
+        local: u16,
+    },
+}
+
 /// Operations can only use this authenticated master; OpenSSH must not fall back
 /// to a fresh connection when its control socket disappears.
 pub(crate) struct Access {
     socket: PathBuf,
     host: String,
-    forwards: std::sync::Arc<tokio::sync::Mutex<HashMap<u16, u16>>>,
+    forwards: tokio::sync::mpsc::Sender<ForwardMsg>,
     pub(crate) root: String,
     pub(crate) io: Handle,
     pub(crate) metadata: Option<Metadata>,
@@ -49,15 +60,26 @@ pub(crate) struct Access {
 impl Access {
     pub(crate) fn new(socket: PathBuf, host: String, root: String) -> Self {
         let (shutdown, _) = tokio::sync::watch::channel(false);
+        let live = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let io = Handle::current();
+        let (forwards, mailbox) = tokio::sync::mpsc::channel(32);
+        io.spawn(run_forwarder(
+            socket.clone(),
+            host.clone(),
+            shutdown.clone(),
+            live.clone(),
+            forwards.clone(),
+            mailbox,
+        ));
         Self {
             socket,
             host,
-            forwards: Default::default(),
+            forwards,
             root,
-            io: Handle::current(),
+            io,
             metadata: None,
             codex_used: Default::default(),
-            live: std::sync::Arc::new(true.into()),
+            live,
             shutdown,
         }
     }
@@ -155,117 +177,14 @@ impl Access {
     }
 
     async fn forward(&self, remote: u16) -> Result<u16, String> {
-        let mut forwards = self.forwards.lock().await;
-        if let Some(port) = forwards.get(&remote) {
-            return Ok(*port);
-        }
-        if forwards.len() >= 8 {
-            return Err("The Codex listener has changed repeatedly. Reconnect to the VM.".into());
-        }
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        let (reply, result) = tokio::sync::oneshot::channel();
+        self.forwards
+            .send(ForwardMsg::Ensure { remote, reply })
             .await
-            .map_err(|e| e.to_string())?;
-        let local = listener.local_addr().map_err(|e| e.to_string())?.port();
-        forwards.insert(remote, local);
-        let socket = self.socket.clone();
-        let host = self.host.clone();
-        let shutdown = self.shutdown.clone();
-        let live = self.live.clone();
-        let forwards = self.forwards.clone();
-        tokio::spawn(async move {
-            let mut closing = shutdown.subscribe();
-            let (failed, mut failures) = tokio::sync::mpsc::unbounded_channel();
-            let (retired, _) = tokio::sync::watch::channel(false);
-            loop {
-                if *closing.borrow() {
-                    break;
-                }
-                tokio::select! {
-                    _ = closing.changed() => break,
-                    Some(()) = failures.recv() => break,
-                    accepted = listener.accept() => match accepted {
-                        Ok((stream, _)) if live.load(std::sync::atomic::Ordering::Acquire) => {
-                            let socket = socket.clone();
-                            let host = host.clone();
-                            let shutdown = shutdown.clone();
-                            let failed = failed.clone();
-                            let retired = retired.clone();
-                            tokio::spawn(async move {
-                                let mut command = Command::new("ssh");
-                                command
-                                    .args(["-F", "/dev/null", "-S"])
-                                    .arg(socket)
-                                    .args(["-o", "ProxyCommand=false", "-o", "BatchMode=yes", "-T", "-W"])
-                                    .arg(format!("127.0.0.1:{remote}"))
-                                    .arg("--")
-                                    .arg(host)
-                                    .stdin(Stdio::piped())
-                                    .stdout(Stdio::piped())
-                                    .stderr(Stdio::null())
-                                    .kill_on_drop(true);
-                                let Ok(mut child) = command.spawn() else {
-                                    let _ = failed.send(());
-                                    return;
-                                };
-                                let (Some(mut stdin), Some(mut stdout)) =
-                                    (child.stdin.take(), child.stdout.take())
-                                else {
-                                    return;
-                                };
-                                let (mut reader, mut writer) = tokio::io::split(stream);
-                                let mut closing = shutdown.subscribe();
-                                let mut retiring = retired.subscribe();
-                                if *closing.borrow() || *retiring.borrow() {
-                                    let _ = child.kill().await;
-                                    return;
-                                }
-                                let copy = async {
-                                    tokio::try_join!(
-                                        async {
-                                            tokio::io::copy(&mut reader, &mut stdin).await?;
-                                            tokio::io::AsyncWriteExt::shutdown(&mut stdin).await
-                                        },
-                                        async {
-                                            tokio::io::copy(&mut stdout, &mut writer).await
-                                        }
-                                    )
-                                };
-                                tokio::select! {
-                                    _ = closing.changed() => {
-                                        let _ = child.kill().await;
-                                    },
-                                    _ = retiring.changed() => {
-                                        let _ = child.kill().await;
-                                    },
-                                    _ = child.wait() => {
-                                        let _ = failed.send(());
-                                    },
-                                    result = copy => {
-                                        if result.is_err() {
-                                            let _ = child.kill().await;
-                                        } else if !matches!(
-                                            tokio::time::timeout(Duration::from_secs(3), child.wait()).await,
-                                            Ok(Ok(status)) if status.success()
-                                        ) {
-                                            let _ = failed.send(());
-                                            let _ = child.kill().await;
-                                        }
-                                    }
-                                }
-                            });
-                        }
-                        Ok(_) => break,
-                        Err(_) => break,
-                    }
-                }
-            }
-            retired.send_replace(true);
-            let mut forwards = forwards.lock().await;
-            if forwards.get(&remote) == Some(&local) {
-                forwards.remove(&remote);
-            }
-        });
-        Ok(local)
+            .map_err(|_| "The VM connection closed.".to_owned())?;
+        result
+            .await
+            .map_err(|_| "The VM connection closed.".to_owned())?
     }
 
     pub(crate) fn codex(&self) -> Result<String, String> {
@@ -300,6 +219,166 @@ impl Access {
                 .map_err(|_| "GitHub timed out on the VM.")?
         })
     }
+}
+
+async fn run_forwarder(
+    socket: PathBuf,
+    host: String,
+    shutdown: tokio::sync::watch::Sender<bool>,
+    live: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    sender: tokio::sync::mpsc::Sender<ForwardMsg>,
+    mut mailbox: tokio::sync::mpsc::Receiver<ForwardMsg>,
+) {
+    let mut forwards: HashMap<u16, u16> = HashMap::new();
+    let mut closing = shutdown.subscribe();
+    loop {
+        if *closing.borrow() {
+            break;
+        }
+        tokio::select! {
+            _ = closing.changed() => break,
+            message = mailbox.recv() => match message {
+                Some(ForwardMsg::Release { remote, local }) => {
+                    if forwards.get(&remote) == Some(&local) {
+                        forwards.remove(&remote);
+                    }
+                }
+                Some(ForwardMsg::Ensure { remote, reply }) => {
+                    let result = if let Some(port) = forwards.get(&remote) {
+                        Ok(*port)
+                    } else if forwards.len() >= 8 {
+                        Err("The Codex listener has changed repeatedly. Reconnect to the VM.".into())
+                    } else {
+                        match tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                            .await
+                            .and_then(|listener| listener.local_addr().map(|addr| (listener, addr.port())))
+                        {
+                            Ok((listener, local)) => {
+                                forwards.insert(remote, local);
+                                spawn_forward_listener(
+                                    listener,
+                                    remote,
+                                    local,
+                                    socket.clone(),
+                                    host.clone(),
+                                    shutdown.clone(),
+                                    live.clone(),
+                                    sender.clone(),
+                                );
+                                Ok(local)
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
+                    };
+                    let _ = reply.send(result);
+                }
+                None => break,
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_forward_listener(
+    listener: tokio::net::TcpListener,
+    remote: u16,
+    local: u16,
+    socket: PathBuf,
+    host: String,
+    shutdown: tokio::sync::watch::Sender<bool>,
+    live: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    forwards: tokio::sync::mpsc::Sender<ForwardMsg>,
+) {
+    tokio::spawn(async move {
+        let mut closing = shutdown.subscribe();
+        let (failed, mut failures) = tokio::sync::mpsc::unbounded_channel();
+        let (retired, _) = tokio::sync::watch::channel(false);
+        loop {
+            if *closing.borrow() {
+                break;
+            }
+            tokio::select! {
+                _ = closing.changed() => break,
+                Some(()) = failures.recv() => break,
+                accepted = listener.accept() => match accepted {
+                    Ok((stream, _)) if live.load(std::sync::atomic::Ordering::Acquire) => {
+                        let socket = socket.clone();
+                        let host = host.clone();
+                        let shutdown = shutdown.clone();
+                        let failed = failed.clone();
+                        let retired = retired.clone();
+                        tokio::spawn(async move {
+                            let mut command = Command::new("ssh");
+                            command
+                                .args(["-F", "/dev/null", "-S"])
+                                .arg(socket)
+                                .args(["-o", "ProxyCommand=false", "-o", "BatchMode=yes", "-T", "-W"])
+                                .arg(format!("127.0.0.1:{remote}"))
+                                .arg("--")
+                                .arg(host)
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .stderr(Stdio::null())
+                                .kill_on_drop(true);
+                            let Ok(mut child) = command.spawn() else {
+                                let _ = failed.send(());
+                                return;
+                            };
+                            let (Some(mut stdin), Some(mut stdout)) =
+                                (child.stdin.take(), child.stdout.take())
+                            else {
+                                return;
+                            };
+                            let (mut reader, mut writer) = tokio::io::split(stream);
+                            let mut closing = shutdown.subscribe();
+                            let mut retiring = retired.subscribe();
+                            if *closing.borrow() || *retiring.borrow() {
+                                let _ = child.kill().await;
+                                return;
+                            }
+                            let copy = async {
+                                tokio::try_join!(
+                                    async {
+                                        tokio::io::copy(&mut reader, &mut stdin).await?;
+                                        tokio::io::AsyncWriteExt::shutdown(&mut stdin).await
+                                    },
+                                    async {
+                                        tokio::io::copy(&mut stdout, &mut writer).await
+                                    }
+                                )
+                            };
+                            tokio::select! {
+                                _ = closing.changed() => {
+                                    let _ = child.kill().await;
+                                },
+                                _ = retiring.changed() => {
+                                    let _ = child.kill().await;
+                                },
+                                _ = child.wait() => {
+                                    let _ = failed.send(());
+                                },
+                                result = copy => {
+                                    if result.is_err() {
+                                        let _ = child.kill().await;
+                                    } else if !matches!(
+                                        tokio::time::timeout(Duration::from_secs(3), child.wait()).await,
+                                        Ok(Ok(status)) if status.success()
+                                    ) {
+                                        let _ = failed.send(());
+                                        let _ = child.kill().await;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Ok(_) => break,
+                    Err(_) => break,
+                }
+            }
+        }
+        retired.send_replace(true);
+        let _ = forwards.send(ForwardMsg::Release { remote, local }).await;
+    });
 }
 
 fn diagnostic(bytes: &[u8]) -> String {
