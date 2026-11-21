@@ -33,15 +33,13 @@ pub struct State {
 pub fn editor(s: &Workspace, index: usize, input: El) -> El {
     let state = &live(s).composer.editors[index];
     let position = state.position.clone();
-    // The first frame after switching sessions still has the previous viewport's
-    // offset. Wait for poll's restoration before recording this session's scroll.
+
     let restored = live(s).composer.selected == Some(index);
     let pane = rune::memo::window_layout("main-pane").map_or(700.0, |r| r[3]);
     let controls = rune::memo::window_layout("composer-controls").map_or(102.0, |r| r[3]);
     let support = rune::memo::window_layout(&format!("composer-context-{index}"))
         .map_or(0.0, |r| r[3].min(180.0));
-    // Grow with the draft, reserving a readable part of the conversation even
-    // when attachments, queue controls or a narrow toolbar take more space.
+
     let height = (pane - controls - support - 65.0 - (pane * 0.3).max(140.0)).clamp(100.0, 420.0);
     ui::composer_editor(input, 56.0, height).on_scroll_offset(move |at| {
         if restored {
@@ -338,7 +336,6 @@ pub fn preview_height(s: &Workspace) -> f32 {
         return 480.0;
     }
     let lines = snapshot_content(&preview.attachment).lines().count();
-    // Source lines use the same 20-point leading as Files; short snapshots fit
-    // their content, while longer captures scroll below the filename header.
+
     (lines as f32 * 20.0 + 24.0).clamp(84.0, 420.0) + 56.0
 }

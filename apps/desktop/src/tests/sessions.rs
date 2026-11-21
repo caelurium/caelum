@@ -364,7 +364,6 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         assert_eq!(session.error.as_deref(), Some("Offline"));
         element(&rt, "live-draft-0");
 
-        // Completing a background archive must not replace the user's new selection.
         close_session(&mut rt, 0);
         let request = rt
             .state
@@ -421,7 +420,6 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
             "Provider draft after restore"
         );
 
-        // Prefer the other session's draft instead of creating a blank replacement.
         click(&mut rt, "session-actions-0");
         click(&mut rt, "archive-session");
         let request = rt
@@ -446,7 +444,6 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         assert_eq!(live.app.sessions.len(), 2);
         assert_eq!(live.drafts[1].text, "Still writing here");
 
-        // Restoring from the archive list updates both provider and workspace state.
         click(&mut rt, "toggle-archived");
         click(&mut rt, "live-session-0");
         click(&mut rt, "session-actions-0");

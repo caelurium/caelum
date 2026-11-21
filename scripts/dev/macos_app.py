@@ -18,7 +18,6 @@ def stage(root: Path, binary: Path) -> Path:
     resources = app / "Contents" / "Resources"
     executable.parent.mkdir(parents=True, exist_ok=True)
     resources.mkdir(parents=True, exist_ok=True)
-    # Replacing the inode also permits rebuilding while an older process exits.
     temporary = executable.with_suffix(".new")
     shutil.copy2(binary, temporary)
     temporary.replace(executable)

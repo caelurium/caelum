@@ -48,9 +48,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             )
             .grow(1.0);
     };
-    // Version the ordered visible identities, not the text or entry count. Rune
-    // can then retain its row keys through streaming/typing commits, while an
-    // equal-length replacement, reorder or visibility change still invalidates.
+
     let mut version = DefaultHasher::new();
     index.hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
@@ -140,9 +138,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                             })
                             .map(|e| e.id.clone());
                     }
-                    // Visibility and the current prompt are bookkeeping, not
-                    // view inputs. Patch changes redraw from the scheduled poll;
-                    // only newly queued images change the view here (busy state).
+
                     crate::media::request(s, index, &positions)
                 }),
         )

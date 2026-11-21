@@ -196,8 +196,6 @@ impl Panels {
     }
     pub fn reveal_line(&mut self, tx: &mut Tx) {
         if let Some((key, offset)) = self.pending_scroll.take() {
-            // Restoration must be held through the first virtual-row measurements
-            // after a surface remount, rather than gliding from an empty viewport.
             tx.scroll_to_instant(key, offset[0], offset[1]);
         }
         if let Some((project, path, line)) = &self.pending_line

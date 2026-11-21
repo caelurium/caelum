@@ -30,7 +30,7 @@ pub(crate) fn workspace() -> Workspace {
     live.app.sessions[0]
         .conversation
         .history(Provider::Codex, &turns, false);
-    // Include expanded output among the variable-height prose and code rows.
+
     for n in (0..1_000).step_by(3) {
         live.expanded.insert((0, format!("codex-tool-{n}")));
     }

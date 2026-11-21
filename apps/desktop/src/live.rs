@@ -200,8 +200,7 @@ impl Live {
     pub(crate) fn archive(&mut self, index: usize, archived: bool) {
         let selected = self.app.selected;
         self.app.archive(index, archived);
-        // Local archive can create and select its replacement synchronously. Rune
-        // rebuilds after the press, before poll gets a chance to create its editor.
+
         self.sync_editors();
         self.menu = None;
         self.panels.overlay = None;
@@ -280,8 +279,7 @@ impl Live {
             &event,
             Event::Completed(_, Ok(caelum_core::application::Reply::Snapshot(_)))
         );
-        // A provider-created fork is still discoverable after the picker is replaced,
-        // but its completion must not navigate away from the user's current view.
+
         if self.panels.overlay != Some(crate::panels::Screen::Fork) {
             self.app.dismiss_fork();
         }
@@ -509,7 +507,6 @@ impl Live {
         {
             let scope = self.app.sessions[index].scope.clone();
             if !self.app.choices.contains_key(&scope) {
-                // Retry missing catalogues on navigation, not on every idle poll.
                 self.app.refresh_choices_for(scope);
             }
         }
@@ -621,8 +618,6 @@ impl Live {
                 && !session.working()
                 && self.app.selected == Some(index)
             {
-                // Restored history is already complete; opening it must not
-                // reveal thousands of pixels at the live-stream growth speed.
                 tx.instant();
             }
             self.history_lengths[index] = length;
@@ -713,8 +708,7 @@ pub(crate) fn live(s: &Workspace) -> &Live {
 }
 pub(crate) fn live_mut(s: &mut Workspace) -> &mut Live {
     let live = s.live.as_mut().expect("live workspace");
-    // Rune polls before input handlers. Mutations must schedule the following
-    // poll so commands and derived views also advance in an otherwise idle app.
+
     live.schedule();
     live
 }
@@ -748,8 +742,7 @@ pub fn open_project(_: &mut Workspace, tx: &mut Tx) {
 /// navigation (including Tab, pointer and accessibility moves), never from a timer.
 pub fn presented_focus(rt: &rune::Runtime<Workspace>) -> Option<Option<String>> {
     let l = rt.state.live.as_ref()?;
-    // Rune commits pointer, keyboard and accessibility focus changes. Paint-only
-    // frames keep the same focus. Also observe blur when an exit is pruned.
+
     let observation = (rt.stats.commits, rt.has_focus());
     if l.focus_observation.replace(Some(observation)) == Some(observation) {
         return None;

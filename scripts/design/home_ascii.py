@@ -38,8 +38,6 @@ def main():
                 round((x + 1) * image.width / width),
                 round((y + 1) * image.height / height),
             )
-            # Read the ink, not the near-black space between strokes. Averaging the
-            # brightest few pixels also tolerates sub-pixel alignment in the PNG.
             pixels = sorted(image.crop(box).get_flattened_data(), key=lambda p: sum(p), reverse=True)
             ink = pixels[:max(1, len(pixels) // 12)]
             colours.extend(round(sum(p[c] for p in ink) / len(ink)) for c in range(3))

@@ -117,8 +117,6 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let shown = l.panels.screen == Screen::Home;
     let mut changed = false;
     if shown && l.home.background.is_none() {
-        // Two 2000×1122 assets (under 24 MiB total including mips), decoded on
-        // Rune's image worker after launch and reused across theme changes.
         let background = Background {
             dark: l.media.home_background(true),
             light: l.media.home_background(false),

@@ -338,7 +338,6 @@ impl Workspace {
 }
 
 fn update_summary(session: &mut Session, summary: Summary, request: u64) {
-    // A refresh during execution must not reorder rows on every streamed update.
     if !session.working() || session.last_activity.is_none() || session.revision == 0 {
         if let Some(at) = summary.updated_at {
             session.record_activity(at);

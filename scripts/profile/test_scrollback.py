@@ -27,7 +27,6 @@ class ScrollbackTests(unittest.TestCase):
         records = replay()
         records.extend((row("frame", "update", 0, ident=9999, label="drawn", value=90000),
                         row("frame", "encode", 0, ident=9999, label="drawn", value=90000)))
-        # Initialisation ends before the first request; an expensive launch is separate.
         records[-1]["at_us"] = records[-2]["at_us"] = -1
         result = summarize_scroll(list(reversed(records)))
         self.assertTrue(result["complete"])

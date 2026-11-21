@@ -75,8 +75,7 @@ impl ProviderRuntime {
         self.remote.shutdown();
         self.updates.shutdown();
         self.approvals.shutdown();
-        // Close registration first: an in-flight connection cannot leak a child
-        // after shutdown, and terminating children unblocks protocol handshakes.
+
         self.processes.shutdown();
         self.codex.shutdown();
         self.opencode.shutdown();
@@ -596,7 +595,7 @@ impl Runtime {
                                 projects = latest;
                             }
                             watch.sync(projects.iter().cloned());
-                            // Reconcile edits made while native registration was pending.
+
                             watch
                                 .dirty
                                 .lock()
@@ -628,8 +627,7 @@ impl Runtime {
         let (control, urgent) = mpsc::sync_channel(128);
         let closed = Arc::new(AtomicBool::new(false));
         let mut workers = Vec::new();
-        // Keep conversation reads moving while catalogues, diffs and discovery
-        // occupy the normal pool. Controls retain their own independent capacity.
+
         for (receiver, count) in [(normal, 8), (conversations, 2), (urgent, 2)] {
             let receiver = Arc::new(Mutex::new(receiver));
             for _ in 0..count {
@@ -771,7 +769,7 @@ impl Drop for Runtime {
     fn drop(&mut self) {
         self.closed.store(true, Ordering::Release);
         self.checkout_watch.take();
-        self.inbox.take(); // Release any producers waiting on a full inbox.
+        self.inbox.take();
         if let Some(providers) = &self.providers {
             providers.shutdown();
         }

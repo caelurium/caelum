@@ -201,9 +201,6 @@ impl Workspace {
             .into_iter()
             .filter(|summary| summary.key.scope == *scope)
         {
-            // OpenCode IDs survive moves. Discovery of the destination must
-            // reconnect the original local slot, preserving its draft/editor.
-            // A late list from the old checkout must not recreate a duplicate.
             if scope.provider == Provider::OpenCode {
                 if let Some(index) = self.sessions.iter().position(|session| {
                     session.scope.provider == Provider::OpenCode

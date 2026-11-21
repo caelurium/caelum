@@ -80,8 +80,6 @@ pub fn composer_context(s: &Workspace, k: &Kit, index: usize) -> El {
 }
 
 fn queued_preview(text: &str) -> &str {
-    // Context payloads follow a blank line. Avoid decoding attachment snapshots
-    // on every streamed frame just to show the queue's one-line summary.
     text.lines()
         .next()
         .filter(|line| !line.trim().is_empty())

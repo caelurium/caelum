@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Normalize the known Nix libiconv link, rejecting dependencies that cannot ship.
 system_libraries() {
   local binary="$1" library
   while IFS= read -r library; do

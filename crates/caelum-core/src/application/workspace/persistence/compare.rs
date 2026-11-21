@@ -9,7 +9,6 @@ mod tests;
 
 impl Workspace {
     pub(super) fn matches_snapshot(&self, snapshot: &Snapshot) -> bool {
-        // Exhaustive patterns keep additions to the storage contract visible here.
         let Snapshot {
             version,
             remote,
@@ -95,8 +94,7 @@ impl Workspace {
         {
             return false;
         }
-        // snapshot() overlays live tabs/selection on remembered file state, and
-        // creates a default file workspace for each nonempty checkout path.
+
         if files.keys().any(|path| !saved.files.contains_key(path))
             || self
                 .services

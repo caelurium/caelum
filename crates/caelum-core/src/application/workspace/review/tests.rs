@@ -67,7 +67,6 @@ fn review_session_follows_recorded_history_across_worktrees_without_crossing_rep
     session(&mut app, "/other", Provider::OpenCode, "feature");
     assert_eq!(app.pull_request_session("/repository", URL), Some(owner));
 
-    // A newly selected draft in the checkout has not worked on the PR's branch.
     app.new_session(Scope {
         project: "/repository".into(),
         provider: Provider::Codex,

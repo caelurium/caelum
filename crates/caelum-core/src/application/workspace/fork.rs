@@ -54,7 +54,7 @@ pub struct ForkPicker {
     seen_turns: usize,
     pub error: Option<String>,
     cursor: Option<String>,
-    // OpenCode pages are newest first. Carry the following user prompt across a page break.
+
     newer_prompt: Option<String>,
     latest_prompt: Option<String>,
     tip: Option<String>,
@@ -512,8 +512,6 @@ impl Workspace {
                 session.controls = super::controls::Status::Idle;
                 match result {
                     Ok(Reply::Done) => {
-                        // Normal history hydration merges older rows. After a destructive
-                        // rewind, rebuild from the provider so removed turns cannot survive.
                         session.conversation = Default::default();
                         session.revision += 1;
                         session.loaded = false;
@@ -583,7 +581,7 @@ impl Workspace {
                         return;
                     }
                 };
-                // Discovery may have already created an editor for the child. Never replace it.
+
                 let child_index = match self
                     .sessions
                     .iter()
@@ -615,7 +613,6 @@ impl Workspace {
                         child.attachments = draft.attachments;
                         child.completion_caret = Some(child.draft.len());
                     } else if !child.forgotten {
-                        // Never replace an existing editor or a previous unsent message.
                         self.sessions[index].error=Some("Branch created, but its draft was already in use. The original prompt is unchanged.".into());
                     }
                 }

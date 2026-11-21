@@ -31,8 +31,6 @@ impl Workspace {
             return;
         }
         if let Pending::RegenerateTitle(index, key) = pending {
-            // The provider publishes the new title through session.renamed.
-            // A failed request must not disturb chat, drafts or queued work.
             if self.sessions[index].key().as_ref() == Some(&key) {
                 self.refresh_title(index);
             }
@@ -436,8 +434,7 @@ impl Workspace {
                         {
                             let navigation = self.navigation;
                             self.select(index);
-                            // Restoring storage is not user navigation; an explicit launch
-                            // still owns its pending project-open request.
+
                             self.navigation = navigation;
                             self.refresh_project();
                         }
@@ -482,7 +479,7 @@ impl Workspace {
             (Pending::Archive(index, archived, select, revision), Reply::Done) => {
                 self.sessions[index].archiving = false;
                 self.sessions[index].archived = archived;
-                // Lists issued while the mutation was in flight can also be stale.
+
                 self.sessions[index].archive_barrier = self.next_request;
                 if archived {
                     let owns_notice = self.archived_notice(index, revision);
@@ -516,7 +513,7 @@ impl Workspace {
                 if !self.projects.iter().any(|p| p.path == project.path) {
                     self.projects.push(project.clone());
                 }
-                // Restored, closed groups defer detail reads until reopened.
+
                 let details: Vec<_> = self
                     .sessions
                     .iter()
@@ -549,9 +546,6 @@ impl Workspace {
                 }
             }
             (Pending::List(scope), Reply::Sessions(summaries)) => {
-                // Discovery can see a newly created remote session before the
-                // creation reply supplies its ID. Adopt it into its stable local
-                // slot first, then reconcile discovery without duplicate rows.
                 if self.creating(&scope) {
                     self.deferred_lists.insert(scope, (request, summaries));
                 } else {

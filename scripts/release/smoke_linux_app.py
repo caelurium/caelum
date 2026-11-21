@@ -55,7 +55,6 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
             else:
                 environment.pop("WAYLAND_DISPLAY", None)
                 children.append(subprocess.Popen(["openbox"], env=environment, stdout=log, stderr=log))
-            # Portal services are D-Bus activated: give them this isolated desktop.
             subprocess.run(["dbus-update-activation-environment", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"], env=environment, check=True, stdout=log, stderr=log)
             for theme in ("light", "dark"):
                 for scene in ("home", "settings"):
@@ -63,7 +62,6 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
                     subprocess.run([*command, "--design-fixture", "--scene", scene, "--theme", theme, "--size", "1280x1000", "--scale", "1", "--at", "1", "--snap", str(output / f"{name}.png")], env=environment, check=True, timeout=60, stdout=log, stderr=log)
                     if (output / f"{name}.png").stat().st_size < 1000:
                         raise RuntimeError("Empty Linux preview")
-            # This path creates a real native surface, not only an offscreen snapshot.
             subprocess.run([*command, "--design-fixture", "--scene", "home", "--native", "--frames", "3", "--trace", str(output / "native.json")], env=environment, check=True, timeout=60, stdout=log, stderr=log)
             if not (output / "native.json").is_file():
                 raise RuntimeError("Native renderer did not produce its trace")
@@ -110,19 +108,16 @@ def exercise_x11(command, environment, root, output, log):
         subprocess.run([*command, urls[0]], env=environment, check=True, timeout=15, stdout=log, stderr=log)
         wait_for(lambda: selected(0), "warm project URL", app)
         assert app.poll() is None
-        # Native clipboard paste, then persistence through close/relaunch.
         draft = "Linux clipboard café & draft"
         subprocess.run(["xclip", "-selection", "clipboard"], input=draft, text=True, env=environment, check=True, stdout=log, stderr=log)
         key(window, "ctrl+l", "ctrl+a", "ctrl+v")
         wait_for(lambda: json.loads(state.read_text())["sessions"][0]["draft"] == draft, "native clipboard draft", app)
-        # Ask the real XDG portal for a folder picker and dismiss it.
         key(window, "ctrl+o")
         dialog = subprocess.check_output(["xdotool", "search", "--sync", "--onlyvisible", "--name", "^Open a project$"], env=environment, text=True, timeout=30).splitlines()[0]
         key(dialog, "Escape")
         key(window, "ctrl+w")
         assert app.wait(timeout=30) == 0, "closing the last window must quit cleanly"
         assert json.loads(state.read_text())["sessions"][0]["draft"] == draft
-        # Exercise URL association lookup and the installed entry's Exec argument.
         subprocess.run(["xdg-open", urls[1]], env={**environment, "APPIMAGE_EXTRACT_AND_RUN": "1"}, check=True, timeout=15, stdout=log, stderr=log)
         window = subprocess.check_output(["xdotool", "search", "--sync", "--onlyvisible", "--class", "dev.caelum.desktop"], env=environment, text=True, timeout=30).splitlines()[0]
         wait_for(lambda: selected(1), "installed desktop URL")
@@ -148,9 +143,6 @@ def main() -> None:
         try:
             run(args.image.resolve(), args.backend, args.output.resolve(), root)
         finally:
-            # The D-Bus-activated document portal outlives this client. Unmount
-            # its private FUSE tree before TemporaryDirectory removes the profile;
-            # dbus-run-session then stops the portal along with the isolated bus.
             documents = root / "runtime/doc"
             if documents.is_mount():
                 subprocess.run(["fusermount3", "-u", str(documents)], check=True, timeout=10)

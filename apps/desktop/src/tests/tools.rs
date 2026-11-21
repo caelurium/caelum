@@ -277,7 +277,7 @@ fn long_tool_output_preserves_copy_selection_scrolling_and_expansion_anchor() {
 #[test]
 fn compaction_milestones_stream_expand_copy_and_survive_history_refresh() {
     use caelum_core::application::Provider;
-    // Parallel runtimes can switch the process-wide text measurer's families.
+
     let _fonts = rune::text::with_families("Inter", "Inter");
     let mut rt = design_runtime("compaction-running", (800.0, 620.0));
     let key = "compaction-0-opencode-compact";

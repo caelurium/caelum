@@ -18,7 +18,7 @@ fn runtime() -> Runtime<Workspace> {
 fn transcript_scrollback_profile() {
     for streaming in [false, true] {
         let mut rt = runtime();
-        // Stay in the transcript padding, outside nested code/output scrollers.
+
         let [left, top, _, height] = element(&rt, "live-transcript-0").rect;
         let (x, y) = (left + 2.0, top + height / 2.0);
         let commits = rt.stats.commits;

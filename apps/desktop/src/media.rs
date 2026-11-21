@@ -41,8 +41,6 @@ impl State {
         let redraw = wake.clone();
         Self {
             cache: Arc::new(ImageCache::new(Arc::new(move || {
-                // Loading/error elements need a new view after decoding, even
-                // when no image pixels have been mounted yet.
                 decoded.store(true, Ordering::Release);
                 redraw();
             }))),
@@ -76,7 +74,7 @@ impl State {
             *used = generation;
             return result.clone().transpose();
         }
-        // A draft can show 16 images alongside transcript thumbnails.
+
         if decoded.len() >= 32
             && let Some(oldest) = decoded
                 .iter()

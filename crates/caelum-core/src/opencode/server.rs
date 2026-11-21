@@ -75,8 +75,6 @@ impl ServerSlot {
         let result = connect(alive);
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if matches!(*state, ServerState::Closed) {
-            // Release/shutdown may retire this attempt while its I/O is in flight.
-            // Never publish it into a replacement checkout connection.
             drop(state);
             if let Ok(server) = result {
                 server.close(processes);
@@ -292,8 +290,6 @@ impl OpenCodeProvider {
         if result.is_err() {
             server.close(&self.inner.processes);
         } else {
-            // The stream is live-only. Recover forms that predate this connection.
-            // A missing form API must not prevent older servers from connecting.
             let _ = sync_questions(server, &self.inner.questions, project.path());
         }
         result
@@ -390,8 +386,6 @@ impl OpenCodeServer {
     }
 
     pub(super) fn active_sessions(&self) -> Result<HashSet<String>, OpenCodeError> {
-        // Activity belongs to the runtime drain, not persisted busy/idle times.
-        // A running session can have no busy timestamp (or a previous idle time).
         let response = self.request_json(Method::GET, "/api/session/active", &[], None)?;
         let active = response
             .get("data")

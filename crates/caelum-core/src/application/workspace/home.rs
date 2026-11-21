@@ -46,7 +46,6 @@ impl Home {
     }
 
     pub(super) fn restore(&mut self, draft: HomeDraft) {
-        // Loading storage must not replace input entered during startup.
         if self.draft == HomeDraft::default()
             && self.generation == 0
             && self.attaching == 0

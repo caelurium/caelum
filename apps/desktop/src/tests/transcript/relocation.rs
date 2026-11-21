@@ -5,8 +5,6 @@ use serde_json::json;
 
 #[test]
 fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
-    // Parallel runtimes can change Rune's process-wide measurement fonts.
-    // Keep bubble widths and wrapping in this runtime's native families.
     let families = spec().families;
     let _fonts = rune::text::with_families(families.0, families.1);
     let mut rt = live_runtime_size((800.0, 620.0));
@@ -22,8 +20,7 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     });
     advance(&mut rt, 0.6);
     fill(&mut rt, "live-draft-0", "Keep this café draft");
-    // Land the initial history before selecting a reading position.
-    // Relocation below still runs with motion enabled.
+
     rt.settle_all();
     rt.frame(1.0 / 60.0);
     rt.update(|s, tx| {
@@ -70,8 +67,7 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     assert_eq!(live.app.active_project.as_deref(), Some("/linked"));
     assert_eq!(live.drafts[0].text, "Keep this café draft");
     assert_eq!((live.drafts[0].anchor, live.drafts[0].focus), (2, 8));
-    // Loading changes the header's height; the visible row, rather than its
-    // absolute scroll offset, must remain anchored on screen.
+
     let current = element(&rt, "live-entry-0-opencode-prompt-25").rect[1];
     assert!(
         (current - anchor).abs() < 1.0,

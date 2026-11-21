@@ -25,8 +25,7 @@ pub(super) fn synthetic(data: &Value) -> Option<Entry> {
     let command = data["description"].as_str().unwrap_or_default();
     let state = data["metadata"]["state"].as_str().unwrap_or("completed");
     let text = data["text"].as_str().unwrap_or_default();
-    // Use the structured command rather than scanning for '>' inside a quoted
-    // attribute: commands can contain redirections, quotes and heredocs.
+
     let header = format!("<shell id=\"{id}\" state=\"{state}\" command=\"{command}\">");
     let output = text
         .strip_prefix(&header)

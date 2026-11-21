@@ -39,7 +39,6 @@ verify_app() {
 }
 
 app_bundle="target/$TARGET/release/bundle/macos/Caelum.app"
-# Resolve shared dependency features once for both shipping binaries.
 bash scripts/release/package_macos_app.sh --with-cli
 verify_app "$app_bundle"
 

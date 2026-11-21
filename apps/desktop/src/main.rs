@@ -52,7 +52,7 @@ static PLUS: Icon = Icon {
 static ORBIT: Icon = Icon {
     name: "orbit",
     view: 24.0,
-    // Lucide's Orbit, as used by the original workspace. See THIRD_PARTY_NOTICES.md.
+
     body: r#"<path d="M20.341 6.484A10 10 0 0 1 10.266 21.85M3.659 17.516A10 10 0 0 1 13.74 2.152" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="5" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="19" r="2" fill="none" stroke="currentColor" stroke-width="2"/>"#,
 };
 static SEND: Icon = Icon {
@@ -298,7 +298,6 @@ fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut Vec<E
         .selection_color(k.selection())
         .w_full()
         .on_edit(|s: &mut Workspace| &mut s.active_mut().draft)
-        // Workspace shortcuts run before the editor's Escape-to-blur handling.
         .on_input_key(on_key)
         .on_submit(Workspace::send);
     let submit = ui::Button::new("Send")
@@ -419,8 +418,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     };
     let mut layers = Vec::new();
     let window_width = cx.layout("shell").map_or(1280.0, |r| r[2]);
-    // Keep both panes usable at the minimum window size without overwriting the
-    // user's preferred widths; they return as the window grows.
+
     let mut sidebar_pane = s.sidebar;
     let mut inspector_pane = s.inspector;
     inspector_pane.set_width(
@@ -471,7 +469,6 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         main.child(composer(s, &k, padding, width > 760.0, &mut layers))
     };
     let main = main.children((vercel && sidebar_pane.is_open()).then(|| {
-        // Separate the black sidebar from the canvas with a softly fading hairline.
         rune::el()
             .key("sidebar-divider")
             .w(1.0)
@@ -551,8 +548,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             .build(&k)
             .key("inspector-toggle")
         });
-    // SplitView's card styling is theme-driven. Keep the shell flush while
-    // retaining rounded controls and composer surfaces inside the panes.
+
     let mut shell_kit = k.clone();
     shell_kit.radius.lg = 0.0;
     shell_kit.c.border_muted = k.c.bg_base;

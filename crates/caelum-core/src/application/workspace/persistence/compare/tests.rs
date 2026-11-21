@@ -171,7 +171,7 @@ fn direct_edits_save_again_but_transcript_updates_do_not() {
         .unwrap()
         .0;
     app.apply(Event::Completed(save, Ok(Reply::Done)));
-    // Warm command queues before exercising otherwise idle polling.
+
     app.commands();
     app.sessions[0]
         .conversation

@@ -23,7 +23,6 @@ impl Store {
             return Ok(());
         }
         let snapshot = if let Some(snapshot) = Store(candidate.into()).load()? {
-            // Candidate drafts, attachments, pending sends and queues always take precedence.
             self.import_database(&candidate.with_file_name("branches.sqlite3"))?;
             Some(snapshot)
         } else if legacy.try_exists().map_err(|e| e.to_string())? {
@@ -49,7 +48,7 @@ impl Store {
             let temporary = parent.join(format!("migration-{}.sqlite3", std::process::id()));
             let source = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(|e| e.to_string())?;
-            // SQLite's backup includes committed WAL data; the original is never migrated or moved.
+
             let result = source
                 .backup(MAIN_DB, &temporary, NO_PROGRESS)
                 .map_err(|e| e.to_string())
@@ -170,7 +169,6 @@ mod tests {
     struct Temp(PathBuf);
     impl Temp {
         fn new() -> Self {
-            // Wall-clock timestamps can coincide across parallel test threads.
             let path = std::env::temp_dir().join(format!(
                 "caelum-migration-{}-{}",
                 std::process::id(),
@@ -247,8 +245,7 @@ mod tests {
         assert_eq!(destination.load().unwrap(), Some(expected));
         let lock = destination.lock().unwrap();
         assert!(destination.lock().is_err());
-        // A duplicate keeps the underlying file description alive, just like a
-        // child forked by a parallel provider test before its close-on-exec.
+
         let inherited = lock.0.try_clone().unwrap();
         drop(lock);
         let replacement = destination.lock().unwrap();
@@ -348,7 +345,7 @@ mod tests {
         assert!(!destination.0.exists());
         let bytes = fs::read(&source).unwrap();
         assert_eq!(serde_json::from_slice::<Snapshot>(&bytes).unwrap(), future);
-        // An existing destination also remains authoritative, even if unreadable.
+
         fs::create_dir_all(destination.0.parent().unwrap()).unwrap();
         fs::write(&destination.0, "damaged production state").unwrap();
         destination

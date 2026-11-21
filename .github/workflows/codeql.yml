@@ -36,7 +36,6 @@ jobs:
           toolchain: '1.95.0'
       - name: Set persistent Rust extractor output
         if: ${{ matrix.language == 'rust' }}
-        # Keep generated Rust outside the source root on cold and warm runs.
         run: echo "CODEQL_EXTRACTOR_RUST_OPTION_CARGO_TARGET_DIR=$RUNNER_TEMP/codeql-cargo-target" >> "$GITHUB_ENV"
       - uses: github/codeql-action/init@v4
         id: codeql
@@ -55,7 +54,6 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
           output: codeql-results
-          # Default setup remains authoritative until the documented cutover.
           upload: ${{ vars.CODEQL_ADVANCED == 'enabled' && 'always' || 'never' }}
           upload-database: ${{ vars.CODEQL_ADVANCED == 'enabled' }}
       - uses: actions/upload-artifact@v7

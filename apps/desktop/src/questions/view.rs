@@ -81,7 +81,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                 .as_str()
                 .or(option["value"].as_str())
                 .unwrap_or("Answer");
-            // Answer text wraps rather than truncating the choice the user must make.
+
             let choice = k
                 .interactive(
                     row()

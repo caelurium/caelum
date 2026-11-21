@@ -81,7 +81,6 @@ fn refresh_open_sessions_reloads_catalogues_for_each_open_scope_once() {
         },
     );
 
-    // The sidebar refreshes the active project before all open sessions.
     app.refresh_choices_for(scope(Provider::Codex, "/a"));
     app.refresh_project();
     app.refresh_open_sessions();

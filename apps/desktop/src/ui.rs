@@ -423,7 +423,7 @@ pub static TOOL: Icon = Icon {
 pub static BRAIN: Icon = Icon {
     name: "brain",
     view: 24.0,
-    // Lucide's Brain. See THIRD_PARTY_NOTICES.md.
+
     body: r#"<path d="M12 18V5M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4M17.707 6.294A3 3 0 1 0 12 5a3 3 0 1 0-5.707 1.294M17.996 5.125a4 4 0 0 1 2.526 5.77M18 18a4 4 0 0 0 2-7.465M19.967 17.482a4 4 0 1 1-7.967.517 4 4 0 1 1-7.967-.517M6 18a4 4 0 0 1-2-7.465M6.004 5.125a4 4 0 0 0-2.526 5.77" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 pub static CLOCK: Icon = Icon {
@@ -613,8 +613,7 @@ pub fn composer_dock(content: El, padding: f32, k: &Kit) -> El {
     let rim =
         k.c.border_strong
             .mix(rune::Color::WHITE, if k.dark { 0.12 } else { 0.35 });
-    // The dock sits over a uniform surface. Tint and top lighting give it depth
-    // without a backdrop pass on every streamed frame.
+
     col().w_full().max_w(840.0).px(padding).pb(24.0).child(
         content
             .w_full()

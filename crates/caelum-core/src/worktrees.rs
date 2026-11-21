@@ -119,7 +119,7 @@ impl WorktreeClient {
                     "HEAD".into()
                 }
             });
-        // Opening a repository subdirectory keeps that scope in every checkout.
+
         for entry in &mut worktrees {
             entry.project.name.clone_from(&group.name);
         }
@@ -159,7 +159,7 @@ impl WorktreeClient {
             .unwrap_or_else(|error| error.into_inner());
         let project = Project::open(path)?;
         let destination = self.destination(project.path(), branch, base_directory)?;
-        // Refuse existing directories and dangling symlinks before Git creates a branch.
+
         if destination.symlink_metadata().is_ok() {
             return Err(WorktreeError::Occupied(destination));
         }
@@ -241,14 +241,11 @@ impl WorktreeClient {
         if entry.locked.is_some() {
             return Err(WorktreeError::Locked);
         }
-        // No force flag: Git refuses tracked changes, untracked files and
-        // submodules. Removing a checkout leaves its branch and commits intact.
+
         let common = common_git_dir(project.path())?;
         checked(project.path(), &["worktree", "remove", "--", &entry.path])?;
         if let Ok(mut labels) = read_labels(&common) {
             if labels.remove(&entry.path).is_some() {
-                // The checkout is already removed; stale local metadata must not
-                // turn a successful Git operation into an apparent failure.
                 let _ = write_labels(&common, &labels);
             }
         }
@@ -318,8 +315,6 @@ impl WorktreeClient {
     }
 }
 
-// Resolve existing parents too, so a new storage folder has the same identity
-// before and after creation (including macOS /var and custom symlink aliases).
 fn resolved_directory(path: &Path) -> PathBuf {
     path.canonicalize()
         .unwrap_or_else(|_| match (path.parent(), path.file_name()) {
@@ -482,8 +477,6 @@ fn slug(value: &str) -> String {
     }
 }
 
-// Stable across app versions and processes, unlike DefaultHasher. Use the
-// common Git directory so linked checkouts share an ID but separate clones do not.
 fn path_id(path: &Path) -> u64 {
     path.as_os_str()
         .as_encoded_bytes()

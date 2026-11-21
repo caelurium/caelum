@@ -523,7 +523,7 @@ fn tool_output(
     let key = format!("tool-output-{index}-{}-{name}", entry.id);
     let full_id = format!("{}:{name}", entry.id);
     let full = live(s).expanded.contains(&(index, full_id.clone()));
-    // Keep previews bounded and Unicode-safe, preferring a complete final line.
+
     let cutoff = value.char_indices().nth(12_000).map(|(i, _)| i);
     let displayed = if let Some(end) = cutoff.filter(|_| !full) {
         &value[..value[..end].rfind('\n').filter(|i| *i > 0).unwrap_or(end)]

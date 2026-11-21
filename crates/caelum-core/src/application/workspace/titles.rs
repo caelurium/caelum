@@ -44,8 +44,7 @@ impl Workspace {
         {
             return;
         }
-        // Failures wait for another interval rather than repeatedly charging
-        // for retries. Turns completed in flight accrue toward one follow-up.
+
         session.title_state.turns = 0;
         self.request(
             Command::RegenerateTitle(key.clone()),

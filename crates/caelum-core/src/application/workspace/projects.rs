@@ -269,7 +269,7 @@ impl Workspace {
                     provider,
                 };
                 self.refresh_choices_for(scope.clone());
-                // A repeated refresh does not accumulate duplicate network calls.
+
                 if self
                     .pending
                     .values()

@@ -178,7 +178,6 @@ fn discovery_started_before_archive_completion_preserves_the_new_state() {
                 );
                 assert_eq!(workspace.sessions.last().unwrap().archived, !archived);
 
-                // A fresh read can still reconcile a later change made outside Caelum.
                 let fresh = discover_session_list(&mut workspace, &scope, !archived);
                 workspace.apply(Event::Completed(
                     fresh,

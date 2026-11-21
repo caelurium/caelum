@@ -300,8 +300,7 @@ pub(super) fn install(prepared: Arc<Prepared>) -> Result<Installed, String> {
     .map_err(|e| e.to_string())?;
     sync_directory(&prepared.stage.root)?;
     exchange(&payload, &target.path)?;
-    // Once exchanged, report an installed update even if the directory flush fails:
-    // retrying an exchange would otherwise restore the old version by mistake.
+
     let _ = sync_directory(&prepared.stage.root);
     let _ = sync_directory(target.path.parent().unwrap());
     Ok(Installed { prepared })

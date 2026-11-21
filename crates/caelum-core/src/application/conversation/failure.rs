@@ -67,7 +67,6 @@ impl State {
         }
         let at = data["_created"].as_u64().unwrap_or(self.observed_at);
         if at < self.observed_at {
-            // A late failure must not settle a newer execution either.
             return !failed;
         }
         self.observed_at = at;

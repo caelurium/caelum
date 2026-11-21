@@ -203,7 +203,6 @@ impl State {
 
     pub fn complete(&mut self, job: &Job, result: Result<Reply, String>) -> Option<Job> {
         if job.id != self.generation {
-            // A completed download may race cancellation. Dispose of its files on a worker.
             return match result {
                 Ok(Reply::Prepared(prepared)) => Some(Job {
                     id: job.id,

@@ -17,7 +17,7 @@ impl CodexProvider {
     ) -> Result<CodexSessionInfo, CodexError> {
         let project = Project::open(path)?;
         let connection = self.connection(&project)?;
-        // Older servers silently ignore unrecognised fork boundaries.
+
         connection.require_action(if before {
             HistoryAction::Edit
         } else {
@@ -229,7 +229,7 @@ impl CodexProvider {
                     id: model.get("model")?.as_str()?.to_owned(),
                     name: model.get("displayName")?.as_str()?.to_owned(),
                     provider: None,
-                    // Codex reports the effective context limit with thread token usage.
+
                     context_window: None,
                     efforts: model
                         .get("supportedReasoningEfforts")
@@ -260,8 +260,7 @@ impl CodexProvider {
                 None => break,
             }
         }
-        // Resolve project-specific defaults before offering effort options for
-        // the otherwise implicit model in a new session.
+
         if let Ok(config) = connection.request(
             "config/read",
             json!({ "cwd": project.path().to_string_lossy(), "includeLayers": false }),
@@ -464,7 +463,7 @@ impl CodexProvider {
             .pointer("/thread/gitInfo/branch")
             .and_then(Value::as_str)
             .map(str::to_owned);
-        // A newly created thread may not have materialized history yet.
+
         let response = connection.request("thread/turns/list", json!({ "threadId": thread_id, "limit": 1, "sortDirection": "desc", "itemsView": "full" })).ok();
         let changes = response
             .as_ref()
@@ -507,7 +506,7 @@ impl CodexProvider {
             return Err(CodexError::InvalidThreadId);
         }
         let project = Project::open(project_path)?;
-        // Read also works for archived threads, which are absent from thread/list.
+
         let connection = self.connection(&project)?;
         let response = connection.request("thread/read", json!({ "threadId": thread_id }))?;
         let cwd = response
@@ -693,7 +692,6 @@ pub(super) fn file_change_lines(change: &Value) -> LineChanges {
         }
     }
     if !unified {
-        // Added/deleted files can carry their complete contents rather than a patch.
         match change.pointer("/kind/type").and_then(Value::as_str) {
             Some("add") => counts.additions = diff.lines().count() as u64,
             Some("delete") => counts.deletions = diff.lines().count() as u64,

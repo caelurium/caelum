@@ -54,8 +54,7 @@ fn install(source: &Path, data: &Path) -> Result<PathBuf, String> {
     let command = desktop_command(&image)?;
     let directory = image.parent().expect("installation directory");
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
-    // Copy first, then atomically replace our installed image; the running download
-    // and any existing installation keep their backing inode until the copy succeeds.
+
     let temporary = directory.join(format!(".install-{}.AppImage", std::process::id()));
     let result = (|| {
         fs::copy(source, &temporary)?;
@@ -84,8 +83,7 @@ fn desktop_command(path: &Path) -> Result<String, String> {
         .to_str()
         .filter(|value| !value.chars().any(char::is_control))
         .ok_or("The installation path must be UTF-8 without control characters")?;
-    // Exec quoting is decoded after desktop-entry string escapes. Percent is a
-    // field-code escape, not shell syntax; doubled percent preserves literal paths.
+
     let mut quoted = String::from("\"");
     for character in path.chars() {
         if matches!(character, '\\' | '"' | '$' | '`') {

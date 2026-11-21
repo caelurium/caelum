@@ -126,7 +126,6 @@ def capture_one(item, output, timeout):
     log = ""
     error = None
     try:
-        # A stale successful artifact must never hide a missing output on a rerun.
         for suffix in (".png", ".json", ".log", "-input.json"):
             (output / f"{name}{suffix}").unlink(missing_ok=True)
         if events:
@@ -157,7 +156,6 @@ def capture_all(plan, output, workers, timeout=60):
     manifest = output / "manifest.json"
     manifest.unlink(missing_ok=True)
     started = time.perf_counter()
-    # Each child has its own input, image, tree and log. map preserves manifest order.
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(lambda item: capture_one(item, output, timeout), plan))
     failed = [result["name"] for result in results if result["error"]]

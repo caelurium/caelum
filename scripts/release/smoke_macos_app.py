@@ -36,8 +36,6 @@ def create_projects(root):
     projects = [root / "first café #1", root / "second & 2%+?"]
     for project in projects:
         project.mkdir()
-    # Match the canonical paths saved by Project::open. Filesystems can return
-    # a different Unicode normalization than the string used to create a path.
     return [project.resolve(strict=True) for project in projects]
 
 
@@ -54,21 +52,16 @@ def run(app, cli, root):
     launch_trace = root / "launch.log"
     callback_trace = root / "callback.log"
     projects = create_projects(root)
-    # Keep this check offline, including on a developer's authenticated machine.
     for provider in ("codex", "opencode"):
         path = bin_dir / provider
         path.write_text("#!/bin/sh\nexit 1\n")
         path.chmod(0o755)
-    # Verify the CLI's actual launch arguments, then target the supplied test bundle
-    # without replacing the user's installed app or global launch environment.
     launch = bin_dir / "open"
     launch.write_text('''#!/bin/sh
 set -eu
 test "$#" -eq 3
 test "$1" = -a
 test "$2" = Caelum
-# Launch-only environment/output options are for the cold start; repeat opens
-# should match the CLI's normal LaunchServices request to the running app.
 if /bin/ps -axo comm= | /usr/bin/grep -Fqx "$CAELUM_SMOKE_EXECUTABLE"; then
   printf 'warm\t%s\n' "$3" >> "$CAELUM_SMOKE_TRACE"
   exec /usr/bin/open -a "$CAELUM_SMOKE_APP" "$3"
@@ -123,7 +116,7 @@ exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
 
     pid = None
     try:
-        open_project(1)  # Cold launch must select the URL, not the saved selection.
+        open_project(1)
         pid = wait_for(lambda: next(iter(pids(executable)), None), "application launch")
         open_project(0)
         assert pids(executable) == [pid], "A warm URL launched another process"
@@ -134,7 +127,7 @@ exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
         assert pids(executable) == [pid]
         quit_app(pid)
         pid = None
-        open_project(0)  # Restart against the flushed snapshot.
+        open_project(0)
         pid = wait_for(lambda: next(iter(pids(executable)), None), "application relaunch")
         quit_app(pid)
         pid = None
@@ -143,7 +136,6 @@ exec /usr/bin/open -a "$CAELUM_SMOKE_APP" \
         assert callbacks == ["received"] * 4, f"Expected four URL callbacks, got {callbacks}"
         print("Verified packaged CLI cold/warm URLs, hidden-app reopening, draft restoration and graceful quit")
     finally:
-        # Only this supplied bundle's process is eligible for cleanup.
         for owned in pids(executable):
             quit_app(owned)
         if log.exists():

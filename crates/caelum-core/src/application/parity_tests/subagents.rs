@@ -241,7 +241,7 @@ fn opening_a_subagent_reuses_its_scoped_session_without_changing_parent_drafts()
     app.sessions[0]
         .conversation
         .history(Provider::OpenCode, &[launch("task", 1000)], false);
-    // A same-ID record in another checkout must not be selected.
+
     app.sessions[1].scope = Scope {
         project: "/other".into(),
         provider: Provider::OpenCode,

@@ -93,8 +93,7 @@ fn set_auto_merge(
             "pullRequestId: $id",
         )
     };
-    // Use the native setting mutation: `gh pr merge --auto` can instead merge
-    // immediately. GitHub enforces repository permissions and branch rules.
+
     mutation.args(["-f", &format!("query=mutation({variables}) {{ {operation}(input: {{ {input} }}) {{ pullRequest {{ url headRefOid state autoMergeRequest {{ mergeMethod }} }} }} }}")]);
     let response = graphql(mutation)?;
     let pr = &response["data"][operation]["pullRequest"];

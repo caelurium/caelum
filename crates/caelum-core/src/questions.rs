@@ -57,7 +57,6 @@ impl QuestionBroker {
         }
         let key = key(&prompt);
         if state.pending.contains_key(&key) {
-            // A duplicate live event can still invalidate a stale snapshot.
             Self::publish(&mut state);
             return Ok(());
         }
@@ -111,7 +110,7 @@ impl QuestionBroker {
             pending.submitting = true;
             Arc::clone(&pending.reply)
         };
-        // Never hold the broker lock across network I/O or a provider callback.
+
         let result = reply(answer);
         let mut state = self.lock();
         if let Some(pending) = state.pending.get_mut(&key) {
@@ -135,7 +134,7 @@ impl QuestionBroker {
             session.into(),
             request.into(),
         ));
-        // Even an unseen resolution invalidates an in-flight pending snapshot.
+
         Self::publish(&mut state);
     }
 
@@ -334,7 +333,7 @@ mod tests {
             .unwrap_err()
             .contains("already"));
         broker.dismiss("codex", "/a", "s1", "same-id");
-        // A completion from the old callback must not remove a replacement.
+
         broker
             .insert(prompt("codex", "/a", "s1"), Arc::new(|_| Ok(())))
             .unwrap();

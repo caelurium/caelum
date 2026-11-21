@@ -48,7 +48,6 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          # Preserve the existing namespace with one writer per architecture/profile.
           shared-key: linux-desktop-${{ matrix.arch }}-desktop-tests
           cache-on-failure: true
       - name: Lint Linux desktop and tests
@@ -81,7 +80,6 @@ jobs:
           toolchain: '1.95.0'
       - uses: Swatinem/rust-cache@v2
         with:
-          # Share PR/release builds, keeping release artifacts separate from dev/tests.
           shared-key: linux-desktop-${{ matrix.arch }}-appimage
           cache-on-failure: true
       - name: Package and audit AppImage

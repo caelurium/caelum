@@ -94,7 +94,7 @@ impl Capture {
                             Message::Finish => break 'records,
                         }
                     }
-                    // Flush each available batch; idle captures have no timer or polling.
+
                     output.flush()?;
                 }
                 writeln!(

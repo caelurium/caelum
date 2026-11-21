@@ -217,7 +217,7 @@ fn edit_uses_the_exclusive_boundary_and_seeds_only_the_child_with_captured_conte
         assert_eq!(b, boundary);
         assert_eq!(text, "original café");
         assert_eq!(attachments, [captured]);
-        // An editor opened while the fork is in flight must retain the selection.
+
         let selected = app.new_session(owner.scope.clone());
         app.apply(Event::Completed(
             id,

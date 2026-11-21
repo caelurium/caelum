@@ -5,9 +5,6 @@ use std::{
 };
 
 pub(crate) fn write_executable(path: &Path, contents: impl AsRef<[u8]>) {
-    // Keep writable executable handles out of the test process. A concurrent
-    // spawn can inherit them until exec, causing ETXTBSY on Linux even after
-    // the writing test has closed its own handle.
     let mut writer = Command::new("/bin/sh")
         .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "write-fixture"])
         .arg(path)

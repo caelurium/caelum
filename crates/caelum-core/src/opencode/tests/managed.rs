@@ -60,7 +60,7 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
         .resolve(PROVIDER_NAME, &path, "ses_fake", "frm_live", None)
         .unwrap();
     assert_eq!(questions.pending().len(), 2);
-    // Rehydrate forms that predate a UI connection, without replaying SSE.
+
     questions.clear(PROVIDER_NAME, &path, None);
     provider.refresh_questions(&project_path).unwrap();
     assert_eq!(questions.pending().len(), 2);
@@ -409,7 +409,7 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
         .generate_from_context(&project_path, "ses_fake", "Malformed")
         .is_err());
     fs::remove_file(project_path.join("generate-malformed")).unwrap();
-    // Keep subsequent model-selection assertions based on the current log.
+
     let before_rejected_model = requests().len();
     let switch = &sent[sent.len() - 2];
     assert_eq!(switch["path"], "/api/session/ses_fake/model");

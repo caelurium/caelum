@@ -346,7 +346,7 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
     }
-    // Caret-only edits also need a follow-up poll for @ search ownership.
+
     let _ = live_mut(s);
     false
 }
@@ -358,8 +358,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let Some([_, _, width, _]) = rune::memo::window_layout("composer-editor") else {
         return;
     };
-    // Keep suggestions out of the context scroller so background output and
-    // attachments cannot clip them or move the editor while the user types.
+
     layers.push(popover::anchored(
         k,
         popover::raised(k, view(s, k).w(width), 8.0),
@@ -440,7 +439,6 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
         .fill(k.c.layer_01)
         .border(1.0, k.c.border_base)
         .radius(8.0)
-        // A press must keep the editor's token alive until the choice is released.
         .keeps_text_selection()
         .on_press(|_: &mut Workspace| {})
         .key("completion-menu")

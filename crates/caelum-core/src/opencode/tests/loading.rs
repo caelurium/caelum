@@ -115,7 +115,7 @@ fn slow_project_initialization_does_not_block_existing_or_new_projects() {
         .collect();
     let first = replies.recv_timeout(Duration::from_secs(2));
     let second = replies.recv_timeout(Duration::from_secs(2));
-    // Always unblock before asserting, including when the regression fails.
+
     service.get("/test/release");
     for reader in readers {
         reader.join().unwrap();
@@ -166,7 +166,7 @@ fn retired_startup_cannot_replace_a_new_connection_or_restore_stale_questions() 
             provider.release_checkout(project.path());
             Some(provider.server(&project).unwrap())
         };
-        // Waiters are released even though the original form request is blocked.
+
         assert!(matches!(waiter.join().unwrap(), Err(OpenCodeError::Closed)));
         service.get("/test/release");
         assert!(matches!(old.join().unwrap(), Err(OpenCodeError::Closed)));

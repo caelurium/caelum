@@ -55,7 +55,6 @@ def summarize_scroll(records):
             "draw_callback_intervals": distribution(intervals),
             "draw_callback_intervals_over_12_5_ms": sum(t > 12.5 for t in intervals),
         }
-    # A replay that applies all requests but never moves is not a scrolling result.
     complete = (all(p["complete"] for p in phases.values())
                 and phases["scroll_up"]["offset_change_points"] < -10_000
                 and phases["scroll_down"]["offset_change_points"] > 10_000)

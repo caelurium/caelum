@@ -82,7 +82,7 @@ pub(crate) fn opencode_event(event: &OpenCodeEvent) -> Option<Mark> {
         anonymous((&event.project_path, event.id.as_deref()?)),
         anonymous(("opencode", &event.project_path, session)),
     )?;
-    // Tool IDs are scoped to their session. Neither IDs nor tool names enter the trace.
+
     mark.parent = event.data["toolCallID"]
         .as_str()
         .or_else(|| event.data["id"].as_str())
