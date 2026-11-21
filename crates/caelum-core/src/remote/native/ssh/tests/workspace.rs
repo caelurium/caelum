@@ -186,19 +186,38 @@ fn native_fake_codex_over_openssh() {
     let Reply::Session(session) = desktop.request(Command::Start(scope, Options::default())) else {
         panic!("could not create a native Codex session")
     };
-    desktop.request(Command::Send(
-        session.key.clone(),
-        "Run over the VM WebSocket.".into(),
-        Options::default(),
-    ));
+    desktop.id += 1;
+    let send = desktop.id;
+    desktop
+        .submit(
+            send,
+            Command::Send(
+                session.key.clone(),
+                "Run over the VM WebSocket.".into(),
+                Options::default(),
+            ),
+        )
+        .unwrap();
     let mut streamed = String::new();
+    let mut completed = false;
+    let mut turn_completed = false;
     desktop.until(|notice| match notice {
         Notice::Event(event) => match *event {
             Event::Codex(event) if event.method == "item/agentMessage/delta" => {
                 streamed.push_str(event.params["delta"].as_str().unwrap());
                 None
             }
-            Event::Codex(event) if event.method == "turn/completed" => Some(()),
+            Event::Codex(event) if event.method == "turn/completed" => {
+                turn_completed = true;
+                (completed).then_some(())
+            }
+            Event::Completed(id, result) if id == send => {
+                if let Err(error) = result {
+                    panic!("native Codex request failed: {error}");
+                }
+                completed = true;
+                turn_completed.then_some(())
+            }
             Event::Completed(_, Err(error)) => panic!("native Codex request failed: {error}"),
             _ => None,
         },
