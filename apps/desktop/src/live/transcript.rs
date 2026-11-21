@@ -534,6 +534,7 @@ pub(super) fn timeline_row(
                         .child(
                             Button::new("Allow once")
                                 .variant(ButtonVariant::Outline)
+                                .disabled(!crate::remote::native::ready(live))
                                 .on_press(move |s: &mut Workspace| {
                                     live_mut(s)
                                         .app
@@ -545,6 +546,7 @@ pub(super) fn timeline_row(
                         .child(
                             Button::new("Deny")
                                 .variant(ButtonVariant::GhostMuted)
+                                .disabled(!crate::remote::native::ready(live))
                                 .on_press(move |s: &mut Workspace| {
                                     live_mut(s)
                                         .app
