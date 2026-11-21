@@ -1,11 +1,15 @@
 //! Native workspace protocol. Agent/provider processes and project operations live on the VM.
 //! The desktop owns editors, its workspace snapshot, and Boat lifecycle credentials.
+mod binding;
 mod client;
 mod profile;
 mod protocol;
 mod server;
 mod ssh;
 
+pub use binding::checkout_id;
+pub use binding::project_key;
+pub use binding::Binding;
 pub use client::Client;
 pub use client::Notice;
 pub use client::Status;

@@ -18,6 +18,7 @@ mod transcript;
 
 pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::enter_new;
+pub(crate) use checkout::manage;
 pub(crate) use checkout::open_session_row;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
@@ -46,7 +47,7 @@ use rune_kit::Kit;
 
 #[derive(Default)]
 pub(crate) struct State {
-    windows: native::Windows,
+    open_when_ready: Option<(String, Option<caelum_core::application::Provider>)>,
     key: TextEdit,
     form: picker::Form,
     folders: create::Folders,

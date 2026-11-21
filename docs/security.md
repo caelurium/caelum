@@ -44,9 +44,10 @@ Expanding a VM tool call reads its published event for that machine and
 conversation. The selected call’s command and text output stay in memory;
 the workspace saves only the summary and a reference for reopening it.
 
-**Open native workspace** authorizes a dedicated SSH public key for the selected
+Opening a VM session authorizes a dedicated SSH public key for the selected
 Boat account and machine. Each attachment uses only the host key from that
-Boat response. The private key and native drafts stay in the machine-scoped
-laptop profile. The VM peer verifies the checkout’s Git root and origin and
+Boat response. The private key stays in the machine-scoped laptop profile.
+Drafts stay in the laptop workspace, scoped to the owning VM checkout. The
+VM peer verifies the checkout’s Git root and origin and
 listens on a private Unix socket; it receives neither the Boat API key nor
 laptop provider credentials.

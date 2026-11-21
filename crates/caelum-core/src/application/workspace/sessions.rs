@@ -2,21 +2,6 @@ use super::{update_summary, Pending, Session, Workspace};
 use crate::application::{Command, Provider, Scope, Summary};
 
 impl Workspace {
-    /// A tunnel loss is not the end of a provider turn. Keep its ID, editors and pending
-    /// forms; history and broker snapshots decide what is still active when it reconnects.
-    pub fn native_connection_lost(&mut self, project: &str) {
-        for session in self
-            .sessions
-            .iter_mut()
-            .filter(|s| s.scope.project == project)
-        {
-            session.revision += 1;
-            session.queue_paused = true;
-            session.disconnected = session.remote_id.is_some();
-            session.conversation.working = false;
-        }
-    }
-
     pub fn refresh_open_sessions(&mut self) {
         let sessions: Vec<_> = self
             .sessions
@@ -97,12 +82,14 @@ impl Workspace {
     pub fn new_session(&mut self, scope: Scope) -> usize {
         let mut session = Session::new(scope.clone());
         session.record_activity(crate::application::presentation::now());
-        session.options = self
-            .preferences
-            .providers
-            .get(scope.provider.as_str())
-            .cloned()
-            .unwrap_or_default();
+        if crate::remote::native::checkout_id(&scope.project).is_none() {
+            session.options = self
+                .preferences
+                .providers
+                .get(scope.provider.as_str())
+                .cloned()
+                .unwrap_or_default();
+        }
         if let Some(choices) = self.choices.get(&scope) {
             if session.options.model.is_none() {
                 session.options.model = choices.default_model.clone();
@@ -162,7 +149,7 @@ impl Workspace {
             self.remembered.insert(root.clone(), index);
         }
         self.selected = Some(index);
-        if !session.loaded {
+        if !session.loaded || session.disconnected {
             self.refresh(index);
         }
     }
@@ -219,9 +206,12 @@ impl Workspace {
             // OpenCode IDs survive moves. Discovery of the destination must
             // reconnect the original local slot, preserving its draft/editor.
             // A late list from the old checkout must not recreate a duplicate.
-            if scope.provider == Provider::OpenCode {
+            if scope.provider == Provider::OpenCode
+                && crate::remote::native::checkout_id(&scope.project).is_none()
+            {
                 if let Some(index) = self.sessions.iter().position(|session| {
                     session.scope.provider == Provider::OpenCode
+                        && crate::remote::native::checkout_id(&session.scope.project).is_none()
                         && session.scope != *scope
                         && !session.forgotten
                         && session.remote_id.as_deref() == Some(&summary.key.id)

@@ -183,7 +183,7 @@ impl ProviderRuntime {
             Command::Task(task) => return task.execute(self).map(Reply::Task),
             Command::Load(store) => {
                 store.migrate_default()?;
-                let snapshot = store.load()?;
+                let snapshot = store.load_workspace()?;
                 self.open_metadata(&store.0)?;
                 return Ok(Reply::Snapshot(snapshot.map(Box::new)));
             }
@@ -710,7 +710,13 @@ impl Runtime {
         }));
     }
 
-    pub fn submit(&mut self, id: u64, command: Command) -> Result<(), String> {
+    pub fn submit(&mut self, id: u64, mut command: Command) -> Result<(), String> {
+        if crate::remote::native::Binding::owner(&mut command)
+            .and_then(|p| crate::remote::native::checkout_id(p))
+            .is_some()
+        {
+            return Err("A VM checkout action requires its SSH connection.".into());
+        }
         if self.closed.load(Ordering::Acquire) {
             return Err("Application is shutting down".into());
         }

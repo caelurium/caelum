@@ -25,9 +25,7 @@ pub(crate) fn start(s: &mut Workspace, id: &str) {
     } else {
         c.thread.provider
     };
-    if l.app.new_vm_session(id, provider) {
-        super::checkout::enter_new(s);
-    }
+    super::checkout::session(s, id, Some(provider));
 }
 
 pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
@@ -107,14 +105,20 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
     .child(ui::divider(k))
     .child(
         row().w_full().justify_end().child(
-            ui::Button::new("New session on this VM")
+            ui::Button::new("New Boat conversation")
                 .icon(&crate::PLUS)
                 .variant(ButtonVariant::Contrast)
                 .disabled(!app.can_start_vm_session(id))
-                .on_press(move |s: &mut Workspace| start(s, &new))
+                .on_press(move |s: &mut Workspace| {
+                    let l = live_mut(s);
+                    let provider = l.app.remote.saved.checkouts[&new].thread.provider;
+                    if l.app.new_vm_session(&new, provider) {
+                        super::checkout::enter_new(s);
+                    }
+                })
                 .build(k)
                 .key("new-vm-session")
-                .help("Start with an empty chat and draft on the same checkout."),
+                .help("Start a managed Boat conversation on this checkout."),
         ),
     )
 }

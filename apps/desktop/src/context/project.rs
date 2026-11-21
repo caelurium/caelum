@@ -12,16 +12,12 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
     el.on_secondary_press(move |s: &mut Workspace, at, _| {
         let id = id.clone();
         let menu = Menu::new()
-            .item(Item::new("open", "Open VM conversation").icon(&ui::SERVER))
-            .item(
-                Item::new("native", "Open native workspace…")
-                    .icon(&ui::SERVER)
-                    .enabled(crate::remote::native::target(live(s), &id).is_some()),
-            )
+            .item(Item::new("open", "Open session").icon(&ui::SERVER))
+            .item(Item::new("manage", "Manage VM and Boat conversations…").icon(&ui::SERVER))
             .item(
                 Item::new("new", "New session on this VM")
                     .icon(&crate::PLUS)
-                    .enabled(live(s).app.can_start_vm_session(&id)),
+                    .enabled(live(s).app.can_open_vm_session(&id)),
             )
             .separator()
             .item(
@@ -46,7 +42,7 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
             );
         show(s, at, origin.clone(), menu, move |s, pick, _| match pick {
             "open" => crate::remote::select(s, &id),
-            "native" => crate::remote::native::launch(s, &id),
+            "manage" => crate::remote::manage(s, &id),
             "new" => crate::remote::new_session(s, &id),
             "remove" => crate::remote::request_removal(s, &id),
             _ => {}
@@ -61,16 +57,8 @@ pub(crate) fn project(el: El, project: String) -> El {
         let app = &live(s).app;
         let menu = Menu::new()
             .item(Item::new("new", "New session").icon(&crate::PLUS))
-            .item(
-                Item::new("worktree", "Create worktree…")
-                    .icon(&ui::BRANCH)
-                    .enabled(live(s).native.is_none()),
-            )
-            .item(
-                Item::new("remote", "Open on remote machine…")
-                    .icon(&ui::SERVER)
-                    .enabled(live(s).native.is_none()),
-            )
+            .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
+            .item(Item::new("remote", "Open on remote machine…").icon(&ui::SERVER))
             .separator()
             .item(
                 Item::new("up", "Move project up")
@@ -84,17 +72,9 @@ pub(crate) fn project(el: El, project: String) -> El {
             )
             .separator()
             .item(Item::new("copy", "Copy project path").icon(&glyphs::COPY))
-            .item(
-                Item::new("reveal", "Reveal in Finder")
-                    .icon(&ui::FOLDER)
-                    .enabled(live(s).native.is_none()),
-            )
+            .item(Item::new("reveal", "Reveal in Finder").icon(&ui::FOLDER))
             .separator()
-            .item(
-                Item::new("close", "Close project")
-                    .icon(&glyphs::CLOSE)
-                    .enabled(live(s).native.is_none()),
-            );
+            .item(Item::new("close", "Close project").icon(&glyphs::CLOSE));
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
             "up" | "down" => {
                 let direction = if pick == "up" {

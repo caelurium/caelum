@@ -10,6 +10,12 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::CheckHandoff(i, text) = pending {
+            if let Err(e) = self.checked_native_start(i, &text, result) {
+                self.complete(request, Pending::Start(i, text), Err(e));
+            }
+            return;
+        }
         if let Pending::Remote(lane) = pending {
             self.complete_remote(request, lane, result);
             return;
@@ -167,6 +173,7 @@ impl Workspace {
                         self.persistence_error = Some(error);
                     }
                     Pending::Remote(_)
+                    | Pending::CheckHandoff(..)
                     | Pending::Home(_)
                     | Pending::ConversationControl(..)
                     | Pending::Fork(_)
@@ -362,6 +369,10 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
+                                session.native_handoff = saved.native_handoff;
+                                if let Some(h) = &session.native_handoff {
+                                    session.conversation.handoff(&h.chat);
+                                }
                                 session.vm_link = saved.vm_link;
                                 session.loaded = saved.remote_id.is_none();
                                 session.remote_id = saved.remote_id;
@@ -429,6 +440,9 @@ impl Workspace {
                             .iter()
                             .enumerate()
                             .filter(|(_, s)| self.project_is_open(&s.scope.project))
+                            .filter(|(_, s)| {
+                                crate::remote::native::checkout_id(&s.scope.project).is_none()
+                            })
                             .filter_map(|(i, s)| s.remote_id.as_ref().map(|_| i))
                             .collect();
                         self.detail_queue.extend(details);
@@ -604,7 +618,7 @@ impl Workspace {
                     session.failed_prompt = Some(prompt);
                     session.inflight_prompt = None;
                 } else {
-                    self.send_existing(index, prompt);
+                    self.send_first(index, prompt);
                 }
             }
             (Pending::Send(index, _, _), Reply::Done) => {

@@ -70,6 +70,16 @@ impl Workspace {
                     .contains(&query)
                 };
                 for t in c.threads() {
+                    if t.is_blank()
+                        && t.local_id.is_none()
+                        && self.sessions.iter().any(|s| {
+                            !s.forgotten
+                                && crate::remote::native::checkout_id(&s.scope.project)
+                                    == Some(id.as_str())
+                        })
+                    {
+                        continue;
+                    }
                     if matches_vm
                         || t.title().to_lowercase().contains(&query)
                         || t.provider.as_str().contains(&query)

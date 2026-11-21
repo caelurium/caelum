@@ -56,7 +56,10 @@ pub(crate) fn group(
                 else {
                     return col();
                 };
-                let ready = app.can_start_vm_session(id);
+                let ready = !matches!(
+                    app.remote.jobs.get(id),
+                    Some(caelum_core::remote::Job::Deleting(_))
+                );
                 let owner = id.clone();
                 ui::choice(&machine.name, branch, false, &kit)
                     .disabled(!ready)

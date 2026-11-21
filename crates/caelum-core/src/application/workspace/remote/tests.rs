@@ -1,4 +1,5 @@
 mod handoff;
+mod native;
 
 use crate::{
     application::{Command, Event, Reply, Workspace},
@@ -165,10 +166,12 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
         .attach_remote(vm.clone(), Some(Provider::OpenCode))
         .is_none());
     assert_eq!(attach(&mut app, Some(Provider::OpenCode)), Some(id.clone()));
+    let index = app.open_vm_session(&id, Some(Provider::OpenCode)).unwrap();
     let c = &app.remote.saved.checkouts[&id];
-    assert_eq!(c.thread.provider, Provider::OpenCode);
-    assert!(c.thread.draft.is_empty() && c.thread.conversation.is_none());
-    assert_eq!(c.other_threads, vec![original]);
+    assert_eq!(c.thread, original);
+    assert!(c.other_threads.is_empty());
+    assert_eq!(app.sessions[index].scope.provider, Provider::OpenCode);
+    assert!(app.sessions[index].remote_id.is_none() && app.sessions[index].draft.is_empty());
     assert!(app.commands().is_empty());
 }
 

@@ -90,18 +90,33 @@ impl Workspace {
         let Some(checkout) = self.remote.saved.checkouts.remove(id) else {
             return;
         };
-        let origin = (self.remote.saved.selected.as_deref() == Some(id))
+        let selected_inline = self
+            .active_project
+            .as_deref()
+            .and_then(crate::remote::native::checkout_id)
+            == Some(id);
+        let handoff_id = self
+            .selected
+            .and_then(|i| self.sessions[i].native_handoff.as_ref())
+            .map(|h| h.id.clone());
+        let origin = (self.remote.saved.selected.as_deref() == Some(id) || selected_inline)
             .then(|| {
                 self.sessions.iter().position(|s| {
                     !s.archived
                         && !s.forgotten
                         && self.project_is_open(&s.scope.project)
                         && s.vm_link.as_ref().is_some_and(|v| {
-                            v.checkout == id && v.thread == checkout.thread.editor_key(id)
+                            v.checkout == id
+                                && v.thread
+                                    == handoff_id
+                                        .as_deref()
+                                        .unwrap_or(checkout.thread.editor_key(id))
                         })
                 })
             })
             .flatten();
+        self.forget_native_sessions(id);
+        self.remote.saved.imported_profiles.remove(id);
         let group = self.group_path(&checkout.source.project).to_owned();
         if !self
             .remote

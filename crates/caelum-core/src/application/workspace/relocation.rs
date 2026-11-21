@@ -58,6 +58,7 @@ impl Workspace {
         };
         let known = self.sessions.iter().position(|s| {
             !s.forgotten
+                && crate::remote::native::checkout_id(&s.scope.project).is_none()
                 && s.scope.provider == Provider::OpenCode
                 && s.remote_id.as_deref() == Some(id)
         });
@@ -334,6 +335,7 @@ impl Pending {
             | Self::DeleteSession(i)
             | Self::Attachment(i, _)
             | Self::Mention { index: i, .. }
+            | Self::CheckHandoff(i, _)
             | Self::Start(i, _)
             | Self::Send(i, _, _)
             | Self::Cancel(i) => *i == index,

@@ -1,11 +1,9 @@
 # Run Codex or OpenCode on Boat
 
-A remote machine has its own Git checkout and disk. Its managed VM chat sends messages to
-[Boat’s integrated Codex and OpenCode agents](https://docs.boat.dev/platform-guide/agents.md).
-Set each provider’s default model and credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
-The VM composer can override that default for a chat. The local model,
-reasoning effort and primary agent (Build, Plan or custom) do not transfer. There is no
-additional install for managed chat. You can also open the checkout as a native Caelum workspace over SSH.
+A Boat VM has its own Git checkout and disk. Choose it as the destination for
+a normal Codex or OpenCode session. Your composer, transcript and session list
+stay in the same Caelum window; the provider, files and Git run on the VM.
+Configure provider credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
 
 ## Create or attach a checkout
 
@@ -47,25 +45,31 @@ GitHub access. When attaching to an existing VM, restore the missing checkout
 first, then click **Refresh checkout**. If it was previously verified, restore
 it at its saved path so the same sessions and files are reopened.
 
-## Open a native workspace
+## Open a VM session
 
-On a running, ready checkout, click **Open native workspace** above the VM
-transcript, or choose it from the VM’s sidebar menu. A separate Caelum window
-opens on the VM checkout. Start with OpenCode, or choose Codex in **New session**.
+Click a VM in the sidebar to return to its session, or open **New session**
+(**⇧⌘N**), choose a provider and pick the VM under the project. You can search
+by machine name, repository or branch. **⌘N** in a VM session
+starts another draft on that checkout. Select any local or VM row in **Sessions**
+to switch back, even while another session streams.
 The normal session list, model and effort pickers, transcript, questions,
 approvals and background-shell output use the provider installed on the VM.
-**Files** and **Changes** read that checkout. Opening a window or switching
+**Files** and **Changes** read that checkout. Opening or switching
 sessions does not submit a message.
+
+![A VM session open in the same window as local sessions](design/previews/rune-dark-native-connected-small.png)
+
+![New session with Codex selected and a ready Boat VM listed under its project](design/previews/rune-dark-vm-session-launcher-small.png)
 
 The Boat key needs the [`ssh` action](https://docs.boat.dev/ssh-access).
 Caelum installs its matching Linux peer on first use and uses the VM’s own
 provider configuration and credentials. Drafts and session settings are kept
-on this computer, separately for each account, machine and repository. The
-managed conversation, including any handoff draft, stays in its original window.
+on this computer, scoped to their account, machine and repository. Drafts from
+the earlier separate-window preview are imported on startup.
 
 If SSH drops, you can keep editing. Caelum tries to reconnect once; if the VM
-has stopped, **Resume** it in the original window and click **Reconnect** in
-the native one. The connection verifies the new host key, reloads history and
+has stopped, **Resume** it from machine stats and reconnect in the same session.
+The connection verifies the new host key, reloads history and
 restores pending questions and approvals. Check the transcript before retrying
 a message marked unconfirmed. Closing the window detaches; it does not stop
 the VM. SSH activity does **not** extend Boat’s auto-stop timer.
@@ -88,7 +92,8 @@ needs `environment.write`** to create and configure the Boat environment.
   with just this repository, GitHub access and agent credentials enabled, and
   **Safe for third parties** off. Reopen VM setup so Caelum discovers it. The
   key still needs `environment.read` and `sandbox.create` for that environment,
-  `exec` to prepare the checkout, and `agent.prompt` to send a prompt.
+  `exec` to prepare the checkout, and `ssh` to connect a native session.
+  Managed Boat conversations use `agent.prompt` to send a prompt.
 
 If the failing step is **Create VM**, check the action **and** the key’s allowed
 environments, or follow the size restriction in the error. See [Boat key scopes](https://docs.boat.dev/api-keys/scopes.md).
@@ -111,20 +116,25 @@ Choose an existing VM, or choose the size and auto-stop time and click
 **Create VM**. While Boat prepares the checkout, a progress card takes the
 place of the message editor. The editor returns with a copy of your unsent draft.
 Your original session and draft stay on the laptop.
-If the VM already had a conversation, **Conversations…** switches back to it.
+If the VM already had a conversation, its row stays in **Sessions**.
 
 The first time you press **Send**, Caelum includes the local user and assistant
-messages as context for a new Boat conversation. The VM composer starts with
+messages as context for the native session on the VM. The VM composer starts with
 the provider from your local session or Home draft. Setup shows how much chat
 will travel: up to the most recent 200 messages or 64 KiB of text. Tool output,
 reasoning, attachments and unpublished Git work stay local.
 
-## Work on the VM
+## Existing managed Boat chats
+
+Managed conversations from earlier builds remain in **Sessions**. You can also
+right-click the machine and select **Manage VM and Boat conversations…**.
+These conversations use [Boat’s integrated agent API](https://docs.boat.dev/platform-guide/agents.md)
+and keep their existing Boat conversation IDs and provider settings.
 
 **Before your first Send**, open **Boat default** beside **Codex** or **OpenCode**
 in the VM composer. Search [Boat’s model catalogue](https://docs.boat.dev/integrated-agents/harnesses-and-models.md#the-model-catalog)
 and choose a model your Boat credentials support. You can change your choice
-while drafting, including after a local handoff. Only **Send** starts the
+while drafting. Only **Send** starts the
 conversation, using the last choice you made.
 
 ![Choosing a model with the first VM message still in the editor](design/previews/rune-dark-vm-first-model-small.png)
@@ -146,23 +156,17 @@ resets effort; switching away from a chat and back keeps its choice. The model
 setting **Boat default** leaves both decisions to your account. Models that
 list no effort levels have no effort picker.
 
-Reopen Caelum or select the machine’s sidebar row to continue the same thread.
+Reopen Caelum and select the saved conversation row to continue the same thread.
 If Boat may have accepted a prompt but the acknowledgement was lost, check
 Boat and reconnect using the prompt ID.
 
 When the VM is ready and its turn has finished, choose **Conversations… →
-New session on this VM**, or right-click the VM in the sidebar. **Sessions**
+New Boat conversation** in the management view. **Sessions**
 immediately selects the new chat and keeps the previous chat in the list.
 Click either row to return to its draft. Both use the same VM files and branch.
 Only **Send** starts the new Boat conversation.
 
-![Sessions showing the selected new VM chat above the previous chat on the same machine](design/previews/rune-light-vm-session-sidebar-small.png)
-
-You can also open **New session** (**⇧⌘N**), choose a provider, and select a
-checkout under the project’s **Remote VMs**. Search by VM name, repository or
-branch. From an open, idle VM, **⌘N** starts a fresh session with its current provider.
-
-![New session with Codex selected and a ready Boat VM listed under its project](design/previews/rune-dark-vm-session-launcher-small.png)
+![A new session and an existing Boat conversation on the same machine in Sessions](design/previews/rune-light-vm-session-sidebar-small.png)
 
 To switch providers in an existing chat, finish the current turn, then choose
 **Codex** or **OpenCode** in the VM composer. The next **Send** uses that provider
@@ -217,7 +221,7 @@ now** changes the remaining time without interrupting the turn. **Until stopped*
 keeps billing until you stop the VM; trials require a timer of at most 2 h.
 See [Boat’s auto-stop guide](https://docs.boat.dev/long-running-tasks/auto-stop.md).
 
-Open **Changes** from machine stats on the VM or **View remote changes** from the workspace
-menu. Review and commit the VM's tracked and non-ignored new files; **Push
+For a managed Git commit or push, open **Manage VM and Boat conversations… → Changes**.
+Review and commit the VM's tracked and non-ignored new files; **Push
 branch** publishes the reviewed commit to GitHub. In your local project, run
 `git fetch origin` to bring the branch back.

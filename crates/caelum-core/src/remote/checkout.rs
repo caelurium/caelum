@@ -74,6 +74,16 @@ pub struct Checkout {
 }
 
 impl Checkout {
+    pub fn native_target(&self) -> Option<super::native::NativeTarget> {
+        let target = super::native::NativeTarget {
+            machine: self.machine()?.key.clone(),
+            repository: self.source.repository.clone(),
+            checkout_root: self.root.clone()?,
+        };
+        target.root().ok()?;
+        Some(target)
+    }
+
     pub(crate) fn open_thread(&mut self, mut thread: super::Thread) {
         thread.record_activity();
         let prior = std::mem::replace(&mut self.thread, thread);
@@ -167,6 +177,8 @@ impl VmLink {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Saved {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub(crate) imported_profiles: std::collections::BTreeSet<String>,
     pub checkouts: BTreeMap<String, Checkout>,
     pub selected: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

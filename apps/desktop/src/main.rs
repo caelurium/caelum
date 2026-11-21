@@ -512,6 +512,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                                     .app
                                     .active_project
                                     .as_ref()
+                                    .map(|path| l.app.checkout_directory(path))
                                     .and_then(|path| std::path::Path::new(path).file_name())
                                     .and_then(|name| name.to_str()),
                             })

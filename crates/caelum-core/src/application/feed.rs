@@ -178,10 +178,14 @@ impl Workspace {
                     .branch
                     .as_deref()
             })
+            .or_else(|| self.native_checkout(&session.scope.project)?.branch())
     }
 
     pub fn session_worktree<'a>(&'a self, session: &'a Session) -> Option<&'a str> {
         let path = &session.scope.project;
+        if let Some(checkout) = self.native_checkout(path) {
+            return Some(checkout.title());
+        }
         if self.group_path(path) == path {
             return None;
         }

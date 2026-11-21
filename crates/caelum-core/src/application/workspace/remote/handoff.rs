@@ -87,6 +87,7 @@ impl Workspace {
                     .project
                     .as_ref()
                     .is_some_and(|p| self.group_path(p) != self.group_path(&s.scope.project)))
+            || crate::remote::native::checkout_id(&s.scope.project).is_some()
             || !self.project_is_open(&s.scope.project)
             || s.archived
             || s.forgotten
@@ -298,7 +299,14 @@ impl Workspace {
             unreachable!()
         };
         h.phase = HandoffPhase::Ready(chat);
-        if self.finish_vm_handoff(destination).is_some() {
+        if let Some(id) = self.finish_vm_handoff(destination) {
+            self.remote
+                .saved
+                .checkouts
+                .get_mut(&id)
+                .unwrap()
+                .thread
+                .awaiting_native = true;
             return true;
         }
         self.handoff.as_mut().unwrap().phase =

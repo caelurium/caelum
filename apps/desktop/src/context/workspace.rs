@@ -52,7 +52,7 @@ fn open_menu(
         .item(
             Item::new(
                 "changes",
-                if remote || live(s).native.is_some() {
+                if remote || crate::remote::native::selected(live(s)).is_some() {
                     "View remote changes"
                 } else {
                     "View local changes"

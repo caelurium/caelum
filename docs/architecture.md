@@ -85,19 +85,24 @@ edits after review stay in the working directory. Push sends the reviewed
 commit to the verified GitHub origin without force. To bring it back to the
 laptop, fetch the branch in the local checkout.
 
-**Open native workspace** launches a separate desktop bound to the Boat account,
-machine ID and repository. The laptop owns its editors and snapshot; the headless
+VM sessions use the same workspace, session slots, editors and sidebar as local
+sessions. The desktop resolves a saved checkout ID to its Boat account, machine,
+repository and verified Git root. It translates project ownership at the SSH
+boundary, leaving provider IDs and transcript content untouched. The headless
 `caelum workspace-peer` on the VM owns provider processes, permission brokers,
 checkout watchers and Git/file workers. A release-matched CLI is extracted from
 the checksum-verified Linux AppImage on first connection. OpenSSH pins the host
-key returned by Boat each time it authorizes the workspace’s public key.
+key returned by Boat each time it authorizes the workspace’s public key. A Dev
+bundle can supply its Linux peer directly over the same verified connection.
 
 The SSH attachment relays bounded command/event frames to a private Unix socket.
 The checkout peer survives a lost attachment. A new connection verifies the
 checkout and protocol, takes a fresh snapshot of pending forms/approvals and
 refreshes native histories. Only completions for that attachment are delivered;
-no prompt is replayed. Native IDs and local drafts live in a dedicated store,
-separate from the managed Boat conversation and its branch-aware handoff.
+no prompt is replayed. Native IDs and drafts live in the main snapshot under
+their checkout identities. New handoffs populate a regular VM session, including
+the bounded chat on its first explicit send after rechecking the published base.
+Existing managed Boat chats retain their own conversation IDs.
 
 Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
 OpenCode uses its verified local registered service or an owned loopback server.
