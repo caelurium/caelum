@@ -5,7 +5,7 @@ use crate::{
     ui::{self, Button},
 };
 use caelum_core::application::{FilePreview, ForkBoundary, ForkPoint, HistoryAction, Provider};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::{ButtonVariant, Kit};
 
 fn matches(s: &Workspace) -> Vec<&ForkPoint> {
@@ -31,7 +31,14 @@ fn row_key(boundary: &ForkBoundary) -> String {
 pub(crate) fn header(s: &Workspace) -> (&'static str, &'static str) {
     let l = live(s);
     let provider = l.app.selected.map(|i| l.app.sessions[i].scope.provider);
-    match (l.app.fork_picker().map(|p| p.action), provider) {
+    let picker = l.app.fork_picker();
+    if picker.is_some_and(|p| p.confirmation().is_some()) {
+        return (
+            "Confirm rewind",
+            "Review the checkpoint before removing later conversation history.",
+        );
+    }
+    match (picker.map(|p| p.action), provider) {
         (Some(HistoryAction::Edit), Some(Provider::Codex)) => (
             "Edit in a branch",
             "Codex 0.145+: branch before the prompt, edit its draft, then send. The original stays intact.",
@@ -76,13 +83,18 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                 )
                 .wrap(),
             )
-            .child(ui::caption(&point.label, k).wrap())
             .child(
-                Button::new("Rewind conversation only")
-                    .on_press(move |s: &mut Workspace| confirm(s, owner, false))
-                    .build(k)
-                    .key("rewind-history"),
+                col()
+                    .w_full()
+                    .gap(4.0)
+                    .padding(10.0)
+                    .radius(8.0)
+                    .fill(k.c.layer_01)
+                    .border(1.0, k.c.border_base)
+                    .child(ui::caption("Selected prompt", k))
+                    .child(text(&point.label).font(k.ty.ui).color(k.c.text_base).wrap()),
             );
+        let mut actions = row().w_full().justify_end().gap(8.0);
         match picker.file_preview() {
             Some(FilePreview::Available(paths)) if !paths.is_empty() => {
                 let description = format!(
@@ -95,19 +107,36 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     .map(String::as_str)
                     .collect::<Vec<_>>()
                     .join("\n");
-                body = body
-                    .child(ui::caption(description, k).wrap())
-                    .child(
-                        Button::new("Rewind and restore files")
-                            .variant(ButtonVariant::Outline)
-                            .on_press(move |s: &mut Workspace| confirm(s, owner, true))
-                            .build(k)
-                            .key("rewind-files"),
-                    )
-                    .child(ui::caption(names, k).wrap());
+                let mut file_box = col()
+                    .w_full()
+                    .gap(6.0)
+                    .padding(10.0)
+                    .radius(8.0)
+                    .fill(k.c.layer_01)
+                    .border(1.0, k.c.border_base)
+                    .child(ui::caption(
+                        format!(
+                            "Changed {} ({})",
+                            if paths.len() == 1 { "file" } else { "files" },
+                            paths.len()
+                        ),
+                        k,
+                    ))
+                    .child(text(names).font(k.ty.mono).color(k.c.text_base).wrap());
                 if paths.len() > 12 {
-                    body = body.child(ui::caption(format!("…and {} more", paths.len() - 12), k));
+                    file_box =
+                        file_box.child(ui::caption(format!("…and {} more", paths.len() - 12), k));
                 }
+                body = body
+                    .child(ui::caption(description, k).color(k.c.warning.fg).wrap())
+                    .child(file_box);
+                actions = actions.child(
+                    Button::new("Rewind and restore files")
+                        .variant(ButtonVariant::Outline)
+                        .on_press(move |s: &mut Workspace| confirm(s, owner, true))
+                        .build(k)
+                        .key("rewind-files"),
+                );
             }
             Some(FilePreview::Available(_)) => {
                 body = body.child(ui::caption(
@@ -124,20 +153,37 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             }
             _ => {}
         }
+        actions = actions.child(
+            Button::new("Rewind conversation only")
+                .variant(ButtonVariant::Contrast)
+                .on_press(move |s: &mut Workspace| confirm(s, owner, false))
+                .build(k)
+                .key("rewind-history"),
+        );
         return col()
             .w_full()
             .h_full()
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            })
+            .min_h(0.0)
+            .gap(12.0)
             .child(
-                body.children(
-                    picker
-                        .error
-                        .as_ref()
-                        .map(|e| ui::caption(e, k).color(k.c.danger.fg).wrap()),
-                ),
-            );
+                col()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(
+                        body.children(
+                            picker
+                                .error
+                                .as_ref()
+                                .map(|e| ui::caption(e, k).color(k.c.danger.fg).wrap()),
+                        ),
+                    ),
+            )
+            .child(ui::divider(k))
+            .child(actions);
     }
     let points = matches(s);
     let active = points
@@ -168,15 +214,17 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     1 => "1 turn earlier".into(),
                     n => format!("{n} turns earlier"),
                 };
-                ui::choice(label, &detail, i == active, &kit).on_press(move |s: &mut Workspace| {
-                    if live(s)
-                        .app
-                        .fork_picker()
-                        .is_some_and(|p| p.token() == owner)
-                    {
-                        live_mut(s).app.fork_at(&boundary)
-                    }
-                })
+                turn_row(label, &detail, *newer == 0, i == active, &kit).on_press(
+                    move |s: &mut Workspace| {
+                        if live(s)
+                            .app
+                            .fork_picker()
+                            .is_some_and(|p| p.token() == owner)
+                        {
+                            live_mut(s).app.fork_at(&boundary)
+                        }
+                    },
+                )
             },
         );
     let mut body = col().w_full().h_full().min_h(0.0).gap(8.0).child(
@@ -214,19 +262,23 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
     if let Some(error) = &picker.error {
         body = body.child(ui::caption(error, k).color(k.c.danger.fg).wrap());
     }
+    let count = points.len();
+    let turns = format!("{count} {}", if count == 1 { "turn" } else { "turns" });
     let status = if picker.creating() {
         if picker.action == HistoryAction::Rewind {
-            "Rewinding…"
+            "Rewinding…".into()
         } else {
-            "Creating branch…"
+            "Creating branch…".into()
         }
     } else if picker.loading() {
-        "Loading history…"
+        "Loading history…".into()
     } else {
         match picker.action {
-            HistoryAction::Fork => "↑↓ Choose a turn · ↵ Fork",
-            HistoryAction::Edit => "↑↓ Choose a prompt · ↵ Create editable branch",
-            HistoryAction::Rewind => "↑↓ Choose a prompt · ↵ Preview rewind",
+            HistoryAction::Fork => format!("{turns} · ↑↓ Choose a turn · ↵ Fork"),
+            HistoryAction::Edit => {
+                format!("{turns} · ↑↓ Choose a prompt · ↵ Create editable branch")
+            }
+            HistoryAction::Rewind => format!("{turns} · ↑↓ Choose a prompt · ↵ Preview rewind"),
         }
     };
     let mut footer = row()
@@ -294,6 +346,66 @@ pub fn fork_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     tx.scroll_center_in_instant("fork-rows", row_key(&chosen));
     live_mut(s).commands.fork_selected = Some(chosen);
     true
+}
+
+fn turn_row(title: &str, detail: &str, latest: bool, selected: bool, k: &Kit) -> El {
+    k.interactive(
+        row()
+            .w_full()
+            .min_h(44.0)
+            .px(10.0)
+            .py(7.0)
+            .gap(10.0)
+            .center_y()
+            .radius(6.0)
+            .fill(if selected {
+                k.c.hover
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(2.0)
+                    .child(
+                        row()
+                            .w_full()
+                            .center_y()
+                            .gap(8.0)
+                            .child(
+                                text(title)
+                                    .font(k.ty.ui_medium)
+                                    .color(k.c.text_base)
+                                    .truncate()
+                                    .grow(1.0)
+                                    .min_w(0.0),
+                            )
+                            .children(latest.then(|| {
+                                text("Latest")
+                                    .font(k.ty.small)
+                                    .color(k.c.text_accent)
+                                    .px(6.0)
+                                    .py(1.0)
+                                    .radius(4.0)
+                                    .fill(k.c.layer_02)
+                            })),
+                    )
+                    .child(ui::caption(detail, k).truncate()),
+            )
+            .child(
+                text("↵")
+                    .font(k.ty.small)
+                    .color(k.c.text_muted)
+                    .opacity(if selected { 1.0 } else { 0.0 })
+                    .a11y_hidden(),
+            ),
+    )
+    .role("button")
+    .label(title)
+    .description(detail)
+    .focusable(true)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
 }
 
 fn confirm(s: &mut Workspace, owner: u64, files: bool) {
