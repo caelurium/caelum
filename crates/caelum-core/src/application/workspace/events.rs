@@ -114,11 +114,13 @@ impl Workspace {
                 )
             }
             Event::Antigravity(mut event) => {
-                if let (Some(session_id), Some(data)) =
-                    (event.session_id.as_deref(), event.params.as_object_mut())
-                {
-                    data.entry("sessionId".to_owned())
-                        .or_insert_with(|| Value::String(session_id.to_owned()));
+                if let Some(data) = event.params.as_object_mut() {
+                    if let Some(session_id) = event.session_id.as_deref() {
+                        data.entry("sessionId".to_owned())
+                            .or_insert_with(|| Value::String(session_id.to_owned()));
+                    }
+                    data.entry("_projectPath".to_owned())
+                        .or_insert_with(|| Value::String(event.project_path.clone()));
                 }
                 self.provider_event(
                     &event.project_path,
@@ -433,6 +435,8 @@ impl Workspace {
             method,
             "item/completed"
                 | "turn/completed"
+                | "antigravity/turnCompleted"
+                | "tool_call_update"
                 | "session.shell.ended"
                 | "session.execution.succeeded"
                 | "session.tool.success"

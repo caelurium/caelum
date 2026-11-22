@@ -1,13 +1,33 @@
 #!/usr/bin/env python3
 import json
+import os
 import sys
 import threading
 
-state = {
-    "sessions": {},
-    "counter": 0,
-    "pending_permissions": {},
-}
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake-agy-state.json")
+
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {
+                "sessions": data.get("sessions", {}),
+                "counter": data.get("counter", 0),
+                "pending_permissions": {},
+            }
+    return {"sessions": {}, "counter": 0, "pending_permissions": {}}
+
+
+def save_state():
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            {"sessions": state["sessions"], "counter": state["counter"]},
+            f,
+        )
+
+
+state = load_state()
 write_lock = threading.Lock()
 
 
@@ -117,24 +137,87 @@ def run_prompt(req_id, session_id, blocks):
         reply = f"permission:{outcome.get('optionId', outcome.get('outcome', 'unknown'))}"
     else:
         thought = {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "Checking files."}}
-        tool_start = {
+        cwd = sess["cwd"]
+        read_start = {
             "sessionUpdate": "tool_call",
-            "toolCallId": "call-1",
+            "toolCallId": "call-read",
             "name": "read_file",
+            "kind": "read",
             "title": "Read README.md",
             "status": "in_progress",
-            "rawInput": {"path": "README.md"},
+            "rawInput": {"Path": f"{cwd}/README.md", "StartLine": 1, "EndLine": 5},
         }
-        tool_done = {
+        read_done = {
             "sessionUpdate": "tool_call_update",
-            "toolCallId": "call-1",
+            "toolCallId": "call-read",
             "status": "completed",
-            "content": [{"type": "content", "content": {"type": "text", "text": "ok"}}],
+            "rawOutput": {
+                "output": "Created At: 2026-11-22T01:00:00Z\nCompleted At: 2026-11-22T01:00:01Z\nShowing lines 1-2 of 2\n1: # Caelum\n2: Hello"
+            },
         }
-        notify(session_id, thought)
-        notify(session_id, tool_start)
-        notify(session_id, tool_done)
-        sess["history"].extend([thought, tool_start, tool_done])
+        edit_start = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-edit",
+            "name": "edit_file",
+            "kind": "edit",
+            "title": "File src/lib.rs",
+            "status": "in_progress",
+            "rawInput": {
+                "Path": f"{cwd}/src/lib.rs",
+                "Target": "fn old() {}\n",
+                "Replacement": "fn new() {\n    println!(\"ok\");\n}\n",
+            },
+        }
+        edit_done = {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-edit",
+            "status": "completed",
+            "content": [{
+                "type": "diff",
+                "path": f"{cwd}/src/lib.rs",
+                "oldText": "fn old() {}\n",
+                "newText": "fn new() {\n    println!(\"ok\");\n}\n",
+            }],
+        }
+        write_done = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-write",
+            "name": "write_file",
+            "kind": "edit",
+            "title": "File notes.md",
+            "status": "completed",
+            "rawInput": {"Path": "notes.md", "Content": "line 1\nline 2\n", "Overwrite": True},
+        }
+        run_done = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-run",
+            "name": "run_command",
+            "kind": "execute",
+            "title": "cargo test",
+            "status": "completed",
+            "rawInput": {"CommandLine": "cargo test", "toolSummary": "Run tests"},
+            "rawOutput": {
+                "output": "Created At: 2026-11-22T01:00:00Z\nCompleted At: 2026-11-22T01:00:01Z\nCommand exited with code 0.\n\nCommand output:\ntest result: ok."
+            },
+        }
+        subagent_done = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-subagent",
+            "name": "invoke_subagent",
+            "kind": "other",
+            "title": "Run invoke_subagent",
+            "status": "completed",
+            "rawInput": {
+                "TypeName": "research",
+                "Role": "Codebase Researcher",
+                "Prompt": "Inspect lib.rs",
+            },
+            "rawOutput": {"output": "Found 1 symbol"},
+        }
+        updates = [thought, read_start, read_done, edit_start, edit_done, write_done, run_done, subagent_done]
+        for u in updates:
+            notify(session_id, u)
+        sess["history"].extend(updates)
         reply = f"echo:{sess['model']}:{sess['effort']}:{sess['mode']}:{text}"
 
     msg = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": reply}}
@@ -142,6 +225,7 @@ def run_prompt(req_id, session_id, blocks):
     notify(session_id, msg)
     notify(session_id, usage)
     sess["history"].extend([msg, usage])
+    save_state()
     send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
 
 
@@ -184,6 +268,7 @@ for raw in sys.stdin:
             "mode": "default",
             "history": [],
         }
+        save_state()
         send({"jsonrpc": "2.0", "id": req_id, "result": session_payload(sid)})
         notify(sid, {
             "sessionUpdate": "available_commands_update",
@@ -207,7 +292,10 @@ for raw in sys.stdin:
         send({"jsonrpc": "2.0", "id": req_id, "result": {"sessions": sessions}})
     elif method == "session/load":
         sid = params["sessionId"]
-        info = state["sessions"][sid]
+        info = state["sessions"].get(sid)
+        if info is None:
+            send({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32002, "message": f"Session not found: {sid}"}})
+            continue
         for update in info["history"]:
             notify(sid, update)
         send({
@@ -217,6 +305,7 @@ for raw in sys.stdin:
         })
     elif method == "session/close":
         state["sessions"].pop(params.get("sessionId"), None)
+        save_state()
         send({"jsonrpc": "2.0", "id": req_id, "result": {}})
     elif method == "session/set_config_option":
         sid = params["sessionId"]
@@ -224,10 +313,12 @@ for raw in sys.stdin:
             state["sessions"][sid]["model"] = params["value"]
         elif params.get("configId") == "thought_level":
             state["sessions"][sid]["effort"] = params["value"]
+        save_state()
         send({"jsonrpc": "2.0", "id": req_id, "result": {}})
     elif method == "session/set_mode":
         sid = params["sessionId"]
         state["sessions"][sid]["mode"] = params["modeId"]
+        save_state()
         send({"jsonrpc": "2.0", "id": req_id, "result": {}})
     elif method == "session/prompt":
         sid = params["sessionId"]

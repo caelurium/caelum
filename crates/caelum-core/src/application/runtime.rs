@@ -86,6 +86,8 @@ impl ProviderRuntime {
             let db = crate::database::WorkspaceDatabase::open(parent.join("branches.sqlite3"))
                 .map_err(|e| e.to_string())?;
             self.branches.reset(db)?;
+            self.antigravity
+                .open_metadata(parent.join("antigravity-sessions.json"))?;
         }
         Ok(())
     }
@@ -147,9 +149,10 @@ impl ProviderRuntime {
                     .opencode
                     .set_title(&key.scope.project, &key.id, title)
                     .map_err(|e| e.to_string()),
-                Provider::Antigravity => {
-                    Err("Antigravity ACP does not support renaming sessions.".into())
-                }
+                Provider::Antigravity => self
+                    .antigravity
+                    .rename(&key.scope.project, &key.id, title)
+                    .map_err(|e| e.to_string()),
             },
             Command::Export(key, title, format, path) => self.export(key, title, *format, path),
             Command::Rewind {
@@ -237,9 +240,10 @@ impl ProviderRuntime {
                     .opencode
                     .set_session_archived(&key.scope.project, &key.id, *archived)
                     .map_err(|e| e.to_string()),
-                Provider::Antigravity => {
-                    Err("Antigravity ACP does not support archiving sessions.".into())
-                }
+                Provider::Antigravity => self
+                    .antigravity
+                    .set_session_archived(&key.scope.project, &key.id, *archived)
+                    .map_err(|e| e.to_string()),
             },
             Command::DeleteSession(key) => match key.scope.provider {
                 Provider::Codex => self
@@ -250,9 +254,10 @@ impl ProviderRuntime {
                     .opencode
                     .delete_session(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string()),
-                Provider::Antigravity => {
-                    Err("Antigravity ACP does not support deleting sessions.".into())
-                }
+                Provider::Antigravity => self
+                    .antigravity
+                    .delete_session(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
             },
             Command::Details(key) => {
                 let details = match key.scope.provider {
@@ -365,7 +370,7 @@ impl ProviderRuntime {
                             },
                         })
                         .collect(),
-                    Provider::Antigravity => Vec::new(),
+                    Provider::Antigravity => self.list_archived_antigravity(scope)?,
                 };
                 return Ok(Reply::Sessions(summaries));
             }

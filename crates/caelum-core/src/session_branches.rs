@@ -40,8 +40,7 @@ impl Identity {
     fn same_start(&self, incoming: &Self) -> bool {
         match (self, incoming) {
             (Self::Codex(left), Self::Codex(right)) => left == right,
-            (Self::OpenCode(_), Self::OpenCode(_))
-            | (Self::Antigravity, Self::Antigravity) => true,
+            (Self::OpenCode(_), Self::OpenCode(_)) | (Self::Antigravity, Self::Antigravity) => true,
             _ => false,
         }
     }

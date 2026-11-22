@@ -246,14 +246,35 @@ fn parse_data_url(url: &str) -> Option<(&str, &str)> {
     Some((mime, data))
 }
 
+pub(crate) fn format_plan_entries(entries: &[Value]) -> String {
+    let mut out = String::new();
+    for entry in entries {
+        let Some(content) = entry["content"].as_str().filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let marker = match entry["status"].as_str().unwrap_or_default() {
+            "completed" => "[x]",
+            "in_progress" => "[-]",
+            _ => "[ ]",
+        };
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("{marker} {content}"));
+    }
+    out
+}
+
 /// Convert replayed ACP `session/update` payloads into normalized history items.
 pub(super) fn history_from_updates(
     updates: &[Value],
     is_working: bool,
     opts: &SessionOptionState,
+    project_path: Option<&Path>,
 ) -> SessionHistoryPage {
     let mut data: Vec<Value> = Vec::new();
     let mut tool_positions: HashMap<String, usize> = HashMap::new();
+    let mut raw_tools: HashMap<String, Value> = HashMap::new();
     let mut counter: u64 = 0;
 
     for update in updates {
@@ -317,22 +338,50 @@ pub(super) fn history_from_updates(
                 let Some(tool_id) = update["toolCallId"].as_str().filter(|s| !s.is_empty()) else {
                     continue;
                 };
+                let raw_state = raw_tools
+                    .entry(tool_id.to_owned())
+                    .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                super::tools::merge_raw_tool(raw_state, update);
+                let normalized = super::tools::normalize_tool(raw_state, project_path);
+                let item = json!({
+                    "id": format!("acp-tool-{tool_id}"),
+                    "type": "tool",
+                    "toolCallId": tool_id,
+                    "name": normalized.name,
+                    "status": normalized.status,
+                    "input": normalized.input,
+                    "output": normalized.output,
+                    "error": normalized.error,
+                    "metadata": normalized.metadata,
+                });
                 if let Some(&pos) = tool_positions.get(tool_id) {
-                    merge_tool_update(&mut data[pos], update);
+                    data[pos] = item;
                 } else {
-                    let mut item = json!({
-                        "id": format!("acp-tool-{tool_id}"),
-                        "type": "tool",
-                        "toolCallId": tool_id,
-                        "name": tool_name(update),
-                        "title": update["title"].as_str().unwrap_or_default(),
-                        "status": update["status"].as_str().unwrap_or("completed"),
-                        "input": tool_input(update),
-                        "output": tool_output(update),
-                    });
-                    merge_tool_update(&mut item, update);
                     tool_positions.insert(tool_id.to_owned(), data.len());
                     data.push(item);
+                }
+            }
+            "plan" => {
+                if let Some(entries) = update["entries"].as_array() {
+                    let plan_text = format_plan_entries(entries);
+                    if !plan_text.is_empty() {
+                        let item = json!({
+                            "id": "acp-plan",
+                            "type": "tool",
+                            "name": "Plan",
+                            "status": "completed",
+                            "input": json!({ "description": "Execution plan" }).to_string(),
+                            "output": plan_text,
+                            "error": "",
+                            "metadata": Value::Null,
+                        });
+                        if let Some(&pos) = tool_positions.get("plan") {
+                            data[pos] = item;
+                        } else {
+                            tool_positions.insert("plan".into(), data.len());
+                            data.push(item);
+                        }
+                    }
                 }
             }
             "usage_update" => {
@@ -368,77 +417,6 @@ pub(crate) fn chunk_text(update: &Value) -> String {
         return text.to_owned();
     }
     String::new()
-}
-
-pub(crate) fn tool_name(update: &Value) -> String {
-    update["name"]
-        .as_str()
-        .or_else(|| update["title"].as_str())
-        .or_else(|| update["kind"].as_str())
-        .unwrap_or("tool")
-        .to_owned()
-}
-
-pub(crate) fn tool_input(update: &Value) -> String {
-    let raw = if !update["rawInput"].is_null() {
-        &update["rawInput"]
-    } else if !update["args"].is_null() {
-        &update["args"]
-    } else {
-        return String::new();
-    };
-    if let Some(text) = raw.as_str() {
-        text.to_owned()
-    } else {
-        serde_json::to_string_pretty(raw).unwrap_or_default()
-    }
-}
-
-pub(crate) fn tool_output(update: &Value) -> String {
-    if let Some(items) = update["content"].as_array() {
-        let mut out = String::new();
-        for item in items {
-            let text = item["content"]["text"]
-                .as_str()
-                .or_else(|| item["text"].as_str());
-            if let Some(text) = text {
-                if !out.is_empty() {
-                    out.push('\n');
-                }
-                out.push_str(text);
-            }
-        }
-        if !out.is_empty() {
-            return out;
-        }
-    }
-    if !update["rawOutput"].is_null() {
-        if let Some(text) = update["rawOutput"].as_str() {
-            return text.to_owned();
-        }
-        return serde_json::to_string_pretty(&update["rawOutput"]).unwrap_or_default();
-    }
-    String::new()
-}
-
-fn merge_tool_update(target: &mut Value, update: &Value) {
-    if let Some(name) = update["name"].as_str().filter(|s| !s.is_empty()) {
-        target["name"] = Value::String(name.to_owned());
-    }
-    if let Some(title) = update["title"].as_str().filter(|s| !s.is_empty()) {
-        target["title"] = Value::String(title.to_owned());
-    }
-    if let Some(status) = update["status"].as_str().filter(|s| !s.is_empty()) {
-        target["status"] = Value::String(status.to_owned());
-    }
-    let input = tool_input(update);
-    if !input.is_empty() {
-        target["input"] = Value::String(input);
-    }
-    let output = tool_output(update);
-    if !output.is_empty() {
-        target["output"] = Value::String(output);
-    }
 }
 
 fn parse_timestamp_ms(value: &Value) -> Option<u64> {

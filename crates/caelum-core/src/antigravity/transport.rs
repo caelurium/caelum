@@ -140,6 +140,7 @@ pub(super) fn spawn_connection(
         choices: Arc::new(Mutex::new(None)),
         commands: commands.clone(),
         session_options: session_options.clone(),
+        session_changes: Mutex::new(HashMap::new()),
     });
 
     spawn_reader(

@@ -153,7 +153,7 @@ fn live_duration_includes_submission_wait_thinking_tools_and_retries() {
                 .entries
                 .iter()
                 .rev()
-                .find(|entry| entry.kind == EntryKind::Assistant)
+                .find(|entry| entry.kind() == EntryKind::Assistant)
                 .map(|entry| entry.id.clone())
                 .unwrap()
         } else {

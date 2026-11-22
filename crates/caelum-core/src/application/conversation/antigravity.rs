@@ -1,4 +1,6 @@
-use serde_json::Value;
+use std::path::Path;
+
+use serde_json::{json, Value};
 
 use super::{Conversation, Entry, EntryKind};
 
@@ -27,7 +29,11 @@ pub(super) fn history_entries(data: &[Value]) -> Vec<Entry> {
                     entry.name = item["name"].as_str().unwrap_or("tool").to_owned();
                     entry.input = item["input"].as_str().unwrap_or_default().to_owned();
                     entry.output = item["output"].as_str().unwrap_or_default().to_owned();
+                    entry.error = item["error"].as_str().unwrap_or_default().to_owned();
                     entry.set_progress(complete, status);
+                    if !item["metadata"].is_null() {
+                        entry.metadata = item["metadata"].clone();
+                    }
                     Some(entry)
                 }
                 _ => None,
@@ -96,35 +102,44 @@ pub(super) fn apply_event(conversation: &mut Conversation, method: &str, data: &
                 return;
             };
             let id = format!("acp-tool-{tool_id}");
-            let existing = conversation.entries.iter().find(|e| e.id == id);
-            let status = data["status"]
-                .as_str()
-                .map(str::to_owned)
-                .or_else(|| existing.map(|e| e.status().to_owned()))
-                .unwrap_or_else(|| "running".into());
-            let complete = !matches!(status.as_str(), "pending" | "in_progress" | "running");
+            let mut raw = conversation
+                .entries
+                .iter()
+                .find(|e| e.id == id)
+                .and_then(|e| e.metadata.get("acp"))
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            crate::antigravity::tools::merge_raw_tool(&mut raw, data);
+            let project_path = data["_projectPath"].as_str().map(Path::new);
+            let normalized = crate::antigravity::tools::normalize_tool(&raw, project_path);
+            let complete = !matches!(
+                normalized.status.as_str(),
+                "pending" | "in_progress" | "running"
+            );
             let mut entry = Entry::new(id, EntryKind::Tool, String::new(), complete);
-            let name = crate::antigravity::protocol::tool_name(data);
-            entry.name = if name != "tool" {
-                name
-            } else {
-                existing.map(|e| e.name.clone()).unwrap_or(name)
-            };
-            let input = crate::antigravity::protocol::tool_input(data);
-            entry.input = if !input.is_empty() {
-                input
-            } else {
-                existing.map(|e| e.input.clone()).unwrap_or_default()
-            };
-            let output = crate::antigravity::protocol::tool_output(data);
-            entry.output = if !output.is_empty() {
-                output
-            } else {
-                existing.map(|e| e.output.clone()).unwrap_or_default()
-            };
-            entry.set_progress(complete, status);
+            entry.name = normalized.name;
+            entry.input = normalized.input;
+            entry.output = normalized.output;
+            entry.error = normalized.error;
+            entry.set_progress(complete, normalized.status);
+            entry.metadata = normalized.metadata;
             conversation.set_working(true);
             conversation.put(entry);
+        }
+        "plan" => {
+            if let Some(entries) = data["entries"].as_array() {
+                let plan_text = crate::antigravity::protocol::format_plan_entries(entries);
+                if !plan_text.is_empty() {
+                    let mut entry =
+                        Entry::new("acp-plan".to_owned(), EntryKind::Tool, String::new(), true);
+                    entry.name = "Plan".to_owned();
+                    entry.input = json!({ "description": "Execution plan" }).to_string();
+                    entry.output = plan_text;
+                    entry.set_progress(true, "completed");
+                    conversation.set_working(true);
+                    conversation.put(entry);
+                }
+            }
         }
         "usage_update" => {
             if let Some(used) = data["used"].as_u64() {

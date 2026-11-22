@@ -11,14 +11,16 @@ use std::{
 
 use caelum_protocol::{
     AntigravityEvent, AntigravitySession, AntigravitySessionInfo, AntigravitySessionList,
-    OpenCodeCommandInfo, ProviderChoices, SessionDetails, SessionHistoryPage,
+    LineChanges, OpenCodeCommandInfo, ProviderChoices, SessionDetails, SessionHistoryPage,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
 
+mod metadata;
 pub(crate) mod protocol;
 #[cfg(all(test, unix))]
 mod tests;
+pub(crate) mod tools;
 mod transport;
 
 use crate::{
@@ -52,6 +54,7 @@ struct ProviderInner {
     approvals: ApprovalBroker,
     connections: Mutex<HashMap<PathBuf, Arc<AcpConnection>>>,
     subscribers: EventSubscribers,
+    metadata: Mutex<metadata::SessionMetadataStore>,
     closed: AtomicBool,
 }
 
@@ -67,6 +70,7 @@ struct AcpConnection {
     choices: Arc<Mutex<Option<ProviderChoices>>>,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
+    session_changes: Mutex<HashMap<String, LineChanges>>,
 }
 
 #[derive(Clone, Default)]
@@ -106,9 +110,14 @@ impl AntigravityProvider {
                 approvals,
                 connections: Mutex::new(HashMap::new()),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
+                metadata: Mutex::new(metadata::SessionMetadataStore::default()),
                 closed: AtomicBool::new(false),
             }),
         }
+    }
+
+    pub(crate) fn open_metadata(&self, path: PathBuf) -> Result<(), String> {
+        lock(&self.inner.metadata).open(path)
     }
 
     pub fn subscribe(&self) -> Receiver<AntigravityEvent> {
@@ -133,13 +142,41 @@ impl AntigravityProvider {
         &self,
         project_path: impl AsRef<Path>,
     ) -> Result<AntigravitySessionList, AntigravityError> {
+        self.list_sessions_filtered(project_path, false)
+    }
+
+    pub fn list_archived_sessions(
+        &self,
+        project_path: impl AsRef<Path>,
+    ) -> Result<AntigravitySessionList, AntigravityError> {
+        self.list_sessions_filtered(project_path, true)
+    }
+
+    fn list_sessions_filtered(
+        &self,
+        project_path: impl AsRef<Path>,
+        archived: bool,
+    ) -> Result<AntigravitySessionList, AntigravityError> {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
         let cwd = project.path().to_string_lossy().into_owned();
         let result = connection.request("session/list", json!({ "cwd": cwd }))?;
         let working = lock(&connection.working_sessions).clone();
         let options = lock(&connection.session_options).clone();
-        let sessions = protocol::parse_session_list(&result, project.path(), &working, &options);
+        let metadata = lock(&self.inner.metadata);
+        let sessions = protocol::parse_session_list(&result, project.path(), &working, &options)
+            .into_iter()
+            .filter(|s| {
+                !metadata.is_deleted(project.path(), &s.id)
+                    && metadata.is_archived(project.path(), &s.id) == archived
+            })
+            .map(|mut s| {
+                if let Some(title) = metadata.title(project.path(), &s.id) {
+                    s.title = title;
+                }
+                s
+            })
+            .collect();
         Ok(AntigravitySessionList {
             project: project.info(),
             sessions,
@@ -226,6 +263,11 @@ impl AntigravityProvider {
         session_id: &str,
     ) -> Result<(AntigravitySessionInfo, SessionHistoryPage), AntigravityError> {
         let project = Project::open(project_path)?;
+        if lock(&self.inner.metadata).is_deleted(project.path(), session_id) {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session was deleted".into(),
+            ));
+        }
         let connection = self.connection(&project)?;
         let (result, replayed) = self.load_session(&connection, project.path(), session_id)?;
         let choices = protocol::parse_choices(&result);
@@ -236,19 +278,28 @@ impl AntigravityProvider {
         lock(&connection.loaded_sessions).insert(session_id.to_owned());
         lock(&connection.session_options).insert(session_id.to_owned(), opts.clone());
         let is_working = lock(&connection.working_sessions).contains(session_id);
-        let mut page = protocol::history_from_updates(&replayed, is_working, &opts);
-        let title = page
-            .data
-            .iter()
-            .find(|item| item["type"] == "user")
-            .and_then(|item| item["text"].as_str())
-            .map(|text| {
-                text.lines()
-                    .next()
-                    .unwrap_or(text)
-                    .chars()
-                    .take(60)
-                    .collect()
+        let mut page =
+            protocol::history_from_updates(&replayed, is_working, &opts, Some(project.path()));
+        if let Some(changes) = tools::session_line_changes(&page.data) {
+            lock(&connection.session_changes).insert(session_id.to_owned(), changes);
+        } else {
+            lock(&connection.session_changes).remove(session_id);
+        }
+        let title = lock(&self.inner.metadata)
+            .title(project.path(), session_id)
+            .or_else(|| {
+                page.data
+                    .iter()
+                    .find(|item| item["type"] == "user")
+                    .and_then(|item| item["text"].as_str())
+                    .map(|text| {
+                        text.lines()
+                            .next()
+                            .unwrap_or(text)
+                            .chars()
+                            .take(60)
+                            .collect()
+                    })
             })
             .unwrap_or_default();
         if page.model.is_none() {
@@ -289,15 +340,123 @@ impl AntigravityProvider {
     pub fn session_details(
         &self,
         project_path: impl AsRef<Path>,
-        _session_id: &str,
+        session_id: &str,
     ) -> Result<SessionDetails, AntigravityError> {
-        let _ = Project::open(project_path)?;
+        let project = Project::open(project_path)?;
+        let changes = lock(&self.inner.connections)
+            .get(project.path())
+            .and_then(|conn| lock(&conn.session_changes).get(session_id).cloned());
         Ok(SessionDetails {
             branch: None,
             branches: Vec::new(),
             branch_is_current: true,
-            changes: None,
+            changes,
         })
+    }
+
+    pub fn set_session_archived(
+        &self,
+        project_path: impl AsRef<Path>,
+        session_id: &str,
+        archived: bool,
+    ) -> Result<(), AntigravityError> {
+        if session_id.trim().is_empty() {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session ID cannot be empty".into(),
+            ));
+        }
+        let project = Project::open(project_path)?;
+        let connection = self.connection(&project)?;
+        self.verify_session_owned(&connection, &project, session_id)?;
+        if archived && lock(&connection.working_sessions).contains(session_id) {
+            return Err(AntigravityError::Protocol(
+                "stop the running turn before archiving this session".into(),
+            ));
+        }
+        lock(&self.inner.metadata).set_archived(project.path(), session_id, archived)
+    }
+
+    pub fn delete_session(
+        &self,
+        project_path: impl AsRef<Path>,
+        session_id: &str,
+    ) -> Result<(), AntigravityError> {
+        if session_id.trim().is_empty() {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session ID cannot be empty".into(),
+            ));
+        }
+        let project = Project::open(project_path)?;
+        let connection = self.connection(&project)?;
+        self.verify_session_owned(&connection, &project, session_id)?;
+        if lock(&connection.working_sessions).contains(session_id) {
+            return Err(AntigravityError::Protocol(
+                "stop the running turn before deleting this session".into(),
+            ));
+        }
+        if !lock(&self.inner.metadata).is_archived(project.path(), session_id) {
+            return Err(AntigravityError::Protocol(
+                "only archived Antigravity sessions can be deleted".into(),
+            ));
+        }
+        let _ = connection.request("session/close", json!({ "sessionId": session_id }));
+        lock(&connection.loaded_sessions).remove(session_id);
+        lock(&connection.session_options).remove(session_id);
+        lock(&connection.session_changes).remove(session_id);
+        lock(&self.inner.metadata).mark_deleted(project.path(), session_id)
+    }
+
+    pub fn rename(
+        &self,
+        project_path: impl AsRef<Path>,
+        session_id: &str,
+        title: &str,
+    ) -> Result<(), AntigravityError> {
+        if session_id.trim().is_empty() {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session ID cannot be empty".into(),
+            ));
+        }
+        let project = Project::open(project_path)?;
+        let connection = self.connection(&project)?;
+        self.verify_session_owned(&connection, &project, session_id)?;
+        lock(&self.inner.metadata).set_title(project.path(), session_id, title)
+    }
+
+    fn verify_session_owned(
+        &self,
+        connection: &AcpConnection,
+        project: &Project,
+        session_id: &str,
+    ) -> Result<(), AntigravityError> {
+        if lock(&self.inner.metadata).is_deleted(project.path(), session_id) {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session does not exist in this project".into(),
+            ));
+        }
+        if lock(&connection.loaded_sessions).contains(session_id)
+            || lock(&connection.session_options).contains_key(session_id)
+        {
+            return Ok(());
+        }
+        let cwd = project.path().to_string_lossy().into_owned();
+        let result = connection.request("session/list", json!({ "cwd": cwd }))?;
+        let exists = result["sessions"].as_array().is_some_and(|items| {
+            items.iter().any(|item| {
+                item["sessionId"].as_str().map(str::trim) == Some(session_id)
+                    && item["cwd"].as_str().is_none_or(|c| {
+                        Path::new(c) == project.path()
+                            || c == project.path().to_string_lossy().as_ref()
+                    })
+            })
+        });
+        if exists {
+            Ok(())
+        } else {
+            Err(AntigravityError::Protocol(
+                "Antigravity session does not belong to this project".into(),
+            ))
+        }
     }
 
     pub fn send_prompt_with_options(
