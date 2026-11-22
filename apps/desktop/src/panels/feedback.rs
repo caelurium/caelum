@@ -66,23 +66,29 @@ pub(super) fn comment_view(
     let link = comment.url.clone();
     col()
         .w_full()
-        .gap(6.0)
-        .padding(10.0)
         .radius(10.0)
         .fill(if selected { k.c.hover } else { k.c.layer_01 })
         .border(
             1.0,
             if selected {
-                k.alpha(k.c.text_accent, 0.3)
+                k.alpha(k.c.text_accent, 0.45)
             } else {
-                k.c.border_base
+                k.c.border_strong
             },
         )
+        .clip_rounded(10.0)
         .child(
             row()
                 .w_full()
+                .px(10.0)
+                .py(7.0)
                 .gap(8.0)
                 .center_y()
+                .fill(if selected {
+                    k.alpha(k.c.text_accent, 0.08)
+                } else {
+                    k.c.layer_02
+                })
                 .child(
                     rune_kit::Checkbox::new(selected)
                         .label(format!(
@@ -117,10 +123,13 @@ pub(super) fn comment_view(
                         .label("Open comment on GitHub"),
                 ),
         )
+        .child(ui::divider(k))
         .child(
-            Markdown::new(&comment.body)
-                .selectable(true)
-                .render(&theme::markdown(k)),
+            col().w_full().padding(10.0).child(
+                Markdown::new(&comment.body)
+                    .selectable(true)
+                    .render(&theme::markdown(k)),
+            ),
         )
 }
 
