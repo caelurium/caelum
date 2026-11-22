@@ -5,12 +5,18 @@ use serde_json::Value;
 
 mod activity;
 mod excerpt;
+mod progress;
+#[cfg(test)]
+mod progress_tests;
+mod tool_hint;
 
 pub use activity::activity;
 pub use activity::Activity;
 pub use activity::ActivityKind;
 pub use excerpt::excerpt;
 pub use excerpt::latest_message;
+pub use progress::TurnPreview;
+pub(crate) use tool_hint::tool_detail;
 
 #[derive(Clone, Debug)]
 pub struct Media {

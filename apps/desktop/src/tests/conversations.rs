@@ -103,6 +103,12 @@ fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows(
         let rect = element(&rt, tile).rect;
         assert!((element(&rt, "overview-session-5").rect[2] - rect[2]).abs() <= 1.0);
         assert!(tile_shows(&rt, tile, "Should a manual disconnect"));
+        assert!(tile_shows(
+            &rt,
+            "overview-session-3",
+            "tracing where the editor loses focus"
+        ));
+        assert!(tile_shows(&rt, "overview-session-3", "Running · 3m"));
         assert!(rt.find("overview-session-0").is_none());
         assert!(rt.find("overview-session-2").is_none());
         assert!(tile_shows(
@@ -126,7 +132,7 @@ fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows(
         });
         advance(&mut rt, 0.25);
         assert_eq!(element(&rt, tile).rect, rect);
-        assert!(tile_shows(&rt, tile, "In progress"));
+        assert!(tile_shows(&rt, tile, "Running"));
         assert!(!tile_shows(&rt, tile, "Return to this draft"));
         key(&mut rt, Key::Down, Mods::default());
         key(&mut rt, Key::Enter, Mods::default());
@@ -134,6 +140,48 @@ fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows(
         assert_eq!(live(&rt.state).app.selected, Some(down));
         assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
     }
+}
+
+#[test]
+fn overview_streams_visible_excerpts_and_keeps_filtered_updates_for_when_the_card_returns() {
+    let mut rt = design_runtime("conversation-overview", (800.0, 620.0));
+    let card = "overview-session-3";
+    let delta = |id: &str, text: &str| {
+        Event::Codex(caelum_protocol::CodexEvent {
+            project_path: "/projects/rune".into(),
+            method: "item/agentMessage/delta".into(),
+            params: serde_json::json!({"threadId":"fixture-3","itemId":id,"delta":text}),
+            request_id: None,
+        })
+    };
+    rt.update(|s, _| assert!(live_mut(s).apply_events([delta("step", "Checking the editor")])));
+    advance(&mut rt, 0.1);
+    rt.update(|s, _| assert!(live_mut(s).apply_events([delta("step", " after sleep.")])));
+    advance(&mut rt, 0.1);
+    assert!(tile_shows(&rt, card, "Checking the editor after sleep."));
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        assert!(l.apply_events([delta("step", &" progress".repeat(40))]));
+        assert!(!l.apply_events([delta("step", " beyond the excerpt")]));
+    });
+    fill(&mut rt, "overview-search", "Reconnect");
+    assert!(rt.find(card).is_none());
+    rt.update(|s, _| {
+        assert!(!live_mut(s).apply_events([delta("final-step", "Found the focus change.")]))
+    });
+    fill(&mut rt, "overview-search", "keyboard focus");
+    assert!(tile_shows(&rt, card, "Found the focus change."));
+    let now = live(&rt.state).feed.displayed_at();
+    rt.update(|s, tx| {
+        let l = live_mut(s);
+        assert!(!l.panels.tick_overview(now + 59_999, tx));
+        l.feed.set_display_clock(now + 60_000);
+        assert!(l.panels.tick_overview(now + 60_000, tx));
+    });
+    advance(&mut rt, 0.1);
+    assert!(tile_shows(&rt, card, "Running · 4m"));
+    fill(&mut rt, "overview-search", "absent");
+    rt.update(|s, tx| assert!(!live_mut(s).panels.tick_overview(now + 120_000, tx)));
 }
 
 #[test]
@@ -161,7 +209,7 @@ fn overview_adds_and_removes_background_sessions_live_under_the_current_search()
     };
     rt.update(|s, _| assert!(live_mut(s).apply_events([event("turn/started")])));
     advance(&mut rt, 0.25);
-    assert!(tile_shows(&rt, "overview-session-3", "In progress"));
+    assert!(tile_shows(&rt, "overview-session-3", "Running"));
     rt.update(|s, _| assert!(live_mut(s).apply_events([event("turn/completed")])));
     advance(&mut rt, 0.25);
     assert!(rt.find("overview-session-3").is_none());
@@ -243,7 +291,7 @@ fn overview_opens_the_scoped_vm_thread_and_preserves_its_draft() {
         .expect("scoped VM tile");
     let vm = target.key.unwrap();
     assert!(tile_shows(&rt, &vm, "dev-01"));
-    assert!(tile_shows(&rt, &vm, "Working on the VM"));
+    assert!(tile_shows(&rt, &vm, "Running cargo"));
     click(&mut rt, "overview-session-0");
     assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
     overview_shortcut(&mut rt);

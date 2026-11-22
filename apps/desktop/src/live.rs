@@ -411,6 +411,9 @@ impl Live {
             tx,
             !self.fixture,
         );
+        if !self.fixture && !self.app.window_background {
+            changed |= self.panels.tick_overview(self.feed.displayed_at(), tx);
+        }
         if let Some(panel) = &mut self.shell_panel {
             panel.sync(&self.app);
         }

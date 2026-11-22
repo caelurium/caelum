@@ -77,49 +77,13 @@ pub(super) fn lines(
                 });
             lines.push(Line {
                 key,
-                tool_detail: call.input.and_then(|v| detail(&name, v, root)),
+                tool_detail: call
+                    .input
+                    .and_then(|v| crate::application::presentation::tool_detail(&name, v, root)),
                 tool_source: source,
                 ..Line::new(Speaker::Tool(call.state), name)
             });
         }
     }
     lines
-}
-
-fn detail(name: &str, input: &serde_json::Value, root: Option<&str>) -> Option<String> {
-    match name.to_ascii_lowercase().as_str() {
-        "bash" | "shell" | "exec_command" | "commandexecution" => {
-            let word = input
-                .get("command")
-                .or_else(|| input.get("cmd"))?
-                .as_str()?
-                .split_whitespace()
-                .next()?;
-            if !word
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"/._-+".contains(&b))
-            {
-                return None;
-            }
-            let program = word.rsplit('/').next()?;
-            (!program.is_empty() && program.len() <= 40).then(|| program.to_owned())
-        }
-        "read" | "read_file" | "edit" | "write" | "grep" | "glob" => {
-            let path = ["filePath", "file_path", "path"]
-                .iter()
-                .find_map(|p| input.get(p)?.as_str())?;
-            let path = if path.starts_with('/') {
-                path.strip_prefix(root?)?.strip_prefix('/')?
-            } else {
-                path.trim_start_matches("./")
-            };
-            (!path.is_empty()
-                && !path.starts_with(['~', '/'])
-                && path.len() <= 160
-                && !path.chars().any(char::is_control)
-                && !path.split('/').any(|p| p == ".."))
-            .then(|| path.to_owned())
-        }
-        _ => None,
-    }
 }

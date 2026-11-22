@@ -45,7 +45,10 @@ return to its transcript and draft.
 the toolbar shows only active conversations across open projects, including VMs.
 A conversation appears while work is running or queued, or while a question or
 approval is waiting for you. Once it’s idle, its tile disappears; you can still
-find it and its draft in **Sessions**. Filter active conversations by title,
+find it and its draft in **Sessions**. A running card shows the latest update
+from the current turn: an assistant message, a tool or subagent task, or the
+prompt while the first reply is on its way. The status shows elapsed time when
+the start is known. Questions and approvals take priority. Filter by title,
 project or branch, or click **needs input** to highlight the next request.
 Use the arrows and Return, or click a tile, to resume a conversation at its
 reading position. Escape or the same shortcut returns to the previous view.
