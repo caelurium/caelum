@@ -8,7 +8,7 @@ use crate::{
 };
 use caelum_core::remote::ModelCatalogue;
 use caelum_protocol::ProviderModelChoice;
-use rune::{El, ScrollSpec, TextEdit, col, row, text};
+use rune::{El, ScrollSpec, TextEdit, col};
 use rune_kit::{Kit, Placement, ScrollBar};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -16,7 +16,7 @@ use std::{
 };
 
 const TRIGGER: &str = "vm-model-trigger";
-const ROW_HEIGHT: f32 = 54.;
+const ROW_HEIGHT: f32 = 46.;
 
 pub(super) fn choice(s: &Workspace, k: &Kit, owner: &Owner, layers: &mut Vec<El>) -> El {
     let l = live(s);
@@ -130,28 +130,20 @@ fn menu(s: &Workspace, k: &Kit, owner: &Owner, current: Option<&str>, query: &Te
     let search = owner.clone();
     let submit = owner.clone();
     let window = rune::memo::window_layout("shell").unwrap_or([0., 0., 800., 620.]);
+    let refresh = crate::quiet_button(&ui::REFRESH, "Refresh Boat models")
+        .disabled(matches!(catalogue, ModelCatalogue::Loading(_)))
+        .on_press(|s: &mut Workspace| live_mut(s).app.refresh_vm_models())
+        .build(k)
+        .key("vm-model-refresh");
     col()
         .w((window[2] - 16.).clamp(1., 320.))
-        .gap(4.)
-        .child(
-            row()
-                .w_full()
-                .center_y()
-                .px(6.)
-                .child(
-                    text(format!("{} models on Boat", owner.provider.name()))
-                        .font(k.ty.ui_medium)
-                        .color(k.c.text_base)
-                        .grow(1.),
-                )
-                .child(
-                    crate::quiet_button(&ui::REFRESH, "Refresh Boat models")
-                        .disabled(matches!(catalogue, ModelCatalogue::Loading(_)))
-                        .on_press(|s: &mut Workspace| live_mut(s).app.refresh_vm_models())
-                        .build(k)
-                        .key("vm-model-refresh"),
-                ),
-        )
+        .gap(6.)
+        .child(ui::popup_header(
+            format!("{} models on Boat", owner.provider.name()),
+            None,
+            Some(refresh),
+            k,
+        ))
         .child(
             ui::field(query, "Find a Boat model", "Search models…", k)
                 .edit_menu_changed(

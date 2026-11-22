@@ -153,11 +153,14 @@ fn projects(s: &Workspace, k: &Kit) -> El {
         )
         .child(ui::divider(k))
         .child(
-            ui::Button::new("Open project folder…")
-                .icon(&ui::FOLDER)
-                .on_press_tx(browse)
-                .build(k)
-                .key("browse-vm-project"),
+            rune::row().w_full().justify_end().child(
+                ui::Button::new("Open project folder…")
+                    .icon(&ui::FOLDER)
+                    .variant(ButtonVariant::Outline)
+                    .on_press_tx(browse)
+                    .build(k)
+                    .key("browse-vm-project"),
+            ),
         )
 }
 

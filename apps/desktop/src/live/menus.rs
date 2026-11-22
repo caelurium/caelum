@@ -6,19 +6,62 @@ use crate::{Workspace, quiet_button, ui};
 
 use super::{Live, live, live_mut};
 
+fn session_action_row(
+    title: &str,
+    detail: &str,
+    glyph: &'static rune::Icon,
+    danger: bool,
+    disabled: bool,
+    k: &Kit,
+) -> El {
+    let ink = if danger { k.c.danger.fg } else { k.c.text_base };
+    let icon_ink = if danger {
+        k.c.danger.fg
+    } else {
+        k.c.icon_muted
+    };
+    k.interactive(
+        row()
+            .w_full()
+            .min_h(40.0)
+            .px(10.0)
+            .py(6.0)
+            .gap(10.0)
+            .center_y()
+            .radius(6.0)
+            .child(icon(glyph, 14.0).color(icon_ink).a11y_hidden())
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(2.0)
+                    .child(text(title).font(k.ty.ui_medium).color(ink).truncate())
+                    .child(ui::caption(detail, k).truncate()),
+            ),
+    )
+    .role("menuitem")
+    .label(title)
+    .description(detail)
+    .disabled(disabled)
+    .focusable(!disabled)
+    .focus_highlight(k.c.hover)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
+    .opacity(if disabled { 0.5 } else { 1.0 })
+}
+
 fn session_actions(s: &Workspace, k: &Kit) -> El {
     let live = live(s);
     let Some(index) = live.session_menu else {
         return col();
     };
     let session = &live.app.sessions[index];
+    let refresh_disabled = session.remote_id.is_none() || session.loading() || session.submitting();
     let mut content = col()
         .w_full()
         .gap(4.0)
-        .child(ui::caption(&session.title, k).truncate().padding(8.0))
-        .child(ui::divider(k))
+        .child(ui::popup_header(&session.title, None, None, k))
         .child(
-            ui::choice(
+            session_action_row(
                 "Refresh session",
                 if session.loading() {
                     "Reconnecting and loading history…"
@@ -27,28 +70,20 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
                 } else {
                     "Reconnect and load the latest history"
                 },
+                &ui::REFRESH,
                 false,
+                refresh_disabled,
                 k,
-            )
-            .disabled(session.remote_id.is_none() || session.loading() || session.submitting())
-            .opacity(
-                if session.remote_id.is_none() || session.loading() || session.submitting() {
-                    0.5
-                } else {
-                    1.0
-                },
             )
             .on_press(move |s: &mut Workspace| {
                 live_mut(s).app.refresh_session(index);
                 close_session_menu(s);
             })
-            .role("menuitem")
-            .focus_highlight(k.c.hover)
             .key("refresh-history"),
         );
     let archive_disabled = archive_disabled(live, index);
     content = content.child(
-        ui::choice(
+        session_action_row(
             if session.archived() {
                 "Restore session"
             } else {
@@ -59,13 +94,11 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
             } else {
                 "Keep its history and return to it later"
             },
+            &ui::ARCHIVE,
             false,
+            archive_disabled,
             k,
         )
-        .disabled(archive_disabled)
-        .role("menuitem")
-        .focus_highlight(k.c.hover)
-        .opacity(if archive_disabled { 0.5 } else { 1.0 })
         .on_press(move |s: &mut Workspace| {
             let archived = crate::live::live(s).app.sessions[index].archived();
             live_mut(s).archive(index, !archived);
@@ -73,25 +106,19 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
         .key("archive-session"),
     );
     if session.archived() {
-        content = content.child(
-            ui::choice(
+        content = content.child(ui::divider(k)).child(
+            session_action_row(
                 if session.deleting() {
                     "Deleting session…"
                 } else {
                     "Delete permanently…"
                 },
                 "Delete this session and its provider history",
-                false,
+                &glyphs::CLOSE,
+                true,
+                archive_disabled || session.deleting(),
                 k,
             )
-            .disabled(archive_disabled || session.deleting())
-            .role("menuitem")
-            .focus_highlight(k.c.hover)
-            .opacity(if archive_disabled || session.deleting() {
-                0.5
-            } else {
-                1.0
-            })
             .on_press(move |s: &mut Workspace| {
                 live_mut(s).request_delete_session(index);
             })
@@ -191,7 +218,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         let bottom = rune::memo::window_layout("message-composer")
             .zip(rune::memo::window_layout("shell"))
             .map_or(18.0, |(composer, shell)| shell[3] - composer[1] + 12.0);
-        layers.push(rune_kit::popover::raised(k, toast, 12.0).pin(
+        layers.push(rune_kit::popover::raised(k, toast, ui::POPUP_RADIUS).pin(
             Some(x),
             None,
             None,

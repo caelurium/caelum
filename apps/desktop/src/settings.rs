@@ -483,9 +483,12 @@ fn worktrees(s: &Workspace, k: &Kit) -> El {
                 Some(&mut live_mut(s).panels.directory)
             }),
         )
+        .child(ui::divider(k))
         .child(
             row()
+                .w_full()
                 .gap(8.0)
+                .center_y()
                 .child(
                     Button::new("Choose folder…")
                         .variant(ButtonVariant::Outline)
@@ -505,6 +508,17 @@ fn worktrees(s: &Workspace, k: &Kit) -> El {
                         .build(k),
                 )
                 .child(
+                    Button::new("Use default location")
+                        .variant(ButtonVariant::GhostMuted)
+                        .on_press(|s: &mut Workspace| {
+                            let l = live_mut(s);
+                            l.panels.directory.clear();
+                            l.app.preferences.worktree_directory.clear();
+                        })
+                        .build(k),
+                )
+                .child(rune::el().grow(1.0))
+                .child(
                     Button::new("Save directory")
                         .variant(ButtonVariant::Contrast)
                         .disabled(
@@ -517,16 +531,6 @@ fn worktrees(s: &Workspace, k: &Kit) -> El {
                         })
                         .build(k),
                 ),
-        )
-        .child(
-            Button::new("Use default location")
-                .variant(ButtonVariant::GhostMuted)
-                .on_press(|s: &mut Workspace| {
-                    let l = live_mut(s);
-                    l.panels.directory.clear();
-                    l.app.preferences.worktree_directory.clear();
-                })
-                .build(k),
         )
 }
 

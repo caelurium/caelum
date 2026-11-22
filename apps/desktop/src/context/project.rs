@@ -38,6 +38,7 @@ pub(crate) fn remote_checkout(el: El, id: String, origin: String) -> El {
                     },
                 )
                 .icon(&glyphs::CLOSE)
+                .danger(true)
                 .enabled(live(s).app.can_remove_remote(&id)),
             );
         show(s, at, origin.clone(), menu, move |s, pick, _| match pick {
@@ -74,7 +75,11 @@ pub(crate) fn project(el: El, project: String) -> El {
             .item(Item::new("copy", "Copy project path").icon(&glyphs::COPY))
             .item(Item::new("reveal", "Reveal in Finder").icon(&ui::FOLDER))
             .separator()
-            .item(Item::new("close", "Close project").icon(&glyphs::CLOSE));
+            .item(
+                Item::new("close", "Close project")
+                    .icon(&glyphs::CLOSE)
+                    .danger(true),
+            );
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
             "up" | "down" => {
                 let direction = if pick == "up" {

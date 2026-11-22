@@ -155,14 +155,7 @@ impl Select {
     pub fn on_close<S: 'static>(mut self, f: impl Fn(&mut S) + Clone + 'static) -> Self {
         let key = format!("{}-scrim", self.key);
         self.dismiss = Some(Box::new(move |el, layers| {
-            layers.push(
-                rune::el()
-                    .key(key)
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .on_press(f.clone()),
-            );
+            layers.push(crate::ui::popup_scrim(key, f.clone()));
             el.modal(true, f)
         }));
         self
@@ -309,7 +302,7 @@ impl Select {
                                 })),
                         )
                         .child(
-                            icon(k.glyph.check_small, 14.0)
+                            icon(k.glyph.check_small, 13.0)
                                 .color(k.c.text_accent)
                                 .opacity(if selected { 1.0 } else { 0.0 }),
                         ),
@@ -340,15 +333,7 @@ impl Select {
             .gap(6.0)
             .focus_return(&anchor)
             .children(self.menu_description.as_ref().map(|description| {
-                col()
-                    .w_full()
-                    .gap(3.0)
-                    .px(8.0)
-                    .pt(6.0)
-                    .pb(4.0)
-                    .child(text(&self.label).font(k.ty.ui_medium).color(k.c.text_base))
-                    .child(text(description).font(k.ty.small).color(k.c.text_muted))
-                    .child(crate::ui::divider(k).mt(7.0))
+                crate::ui::popup_header(&self.label, Some(description), None, k)
             }))
             .children(self.search)
             .child(
@@ -367,10 +352,10 @@ impl Select {
         }
         layers.push(rune_kit::popover::anchored(
             k,
-            rune_kit::popover::raised(k, content, 10.0),
+            rune_kit::popover::raised(k, content, crate::ui::POPUP_RADIUS),
             &anchor,
             self.placement,
-            6.0,
+            crate::ui::POPUP_OFFSET,
         ));
         trigger
     }
