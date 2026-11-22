@@ -1,4 +1,5 @@
 mod card;
+mod updates;
 mod view;
 
 pub(crate) use view::view;
@@ -24,6 +25,8 @@ pub(crate) struct State {
     cursor: Option<FeedSession>,
     columns: usize,
     origin: std::cell::OnceCell<crate::live::Bookmark>,
+    frame: std::cell::RefCell<updates::Frame>,
+    wake_at: Option<u64>,
 }
 
 impl Panels {
@@ -68,6 +71,8 @@ pub(crate) fn open(s: &mut Workspace, _: &mut Tx) {
         cursor: l.app.selected_feed_session(),
         columns: 0,
         origin: Default::default(),
+        frame: Default::default(),
+        wake_at: None,
     })));
 }
 

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::{provider_started_at, set_metadata, set_output_duration, Conversation};
+use super::{provider_started_at, set_metadata, set_output_duration, Conversation, Entry};
 
 #[derive(Debug)]
 pub(super) enum Turn {
@@ -13,23 +13,60 @@ pub(super) struct Timing {
     started_at: u64,
     agent: Option<String>,
     output_ids: Vec<String>,
+    previous_entry: Option<String>,
 }
 
 impl Timing {
-    fn new(started_at: u64, agent: Option<String>) -> Self {
+    fn new(started_at: u64, agent: Option<String>, previous: Option<&Entry>) -> Self {
         Self {
             started_at,
             agent,
             output_ids: Vec::new(),
+            previous_entry: previous.map(|e| e.id.clone()),
         }
     }
 }
 
 impl Conversation {
+    fn active_timing(&self) -> Option<&Timing> {
+        match self.turn.as_ref().filter(|_| self.working())? {
+            Turn::AwaitingProvider(timing) | Turn::ProviderStarted(timing) => Some(timing),
+        }
+    }
+
+    pub(in crate::application) fn turn_started_at(&self) -> Option<u64> {
+        self.active_timing().map(|t| t.started_at)
+    }
+
+    pub(in crate::application) fn turn_entries(&self) -> impl Iterator<Item = &Entry> {
+        let previous = self
+            .active_timing()
+            .and_then(|t| t.previous_entry.as_deref());
+        self.entries
+            .iter()
+            .rev()
+            .take_while(move |e| Some(e.id.as_str()) != previous)
+    }
+
+    pub(in crate::application) fn is_turn_update(&self, entry: &Entry) -> bool {
+        !entry.complete()
+            || self.active_timing().is_some_and(|t| {
+                t.output_ids.contains(&entry.id)
+                    || entry
+                        .started_at
+                        .or_else(|| entry.metadata["ended"].as_u64())
+                        .is_some_and(|at| at >= t.started_at)
+            })
+    }
+
     pub fn begin_turn(&mut self, agent: Option<String>, started_at: u64) {
         self.failure.begin(started_at);
         if !self.working() || self.turn.is_none() {
-            self.turn = Some(Turn::AwaitingProvider(Timing::new(started_at, agent)));
+            self.turn = Some(Turn::AwaitingProvider(Timing::new(
+                started_at,
+                agent,
+                self.entries.last(),
+            )));
         }
     }
 
@@ -43,7 +80,11 @@ impl Conversation {
                 timing.started_at = timing.started_at.min(started_at);
                 timing
             }
-            None | Some(Turn::AwaitingProvider(_)) => Timing::new(started_at, agent),
+            None | Some(Turn::AwaitingProvider(_)) => Timing::new(
+                started_at,
+                agent,
+                self.entries.iter().rev().find(|e| e.complete()),
+            ),
         };
         self.turn = Some(Turn::ProviderStarted(timing));
     }
