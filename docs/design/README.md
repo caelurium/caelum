@@ -118,7 +118,9 @@ the workspace menu.
 The overview shows conversations with running or queued work, or a question or
 approval waiting for the reader. Cards disappear when conversations go idle;
 those still active keep their relative order. They share the sidebar's project
-colours and sit over a still version of Home's ASCII sky. **Needs input** moves
+colours and sit over a still version of Home's ASCII sky. A running card gives
+its two lines to the current exchange; a small status label carries the elapsed
+time. **Needs input** moves
 between pending requests. When all work finishes, the [idle overview](previews/rune-light-conversation-overview-idle-small.png)
 explains which conversations will appear.
 

@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 pub(crate) fn view(s: &Workspace, k: &Kit, state: &State) -> El {
     let l = live(s);
+    state.frame.borrow_mut().reset();
     if state.origin.get().is_none()
         && let Some(mark) = l.reading_bookmark()
     {

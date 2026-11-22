@@ -1,5 +1,6 @@
 use super::Live;
-use caelum_core::application::{Event, Provider, Session};
+use crate::panels::Screen;
+use caelum_core::application::{Event, Provider, Session, Workspace, presentation::TurnPreview};
 
 /// Text deltas can change these visible session properties even while their
 /// transcript is hidden (for example, the first delta can mark a session busy).
@@ -10,11 +11,17 @@ struct Summary {
     unread: bool,
     failure: Option<u64>,
     last_activity: Option<u64>,
-    peek: Option<String>,
+    preview: Preview,
+}
+
+enum Preview {
+    Hidden,
+    Child(String),
+    Overview(TurnPreview),
 }
 
 impl Summary {
-    fn new(session: &Session, peek: bool) -> Self {
+    fn new(session: &Session, preview: Preview) -> Self {
         Self {
             title: session.title.clone(),
             working: session.working(),
@@ -22,21 +29,22 @@ impl Summary {
             unread: session.unread,
             failure: session.conversation.failure.notice().map(|n| n.generation),
             last_activity: session.last_activity,
-            peek: peek.then(|| peek_text(session)),
+            preview,
         }
     }
 
-    fn matches(&self, session: &Session) -> bool {
+    fn matches(&self, app: &Workspace, session: &Session) -> bool {
         self.title == session.title
             && self.working == session.working()
             && self.retrying == session.conversation.retrying()
             && self.unread == session.unread
             && self.failure == session.conversation.failure.notice().map(|n| n.generation)
             && self.last_activity == session.last_activity
-            && self
-                .peek
-                .as_ref()
-                .is_none_or(|previous| *previous == peek_text(session))
+            && match &self.preview {
+                Preview::Hidden => true,
+                Preview::Child(previous) => *previous == peek_text(session),
+                Preview::Overview(previous) => *previous == app.turn_preview(session),
+            }
     }
 }
 
@@ -73,7 +81,7 @@ impl Live {
                 self.app
                     .sessions
                     .get(index)
-                    .is_none_or(|s| !summary.matches(s))
+                    .is_none_or(|s| !summary.matches(&self.app, s))
             });
         }
         changed
@@ -138,7 +146,9 @@ impl Live {
                 && s.remote_id.as_deref() == Some(id)
         });
         let (index, session) = owners.next()?;
-        if (self.app.selected == Some(index) && self.panels.screen != crate::panels::Screen::Home)
+        if (self.app.selected == Some(index)
+            && self.panels.screen != Screen::Home
+            && self.panels.overlay() != Some(Screen::ConversationOverview))
             || owners.next().is_some()
         {
             return None;
@@ -165,6 +175,13 @@ impl Live {
                         })
             })
             && crate::questions::active(self, index).is_none();
-        Some((index, Summary::new(session, peek)))
+        let preview = if self.panels.overview_shows_turn(index) {
+            Preview::Overview(self.app.turn_preview(session))
+        } else if peek {
+            Preview::Child(peek_text(session))
+        } else {
+            Preview::Hidden
+        };
+        Some((index, Summary::new(session, preview)))
     }
 }

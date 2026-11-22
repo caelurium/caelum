@@ -146,7 +146,10 @@ fn overview(l: &mut Live) {
         "All three providers now keep their own session and model defaults.".into(),
         true,
     ));
-    l.app.sessions[3].conversation.set_working(true);
+    let focus = &mut l.app.sessions[3].conversation;
+    focus.begin_turn(None, NOW - 180_000);
+    focus.apply(Provider::Codex, "item/agentMessage/delta",
+        &json!({"itemId":"focus-progress", "delta":"I’m tracing where the editor loses focus when the inspector opens."}));
     let session = &l.app.sessions[4];
     l.app.approvals.push(caelum_protocol::ApprovalPrompt {
         provider: session.scope.provider.as_str().into(),
