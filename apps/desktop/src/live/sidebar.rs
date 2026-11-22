@@ -9,7 +9,7 @@ mod vm;
 use std::rc::Rc;
 
 use caelum_core::application::{FeedSession, SessionScope, Workspace as Application};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text, text_input};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text_input};
 use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
 
 use super::{live, live_mut};
@@ -342,12 +342,6 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                         .py(5.0)
                         .edit_menu("session-search", |s| Some(&mut live_mut(s).panels.sessions))
                         .on_input_key(on_key),
-                )
-                .child(
-                    text(ui::shortcut("⌘K"))
-                        .font(k.ty.small)
-                        .color(k.c.text_faint)
-                        .a11y_hidden(),
                 ),
         )
         .child(

@@ -11,6 +11,7 @@ pub(super) enum Overlay {
     Standard(StandardOverlay),
     Conversations(Box<super::conversations::State>),
     CreateWorktree(Box<crate::worktree::Form>),
+    Palette(Box<crate::palette::State>),
     RemoveVm(Removal),
 }
 
@@ -70,6 +71,7 @@ impl Overlay {
             Self::Standard(screen) => screen.screen(),
             Self::Conversations(_) => Screen::ConversationOverview,
             Self::CreateWorktree(_) => Screen::CreateWorktree,
+            Self::Palette(_) => Screen::Palette,
             Self::RemoveVm(_) => Screen::RemoveVm,
         }
     }
@@ -104,6 +106,24 @@ impl Panels {
     pub(crate) fn worktree_mut(&mut self) -> Option<&mut crate::worktree::Form> {
         match &mut self.overlay {
             Some(Overlay::CreateWorktree(form)) => Some(form),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn open_palette(&mut self, state: crate::palette::State) {
+        self.overlay = Some(Overlay::Palette(Box::new(state)));
+    }
+
+    pub(crate) fn palette(&self) -> Option<&crate::palette::State> {
+        match &self.overlay {
+            Some(Overlay::Palette(state)) => Some(state),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn palette_mut(&mut self) -> Option<&mut crate::palette::State> {
+        match &mut self.overlay {
+            Some(Overlay::Palette(state)) => Some(state),
             _ => None,
         }
     }
@@ -247,11 +267,13 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Choose a local checkout or run Codex on a VM.",
             launcher(s, k),
         ),
+        Screen::Palette => ("Command palette", "", crate::palette::view(s, k)),
         _ => return,
     };
     let (width, height): (f32, f32) = match screen {
         Screen::Settings => (740.0, crate::settings::height(s)),
         Screen::Launcher => (560.0, 380.0),
+        Screen::Palette => (580.0, 440.0),
         Screen::Worktrees => (560.0, crate::checkouts::manager_height(s)),
         Screen::RemoveVm => (
             460.0,

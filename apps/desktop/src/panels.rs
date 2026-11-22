@@ -72,6 +72,7 @@ pub enum Screen {
     Image,
     Attachment,
     Launcher,
+    Palette,
 }
 
 type Target = (String, String);
@@ -617,6 +618,18 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if live(s).panels.overlay() == Some(Screen::ConversationOverview) {
         return conversations::key(s, ev, tx);
     }
+    if live(s).panels.overlay() == Some(Screen::Palette) {
+        if ev.key == Key::Escape || ev.is_command('k') {
+            overlays::close(s);
+            return true;
+        }
+        if matches!(ev.key, Key::Up | Key::Down | Key::Enter) {
+            return crate::palette::on_key(s, ev, tx);
+        }
+        return ['n', 'p', 'o', 'l', ',', 'i']
+            .iter()
+            .any(|c| ev.is_command(*c));
+    }
     if live(s).panels.overlay().is_some() {
         if live(s).panels.overlay() == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
             return crate::commands::fork_key(s, ev, tx);
@@ -651,9 +664,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     } else if ev.is_command('g') && matches!(live(s).panels.finding, Find::Open { .. }) {
         find_next(s, ev.mods.shift, tx);
     } else if ev.is_command('k') {
-        s.sidebar.set_open(true);
-        live_mut(s).panels.searching_sessions = true;
-        live_mut(s).panels.sessions.focused = true;
+        crate::palette::open(s);
     } else if ev.is_command('p') || (ev.is_command('f') && ev.mods.shift) {
         find_files(s, ev.is_command('f'));
     } else if ev.is_command(',') {

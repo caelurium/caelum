@@ -288,7 +288,7 @@ fn stats_task(s: &Workspace) -> Option<Task> {
         },
     })
 }
-fn refresh_stats(s: &mut Workspace) {
+pub(crate) fn refresh_stats(s: &mut Workspace) {
     if let Some(task) = stats_task(s) {
         live_mut(s).app.task(task);
     }
