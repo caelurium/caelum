@@ -49,6 +49,7 @@ pub struct ForkPicker {
     index: usize,
     source: SessionKey,
     navigation: u64,
+    context_prefix: Option<String>,
     phase: Phase,
     pub points: Vec<ForkPoint>,
     seen_turns: usize,
@@ -161,7 +162,12 @@ impl ForkPicker {
                 }
                 Provider::Antigravity => continue,
             };
-            let shown = presentation::visible_text(split_context(&prompt).0);
+            let prompt = self
+                .context_prefix
+                .as_deref()
+                .and_then(|prefix| prompt.strip_prefix(prefix))
+                .unwrap_or(&prompt);
+            let shown = presentation::visible_text(split_context(prompt).0);
             let label = shown
                 .lines()
                 .map(str::trim)
@@ -176,7 +182,7 @@ impl ForkPicker {
                 newer_turns: self.seen_turns,
                 entry,
                 draft: (self.action == HistoryAction::Edit)
-                    .then(|| prompt::recover(self.source.scope.provider, &prompt, user)),
+                    .then(|| prompt::recover(self.source.scope.provider, prompt, user)),
             });
             self.seen_turns += 1;
         }
@@ -301,6 +307,11 @@ impl Workspace {
             index,
             source,
             navigation: self.navigation,
+            context_prefix: self.sessions[index]
+                .provider_switch
+                .threads
+                .last()
+                .map(|t| t.context.prompt("")),
             phase: Phase::Reading(request),
             points: vec![],
             seen_turns: 0,
@@ -513,7 +524,11 @@ impl Workspace {
                 session.controls = super::controls::Status::Idle;
                 match result {
                     Ok(Reply::Done) => {
-                        session.conversation = Default::default();
+                        session
+                            .conversation
+                            .entries
+                            .retain(|e| e.previous_thread.is_some());
+                        session.reset_backend();
                         session.revision += 1;
                         session.invalidate_history();
                         session.reading = -1.0;
@@ -590,6 +605,10 @@ impl Workspace {
                     Some(i) => i,
                     None => {
                         let mut s = Session::new(source.scope.clone());
+                        s.restore_threads(
+                            self.sessions[index].provider_switch.threads.clone(),
+                            false,
+                        );
                         s.remote_id = Some(child.key.id.clone());
                         s.invalidate_history();
                         update_summary(&mut s, child, request);

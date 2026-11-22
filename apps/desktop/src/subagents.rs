@@ -15,7 +15,8 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
 pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent) -> El {
     let tool = Tool::from_entry(entry, now());
-    let id = entry.id.clone();
+    let row_id = live(s).app.sessions[index].transcript_id(entry);
+    let id = row_id.to_string();
     let expanded = live(s).expanded.contains(&(index, id.clone()));
     let state = match tool.outcome {
         Outcome::Running => "Running",
@@ -70,7 +71,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         .expanded(expanded)
         .focusable(true)
         .focus_ring(1.5, 0.0, k.c.border_focus)
-        .key(format!("subagent-{index}-{}", entry.id))
+        .key(format!("subagent-{index}-{row_id}"))
         .on_press_tx(move |s: &mut Workspace, tx| {
             tx.keep_on_screen(format!("subagent-{index}-{id}"));
             let expanded = &mut live_mut(s).expanded;
@@ -112,7 +113,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                     }
                 })
                 .build(k)
-                .key(format!("subagent-open-{index}-{}", entry.id)),
+                .key(format!("subagent-open-{index}-{row_id}")),
         );
     }
     content = content.child(footer);
@@ -131,7 +132,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         }
         for (name, value) in [("Result", &tool.output), ("Prompt", &task.prompt)] {
             if !value.is_empty() {
-                details = details.child(section(s, k, index, &entry.id, name, value));
+                details = details.child(section(s, k, index, &row_id, name, value));
             }
         }
         content = content.child(details);

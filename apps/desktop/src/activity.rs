@@ -98,7 +98,8 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
         return crate::subagents::view(s, k, index, entry, &task);
     }
     let presentation = Tool::from_entry(entry, now());
-    let id = entry.id.clone();
+    let row_id = live(s).app.sessions[index].transcript_id(entry);
+    let id = row_id.to_string();
     let expanded = live(s).expanded.contains(&(index, id.clone()));
     let patch = !presentation.patch.is_empty();
     let preview = patch && !live(s).collapsed_patches.contains(&(index, id.clone()));
@@ -137,7 +138,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
         .child(
             icon(glyph, 15.0)
                 .color(k.c.icon_muted)
-                .key(format!("tool-icon-{index}-{}", entry.id)),
+                .key(format!("tool-icon-{index}-{row_id}")),
         )
         .child(if running {
             ui::busy_text(
@@ -197,7 +198,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
         .min_w(0.0)
         .label(format!("{} {}", presentation.name, presentation.summary))
         .description(if running { "Running" } else { state })
-        .key(format!("tool-{index}-{}", entry.id));
+        .key(format!("tool-{index}-{row_id}"));
     let header = if can_expand {
         k.interactive(header)
             .role("button")
@@ -226,11 +227,11 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                 .on_press_tx(move |s: &mut Workspace, tx| panels::open_link(s, index, &path, tx))
                 .build(k)
                 .help(&presentation.paths[0])
-                .key(format!("open-tool-file-{index}-{}", entry.id)),
+                .key(format!("open-tool-file-{index}-{row_id}")),
         );
     }
     if patch && has_details {
-        let details_key = entry.id.clone();
+        let details_key = row_id.to_string();
         heading = heading.child(
             quiet_button(
                 &ui::MORE,
@@ -248,7 +249,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                 }
             })
             .build(k)
-            .key(format!("tool-details-{index}-{}", entry.id)),
+            .key(format!("tool-details-{index}-{row_id}")),
         );
     }
     let mut content = col().w_full().gap(6.0).child(heading);
@@ -297,14 +298,14 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
         );
     }
     if !presentation.patch.is_empty() {
-        let owner = (index, entry.id.clone());
+        let owner = (index, row_id.to_string());
         if preview && live(s).patches.contains_key(&owner) {
             let edit = owner.clone();
             let keyboard = owner.clone();
             let file_owner = owner.clone();
             let copy = presentation.patch.clone();
-            let key = crate::code_view::source_key(&index.to_string(), &entry.id);
-            let full_key = format!("{}:patch-full", entry.id);
+            let key = crate::code_view::source_key(&index.to_string(), &row_id);
+            let full_key = format!("{row_id}:patch-full");
             let full = live(s).expanded.contains(&(index, full_key.clone()));
             let natural = crate::code_view::inline_height(&live(s).patches[&owner].diff);
             let expanded_height = rune::memo::window_layout("shell")
@@ -317,7 +318,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                     .h(height + 2.0)
                     .min_h(0.0)
                     .padding(1.0)
-                    .key(format!("patch-preview-{index}-{}", entry.id))
+                    .key(format!("patch-preview-{index}-{row_id}"))
                     .radius(6.0)
                     .clip_rounded(6.0)
                     .border(1.0, k.c.border_muted)
@@ -407,7 +408,7 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                                 }
                             })
                             .build(k)
-                            .key(format!("expand-patch-{index}-{}", entry.id)),
+                            .key(format!("expand-patch-{index}-{row_id}")),
                         ),
                 );
             }
@@ -520,8 +521,9 @@ fn tool_output(
     } else {
         ("Output", &tool.output)
     };
-    let key = format!("tool-output-{index}-{}-{name}", entry.id);
-    let full_id = format!("{}:{name}", entry.id);
+    let row_id = live(s).app.sessions[index].transcript_id(entry);
+    let key = format!("tool-output-{index}-{row_id}-{name}");
+    let full_id = format!("{row_id}:{name}");
     let full = live(s).expanded.contains(&(index, full_id.clone()));
 
     let cutoff = value.char_indices().nth(12_000).map(|(i, _)| i);
@@ -637,7 +639,8 @@ pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
     };
     let summary = caelum_core::application::presentation::entry_text(entry);
     let has_summary = !summary.trim().is_empty();
-    let id = entry.id.clone();
+    let row_id = live(s).app.sessions[index].transcript_id(entry);
+    let id = row_id.to_string();
     let expanded = has_summary && live(s).expanded.contains(&(index, id.clone()));
     let mut label = row()
         .gap(8.0)
@@ -678,7 +681,7 @@ pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
             .center_y()
             .gap(8.0)
             .child(line())
-            .child(label.key(format!("compaction-{index}-{}", entry.id)))
+            .child(label.key(format!("compaction-{index}-{row_id}")))
             .child(line()),
     );
     if !entry.error.is_empty() {
@@ -709,7 +712,7 @@ pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                             quiet_button(&glyphs::COPY, "Copy context summary")
                                 .on_press_tx(move |_: &mut Workspace, tx| tx.copy(copy.clone()))
                                 .build(k)
-                                .key(format!("copy-compaction-{index}-{}", entry.id)),
+                                .key(format!("copy-compaction-{index}-{row_id}")),
                         ),
                 )
                 .child(

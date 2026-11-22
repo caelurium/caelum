@@ -8,6 +8,10 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if let Pending::PreviousHistory(index, segment) = pending {
+            self.complete_previous_history(index, segment, request, result);
+            return;
+        }
         if let Pending::CheckHandoff(i) = pending {
             self.complete_handoff_check(i, request, result);
             return;
@@ -157,6 +161,7 @@ impl Workspace {
                     }
                     Pending::Save => self.store_saved(request, Err(error)),
                     Pending::Remote(_)
+                    | Pending::PreviousHistory(..)
                     | Pending::CheckHandoff(..)
                     | Pending::Home(_)
                     | Pending::ConversationControl(..)
@@ -286,6 +291,8 @@ impl Workspace {
                             .into_iter()
                             .map(|saved| {
                                 let mut session = Session::new(saved.scope);
+                                session
+                                    .restore_threads(saved.previous_threads, saved.needs_context);
                                 session.native_handoff = saved.native_handoff;
                                 if let Some(h) = &session.native_handoff {
                                     session.conversation.handoff(&h.chat);

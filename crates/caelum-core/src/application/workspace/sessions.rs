@@ -107,6 +107,7 @@ impl Workspace {
         if let Some(i) = self.sessions.iter().rposition(|s| {
             s.scope == scope
                 && s.remote_id.is_none()
+                && s.provider_switch.threads.is_empty()
                 && !s.archived()
                 && !s.forgotten()
                 && !s.working()
@@ -158,6 +159,7 @@ impl Workspace {
         if !session.loaded() || session.disconnected {
             self.refresh(index);
         }
+        self.restore_previous_pages(index);
     }
 
     pub(super) fn creating(&self, scope: &Scope) -> bool {
@@ -175,6 +177,13 @@ impl Workspace {
             .into_iter()
             .filter(|summary| summary.key.scope == *scope)
         {
+            if self
+                .sessions
+                .iter()
+                .any(|s| s.has_previous_key(&summary.key))
+            {
+                continue;
+            }
             if scope.provider == Provider::OpenCode
                 && crate::remote::native::checkout_id(&scope.project).is_none()
             {

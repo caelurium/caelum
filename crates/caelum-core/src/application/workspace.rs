@@ -9,6 +9,7 @@ mod home;
 mod notifications;
 mod persistence;
 mod projects;
+mod provider_switch;
 mod queue;
 mod relocation;
 mod remote;
@@ -44,6 +45,7 @@ use super::{
 pub(super) use archive::ArchiveFixture;
 
 pub struct Session {
+    provider_switch: provider_switch::State,
     vm_link: Option<crate::remote::VmLink>,
     native_handoff: Option<crate::remote::Continuation>,
     pub scope: Scope,
@@ -94,6 +96,7 @@ pub struct Session {
 impl Session {
     fn new(scope: Scope) -> Self {
         Self {
+            provider_switch: Default::default(),
             vm_link: None,
             native_handoff: None,
             scope,
@@ -202,6 +205,7 @@ impl Session {
 }
 
 enum Pending {
+    PreviousHistory(usize, usize),
     Remote(remote::Lane),
     ConversationControl(usize, SessionKey, controls::Operation),
     Fork(fork::Request),

@@ -137,6 +137,8 @@ impl Workspace {
 impl Session {
     fn matches_saved(&self, saved: &SavedSession) -> bool {
         let SavedSession {
+            previous_threads,
+            needs_context,
             native_handoff,
             vm_link,
             last_activity,
@@ -157,6 +159,8 @@ impl Session {
             unread,
         } = saved;
         self.vm_link == *vm_link
+            && self.provider_switch.threads == *previous_threads
+            && self.provider_switch.needs_context == *needs_context
             && self.native_handoff == *native_handoff
             && self.last_activity == *last_activity
             && self.scope == *scope
