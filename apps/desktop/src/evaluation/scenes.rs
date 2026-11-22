@@ -420,14 +420,25 @@ pub(super) fn apply_usage(
 ) {
     use caelum_core::application::{Provider, Task};
     if name == "usage" {
-        app.services.checkouts.get_mut(project).unwrap().usage.insert(
-            Provider::OpenCode,
-            serde_json::json!({
-                "workspace": {"name": "Personal workspace"},
-                "go": {"rolling": {"percent": 24}, "weekly": {"percent": 68}, "monthly": {"percent": 12}}
-            }),
-        );
+        app.sessions[0].scope.provider = Provider::OpenCode;
+        app.services
+            .checkouts
+            .get_mut(project)
+            .unwrap()
+            .usage
+            .insert(
+                Provider::OpenCode,
+                serde_json::json!({
+                    "workspace": {"name": "Personal workspace"},
+                    "go": {
+                        "rolling": {"percent": 24},
+                        "weekly": {"percent": 82},
+                        "monthly": {"percent": 12}
+                    }
+                }),
+            );
     } else if name == "usage-loading" {
+        app.sessions[0].scope.provider = Provider::OpenCode;
         app.task(Task::Usage {
             project: project.into(),
             provider: Provider::OpenCode,
