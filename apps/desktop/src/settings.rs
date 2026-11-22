@@ -271,11 +271,11 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         k,
     ));
     if available.len() > 1 {
-        let mut defaults = row().gap(4.0);
+        let mut defaults = ui::segmented_track(k);
         for &p in available {
             let destination = project.clone();
             defaults = defaults.child(
-                ui::tab(
+                ui::segment(
                     ui::provider_name(p),
                     app.default_provider_for(destination.as_deref()) == p,
                     k,
@@ -298,10 +298,10 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             ))
             .child(ui::divider(k));
     }
-    let mut tabs = row().gap(6.0);
+    let mut tabs = ui::segmented_track(k);
     for &p in available {
         tabs = tabs.child(
-            ui::tab(ui::provider_name(p), p == provider, k)
+            ui::segment(ui::provider_name(p), p == provider, k)
                 .on_press(move |s: &mut Workspace| {
                     let scope = settings_project(s).map(|project| Scope {
                         provider: p,
@@ -541,7 +541,7 @@ fn notifications(s: &Workspace, k: &Kit) -> El {
         "Choose when Caelum plays a sound.",
         k,
     ));
-    let mut modes = row().gap(4.0);
+    let mut modes = ui::segmented_track(k);
     for (name, detail, mode) in [
         ("Off", "Keep the workspace quiet", "off"),
         (
@@ -552,7 +552,7 @@ fn notifications(s: &Workspace, k: &Kit) -> El {
         ("Always", "Notify whenever work finishes", "always"),
     ] {
         modes = modes.child(
-            ui::tab(
+            ui::segment(
                 name,
                 (p.notifications && p.notification_mode == mode)
                     || (!p.notifications && mode == "off"),

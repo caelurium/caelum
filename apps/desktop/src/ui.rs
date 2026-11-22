@@ -267,6 +267,54 @@ pub fn tab(title: &str, selected: bool, k: &Kit) -> El {
     .focus_ring(1.5, 0.0, k.c.border_focus)
 }
 
+pub fn segmented_track(k: &Kit) -> El {
+    row()
+        .gap(2.0)
+        .padding(3.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
+        .center_y()
+}
+
+pub fn segment(title: &str, selected: bool, k: &Kit) -> El {
+    k.interactive(
+        row()
+            .h(26.0)
+            .px(10.0)
+            .center()
+            .radius(6.0)
+            .fill(if selected {
+                k.c.layer_02
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .border(
+                1.0,
+                if selected {
+                    k.c.border_base
+                } else {
+                    rune::Color::TRANSPARENT
+                },
+            )
+            .child(
+                text(title)
+                    .font(if selected { k.ty.ui_medium } else { k.ty.ui })
+                    .color(if selected {
+                        k.c.text_base
+                    } else {
+                        k.c.text_muted
+                    })
+                    .truncate(),
+            ),
+    )
+    .role("tab")
+    .label(title)
+    .focusable(true)
+    .focus_selected(selected)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
+}
+
 pub fn highlighted_tab(title: &str, selected: bool, k: &Kit) -> El {
     k.interactive(
         row()
