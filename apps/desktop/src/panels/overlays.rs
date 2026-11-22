@@ -209,11 +209,25 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Browse earlier conversations from this provider.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
-        Screen::Usage => (
-            "OpenCode Go usage",
-            "Subscription allowances.",
-            crate::commands::view(s, k, screen, &mut menus),
-        ),
+        Screen::Usage => {
+            let antigravity = live(s).app.selected.is_some_and(|i| {
+                live(s).app.sessions[i].scope.provider
+                    == caelum_core::application::Provider::Antigravity
+            });
+            (
+                if antigravity {
+                    "Antigravity usage"
+                } else {
+                    "OpenCode Go usage"
+                },
+                if antigravity {
+                    "Quota and reset windows."
+                } else {
+                    "Subscription allowances."
+                },
+                crate::commands::view(s, k, screen, &mut menus),
+            )
+        }
         Screen::Stats => (
             "Statistics",
             "Tokens, cost and activity across recorded history.",

@@ -11,7 +11,7 @@ use std::{
 use caelum_protocol::ApprovalDecision;
 
 use super::AntigravityProvider;
-use crate::{approvals::ApprovalBroker, processes::ProcessRegistry};
+use crate::{approvals::ApprovalBroker, processes::ProcessRegistry, questions::QuestionBroker};
 
 const FAKE_SERVER: &str = include_str!("tests/fixtures/server.py");
 
@@ -56,6 +56,7 @@ fn starts_lists_streams_replays_history_and_resolves_permissions() {
         Some(fixture.server.clone()),
         processes,
         approvals.clone(),
+        QuestionBroker::default(),
     );
     let events = provider.subscribe();
 
@@ -235,6 +236,7 @@ fn archives_restores_renames_and_deletes_sessions_with_persistence() {
         Some(fixture.server.clone()),
         processes.clone(),
         approvals.clone(),
+        QuestionBroker::default(),
     );
     provider.open_metadata(metadata_path.clone()).unwrap();
 
@@ -283,8 +285,12 @@ fn archives_restores_renames_and_deletes_sessions_with_persistence() {
     assert_eq!(archived.sessions[0].title, "Custom ACP Title");
     provider.shutdown();
 
-    let reopened =
-        AntigravityProvider::with_executable(Some(fixture.server.clone()), processes, approvals);
+    let reopened = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes,
+        approvals,
+        QuestionBroker::default(),
+    );
     reopened.open_metadata(metadata_path).unwrap();
     let (resumed, _) = reopened
         .resume_session(&fixture.project, &session_id)
@@ -329,4 +335,184 @@ fn archives_restores_renames_and_deletes_sessions_with_persistence() {
         .is_err());
 
     reopened.shutdown();
+}
+
+#[test]
+fn background_task_keeps_session_working_until_reactive_followup_completes() {
+    let fixture = Fixture::new();
+    let processes = Arc::new(ProcessRegistry::default());
+    let approvals = ApprovalBroker::default();
+    let provider = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes,
+        approvals,
+        QuestionBroker::default(),
+    );
+    let events = provider.subscribe();
+
+    let started = provider
+        .start_session_with_options(&fixture.project, None, None, None)
+        .unwrap();
+    let session_id = started.session.id;
+
+    provider
+        .send_prompt_with_options(
+            &fixture.project,
+            &session_id,
+            "background-task",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+    let mut conv = crate::application::Conversation::default();
+    let mut saw_yielded = false;
+    let mut saw_completed = false;
+    for _ in 0..60 {
+        let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.session_id.as_deref() != Some(session_id.as_str()) {
+            continue;
+        }
+        conv.apply(
+            crate::application::Provider::Antigravity,
+            &event.method,
+            &event.params,
+        );
+        if event.method == "antigravity/turnYielded" {
+            saw_yielded = true;
+            assert!(conv.working());
+            assert!(
+                provider.list_sessions(&fixture.project).unwrap().sessions[0].is_working,
+                "session must remain working while background tool is in progress"
+            );
+            let bg_tool = conv
+                .entries
+                .iter()
+                .find(|e| e.id == "acp-tool-call-bg")
+                .expect("background tool entry");
+            assert!(!bg_tool.complete());
+            let yield_text = conv
+                .entries
+                .iter()
+                .find(|e| e.kind() == crate::application::EntryKind::Assistant)
+                .expect("yield assistant entry");
+            assert!(yield_text.complete());
+        }
+        if event.method == "antigravity/turnCompleted" {
+            saw_completed = true;
+            break;
+        }
+    }
+
+    assert!(
+        saw_yielded,
+        "expected turnYielded before background task finished"
+    );
+    assert!(
+        saw_completed,
+        "expected turnCompleted after reactive follow-up settled"
+    );
+    assert!(!conv.working());
+    assert!(
+        !provider.list_sessions(&fixture.project).unwrap().sessions[0].is_working,
+        "session must be idle after reactive turn settles"
+    );
+    assert!(conv.entries.iter().any(|e| {
+        e.kind() == crate::application::EntryKind::Assistant
+            && e.text.contains("All checks passed.")
+    }));
+    let bg_tool = conv
+        .entries
+        .iter()
+        .find(|e| e.id == "acp-tool-call-bg")
+        .expect("background tool entry");
+    assert!(bg_tool.complete());
+
+    provider.shutdown();
+}
+
+#[test]
+fn asks_questions_through_broker_and_reads_usage_limits() {
+    let fixture = Fixture::new();
+    let processes = Arc::new(ProcessRegistry::default());
+    let approvals = ApprovalBroker::default();
+    let questions = QuestionBroker::default();
+    let provider = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes,
+        approvals,
+        questions.clone(),
+    );
+    let events = provider.subscribe();
+    let question_updates = questions.subscribe();
+
+    let started = provider
+        .start_session_with_options(&fixture.project, None, None, None)
+        .unwrap();
+    let session_id = started.session.id;
+
+    let usage = provider.usage_limits(&fixture.project).unwrap();
+    assert_eq!(usage["provider"], "antigravity");
+    assert_eq!(usage["tier"]["name"], "Google AI Pro");
+    assert_eq!(usage["groups"][0]["name"], "Gemini Models");
+    assert_eq!(
+        usage["groups"][0]["buckets"][0]["remaining_fraction"],
+        serde_json::json!(0.4)
+    );
+
+    provider
+        .send_prompt_with_options(&fixture.project, &session_id, "ask-me", None, None, None)
+        .unwrap();
+
+    let prompt = loop {
+        let pending = question_updates
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        if let Some(first) = pending.into_iter().next() {
+            break first;
+        }
+    };
+    assert_eq!(prompt.provider, "antigravity");
+    assert_eq!(prompt.session_id, session_id);
+    assert_eq!(prompt.request_id, "call-ask");
+    assert_eq!(prompt.fields[0]["title"], "Which color do you prefer?");
+
+    // Wait for the initial turn to finish cleanly (ask_question is NOT a background tool).
+    for _ in 0..30 {
+        let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.method == "antigravity/turnCompleted" {
+            break;
+        }
+    }
+    assert!(!provider.list_sessions(&fixture.project).unwrap().sessions[0].is_working);
+
+    let answer = serde_json::json!({ "q0": "Blue" })
+        .as_object()
+        .unwrap()
+        .clone();
+    questions
+        .resolve(
+            &prompt.provider,
+            &prompt.project_path,
+            &prompt.session_id,
+            &prompt.request_id,
+            Some(answer),
+        )
+        .unwrap();
+
+    let mut reply = String::new();
+    for _ in 0..30 {
+        let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.method == "agent_message_chunk" {
+            reply.push_str(event.params["content"]["text"].as_str().unwrap_or_default());
+        }
+        if event.method == "antigravity/turnCompleted" {
+            break;
+        }
+    }
+    assert_eq!(reply, "answered:Blue");
+    assert!(questions.pending().is_empty());
+
+    provider.shutdown();
 }

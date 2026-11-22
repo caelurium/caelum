@@ -3,6 +3,37 @@ import json
 import os
 import sys
 import threading
+import time
+
+if "--print" in sys.argv and "/usage" in sys.argv:
+    print(json.dumps({
+        "conversation_id": "",
+        "status": "SUCCESS",
+        "num_turns": 0,
+        "command": {
+            "name": "usage",
+            "data": {
+                "description": "Shared weekly and 5-hour limits.",
+                "groups": [
+                    {
+                        "name": "Gemini Models",
+                        "description": "Gemini 4 Neon, Gemini 4 Hydrogen",
+                        "buckets": [
+                            {
+                                "id": "gemini-weekly",
+                                "name": "Weekly Limit Remaining",
+                                "description": "Refreshes in 5 days.",
+                                "window": "weekly",
+                                "remaining_fraction": 0.4,
+                                "reset_time": "2026-11-28T17:16:29Z",
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+    }))
+    sys.exit(0)
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake-agy-state.json")
 
@@ -101,6 +132,15 @@ def session_payload(session_id, model="gemini-4-neon", effort="high", mode="defa
                 ],
             },
         ],
+        "_meta": {
+            "antigravity": {
+                "tier": {
+                    "name": "Google AI Pro",
+                    "id": "g1-pro-tier",
+                    "upgradeUri": "https://antigravity.google/g1-upgrade",
+                }
+            }
+        },
     }
 
 
@@ -109,7 +149,117 @@ def run_prompt(req_id, session_id, blocks):
     sess = state["sessions"][session_id]
     sess["history"].append({"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": text}})
 
-    if "need-permission" in text:
+    if "ask-me" in text:
+        q_input = {
+            "questions": [
+                {
+                    "question": "Which color do you prefer?",
+                    "options": ["Red", "Blue"],
+                    "is_multi_select": False,
+                }
+            ]
+        }
+        q_start = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-ask",
+            "name": "ask_question",
+            "kind": "other",
+            "title": "Run ask_question",
+            "status": "in_progress",
+            "rawInput": q_input,
+        }
+        q_pending = {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-ask",
+            "name": "ask_question",
+            "kind": "other",
+            "title": "Run ask_question",
+            "status": "pending",
+            "rawInput": q_input,
+        }
+        q_msg = {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "\nWhich color do you prefer?\n- [1] Red\n- [2] Blue\n"},
+        }
+        for u in (q_start, q_pending, q_msg):
+            notify(session_id, u)
+            sess["history"].append(u)
+        sess["pending_question"] = "call-ask"
+        save_state()
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+        return
+
+    if sess.pop("pending_question", None) == "call-ask":
+        q_done = {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-ask",
+            "name": "ask_question",
+            "status": "completed",
+            "rawOutput": {"output": text},
+        }
+        notify(session_id, q_done)
+        sess["history"].append(q_done)
+        reply = f"answered:{text}"
+    elif "background-task" in text:
+        bg_start = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-bg",
+            "name": "run_command",
+            "kind": "execute",
+            "title": "make check",
+            "status": "in_progress",
+            "rawInput": {"CommandLine": "make check", "WaitMsBeforeAsync": 500},
+        }
+        yield_msg = {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "Running make check. I'll update you once it finishes."},
+        }
+        yield_usage = {"sessionUpdate": "usage_update", "used": 1000, "size": 1048576}
+        notify(session_id, bg_start)
+        notify(session_id, yield_msg)
+        notify(session_id, yield_usage)
+        sess["history"].extend([bg_start, yield_msg, yield_usage])
+        save_state()
+        send({"jsonrpc": "2.0", "id": req_id, "result": {"stopReason": "end_turn"}})
+
+        time.sleep(0.3)
+        bg_done = {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-bg",
+            "status": "completed",
+            "rawOutput": {"output": "Command exited with code 0.\n\nCommand output:\nok"},
+        }
+        notify(session_id, bg_done)
+        sess["history"].append(bg_done)
+
+        followup_usage = {"sessionUpdate": "usage_update", "used": 1200, "size": 1048576}
+        followup_start = {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-followup",
+            "name": "run_command",
+            "kind": "execute",
+            "title": "echo verified",
+            "status": "in_progress",
+            "rawInput": {"CommandLine": "echo verified"},
+        }
+        followup_done = {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-followup",
+            "status": "completed",
+            "rawOutput": {"output": "Command exited with code 0.\n\nCommand output:\nverified"},
+        }
+        final_msg = {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "\n\nAll checks passed."},
+        }
+        final_usage = {"sessionUpdate": "usage_update", "used": 1400, "size": 1048576}
+        for u in (followup_usage, followup_start, followup_done, final_msg, final_usage):
+            notify(session_id, u)
+            sess["history"].append(u)
+        save_state()
+        return
+
+    elif "need-permission" in text:
         perm_id = f"perm-{req_id}"
         ev = threading.Event()
         box = {}

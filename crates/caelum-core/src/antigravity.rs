@@ -17,7 +17,9 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 mod metadata;
+mod progress;
 pub(crate) mod protocol;
+mod questions;
 #[cfg(all(test, unix))]
 mod tests;
 pub(crate) mod tools;
@@ -27,6 +29,7 @@ use crate::{
     approvals::ApprovalBroker,
     processes::{ProcessId, ProcessRegistry},
     projects::{Project, ProjectError},
+    questions::QuestionBroker,
 };
 
 const PROVIDER_NAME: &str = "antigravity";
@@ -52,6 +55,7 @@ struct ProviderInner {
     executable: Option<PathBuf>,
     processes: Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
+    questions: QuestionBroker,
     connections: Mutex<HashMap<PathBuf, Arc<AcpConnection>>>,
     subscribers: EventSubscribers,
     metadata: Mutex<metadata::SessionMetadataStore>,
@@ -62,12 +66,13 @@ struct AcpConnection {
     process_id: ProcessId,
     writer: Arc<Mutex<std::process::ChildStdin>>,
     pending: PendingRequests,
-    next_id: AtomicU64,
+    next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
     loaded_sessions: Mutex<HashSet<String>>,
-    working_sessions: Arc<Mutex<HashSet<String>>>,
+    progress: Arc<Mutex<progress::SessionProgressTracker>>,
     replays: ReplayBuffers,
     choices: Arc<Mutex<Option<ProviderChoices>>>,
+    tier: Arc<Mutex<Option<Value>>>,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
     session_changes: Mutex<HashMap<String, LineChanges>>,
@@ -83,31 +88,39 @@ struct SessionOptionState {
 struct ReaderContext {
     pending: PendingRequests,
     writer: Arc<Mutex<std::process::ChildStdin>>,
+    next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
     subscribers: EventSubscribers,
     approvals: ApprovalBroker,
+    questions: QuestionBroker,
     project_path: PathBuf,
-    working_sessions: Arc<Mutex<HashSet<String>>>,
+    progress: Arc<Mutex<progress::SessionProgressTracker>>,
     replays: ReplayBuffers,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
 }
 
 impl AntigravityProvider {
-    pub fn new(processes: Arc<ProcessRegistry>, approvals: ApprovalBroker) -> Self {
-        Self::with_executable(None, processes, approvals)
+    pub fn new(
+        processes: Arc<ProcessRegistry>,
+        approvals: ApprovalBroker,
+        questions: QuestionBroker,
+    ) -> Self {
+        Self::with_executable(None, processes, approvals, questions)
     }
 
     pub fn with_executable(
         executable: Option<PathBuf>,
         processes: Arc<ProcessRegistry>,
         approvals: ApprovalBroker,
+        questions: QuestionBroker,
     ) -> Self {
         Self {
             inner: Arc::new(ProviderInner {
                 executable,
                 processes,
                 approvals,
+                questions,
                 connections: Mutex::new(HashMap::new()),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
                 metadata: Mutex::new(metadata::SessionMetadataStore::default()),
@@ -128,12 +141,12 @@ impl AntigravityProvider {
 
     pub fn shutdown(&self) {
         self.inner.closed.store(true, Ordering::Release);
-        let connections: Vec<_> = lock(&self.inner.connections)
-            .drain()
-            .map(|(_, connection)| connection)
-            .collect();
-        for connection in connections {
+        let connections: Vec<_> = lock(&self.inner.connections).drain().collect();
+        for (path, connection) in connections {
             connection.alive.store(false, Ordering::Release);
+            self.inner
+                .questions
+                .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
             let _ = self.inner.processes.terminate(connection.process_id);
         }
     }
@@ -161,7 +174,7 @@ impl AntigravityProvider {
         let connection = self.connection(&project)?;
         let cwd = project.path().to_string_lossy().into_owned();
         let result = connection.request("session/list", json!({ "cwd": cwd }))?;
-        let working = lock(&connection.working_sessions).clone();
+        let working = lock(&connection.progress).working_sessions();
         let options = lock(&connection.session_options).clone();
         let metadata = lock(&self.inner.metadata);
         let sessions = protocol::parse_session_list(&result, project.path(), &working, &options)
@@ -199,7 +212,54 @@ impl AntigravityProvider {
         }
         let choices = protocol::parse_choices(&result);
         *lock(&connection.choices) = Some(choices.clone());
+        cache_tier(&connection, &result);
         Ok(choices)
+    }
+
+    pub fn usage_limits(&self, project_path: impl AsRef<Path>) -> Result<Value, AntigravityError> {
+        let project = Project::open(project_path)?;
+        let executable = self.executable()?;
+        let output = std::process::Command::new(&executable)
+            .args(["--print", "/usage", "--output-format", "json"])
+            .current_dir(project.path())
+            .env("PATH", crate::executable::path(&executable))
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|error| {
+                AntigravityError::Launch(format!(
+                    "Could not run `{}` --print /usage: {error}",
+                    executable.display()
+                ))
+            })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(AntigravityError::Protocol(if stderr.is_empty() {
+                format!("Antigravity /usage exited with status {}", output.status)
+            } else {
+                stderr
+            }));
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: Value = serde_json::from_str(stdout.trim()).map_err(|error| {
+            AntigravityError::Protocol(format!("Invalid Antigravity /usage JSON: {error}"))
+        })?;
+        let data = parsed
+            .pointer("/command/data")
+            .filter(|value| value.is_object())
+            .ok_or_else(|| {
+                AntigravityError::Protocol("Antigravity /usage response has no usage data".into())
+            })?;
+        let tier = lock(&self.inner.connections)
+            .get(project.path())
+            .and_then(|conn| lock(&conn.tier).clone());
+        let mut usage = data.clone();
+        if let Some(obj) = usage.as_object_mut() {
+            obj.insert("provider".into(), Value::String(PROVIDER_NAME.into()));
+            if let Some(tier) = tier {
+                obj.insert("tier".into(), tier);
+            }
+        }
+        Ok(usage)
     }
 
     pub fn commands(
@@ -239,6 +299,7 @@ impl AntigravityProvider {
         if !choices.models.is_empty() || !choices.agents.is_empty() {
             *lock(&connection.choices) = Some(choices);
         }
+        cache_tier(&connection, &result);
         let mut opts = protocol::parse_current_options(&result);
         self.apply_options(&connection, &session_id, &mut opts, model, effort, agent)?;
         lock(&connection.loaded_sessions).insert(session_id.clone());
@@ -274,12 +335,52 @@ impl AntigravityProvider {
         if !choices.models.is_empty() || !choices.agents.is_empty() {
             *lock(&connection.choices) = Some(choices);
         }
+        cache_tier(&connection, &result);
         let opts = protocol::parse_current_options(&result);
         lock(&connection.loaded_sessions).insert(session_id.to_owned());
         lock(&connection.session_options).insert(session_id.to_owned(), opts.clone());
-        let is_working = lock(&connection.working_sessions).contains(session_id);
         let mut page =
-            protocol::history_from_updates(&replayed, is_working, &opts, Some(project.path()));
+            protocol::history_from_updates(&replayed, false, &opts, Some(project.path()));
+        let active_tools: Vec<String> = page
+            .data
+            .iter()
+            .filter(|item| {
+                item["type"] == "tool"
+                    && item["name"] != "ask_question"
+                    && progress::is_active_tool_status(item["status"].as_str())
+            })
+            .filter_map(|item| item["toolCallId"].as_str().map(str::to_owned))
+            .collect();
+        let is_working = {
+            let mut tracker = lock(&connection.progress);
+            tracker.on_replayed_history(session_id, active_tools);
+            tracker.is_working(session_id)
+        };
+        page.is_working = Some(is_working);
+        let project_str = project.path().to_string_lossy().into_owned();
+        for item in &page.data {
+            if item["type"] == "tool"
+                && item["name"] == "ask_question"
+                && item["status"] == "pending"
+            {
+                if let Some(raw) = item.pointer("/metadata/acp") {
+                    questions::register_from_update(
+                        &self.inner.questions,
+                        questions::QuestionReplyContext {
+                            project_path: project_str.clone(),
+                            session_id: session_id.to_owned(),
+                            writer: connection.writer.clone(),
+                            pending: connection.pending.clone(),
+                            next_id: connection.next_id.clone(),
+                            alive: connection.alive.clone(),
+                            progress: connection.progress.clone(),
+                            subscribers: self.inner.subscribers.clone(),
+                        },
+                        raw,
+                    );
+                }
+            }
+        }
         if let Some(changes) = tools::session_line_changes(&page.data) {
             lock(&connection.session_changes).insert(session_id.to_owned(), changes);
         } else {
@@ -368,7 +469,7 @@ impl AntigravityProvider {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
         self.verify_session_owned(&connection, &project, session_id)?;
-        if archived && lock(&connection.working_sessions).contains(session_id) {
+        if archived && lock(&connection.progress).is_working(session_id) {
             return Err(AntigravityError::Protocol(
                 "stop the running turn before archiving this session".into(),
             ));
@@ -389,7 +490,7 @@ impl AntigravityProvider {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
         self.verify_session_owned(&connection, &project, session_id)?;
-        if lock(&connection.working_sessions).contains(session_id) {
+        if lock(&connection.progress).is_working(session_id) {
             return Err(AntigravityError::Protocol(
                 "stop the running turn before deleting this session".into(),
             ));
@@ -403,6 +504,11 @@ impl AntigravityProvider {
         lock(&connection.loaded_sessions).remove(session_id);
         lock(&connection.session_options).remove(session_id);
         lock(&connection.session_changes).remove(session_id);
+        self.inner.questions.clear(
+            PROVIDER_NAME,
+            &project.path().to_string_lossy(),
+            Some(session_id),
+        );
         lock(&self.inner.metadata).mark_deleted(project.path(), session_id)
     }
 
@@ -484,7 +590,12 @@ impl AntigravityProvider {
         lock(&connection.session_options).insert(session_id.to_owned(), opts);
 
         let blocks = protocol::prompt_blocks(prompt);
-        lock(&connection.working_sessions).insert(session_id.to_owned());
+        self.inner.questions.clear(
+            PROVIDER_NAME,
+            &project.path().to_string_lossy(),
+            Some(session_id),
+        );
+        lock(&connection.progress).on_prompt_started(session_id);
         transport::publish_event(
             &self.inner.subscribers,
             AntigravityEvent {
@@ -501,7 +612,7 @@ impl AntigravityProvider {
                 "prompt": blocks,
             }),
         ) {
-            lock(&connection.working_sessions).remove(session_id);
+            lock(&connection.progress).on_prompt_send_failed(session_id);
             return Err(error);
         }
         Ok(())
@@ -514,7 +625,19 @@ impl AntigravityProvider {
     ) -> Result<(), AntigravityError> {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
-        connection.notify("session/cancel", json!({ "sessionId": session_id }))
+        let result = connection.notify("session/cancel", json!({ "sessionId": session_id }));
+        if result.is_ok() {
+            let effect = lock(&connection.progress).on_cancel(session_id);
+            if let Some(effect) = effect {
+                transport::dispatch_progress_effect(
+                    &project.path().to_string_lossy(),
+                    effect,
+                    &self.inner.subscribers,
+                    &connection.progress,
+                );
+            }
+        }
+        result
     }
 
     fn load_session(
@@ -604,6 +727,7 @@ impl AntigravityProvider {
             &path,
             &self.inner.processes,
             self.inner.approvals.clone(),
+            self.inner.questions.clone(),
             self.inner.subscribers.clone(),
         )?;
         let mut connections = lock(&self.inner.connections);
@@ -632,6 +756,15 @@ impl AntigravityProvider {
                     .into(),
             )
         })
+    }
+}
+
+fn cache_tier(connection: &AcpConnection, result: &Value) {
+    if let Some(tier) = result
+        .pointer("/_meta/antigravity/tier")
+        .filter(|value| value.is_object())
+    {
+        *lock(&connection.tier) = Some(tier.clone());
     }
 }
 

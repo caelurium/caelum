@@ -418,6 +418,7 @@ fn vm_routing_refuses_opencode_operations_even_with_a_codex_session_key() {
         Command::Generate(key, "side question".into()),
         Command::Task(Task::Usage {
             project: project.clone(),
+            provider: Provider::OpenCode,
         }),
         Command::Task(Task::Image {
             project: project.clone(),

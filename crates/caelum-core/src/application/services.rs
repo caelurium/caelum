@@ -39,6 +39,8 @@ pub enum Task {
     },
     Usage {
         project: String,
+        #[serde(default = "default_usage_provider")]
+        provider: super::Provider,
     },
     Stats {
         project: String,
@@ -180,7 +182,7 @@ macro_rules! project_field {
             | Task::Image { project, .. }
             | Task::EncodeImage { project, .. }
             | Task::Reveal { project, .. }
-            | Task::Usage { project }
+            | Task::Usage { project, .. }
             | Task::Stats { project, .. }
             | Task::AttachPullRequest { project, .. }
             | Task::Directory { project, .. }
@@ -338,7 +340,12 @@ impl Task {
                 Updates
             ),
             Self::Update(job) => runtime.updates.execute(job).map(TaskReply::Update),
-            Self::Usage { project } => reply!(runtime.opencode.usage_limits(project), Usage),
+            Self::Usage { project, provider } => match provider {
+                super::Provider::Antigravity => {
+                    reply!(runtime.antigravity.usage_limits(project), Usage)
+                }
+                _ => reply!(runtime.opencode.usage_limits(project), Usage),
+            },
             Self::Stats { project, filter } => Ok(TaskReply::Stats(
                 runtime
                     .opencode
@@ -477,10 +484,14 @@ impl Task {
     }
 }
 
+fn default_usage_provider() -> super::Provider {
+    super::Provider::OpenCode
+}
+
 #[derive(Default)]
 pub struct Checkout {
     pub shell_output: BTreeMap<(String, String), String>,
-    pub usage: Option<serde_json::Value>,
+    pub usage: HashMap<super::Provider, serde_json::Value>,
     pub stats: Option<OpenCodeStats>,
     pub stats_projects: Vec<OpenCodeStatsProject>,
     pub stats_filter: String,

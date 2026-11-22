@@ -281,3 +281,89 @@ fn refreshing_statistics_preserves_the_same_filter_cache_and_rejects_old_ranges(
     app.apply(Event::Completed(new, Err("current failure".into())));
     assert_eq!(app.services.error(&other), Some("current failure"));
 }
+
+#[test]
+fn antigravity_turn_yielded_keeps_running_command_activity_until_completion() {
+    use caelum_protocol::AntigravityEvent;
+    use presentation::{activity, ActivityKind as A};
+
+    let mut app = workspace();
+    let index = app.new_session(Scope {
+        project: "/project".into(),
+        provider: Provider::Antigravity,
+    });
+    app.sessions[index].remote_id = Some("ag-1".into());
+    app.selected = Some(0);
+    app.commands();
+
+    let ag = |method: &str, params: serde_json::Value| {
+        Event::Antigravity(AntigravityEvent {
+            project_path: "/project".into(),
+            session_id: Some("ag-1".into()),
+            method: method.into(),
+            params,
+        })
+    };
+
+    app.apply(ag("antigravity/turnStarted", json!({"_created": 1000})));
+    app.apply(ag(
+        "tool_call",
+        json!({
+            "toolCallId": "call-bg",
+            "name": "run_command",
+            "kind": "execute",
+            "title": "make check",
+            "status": "in_progress",
+            "rawInput": {"CommandLine": "make check"}
+        }),
+    ));
+    app.apply(ag(
+        "agent_message_chunk",
+        json!({"content": {"text": "Running make check. I'll update you once it finishes."}}),
+    ));
+    assert_eq!(
+        activity(&app.sessions[index], false).unwrap().kind,
+        A::Responding
+    );
+
+    app.apply(ag("antigravity/turnYielded", json!({})));
+    assert!(app.sessions[index].working());
+    let current = activity(&app.sessions[index], false).expect("still active");
+    assert_eq!(current.kind, A::Tool);
+    assert_eq!(current.label, "Running a command…");
+    assert!(
+        !app.commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::Notify(..))),
+        "must not fire Session finished notification while background task is running"
+    );
+
+    app.apply(ag(
+        "tool_call_update",
+        json!({"toolCallId": "call-bg", "status": "completed"}),
+    ));
+    assert_eq!(
+        activity(&app.sessions[index], false).unwrap().kind,
+        A::Working
+    );
+
+    app.apply(ag(
+        "agent_message_chunk",
+        json!({"content": {"text": "\n\nAll checks passed."}}),
+    ));
+    assert_eq!(
+        activity(&app.sessions[index], false).unwrap().kind,
+        A::Responding
+    );
+
+    app.apply(ag(
+        "antigravity/turnCompleted",
+        json!({"stopReason": "end_turn", "_created": 5000}),
+    ));
+    assert!(!app.sessions[index].working());
+    assert!(activity(&app.sessions[index], false).is_none());
+    assert!(app
+        .commands()
+        .iter()
+        .any(|(_, c)| matches!(c, Command::Notify(..))));
+}
