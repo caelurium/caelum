@@ -111,6 +111,62 @@ pub fn divider(k: &Kit) -> El {
     rune::el().w_full().h(1.0).fill(k.c.border_base)
 }
 
+pub const POPUP_RADIUS: f32 = 10.0;
+pub const POPUP_OFFSET: f32 = 6.0;
+
+pub fn popup_scrim<S: 'static>(
+    key: impl Into<String>,
+    close: impl Fn(&mut S) + Clone + 'static,
+) -> El {
+    let secondary = close.clone();
+    rune::el()
+        .key(key)
+        .role("none")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .on_press(close)
+        .on_secondary_press(move |s: &mut S, _, _| secondary(s))
+}
+
+pub fn popup_header(
+    title: impl Into<String>,
+    subtitle: Option<&str>,
+    trailing: Option<El>,
+    k: &Kit,
+) -> El {
+    let heading = col()
+        .min_w(0.0)
+        .grow(1.0)
+        .gap(2.0)
+        .child(
+            text(title)
+                .font(k.ty.ui_medium)
+                .color(k.c.text_base)
+                .truncate(),
+        )
+        .children(
+            subtitle
+                .filter(|s| !s.is_empty())
+                .map(|detail| text(detail).font(k.ty.small).color(k.c.text_muted).wrap()),
+        );
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(
+            row()
+                .w_full()
+                .px(8.0)
+                .pt(5.0)
+                .pb(2.0)
+                .gap(8.0)
+                .center_y()
+                .child(heading)
+                .children(trailing),
+        )
+        .child(divider(k))
+}
+
 pub fn popup<S: 'static>(
     key: &str,
     anchor: &str,
@@ -120,14 +176,7 @@ pub fn popup<S: 'static>(
     k: &Kit,
     layers: &mut Vec<El>,
 ) {
-    layers.push(
-        rune::el()
-            .key(format!("{key}-scrim"))
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .on_press(close.clone()),
-    );
+    layers.push(popup_scrim(format!("{key}-scrim"), close.clone()));
     let content = content
         .key(key)
         .padding(6.0)
@@ -137,10 +186,10 @@ pub fn popup<S: 'static>(
         .focus_return(anchor);
     layers.push(rune_kit::popover::anchored(
         k,
-        rune_kit::popover::raised(k, content, 10.0),
+        rune_kit::popover::raised(k, content, POPUP_RADIUS),
         anchor,
         placement,
-        6.0,
+        POPUP_OFFSET,
     ));
 }
 
@@ -148,12 +197,12 @@ pub fn choice(title: &str, detail: &str, selected: bool, k: &Kit) -> El {
     k.interactive(
         row()
             .w_full()
-            .min_h(46.0)
+            .min_h(44.0)
             .px(10.0)
-            .py(8.0)
+            .py(7.0)
             .gap(10.0)
             .center_y()
-            .radius(7.0)
+            .radius(6.0)
             .fill(if selected {
                 k.c.hover
             } else {
@@ -173,7 +222,7 @@ pub fn choice(title: &str, detail: &str, selected: bool, k: &Kit) -> El {
                     .children((!detail.is_empty()).then(|| caption(detail, k).truncate())),
             )
             .child(
-                icon(k.glyph.check_small, 14.0)
+                icon(k.glyph.check_small, 13.0)
                     .color(k.c.text_accent)
                     .opacity(if selected { 1.0 } else { 0.0 }),
             ),
@@ -218,15 +267,63 @@ pub fn tab(title: &str, selected: bool, k: &Kit) -> El {
     .focus_ring(1.5, 0.0, k.c.border_focus)
 }
 
+pub fn segmented_track(k: &Kit) -> El {
+    row()
+        .gap(2.0)
+        .padding(3.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
+        .center_y()
+}
+
+pub fn segment(title: &str, selected: bool, k: &Kit) -> El {
+    k.interactive(
+        row()
+            .h(26.0)
+            .px(10.0)
+            .center()
+            .radius(6.0)
+            .fill(if selected {
+                k.c.layer_02
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .border(
+                1.0,
+                if selected {
+                    k.c.border_base
+                } else {
+                    rune::Color::TRANSPARENT
+                },
+            )
+            .child(
+                text(title)
+                    .font(if selected { k.ty.ui_medium } else { k.ty.ui })
+                    .color(if selected {
+                        k.c.text_base
+                    } else {
+                        k.c.text_muted
+                    })
+                    .truncate(),
+            ),
+    )
+    .role("tab")
+    .label(title)
+    .focusable(true)
+    .focus_selected(selected)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
+}
+
 pub fn highlighted_tab(title: &str, selected: bool, k: &Kit) -> El {
     k.interactive(
         row()
             .h(30.0)
             .px(10.0)
             .center_y()
-            .radius(10.0)
+            .radius(6.0)
             .fill(if selected {
-                k.c.pressed
+                k.c.hover
             } else {
                 rune::Color::TRANSPARENT
             })

@@ -65,20 +65,21 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
             ),
     );
     browser = browser.child(
-        row()
-            .w_full()
-            .gap(4.0)
-            .child(
-                ui::tab("Paths", !live.panels.content_search, k)
-                    .h(26.0)
-                    .on_press(|s: &mut Workspace| live_mut(s).panels.content_search = false),
-            )
-            .child(
-                ui::tab("Content", live.panels.content_search, k)
-                    .h(26.0)
-                    .on_press(|s: &mut Workspace| live_mut(s).panels.content_search = true),
-            )
-            .child(rune::el().grow(1.0)),
+        row().w_full().center_y().child(
+            ui::segmented_track(k)
+                .role("tablist")
+                .label("Search mode")
+                .child(
+                    ui::segment("Paths", !live.panels.content_search, k)
+                        .h(22.0)
+                        .on_press(|s: &mut Workspace| live_mut(s).panels.content_search = false),
+                )
+                .child(
+                    ui::segment("Content", live.panels.content_search, k)
+                        .h(22.0)
+                        .on_press(|s: &mut Workspace| live_mut(s).panels.content_search = true),
+                ),
+        ),
     );
     let Some(checkout) = live.app.services.checkouts.get(project) else {
         return browser.child(ui::skeleton("Loading files", 4, k));

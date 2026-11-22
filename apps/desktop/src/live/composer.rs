@@ -131,16 +131,16 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .child(crate::remote::handoff_button(s, k, Some(index)))
         .child(crate::activity::context(s, k, index, usage_label));
     let controls = if wide {
-        row().center_y().gap(12.0).child(pickers.grow(1.0)).child(
+        row().center_y().gap(8.0).child(pickers.grow(1.0)).child(
             row()
                 .center_y()
                 .self_end()
-                .gap(12.0)
+                .gap(8.0)
                 .child(usage)
                 .child(actions),
         )
     } else {
-        col().gap(8.0).child(pickers.w_full()).child(
+        col().gap(6.0).child(pickers.w_full()).child(
             row()
                 .w_full()
                 .center_y()
@@ -186,7 +186,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let mut content = row()
         .key("composer-options")
         .flex_wrap()
-        .gap(6.0)
+        .gap(4.0)
         .center_y();
     let Some(index) = live.app.selected else {
         return content;

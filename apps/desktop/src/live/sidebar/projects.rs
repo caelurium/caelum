@@ -1,51 +1,7 @@
-use super::{Menu, live, live_mut};
-use crate::{
-    PLUS, Workspace, quiet_button,
-    select::{Choice, Select},
-    ui,
-};
+use super::{live, live_mut};
+use crate::{PLUS, Workspace, quiet_button, ui};
 use rune::{El, ScrollSpec, col, row, text};
 use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
-
-pub(super) fn filter(s: &Workspace) -> Select {
-    let l = live(s);
-    let default = match l.app.preferences.session_scope {
-        caelum_core::application::SessionScope::AllProjects => "All projects".to_owned(),
-        caelum_core::application::SessionScope::CurrentProject => l
-            .app
-            .feed_project(None)
-            .map_or("Current project".into(), |p| {
-                format!("Current · {}", crate::checkouts::project_name(&l.app, p))
-            }),
-    };
-    let choices = std::iter::once(Choice::new("", default))
-        .chain(
-            l.app
-                .projects
-                .iter()
-                .filter(|p| l.app.group_path(&p.path) == p.path)
-                .map(|p| Choice::new(&p.path, &p.name)),
-        )
-        .collect();
-    Select::choices("session-project-filter", choices)
-        .label("Filter sessions and pull requests by project")
-        .current(Some(l.feed.project.as_deref().unwrap_or("")))
-        .open(l.feed.menu == Menu::Filter)
-        .on_toggle(|s: &mut Workspace| {
-            let l = live_mut(s);
-            l.feed.menu = if l.feed.menu == Menu::Filter {
-                Menu::Closed
-            } else {
-                Menu::Filter
-            };
-        })
-        .on_close(|s: &mut Workspace| live_mut(s).feed.menu = Menu::Closed)
-        .on_choose(|s: &mut Workspace, value, _| {
-            let l = live_mut(s);
-            l.feed.project = (!value.is_empty()).then(|| value.to_owned());
-            l.feed.menu = Menu::Closed;
-        })
-}
 
 pub(super) fn view(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
@@ -103,7 +59,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                                 .on_press({
                                     let path = path.clone();
                                     move |s: &mut Workspace| {
-                                        live_mut(s).feed.menu = Menu::Closed;
                                         crate::worktree::open(
                                             s,
                                             path.clone(),
@@ -144,7 +99,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                 .on_press({
                     let path = path.clone();
                     move |s: &mut Workspace| {
-                        live_mut(s).feed.menu = Menu::Closed;
                         crate::checkouts::select_project(s, &path);
                     }
                 }),
@@ -181,7 +135,6 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     .child(
                         quiet_button(&PLUS, "Open project")
                             .on_press_tx(|s: &mut Workspace, tx| {
-                                live_mut(s).feed.menu = Menu::Closed;
                                 super::super::open_project(s, tx);
                             })
                             .build(k)

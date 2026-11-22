@@ -11,10 +11,10 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
         "Choose a theme and an accent for your workspace.",
         k,
     ));
-    let mut themes = row().gap(4.0);
+    let mut themes = ui::segmented_track(k);
     for (mode, name) in [("system", "System"), ("dark", "Dark"), ("light", "Light")] {
         themes = themes.child(
-            ui::tab(name, preferences.theme == mode, k)
+            ui::segment(name, preferences.theme == mode, k)
                 .on_press(move |s: &mut Workspace| live_mut(s).app.preferences.theme = mode.into())
                 .key(format!("theme-{mode}"))
                 .grow(1.0),
@@ -117,7 +117,7 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
         accents,
         k,
     ));
-    let mut scopes = row().gap(4.0);
+    let mut scopes = ui::segmented_track(k);
     for (scope, key, label) in [
         (
             caelum_core::application::SessionScope::AllProjects,
@@ -131,13 +131,11 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
         ),
     ] {
         scopes = scopes.child(
-            ui::tab(label, preferences.session_scope == scope, k)
+            ui::segment(label, preferences.session_scope == scope, k)
                 .key(format!("session-scope-{key}"))
                 .grow(1.0)
                 .on_press(move |s: &mut Workspace| {
-                    let l = live_mut(s);
-                    l.app.preferences.session_scope = scope;
-                    l.feed.project = None;
+                    live_mut(s).app.preferences.session_scope = scope;
                 }),
         );
     }

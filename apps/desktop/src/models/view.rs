@@ -9,7 +9,7 @@ use crate::{
     live::{live, live_mut},
     ui,
 };
-use rune::{Color, El, Icon, ScrollSpec, TextStyle, col, icon, row, text};
+use rune::{Color, El, Icon, ScrollSpec, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit, ScrollBar};
 use std::{collections::BTreeMap, rc::Rc};
 
@@ -36,7 +36,7 @@ fn chip(label: &str, selected: bool, glyph: Option<&'static Icon>, k: &Kit) -> E
             .px(7.0)
             .gap(5.0)
             .center_y()
-            .radius(5.0)
+            .radius(6.0)
             .fill(if selected {
                 k.c.hover
             } else {
@@ -117,10 +117,10 @@ fn model_row(
                 .grow(1.0)
                 .min_w(0.0)
                 .h(ROW_HEIGHT - 2.0)
-                .px(6.0)
-                .gap(7.0)
+                .px(8.0)
+                .gap(8.0)
                 .center_y()
-                .radius(5.0)
+                .radius(6.0)
                 .fill(if i == selected {
                     k.c.hover
                 } else {
@@ -129,7 +129,7 @@ fn model_row(
                 .child(mark)
                 .child(
                     text(&m.name)
-                        .font(TextStyle::new(13.0, 500.0))
+                        .font(k.ty.ui_medium)
                         .color(k.c.text_base)
                         .truncate()
                         .min_w(0.0)
@@ -147,7 +147,7 @@ fn model_row(
                         }),
                 )
                 .child(
-                    icon(k.glyph.check_small, 12.0)
+                    icon(k.glyph.check_small, 13.0)
                         .color(k.c.text_accent)
                         .opacity(if m.id == current { 1.0 } else { 0.0 }),
                 ),
@@ -414,15 +414,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         width = width.min(trigger[0] - 16.0);
         placement = rune_kit::Placement::Left;
     }
-    layers.push(
-        rune::el()
-            .key("models-scrim")
-            .role("none")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .on_press(close),
-    );
+    layers.push(ui::popup_scrim("models-scrim", close));
     let content = col()
         .key("model-popover")
         .role("dialog")
@@ -436,9 +428,9 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .child(body);
     layers.push(rune_kit::popover::anchored(
         k,
-        rune_kit::popover::raised(k, content, 9.0),
+        rune_kit::popover::raised(k, content, ui::POPUP_RADIUS),
         anchor,
         placement,
-        8.0,
+        ui::POPUP_OFFSET,
     ));
 }

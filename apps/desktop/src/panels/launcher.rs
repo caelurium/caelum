@@ -25,13 +25,10 @@ pub fn open_launcher(s: &mut Workspace) {
 pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
     let mut body = col().w_full().h_full().min_h(0.0).gap(12.0);
-    let mut providers = row()
-        .center_y()
-        .gap(8.0)
-        .child(ui::caption("Local sessions", k));
+    let mut provider_tabs = ui::segmented_track(k);
     for provider in caelum_core::application::Provider::ALL {
-        providers = providers.child(
-            ui::tab(
+        provider_tabs = provider_tabs.child(
+            ui::segment(
                 ui::provider_name(provider),
                 l.panels.launch_provider == provider,
                 k,
@@ -40,6 +37,11 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
             .key(format!("launch-provider-{}", provider.as_str())),
         );
     }
+    let providers = row()
+        .center_y()
+        .gap(10.0)
+        .child(ui::caption("Local sessions", k))
+        .child(provider_tabs);
     body = body.child(providers).child(
         ui::field(
             &l.commands.search,

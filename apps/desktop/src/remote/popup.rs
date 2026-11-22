@@ -8,7 +8,7 @@ use caelum_core::{
     application::HandoffSource,
     remote::{Job, Monitor, VmLink},
 };
-use rune::{El, ScrollSpec, col, el, row, text};
+use rune::{El, ScrollSpec, col, row};
 use rune_kit::{ButtonVariant, Kit, Placement, ScrollBar, popover};
 
 pub(super) enum Inspection {
@@ -169,23 +169,16 @@ pub(crate) fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .w((window[2] - 16.0).clamp(1.0, 420.0))
         .h(height.min((window[3] - 16.0).max(1.0)))
         .min_h(0.0)
-        .padding(12.0)
+        .padding(8.0)
         .gap(8.0)
-        .child(text(title).font(k.ty.ui_medium).color(k.c.text_base))
-        .child(body.min_h(0.0).grow(1.0));
-    layers.push(
-        el().key("vm-scrim")
-            .role("none")
-            .absolute(0., 0.)
-            .w_full()
-            .h_full()
-            .on_press(close),
-    );
+        .child(ui::popup_header(title, None, None, k))
+        .child(body.px(4.0).min_h(0.0).grow(1.0));
+    layers.push(ui::popup_scrim("vm-scrim", close));
     layers.push(popover::anchored(
         k,
-        popover::raised(k, content, 9.0),
+        popover::raised(k, content, ui::POPUP_RADIUS),
         anchor,
         Placement::TopEnd,
-        8.0,
+        ui::POPUP_OFFSET,
     ));
 }
