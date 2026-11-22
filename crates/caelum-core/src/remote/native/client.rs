@@ -1,11 +1,6 @@
 use super::{commands, ssh, NativeTarget};
 use crate::application::{Command, Event, ProviderRuntime, Runtime};
-use std::{
-    collections::BTreeSet,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::BTreeSet, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, watch, Notify};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -20,14 +15,46 @@ pub enum Notice {
     Event(Box<Event>),
 }
 
-struct Active {
-    writer: mpsc::Sender<(u64, Command)>,
-    pending: BTreeSet<u64>,
-}
-type Link = Arc<Mutex<Option<Active>>>;
+type Link = mpsc::Sender<(u64, Command)>;
 enum Message {
     Connected(Link),
     Notice(Notice),
+}
+struct Attempt {
+    connected: bool,
+    pending: BTreeSet<u64>,
+    requests: Option<mpsc::Receiver<(u64, Command)>>,
+}
+impl Attempt {
+    fn new() -> Self {
+        Self {
+            connected: false,
+            pending: BTreeSet::new(),
+            requests: None,
+        }
+    }
+    fn activate(&mut self) -> Link {
+        let (writer, rx) = mpsc::channel(128);
+        self.connected = true;
+        self.requests = Some(rx);
+        writer
+    }
+    async fn next_request(&mut self) -> Option<(u64, Command)> {
+        let req = self.requests.as_mut()?.recv().await?;
+        Some(req)
+    }
+    fn retire(mut self) -> Option<BTreeSet<u64>> {
+        if !self.connected {
+            return None;
+        }
+        if let Some(mut rx) = self.requests.take() {
+            rx.close();
+            while let Ok((id, _)) = rx.try_recv() {
+                self.pending.insert(id);
+            }
+        }
+        Some(self.pending)
+    }
 }
 struct Output {
     tx: mpsc::Sender<Message>,
@@ -74,14 +101,14 @@ impl Client {
         wake: impl Fn() + Send + Sync + 'static,
         mut open: impl AsyncFnMut() -> Result<ssh::Tunnel, String> + Send + 'static,
     ) -> Result<Self, String> {
-        Self::with_connection(root, wake, async move |link, out| {
+        Self::with_connection(root, wake, async move |attempt, out| {
             let mut tunnel = match open().await {
                 Ok(tunnel) => tunnel,
                 Err(e) => return e,
             };
             tokio::select! {
                 _=tunnel.child.wait()=>"SSH disconnected. Reconnect to verify the VM’s address and host key.".to_owned(),
-                e=session(tunnel.access.clone(),link,out)=>e,
+                e=session(tunnel.access.clone(),attempt,out)=>e,
             }
         })
     }
@@ -89,7 +116,7 @@ impl Client {
     fn with_connection(
         root: String,
         wake: impl Fn() + Send + Sync + 'static,
-        connect: impl AsyncFnMut(&Link, &Output) -> String + Send + 'static,
+        connect: impl AsyncFnMut(&mut Attempt, &Output) -> String + Send + 'static,
     ) -> Result<Self, String> {
         let (tx, rx) = mpsc::channel(512);
         let (retry, again) = mpsc::channel(1);
@@ -137,21 +164,10 @@ impl Client {
             return Err("This action is not available in a native VM workspace.".into());
         }
         let offline = "The VM is disconnected. Reconnect before trying again.";
-        let mut guard = self
-            .link
-            .as_ref()
-            .ok_or(offline)?
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let active = guard.as_mut().ok_or(offline)?;
-        if active.pending.len() >= 512 || !active.pending.insert(id) {
-            return Err("Too many pending native workspace requests.".into());
-        }
-        if active.writer.try_send((id, command)).is_err() {
-            active.pending.remove(&id);
-            return Err("The VM connection is busy or closed. Try again.".into());
-        }
-        Ok(())
+        let writer = self.link.as_ref().ok_or(offline)?;
+        writer
+            .try_send((id, command))
+            .map_err(|_| "The VM connection is busy or closed. Try again.".into())
     }
     pub fn reconnect(&self) {
         let _ = self.retry.try_send(());
@@ -189,19 +205,19 @@ impl Drop for Client {
 }
 
 async fn supervise(
-    mut connect: impl AsyncFnMut(&Link, &Output) -> String,
+    mut connect: impl AsyncFnMut(&mut Attempt, &Output) -> String,
     mut again: mpsc::Receiver<()>,
     out: &Output,
 ) {
     loop {
         out.send(Notice::Status(Status::Connecting)).await;
-        let link = Link::default();
-        let problem = connect(&link, out).await;
-        let retired = link.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let mut attempt = Attempt::new();
+        let problem = connect(&mut attempt, out).await;
+        let retired = attempt.retire();
         out.send(Notice::Status(Status::Disconnected(problem)))
             .await;
-        if let Some(retired) = retired {
-            for id in retired.pending {
+        if let Some(pending) = retired {
+            for id in pending {
                 let error = "VM connection lost. Delivery is unconfirmed; check the session history before retrying.";
                 out.send(Notice::Event(Box::new(Event::Completed(
                     id,
@@ -229,22 +245,9 @@ impl Drop for Workers {
         }
     }
 }
-fn activate(link: &Link) -> mpsc::Receiver<(u64, Command)> {
-    let (writer, rx) = mpsc::channel(128);
-    *link.lock().unwrap_or_else(|e| e.into_inner()) = Some(Active {
-        writer,
-        pending: BTreeSet::new(),
-    });
-    rx
-}
-async fn deliver(link: &Link, out: &Output, event: Event) {
+async fn deliver(pending: &mut BTreeSet<u64>, out: &Output, event: Event) {
     let completion = if let Event::Completed(id, _) = &event {
-        if !link
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
-            .is_some_and(|a| a.pending.contains(id))
-        {
+        if !pending.contains(id) {
             return;
         }
         Some(*id)
@@ -253,12 +256,10 @@ async fn deliver(link: &Link, out: &Output, event: Event) {
     };
     out.send(Notice::Event(Box::new(event))).await;
     if let Some(id) = completion {
-        if let Some(active) = link.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            active.pending.remove(&id);
-        }
+        pending.remove(&id);
     }
 }
-async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> String {
+async fn session(access: Arc<super::Access>, attempt: &mut Attempt, out: &Output) -> String {
     let wake = Arc::new(Notify::new());
     let notify = wake.clone();
     let providers = ProviderRuntime::forwarded(access.clone());
@@ -270,8 +271,8 @@ async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> Strin
     );
     let rt = workers.0.as_mut().unwrap();
     let mut brokers_attached = false;
-    let mut requests = activate(link);
-    out.publish(Message::Connected(link.clone())).await;
+    let writer = attempt.activate();
+    out.publish(Message::Connected(writer)).await;
     loop {
         tokio::select! {
             _ = wake.notified() => for event in rt.drain() {
@@ -279,8 +280,8 @@ async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> Strin
                 // Keep visible questions and answer drafts until Codex has resubscribed.
                 if !brokers_attached && access.codex_used.load(std::sync::atomic::Ordering::Acquire) {
                     brokers_attached = true;
-                    deliver(link, out, Event::Approvals(providers.approvals.pending())).await;
-                    deliver(link, out, Event::Questions(providers.questions.pending())).await;
+                    deliver(&mut attempt.pending, out, Event::Approvals(providers.approvals.pending())).await;
+                    deliver(&mut attempt.pending, out, Event::Questions(providers.questions.pending())).await;
                 }
                 let event = match event {
                     Event::Codex(ref e) if e.method == "codex/processExited" => {
@@ -291,12 +292,20 @@ async fn session(access: Arc<super::Access>, link: &Link, out: &Output) -> Strin
                     Event::Questions(_) => Event::Questions(providers.questions.pending()),
                     e => e,
                 };
-                deliver(link, out, event).await;
+                deliver(&mut attempt.pending, out, event).await;
             },
-            req = requests.recv() => match req {
-                Some((id, cmd)) => if let Err(e) = rt.submit(id, cmd) {
-                    deliver(link, out, Event::Completed(id, Err(e))).await;
-                },
+            req = attempt.next_request() => match req {
+                Some((id, cmd)) => {
+                    if attempt.pending.len() >= 512 || !attempt.pending.insert(id) {
+                        out.send(Notice::Event(Box::new(Event::Completed(
+                            id,
+                            Err("Too many pending native workspace requests.".into()),
+                        ))))
+                        .await;
+                    } else if let Err(e) = rt.submit(id, cmd) {
+                        deliver(&mut attempt.pending, out, Event::Completed(id, Err(e))).await;
+                    }
+                }
                 None => return "VM workspace closed.".into(),
             }
         }

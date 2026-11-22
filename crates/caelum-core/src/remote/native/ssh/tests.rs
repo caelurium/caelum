@@ -113,10 +113,7 @@ async fn remote_paths_do_not_depend_on_the_laptop_filesystem() {
             path: "note".into(),
         });
         assert!(access
-            .checkout_command(
-                &task,
-                &std::sync::Mutex::new(crate::session_branches::SessionBranches::new(None))
-            )
+            .checkout_command(&task, &crate::session_branches::SessionBranches::new(None))
             .unwrap()
             .is_err());
     })
