@@ -220,6 +220,7 @@ fn archive_delete_and_worktree_removal_do_not_wait_for_in_flight_saves() {
     let (save, command) = app.commands().pop().unwrap();
     assert!(matches!(command, Command::Save(..)));
 
+    app.open_project("/b".into());
     app.archive(active, true);
     assert!(app.delete_archived_session(archived));
     app.task(Task::RemoveWorktree {
@@ -227,6 +228,9 @@ fn archive_delete_and_worktree_removal_do_not_wait_for_in_flight_saves() {
         path: "/worktrees/a".into(),
     });
     let commands = app.commands();
+    assert!(commands
+        .iter()
+        .any(|(_, c)| matches!(c, Command::Open(path) if path == "/b")));
     assert!(commands
         .iter()
         .any(|(_, c)| matches!(c, Command::Archive(_, true))));

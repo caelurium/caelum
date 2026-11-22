@@ -57,7 +57,8 @@ impl Workspace {
             if (self.restored()
                 && matches!(
                     request.1,
-                    Command::Archive(..)
+                    Command::Open(_)
+                        | Command::Archive(..)
                         | Command::DeleteSession(..)
                         | Command::List(..)
                         | Command::ListArchived(..)

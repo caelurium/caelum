@@ -222,7 +222,7 @@ impl Workspace {
             .values()
             .filter(|p| matches!(p, Pending::Details(_)))
             .count();
-        for _ in count..6 {
+        for _ in count..2 {
             let Some(index) = self.detail_queue.pop() else {
                 break;
             };

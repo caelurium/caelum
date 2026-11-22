@@ -118,7 +118,7 @@ fn saturated_command_lane_applies_backpressure_without_blocking_controls() {
         {
             let background = background.clone();
             Arc::new(move |command| {
-                if matches!(command, Command::Open(_)) {
+                if matches!(command, Command::List(_)) {
                     let _ = entered.send(());
                     background.wait();
                 }
@@ -130,22 +130,17 @@ fn saturated_command_lane_applies_backpressure_without_blocking_controls() {
         }),
     );
     let _release = Release(background, Gate::default());
+    let list = || Command::List(scope(Provider::OpenCode, "/project"));
     for id in 0..8 {
-        runtime
-            .submit(id, Command::Open("/project".into()))
-            .unwrap();
+        runtime.submit(id, list()).unwrap();
     }
     for _ in 0..8 {
         started.recv_timeout(Duration::from_secs(2)).unwrap();
     }
     for id in 8..1032 {
-        runtime
-            .submit(id, Command::Open("/project".into()))
-            .unwrap();
+        runtime.submit(id, list()).unwrap();
     }
-    assert!(runtime
-        .submit(1032, Command::Open("/project".into()))
-        .is_err());
+    assert!(runtime.submit(1032, list()).is_err());
     runtime
         .submit(
             1033,
@@ -159,6 +154,14 @@ fn saturated_command_lane_applies_backpressure_without_blocking_controls() {
     assert!(matches!(
         runtime.drain().as_slice(),
         [Event::Completed(1033, Ok(Reply::Done))]
+    ));
+    runtime
+        .submit(1034, Command::Open("/project".into()))
+        .unwrap();
+    wakes.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(
+        runtime.drain().as_slice(),
+        [Event::Completed(1034, Ok(Reply::Done))]
     ));
 }
 

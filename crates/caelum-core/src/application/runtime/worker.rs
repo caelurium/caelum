@@ -1,4 +1,4 @@
-use super::{Command, Event, Execute};
+use super::{Command, Event, Execute, Task};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -19,23 +19,72 @@ const HISTORY_LIMIT: usize = 2;
 const ACTIONS_LIMIT: usize = 4;
 const CONTROL_LIMIT: usize = 2;
 
+pub(super) struct Mailboxes {
+    normal: mpsc::Sender<Request>,
+    history: mpsc::Sender<Request>,
+    actions: mpsc::Sender<Request>,
+    control: mpsc::Sender<Request>,
+}
+
+impl Mailboxes {
+    pub(super) fn try_send(&self, id: u64, command: Command) -> Result<(), String> {
+        let queue = if matches!(
+            command,
+            Command::Cancel(_)
+                | Command::Remote(crate::remote::Operation::Interrupt(..))
+                | Command::Task(Task::Shell { stop: true, .. })
+                | Command::Approve(..)
+                | Command::Answer(..)
+                | Command::Save(..)
+                | Command::Load(_)
+        ) {
+            &self.control
+        } else if matches!(
+            command,
+            Command::Resume(_)
+                | Command::History(..)
+                | Command::HandoffChat(_)
+                | Command::CodexControlHistory(..)
+                | Command::Inbox(_)
+        ) {
+            &self.history
+        } else if matches!(
+            command,
+            Command::Open(_)
+                | Command::Archive(..)
+                | Command::DeleteSession(..)
+                | Command::Task(
+                    Task::RemoveWorktree { .. }
+                        | Task::RenameWorktree { .. }
+                        | Task::CreateWorktree { .. }
+                )
+        ) {
+            &self.actions
+        } else {
+            &self.normal
+        };
+        queue
+            .try_send((id, command))
+            .map_err(|_| "Too many pending requests; try again shortly".into())
+    }
+}
+
 pub(super) struct Workers {
     thread: JoinHandle<()>,
     stop: oneshot::Sender<()>,
 }
 
 impl Workers {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn start(
-        normal: mpsc::Receiver<Request>,
-        history: mpsc::Receiver<Request>,
-        actions: mpsc::Receiver<Request>,
-        control: mpsc::Receiver<Request>,
         execute: Execute,
         sender: SyncSender<Event>,
         wake: Arc<dyn Fn() + Send + Sync>,
         closed: Arc<AtomicBool>,
-    ) -> Self {
+    ) -> (Mailboxes, Self) {
+        let (normal_tx, normal) = mpsc::channel(1024);
+        let (history_tx, history) = mpsc::channel(128);
+        let (actions_tx, actions) = mpsc::channel(128);
+        let (control_tx, control) = mpsc::channel(128);
         let (stop, stopped) = oneshot::channel();
         let thread = thread::Builder::new()
             .name("caelum-commands".into())
@@ -77,7 +126,15 @@ impl Workers {
                 // Dropping the runtime waits for blocking work already running.
             })
             .expect("start command dispatcher");
-        Self { thread, stop }
+        (
+            Mailboxes {
+                normal: normal_tx,
+                history: history_tx,
+                actions: actions_tx,
+                control: control_tx,
+            },
+            Self { thread, stop },
+        )
     }
 
     pub(super) fn stop(self) -> JoinHandle<()> {
