@@ -172,6 +172,40 @@ pub fn active(l: &Live, index: usize) -> Option<&QuestionPrompt> {
         .or_else(|| l.app.questions.iter().find(|p| belongs(p, session)))
 }
 
+pub(crate) fn preview(l: &Live, index: usize) -> Option<String> {
+    let prompt = active(l, index)?;
+    let title = prompt.title.trim();
+    let question = if title.is_empty()
+        || ["Question", "Questions"]
+            .iter()
+            .any(|s| title.eq_ignore_ascii_case(s))
+    {
+        let visible = l
+            .forms
+            .drafts
+            .get(&key(prompt))
+            .map(|draft| answer(prompt, draft).active);
+        prompt
+            .fields
+            .iter()
+            .filter(|field| {
+                visible
+                    .as_ref()
+                    .is_none_or(|keys| keys.iter().any(|k| field["key"] == *k))
+            })
+            .find_map(|field| {
+                ["description", "label", "title"]
+                    .iter()
+                    .filter_map(|k| field[*k].as_str())
+                    .find(|s| !s.trim().is_empty())
+            })
+            .unwrap_or("The agent has a question.")
+    } else {
+        title
+    };
+    Some(caelum_core::application::presentation::excerpt(question))
+}
+
 fn scroll_key(index: usize, prompt: &QuestionPrompt) -> String {
     format!("question-fields-{index}-{}", prompt.request_id)
 }

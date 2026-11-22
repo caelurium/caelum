@@ -16,8 +16,10 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent) -> El {
     let tool = Tool::from_entry(entry, now());
     let row_id = live(s).app.sessions[index].transcript_id(entry);
-    let id = row_id.to_string();
-    let expanded = live(s).expanded.contains(&(index, id.clone()));
+    let id = entry.id.clone();
+    let disclosure = row_id.to_string();
+    let escape_disclosure = disclosure.clone();
+    let expanded = live(s).expanded.contains(&(index, disclosure.clone()));
     let state = match tool.outcome {
         Outcome::Running => "Running",
         Outcome::Success => "Completed",
@@ -32,38 +34,24 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
     };
     let heading = k
         .interactive(
-            col()
+            row()
                 .w_full()
-                .gap(6.0)
+                .center_y()
+                .gap(7.0)
                 .padding(10.0)
                 .radius(8.0)
-                .child(
-                    row()
-                        .w_full()
-                        .center_y()
-                        .gap(7.0)
-                        .child(icon(&ui::AGENT, 15.0).color(k.c.icon_muted))
-                        .child(
-                            text(format!("Subagent · {}", task.agent))
-                                .font(k.ty.small_medium)
-                                .color(k.c.text_base)
-                                .truncate()
-                                .min_w(0.0)
-                                .grow(1.0),
-                        )
-                        .child(ui::caption(state, k).color(ink))
-                        .children(
-                            (tool.outcome != Outcome::Running)
-                                .then(|| ui::outcome(tool.outcome, k)),
-                        )
-                        .child(ui::disclosure(expanded, k)),
-                )
+                .child(icon(&ui::AGENT, 15.0).color(k.c.icon_muted))
                 .child(
                     text(&task.description)
-                        .font(k.ty.ui)
+                        .font(k.ty.ui_medium)
                         .color(k.c.text_base)
-                        .wrap_anywhere(),
-                ),
+                        .truncate()
+                        .min_w(0.0)
+                        .grow(1.0),
+                )
+                .child(ui::caption(state, k).color(ink))
+                .children((tool.outcome != Outcome::Running).then(|| ui::outcome(tool.outcome, k)))
+                .child(ui::disclosure(expanded, k)),
         )
         .role("button")
         .label(format!("{}: {}", task.agent, task.description))
@@ -72,11 +60,24 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         .focusable(true)
         .focus_ring(1.5, 0.0, k.c.border_focus)
         .key(format!("subagent-{index}-{row_id}"))
+        .on_key(move |s: &mut Workspace, ev, tx| {
+            if ev.key == rune::Key::Escape
+                && live_mut(s)
+                    .expanded
+                    .remove(&(index, escape_disclosure.clone()))
+            {
+                tx.keep_on_screen(format!("subagent-{index}-{escape_disclosure}"));
+                return true;
+            }
+            false
+        })
         .on_press_tx(move |s: &mut Workspace, tx| {
-            tx.keep_on_screen(format!("subagent-{index}-{id}"));
-            let expanded = &mut live_mut(s).expanded;
-            if !expanded.remove(&(index, id.clone())) {
-                expanded.insert((index, id.clone()));
+            tx.keep_on_screen(format!("subagent-{index}-{disclosure}"));
+            let l = live_mut(s);
+            if !l.expanded.remove(&(index, disclosure.clone())) {
+                l.expanded.insert((index, disclosure.clone()));
+                l.app.peek_subagent(index, &id);
+                l.sync_editors();
             }
         });
     let mut content = col()
@@ -84,22 +85,28 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         .radius(9.0)
         .border(1.0, k.c.border_muted)
         .child(heading);
-    let mut footer = row().w_full().center_y().gap(6.0).px(10.0).pb(6.0).child(
-        ui::caption(
-            if tool.outcome == Outcome::Running {
-                if task.session_id.is_some() {
-                    "Working in a child session"
-                } else {
-                    "Starting task…"
-                }
-            } else {
-                &tool.timing
-            },
-            k,
-        )
-        .grow(1.0),
-    );
-    if task.session_id.is_some() {
+    if !tool.error.is_empty() {
+        content = content.child(
+            ui::caption(&tool.error, k)
+                .color(k.c.danger.fg)
+                .px(10.0)
+                .pb(8.0),
+        );
+    }
+    if !expanded {
+        return content;
+    }
+    let mut footer = row()
+        .w_full()
+        .center_y()
+        .gap(6.0)
+        .px(10.0)
+        .child(ui::caption(format!("Subagent · {}", task.agent), k))
+        .child(ui::caption(&tool.timing, k).grow(1.0));
+    if let Some(child) = task.session_id.as_deref() {
+        if let Some(preview) = child_preview(s, k, index, child) {
+            content = content.child(preview);
+        }
         let id = entry.id.clone();
         footer = footer.child(
             ui::Button::new("Open session")
@@ -117,27 +124,59 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         );
     }
     content = content.child(footer);
-    if !tool.error.is_empty() {
-        content = content.child(
-            ui::caption(&tool.error, k)
-                .color(k.c.danger.fg)
-                .px(10.0)
-                .pb(8.0),
-        );
+    let mut details = col().w_full().gap(10.0).padding(10.0);
+    if let Some(model) = &task.model {
+        details = details.child(ui::caption(format!("Model · {model}"), k));
     }
-    if expanded {
-        let mut details = col().w_full().gap(10.0).padding(10.0);
-        if let Some(model) = &task.model {
-            details = details.child(ui::caption(format!("Model · {model}"), k));
+    for (name, value) in [("Result", &tool.output), ("Prompt", &task.prompt)] {
+        if !value.is_empty() {
+            details = details.child(section(s, k, index, &entry.id, name, value));
         }
-        for (name, value) in [("Result", &tool.output), ("Prompt", &task.prompt)] {
-            if !value.is_empty() {
-                details = details.child(section(s, k, index, &row_id, name, value));
-            }
-        }
-        content = content.child(details);
     }
-    content
+    content.child(details)
+}
+
+fn child_preview(s: &Workspace, k: &Kit, parent: usize, child: &str) -> Option<El> {
+    use caelum_core::application::presentation::{excerpt, latest_message};
+    let l = live(s);
+    let owner = &l.app.sessions[parent];
+    let (index, session) = l.app.sessions.iter().enumerate().find(|(i, v)| {
+        *i != parent
+            && !v.forgotten()
+            && !v.archived()
+            && v.scope == owner.scope
+            && v.remote_id.as_deref() == Some(child)
+    })?;
+    let (label, detail, ink) = if let Some(question) = crate::questions::preview(l, index) {
+        ("Needs your input", question, k.c.warning.fg)
+    } else if let Some((_, text)) = latest_message(&session.conversation.entries) {
+        ("From the child conversation", text, k.c.text_accent)
+    } else if let Some(error) = &session.error {
+        ("Child conversation", excerpt(error), k.c.danger.fg)
+    } else if session.loading() {
+        (
+            "Child conversation",
+            "Loading messages…".into(),
+            k.c.text_muted,
+        )
+    } else {
+        return None;
+    };
+    Some(
+        col()
+            .w_full()
+            .px(10.0)
+            .pb(8.0)
+            .gap(3.0)
+            .child(ui::caption(label, k).color(ink))
+            .child(
+                text(detail)
+                    .font(k.ty.ui)
+                    .color(k.c.text_base)
+                    .wrap_anywhere()
+                    .max_lines(3),
+            ),
+    )
 }
 
 fn section(s: &Workspace, k: &Kit, index: usize, id: &str, name: &str, value: &str) -> El {

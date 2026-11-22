@@ -4,10 +4,13 @@ use caelum_protocol::{GitHubPullRequestDetails, GitHubStatusCheck};
 use serde_json::Value;
 
 mod activity;
+mod excerpt;
 
 pub use activity::activity;
 pub use activity::Activity;
 pub use activity::ActivityKind;
+pub use excerpt::excerpt;
+pub use excerpt::latest_message;
 
 #[derive(Clone, Debug)]
 pub struct Media {

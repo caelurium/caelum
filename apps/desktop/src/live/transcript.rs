@@ -69,7 +69,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
     let count = visible.len();
     let keys = visible.clone();
     let rows = visible.clone();
-    let reading = live.reading[index].clone();
+    let reading = live.reading[index].position.clone();
     let kit = k.clone();
     col()
         .key(format!("live-transcript-{index}"))

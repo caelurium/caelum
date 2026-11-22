@@ -83,7 +83,7 @@ pub fn composer_context(s: &Workspace, k: &Kit, index: usize) -> El {
     context.child(crate::composer::attachments(s, k, index))
 }
 
-fn queued_preview(text: &str) -> &str {
+pub(super) fn queued_preview(text: &str) -> &str {
     text.lines()
         .next()
         .filter(|line| !line.trim().is_empty())

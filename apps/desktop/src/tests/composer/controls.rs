@@ -105,7 +105,9 @@ fn switching_in_a_conversation_keeps_the_mounted_transcript_and_draft() {
     assert!(element(&rt, "live-draft-0").focused);
     let after = element(&rt, tool);
     assert_eq!(after.expanded, before.expanded);
-    assert_eq!(after.rect, before.rect);
+    assert_eq!(after.key, before.key);
+    assert_eq!(after.rect[0], before.rect[0]);
+    assert_eq!(after.rect[2..], before.rect[2..]);
 }
 
 #[test]

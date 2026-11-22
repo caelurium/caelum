@@ -199,11 +199,26 @@ impl Workspace {
     }
 
     pub fn needs_input(&self, session: &Session) -> bool {
-        self.approvals.iter().any(|p| {
+        self.has_question(session) || self.pending_approval(session, true).is_some()
+    }
+
+    pub(in crate::application) fn pending_approval(
+        &self,
+        session: &Session,
+        project_approvals: bool,
+    ) -> Option<&ApprovalPrompt> {
+        self.approvals.iter().find(|p| {
             p.project_path == session.scope.project
                 && p.provider == session.scope.provider.as_str()
-                && (p.session_id.is_none() || p.session_id == session.remote_id)
-        }) || self.questions.iter().any(|p| {
+                && match &p.session_id {
+                    Some(id) => Some(id) == session.remote_id.as_ref(),
+                    None => project_approvals,
+                }
+        })
+    }
+
+    pub(in crate::application) fn has_question(&self, session: &Session) -> bool {
+        self.questions.iter().any(|p| {
             p.project_path == session.scope.project
                 && p.provider == session.scope.provider.as_str()
                 && Some(&p.session_id) == session.remote_id.as_ref()

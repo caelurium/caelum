@@ -54,8 +54,10 @@ Tool-launched background completions arrive as synthetic messages tagged
 command results with output, Copy, and exit status. An open output reader switches
 to the final transcript output when the running command's cache is retired.
 
-Subagent calls appear as named task cards with their agent, task description,
-running/completed/failed state, and expandable, copyable prompts and results.
+Subagent calls appear as task disclosures. Expand the task name to peek at the
+child's latest exchange or pending question without leaving the parent. Its
+prompt and result can be copied independently. Collapse the row, or press Escape
+while its heading is focused, to return to reading.
 Background launch acknowledgements remain running until the provider's tagged
 completion report arrives. Live reports and restored history finish the original
 task without duplicating its output; older reports cannot finish a newer follow-up.
@@ -63,6 +65,8 @@ The composer and sidebar indicate outstanding subagents while the parent waits.
 **Open session** resumes the child in its captured checkout, preserving the parent
 draft; the child offers **Back to parent session**. Child history is loaded on
 demand through the normal scoped resume path.
+
+![A child conversation expanded beneath its parent prompt](design/previews/rune-dark-subagent-peek-small.png)
 
 ## Setup
 

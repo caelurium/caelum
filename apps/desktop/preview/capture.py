@@ -26,6 +26,7 @@ interactions = {
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
     "question-pending": ("questions", [{"t": 0.25, "key": "question-submit-fixture"}]),
     "session-feed-filter": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}]),
+    "conversation-overview-idle": ("session-feed", [{"t": 0.25, "key": "open-conversations"}]),
     "session-feed-search": ("session-feed", [{"t": 0.25, "key": "session-search"}, {"t": 0.4, "paste": "focus"}]),
     "session-feed-project": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}, {"t": 0.5, "key": "option2"}]),
     "composer-focus": ("", [{"t": 0.25, "key": "live-draft-0"}]),
@@ -80,8 +81,9 @@ scenes += ("overview-cached",)
 scenes += ("provider-timeout", "provider-rejection")
 scenes += ("shells-collapsed", "vercel", "vercel-settings", "sidebar-projects")
 scenes += ("shell-completed", "shell-output-completed")
-scenes += ("subagent-running", "subagent-completed", "subagent-failed")
+scenes += ("subagent-running", "subagent-completed", "subagent-failed", "subagent-peek")
 scenes += ("session-feed", "session-feed-current", "session-feed-empty", "session-feed-many", "session-feed-colours", "session-review-feedback")
+scenes += ("conversation-overview",)
 scenes += ("sidebar-worktrees", "sidebar-worktrees-many", "sidebar-worktrees-projects", "sidebar-worktrees-vercel", "worktrees-empty")
 scenes += ("patch-short", "patch-long", "patch-multi", "vercel-patch-short", "vercel-patch-long", "vercel-patch-multi")
 scenes += ("about-checking", "about-current", "about-update", "about-release", "about-ahead", "about-error", "vercel-about", "vercel-about-update")

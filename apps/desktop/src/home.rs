@@ -119,7 +119,9 @@ pub fn send(s: &mut Workspace, tx: &mut Tx) {
 pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let shown = l.panels.screen == Screen::Home;
     let mut changed = false;
-    if shown && l.home.background.is_none() {
+    if (shown || l.panels.overlay() == Some(Screen::ConversationOverview))
+        && l.home.background.is_none()
+    {
         let background = Background {
             dark: l.media.home_background(true),
             light: l.media.home_background(false),

@@ -98,6 +98,13 @@ pub struct Inbox {
 }
 
 impl Inbox {
+    pub(super) fn queued_text(&self) -> Option<&str> {
+        self.items
+            .iter()
+            .find(|item| !matches!(item.phase, Phase::EnqueueFailed(_)))
+            .map(|item| item.text.as_str())
+    }
+
     pub(super) fn enqueue(&mut self, id: String, text: String, request: u64) {
         self.items.push(InboxPrompt {
             id,

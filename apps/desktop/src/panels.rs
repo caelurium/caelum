@@ -1,6 +1,7 @@
 //! Native workspace views; all reads, mutations and response ownership are in core.
 mod appearance;
 mod changes;
+pub(crate) mod conversations;
 mod feedback;
 mod files;
 mod launcher;
@@ -46,6 +47,7 @@ pub enum Screen {
     Home,
     #[default]
     Conversation,
+    ConversationOverview,
     Files,
     Changes,
     Worktrees,
@@ -612,6 +614,9 @@ pub(crate) fn find_files(s: &mut Workspace, content: bool) {
 }
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if live(s).panels.overlay() == Some(Screen::ConversationOverview) {
+        return conversations::key(s, ev, tx);
+    }
     if live(s).panels.overlay().is_some() {
         if live(s).panels.overlay() == Some(Screen::Fork) && matches!(ev.key, Key::Up | Key::Down) {
             return crate::commands::fork_key(s, ev, tx);
@@ -634,7 +639,9 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             .any(|c| ev.is_command(*c))
             || ev.key == Key::Escape;
     }
-    if ev.is_command('f')
+    if conversations::shortcut(ev) {
+        conversations::open(s, tx);
+    } else if ev.is_command('f')
         && !ev.mods.shift
         && s.inspector.is_open()
         && live(s).panels.inspector == Screen::Files

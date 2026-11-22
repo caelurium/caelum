@@ -9,6 +9,17 @@ use caelum_core::application::EntryKind;
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::Kit;
 
+pub(crate) fn open(s: &mut Workspace) {
+    let l = live_mut(s);
+    let Some(index) = l.app.selected else { return };
+    l.commands.owner = Some(index);
+    l.commands.search.clear();
+    l.commands.timeline_selected = l.current_prompt.clone();
+    l.commands.timeline_current = l.current_prompt.clone();
+    l.panels.set_overlay(Some(Screen::Timeline));
+    l.commands.search.focused = true;
+}
+
 pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
     let l = live(s);
     let session = &l.app.sessions[index];

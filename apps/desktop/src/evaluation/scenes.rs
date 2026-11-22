@@ -48,6 +48,15 @@ pub(crate) const SCENES: &[Scene] = &[
     ("subagent-running", |s| {
         crate::subagents::scene(s, "running")
     }),
+    ("subagent-peek", |s| {
+        crate::subagents::scene(s, "running");
+        let l = s.live.as_mut().unwrap();
+        let child = l.app.peek_subagent(0, "opencode-tool-explore").unwrap();
+        l.app.sessions[child].conversation.entries.push(caelum_core::application::Entry::new(
+            "child-reply".into(), caelum_core::application::EntryKind::Assistant,
+            "I found where the retry timer is armed. I’m checking what happens after a manual disconnect.".into(), true));
+        l.sync_editors();
+    }),
     ("subagent-completed", |s| {
         crate::subagents::scene(s, "completed")
     }),
@@ -138,6 +147,9 @@ pub(crate) const SCENES: &[Scene] = &[
     ("vercel-settings", |s| scene(s, "vercel-settings")),
     ("sidebar-projects", |s| scene(s, "sidebar-projects")),
     ("session-feed", |s| scene(s, "session-feed")),
+    ("conversation-overview", |s| {
+        scene(s, "conversation-overview")
+    }),
     ("session-review-feedback", |s| {
         scene(s, "session-review-feedback")
     }),

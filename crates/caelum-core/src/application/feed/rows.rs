@@ -1,5 +1,5 @@
 use super::Workspace;
-use crate::remote::{Thread, VmLink};
+use crate::remote::{Thread, Turn, VmLink};
 use std::cmp::Reverse;
 
 /// Feed identity never depends on a row position, title, or provider conversation ID.
@@ -7,6 +7,14 @@ use std::cmp::Reverse;
 pub enum FeedSession {
     Local(usize),
     Vm(VmLink),
+}
+
+enum Feed<'a> {
+    Sidebar {
+        project: Option<&'a str>,
+        archived: bool,
+    },
+    Overview,
 }
 
 impl FeedSession {
@@ -42,14 +50,38 @@ impl Workspace {
         query: &str,
         archived: bool,
     ) -> Vec<FeedSession> {
+        let mut rows = self.feed_rows(Feed::Sidebar { project, archived }, query);
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
+    /// Conversations with live work or a pending request, in stable identity order across open projects.
+    pub fn overview_sessions(&self, query: &str) -> Vec<FeedSession> {
+        let mut rows: Vec<_> = self
+            .feed_rows(Feed::Overview, query)
+            .into_iter()
+            .map(|(_, row)| row)
+            .collect();
+        rows.sort_unstable();
+        rows
+    }
+
+    fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<(Reverse<Option<u64>>, FeedSession)> {
+        let includes = |path: &str| match feed {
+            Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
+            Feed::Overview => self.project_is_open(path),
+        };
+        let archived = matches!(feed, Feed::Sidebar { archived: true, .. });
+        let active_only = matches!(feed, Feed::Overview);
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
-            .matching_local_sessions(project, &query, archived)
+            .matching_local_sessions(&includes, &query, archived)
+            .filter(|(_, s)| !active_only || self.overview_activity(s).is_some())
             .map(|(i, s)| (Reverse(s.last_activity), FeedSession::Local(i)))
             .collect();
         if !archived {
             for (id, c) in &self.remote.saved.checkouts {
-                if !self.feed_includes_project(&c.source.project, project) {
+                if !includes(&c.source.project) {
                     continue;
                 }
                 let matches_vm = query.is_empty() || {
@@ -70,6 +102,9 @@ impl Workspace {
                     .contains(&query)
                 };
                 for t in c.threads() {
+                    if active_only && t.turn == Turn::Idle {
+                        continue;
+                    }
                     if t.is_blank()
                         && t.local_id.is_none()
                         && self.sessions.iter().any(|s| {
@@ -89,7 +124,6 @@ impl Workspace {
                 }
             }
         }
-        rows.sort_unstable();
-        rows.into_iter().map(|(_, row)| row).collect()
+        rows
     }
 }
