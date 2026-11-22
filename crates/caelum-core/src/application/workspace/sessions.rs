@@ -71,7 +71,7 @@ impl Workspace {
             Command::Choices(scope.clone()),
             Pending::Choices(scope.clone()),
         );
-        if scope.provider == Provider::OpenCode {
+        if matches!(scope.provider, Provider::OpenCode | Provider::Antigravity) {
             self.request(Command::Commands(scope.clone()), Pending::Commands(scope));
         }
     }

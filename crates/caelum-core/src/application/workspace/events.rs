@@ -113,6 +113,20 @@ impl Workspace {
                     &event.data,
                 )
             }
+            Event::Antigravity(mut event) => {
+                if let (Some(session_id), Some(data)) =
+                    (event.session_id.as_deref(), event.params.as_object_mut())
+                {
+                    data.entry("sessionId".to_owned())
+                        .or_insert_with(|| Value::String(session_id.to_owned()));
+                }
+                self.provider_event(
+                    &event.project_path,
+                    Provider::Antigravity,
+                    &event.method,
+                    &event.params,
+                )
+            }
         }
     }
 
@@ -162,6 +176,7 @@ impl Workspace {
             let deleted = match provider {
                 Provider::Codex => data["threadId"].as_str(),
                 Provider::OpenCode => data["sessionID"].as_str(),
+                Provider::Antigravity => data["sessionId"].as_str(),
             };
             if let Some(id) = deleted {
                 let indices = self
@@ -181,12 +196,16 @@ impl Workspace {
             }
             return;
         }
-        let disconnected = matches!(method, "codex/processExited" | "server.disconnected");
+        let disconnected = matches!(
+            method,
+            "codex/processExited" | "server.disconnected" | "antigravity/processExited"
+        );
         let id = match provider {
             Provider::Codex => data["threadId"].as_str().or(data["thread"]["id"].as_str()),
             Provider::OpenCode => data["sessionID"]
                 .as_str()
                 .or(data["session"]["id"].as_str()),
+            Provider::Antigravity => data["sessionId"].as_str(),
         };
         let mut completed = Vec::new();
         let mut shells_completed = Vec::new();
@@ -299,7 +318,10 @@ impl Workspace {
                 }
             }
             session.revision += 1;
-            if matches!(method, "turn/started" | "session.execution.started") {
+            if matches!(
+                method,
+                "turn/started" | "session.execution.started" | "antigravity/turnStarted"
+            ) {
                 let options = session
                     .pending_prompt()
                     .map_or(&session.options, |prompt| &prompt.options);
@@ -326,6 +348,7 @@ impl Workspace {
                 method,
                 "session.execution.failed" | "session.execution.interrupted"
             ) || (method == "turn/completed" && !data["turn"]["error"].is_null())
+                || (method == "antigravity/turnCompleted" && !data["error"].is_null())
             {
                 session.queue_paused = true;
             }
@@ -349,7 +372,10 @@ impl Workspace {
                         data["threadName"].as_str()
                     } else if matches!(
                         method,
-                        "session.title.updated" | "session.updated" | "session.renamed"
+                        "session.title.updated"
+                            | "session.updated"
+                            | "session.renamed"
+                            | "session_info_update"
                     ) {
                         data["title"].as_str()
                     } else {

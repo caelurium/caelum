@@ -2,6 +2,7 @@ use serde_json::Value;
 
 use super::Provider;
 
+mod antigravity;
 mod entry;
 mod failure;
 mod handoff;
@@ -95,6 +96,9 @@ impl Conversation {
                 }
             }
         }
+        if provider == Provider::Antigravity {
+            antigravity::apply_history_usage(self, data);
+        }
         let entries = match provider {
             Provider::Codex => data
                 .iter()
@@ -157,6 +161,7 @@ impl Conversation {
                     })
                 })
                 .collect(),
+            Provider::Antigravity => antigravity::history_entries(data),
         };
         reconciliation::merge(self, entries, older);
         if provider == Provider::OpenCode {
@@ -243,6 +248,9 @@ impl Conversation {
             || method.ends_with(".started")
             || method == "item/started"
             || method == "turn/started"
+            || method == "antigravity/turnStarted"
+            || method == "agent_message_chunk"
+            || method == "agent_thought_chunk"
             || (method == "session.status" && data["status"]["type"] == "busy")
         {
             self.set_retrying(false);
@@ -250,6 +258,7 @@ impl Conversation {
         match provider {
             Provider::Codex => self.codex(method, data),
             Provider::OpenCode => self.opencode(method, data),
+            Provider::Antigravity => antigravity::apply_event(self, method, data),
         }
     }
 

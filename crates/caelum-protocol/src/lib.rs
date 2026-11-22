@@ -631,6 +631,51 @@ pub struct OpenCodeEvent {
     pub location: Option<serde_json::Value>,
 }
 
+/// Summary of an Antigravity ACP session scoped to one project directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravitySession {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub updated_at: Option<u64>,
+    #[serde(default)]
+    pub is_working: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+}
+
+/// The selected project and Antigravity ACP session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravitySessionInfo {
+    pub project: ProjectInfo,
+    pub session: AntigravitySession,
+}
+
+/// Recent Antigravity ACP sessions scoped to one project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravitySessionList {
+    pub project: ProjectInfo,
+    pub sessions: Vec<AntigravitySession>,
+}
+
+/// A live notification or lifecycle event emitted by an Antigravity ACP server.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntigravityEvent {
+    pub project_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    pub method: String,
+    pub params: serde_json::Value,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

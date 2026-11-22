@@ -102,6 +102,19 @@ impl Live {
                         .or(e.data["session"]["id"].as_str())?,
                 )
             }
+            Event::Antigravity(e)
+                if matches!(
+                    e.method.as_str(),
+                    "agent_message_chunk" | "agent_thought_chunk"
+                ) =>
+            {
+                (
+                    Provider::Antigravity,
+                    &e.project_path,
+                    &e.params,
+                    e.session_id.as_deref().or(e.params["sessionId"].as_str())?,
+                )
+            }
             _ => return None,
         };
 

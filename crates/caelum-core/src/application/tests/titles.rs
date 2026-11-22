@@ -321,6 +321,12 @@ fn live_title_renames_survive_stale_resume_snapshots() {
                 "thread/name/updated",
                 json!({"threadName":"Fresh title"}),
             ),
+            Provider::Antigravity => Event::Antigravity(caelum_protocol::AntigravityEvent {
+                project_path: "/a".into(),
+                session_id: Some("one".into()),
+                method: "session_info_update".into(),
+                params: json!({"title":"Fresh title"}),
+            }),
         };
         app.apply(renamed);
         app.apply(Event::Completed(

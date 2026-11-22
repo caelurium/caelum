@@ -32,14 +32,14 @@ fn feed_discovers_all_open_scopes_once_and_forgets_closed_projects() {
             .iter()
             .filter(|(_, c)| matches!(c, Command::List(_)))
             .count(),
-        4
+        6
     );
     assert_eq!(
         commands
             .iter()
             .filter(|(_, c)| matches!(c, Command::ListArchived(_)))
             .count(),
-        4
+        6
     );
     for (request, _) in commands {
         app.apply(Event::Completed(request, Ok(Reply::Sessions(vec![]))));

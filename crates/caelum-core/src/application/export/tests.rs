@@ -45,6 +45,10 @@ fn exports_all_pages_oldest_first_with_the_stated_scope_and_without_touching_the
                 json!({"id":"first","type":"user","text":prompt}),
                 json!({"id":"last","type":"assistant","content":[{"id":"t","type":"tool","name":"shell","state":{"status":"completed","input":"git status","content":[{"type":"text","text":"tree clean"}]}},{"type":"text","text":"Finished"}]}),
             ),
+            Provider::Antigravity => (
+                json!({"id":"first","type":"user","text":prompt}),
+                json!({"id":"last","type":"tool","name":"shell","status":"completed","input":"git status","output":"tree clean\nFinished"}),
+            ),
         };
         for format in [ExportFormat::Json, ExportFormat::Markdown] {
             let path = dir.path().join(format.extension());

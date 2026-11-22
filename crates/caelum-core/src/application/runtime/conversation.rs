@@ -64,6 +64,10 @@ impl ProviderRuntime {
                 .opencode
                 .session_history(&key.scope.project, &key.id, cursor)
                 .map_err(|e| e.to_string()),
+            Provider::Antigravity => self
+                .antigravity
+                .session_history(&key.scope.project, &key.id)
+                .map_err(|e| e.to_string()),
         }
     }
     pub(super) fn fork(

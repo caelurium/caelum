@@ -41,6 +41,12 @@ fn event(provider: Provider, method: &str, data: serde_json::Value) -> Event {
             created: Some(1000),
             location: None,
         }),
+        Provider::Antigravity => Event::Antigravity(caelum_protocol::AntigravityEvent {
+            project_path: "/project".into(),
+            session_id: data["sessionId"].as_str().map(str::to_owned),
+            method: method.into(),
+            params: data,
+        }),
     }
 }
 
@@ -50,8 +56,9 @@ fn delta(provider: Provider, id: &str, text: &str) -> Event {
         match provider {
             Provider::Codex => "item/agentMessage/delta",
             Provider::OpenCode => "session.text.delta",
+            Provider::Antigravity => "agent_message_chunk",
         },
-        json!({"threadId":id,"sessionID":id,"itemId":"answer","assistantMessageID":"answer","delta":text,"_created":1000}),
+        json!({"threadId":id,"sessionID":id,"sessionId":id,"itemId":"answer","assistantMessageID":"answer","delta":text,"content":{"type":"text","text":text},"_created":1000}),
     )
 }
 
@@ -123,6 +130,9 @@ fn background_unread_retry_and_title_changes_invalidate_the_view() {
             Event::OpenCode(e) => {
                 e.data["session"] = json!({"id":"background","title":"New title"})
             }
+            Event::Antigravity(e) => {
+                e.params["session"] = json!({"id":"background","title":"New title"})
+            }
             _ => unreachable!(),
         }
         assert!(l.apply_events([renamed]));
@@ -141,6 +151,7 @@ fn redraw_suppression_keeps_project_provider_and_unique_session_ownership() {
         l.app.sessions[0].scope.provider = match provider {
             Provider::Codex => Provider::OpenCode,
             Provider::OpenCode => Provider::Codex,
+            Provider::Antigravity => Provider::Codex,
         };
         assert!(!l.apply_events([delta(provider, "background", " provider")]));
         l.app.sessions[0].scope.provider = provider;
@@ -158,6 +169,7 @@ fn redraw_suppression_keeps_project_provider_and_unique_session_ownership() {
                 e.data.as_object_mut().unwrap().remove("sessionID");
                 e.data["session"] = json!({"id":"background"});
             }
+            Event::Antigravity(_) => {}
             _ => unreachable!(),
         }
         assert!(!l.apply_events([nested]));

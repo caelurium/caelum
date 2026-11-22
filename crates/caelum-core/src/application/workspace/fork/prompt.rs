@@ -14,6 +14,7 @@ pub(super) fn recover(provider: Provider, text: &str, user: &Value) -> Result<Dr
     let parts = match provider {
         Provider::Codex => &user["content"],
         Provider::OpenCode => &user["files"],
+        Provider::Antigravity => &Value::Null,
     };
     for part in parts.as_array().into_iter().flatten() {
         if provider == Provider::Codex && part["type"] == "text" {

@@ -54,10 +54,11 @@ pub enum Provider {
     #[default]
     Codex,
     OpenCode,
+    Antigravity,
 }
 
 impl Provider {
-    pub const ALL: [Self; 2] = [Self::Codex, Self::OpenCode];
+    pub const ALL: [Self; 3] = [Self::Codex, Self::OpenCode, Self::Antigravity];
 
     pub fn for_project(project: Option<&str>) -> &'static [Self] {
         if project
@@ -74,6 +75,7 @@ impl Provider {
         match self {
             Self::Codex => "Codex",
             Self::OpenCode => "OpenCode",
+            Self::Antigravity => "Antigravity",
         }
     }
 
@@ -81,6 +83,7 @@ impl Provider {
         match self {
             Self::Codex => "codex",
             Self::OpenCode => "opencode",
+            Self::Antigravity => "antigravity",
         }
     }
 }

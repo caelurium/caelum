@@ -1,7 +1,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use caelum_protocol::{
-    CodexEvent, GitRepositoryStatus, OpenCodeEvent, SessionBranchUpdate, SessionDetails,
+    AntigravityEvent, CodexEvent, GitRepositoryStatus, OpenCodeEvent, SessionBranchUpdate,
+    SessionDetails,
 };
 
 use crate::{
@@ -32,13 +33,15 @@ enum Attribution {
 enum Identity {
     Codex(String),
     OpenCode(Option<u64>),
+    Antigravity,
 }
 
 impl Identity {
     fn same_start(&self, incoming: &Self) -> bool {
         match (self, incoming) {
             (Self::Codex(left), Self::Codex(right)) => left == right,
-            (Self::OpenCode(_), Self::OpenCode(_)) => true,
+            (Self::OpenCode(_), Self::OpenCode(_))
+            | (Self::Antigravity, Self::Antigravity) => true,
             _ => false,
         }
     }
@@ -143,6 +146,19 @@ impl SessionBranches {
             _ => return None,
         };
         self.execution(&event.project_path, "opencode", id, change)
+    }
+
+    pub fn antigravity_event(&self, event: &AntigravityEvent) -> Option<SessionBranchUpdate> {
+        if event.method == "antigravity/processExited" {
+            self.disconnect(&event.project_path, "antigravity");
+        }
+        let id = event.session_id.as_deref()?;
+        let change = match event.method.as_str() {
+            "antigravity/turnStarted" => ExecutionEvent::Started(Identity::Antigravity),
+            "antigravity/turnCompleted" => ExecutionEvent::Finished(Identity::Antigravity),
+            _ => return None,
+        };
+        self.execution(&event.project_path, "antigravity", id, change)
     }
 
     pub fn details(
