@@ -68,8 +68,11 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
         LocalCommand::Timeline => super::open_timeline(s),
         LocalCommand::Usage => {
             l.panels.set_overlay(Some(Screen::Usage));
-            let project = l.app.sessions[index].scope.project.clone();
-            l.app.task(Task::Usage { project });
+            let scope = l.app.sessions[index].scope.clone();
+            l.app.task(Task::Usage {
+                project: scope.project,
+                provider: scope.provider,
+            });
         }
         LocalCommand::Stats => {
             l.commands.stats_anchor = caelum_core::application::presentation::now();

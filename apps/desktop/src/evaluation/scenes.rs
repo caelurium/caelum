@@ -412,3 +412,25 @@ pub(super) fn composer_queue(session: &mut caelum_core::application::Session, na
         }
     }
 }
+
+pub(super) fn apply_usage(
+    app: &mut caelum_core::application::Workspace,
+    project: &str,
+    name: &str,
+) {
+    use caelum_core::application::{Provider, Task};
+    if name == "usage" {
+        app.services.checkouts.get_mut(project).unwrap().usage.insert(
+            Provider::OpenCode,
+            serde_json::json!({
+                "workspace": {"name": "Personal workspace"},
+                "go": {"rolling": {"percent": 24}, "weekly": {"percent": 68}, "monthly": {"percent": 12}}
+            }),
+        );
+    } else if name == "usage-loading" {
+        app.task(Task::Usage {
+            project: project.into(),
+            provider: Provider::OpenCode,
+        });
+    }
+}

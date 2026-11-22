@@ -59,6 +59,10 @@ pub(super) fn apply_event(conversation: &mut Conversation, method: &str, data: &
             conversation.provider_started(data);
             conversation.set_working(true);
         }
+        "antigravity/turnYielded" => {
+            conversation.settle_streaming();
+            conversation.set_working(true);
+        }
         "antigravity/turnCompleted" => {
             if let Some(error) = data["error"].as_str().filter(|e| !e.is_empty()) {
                 let id = format!("acp-error-{}", conversation.entries.len() + 1);
