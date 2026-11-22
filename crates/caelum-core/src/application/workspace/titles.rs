@@ -1,21 +1,71 @@
 use super::{Pending, Workspace};
-use crate::application::{Command, Provider};
+use crate::application::{Command, Provider, SessionKey};
 
 const TURN_INTERVAL: u8 = 3;
 
 #[derive(Default)]
-pub(super) struct TitleState {
-    pub(super) manual: bool,
-    /// Successful executions since the last request, capped to coalesce work.
-    pub(super) turns: u8,
-    /// Snapshots requested before a live rename must not restore an old title.
-    pub(super) barrier: u64,
+pub(super) struct Automatic {
+    turns: u8,
+    barrier: u64,
+    update: Option<Update>,
+}
+
+struct Update {
+    request: u64,
+    owner: SessionKey,
+}
+
+pub(super) enum TitleState {
+    Automatic(Automatic),
+    Manual,
+}
+
+impl Default for TitleState {
+    fn default() -> Self {
+        Self::Automatic(Automatic::default())
+    }
 }
 
 impl TitleState {
+    pub(super) fn restored(manual: bool, turns: u8) -> Self {
+        if manual {
+            Self::Manual
+        } else {
+            Self::Automatic(Automatic {
+                turns: turns.min(TURN_INTERVAL),
+                ..Automatic::default()
+            })
+        }
+    }
+
+    pub(super) fn manual(&self) -> bool {
+        matches!(self, Self::Manual)
+    }
+
+    pub(super) fn turns(&self) -> u8 {
+        match self {
+            Self::Automatic(state) => state.turns,
+            Self::Manual => 0,
+        }
+    }
+
+    pub(super) fn allows_snapshot(&self, request: u64) -> bool {
+        matches!(self, Self::Automatic(state) if request > state.barrier)
+    }
+
+    pub(super) fn note_live_rename(&mut self, request: u64) {
+        if let Self::Automatic(state) = self {
+            state.barrier = request;
+        }
+    }
+
+    pub(super) fn updating(&self, owner: &SessionKey) -> bool {
+        matches!(self, Self::Automatic(Automatic { update: Some(update), .. }) if &update.owner == owner)
+    }
+
     pub(super) fn completed_turn(&mut self) {
-        if !self.manual {
-            self.turns = self.turns.saturating_add(1).min(TURN_INTERVAL);
+        if let Self::Automatic(state) = self {
+            state.turns = state.turns.saturating_add(1).min(TURN_INTERVAL);
         }
     }
 }
@@ -24,12 +74,11 @@ impl Workspace {
     pub(super) fn refresh_title(&mut self, index: usize) {
         let session = &mut self.sessions[index];
         if session.scope.provider != Provider::OpenCode
-            || session.title_state.manual
-            || session.title_state.turns < TURN_INTERVAL
-            || session.archived
-            || session.archiving
-            || session.forgotten
-            || session.deleting
+            || session.title_state.turns() < TURN_INTERVAL
+            || session.archived()
+            || session.archiving()
+            || session.forgotten()
+            || session.deleting()
             || session.disconnected
         {
             return;
@@ -37,18 +86,42 @@ impl Workspace {
         let Some(key) = session.key() else {
             return;
         };
-        if self
+        if session.title_state.updating(&key) || self
             .pending
             .values()
-            .any(|pending| matches!(pending, Pending::RegenerateTitle(_, owner) | Pending::ConversationControl(_,owner,super::controls::Operation::Rename(_)) if *owner == key))
+            .any(|pending| matches!(pending, Pending::ConversationControl(_,owner,super::controls::Operation::Rename(_)) if *owner == key))
         {
             return;
         }
 
-        session.title_state.turns = 0;
-        self.request(
+        let request = self.request(
             Command::RegenerateTitle(key.clone()),
-            Pending::RegenerateTitle(index, key),
+            Pending::RegenerateTitle(index),
         );
+        if let TitleState::Automatic(state) = &mut self.sessions[index].title_state {
+            state.turns = 0;
+            state.update = Some(Update {
+                request,
+                owner: key,
+            });
+        }
+    }
+
+    pub(super) fn finish_title_update(&mut self, index: usize, request: u64) {
+        let session = &mut self.sessions[index];
+        let key = session.key();
+        let TitleState::Automatic(state) = &mut session.title_state else {
+            return;
+        };
+        if state
+            .update
+            .as_ref()
+            .is_some_and(|update| update.request == request)
+        {
+            let update = state.update.take().unwrap();
+            if key.as_ref() == Some(&update.owner) {
+                self.refresh_title(index);
+            }
+        }
     }
 }

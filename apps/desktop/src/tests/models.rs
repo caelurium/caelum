@@ -205,7 +205,6 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
         });
         let session = &mut l.app.sessions[index];
         session.remote_id = Some("restored-session".into());
-        session.loaded = true;
         session.draft = "Keep this café draft".into();
         session.options.model = Some("local/model".into());
         session.options.effort = Some("low".into());
@@ -352,7 +351,7 @@ fn native_shortcuts_and_large_model_catalogue_keep_the_captured_owner() {
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[0].remote_id = Some("thread".into());
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
     });
     key(
         &mut rt,
@@ -365,9 +364,9 @@ fn native_shortcuts_and_large_model_catalogue_keep_the_captured_owner() {
     advance(&mut rt, 0.3);
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     key(&mut rt, Key::Escape, Mods::default());
-    assert!(rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
 }
 
 #[test]
@@ -399,12 +398,12 @@ fn model_popover_stays_anchored_and_returns_focus_without_cancelling_work() {
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.sessions[0]
             .conversation
-            .working = true;
+            .set_working(true);
     });
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.4);
     assert!(!rt.state.live.as_ref().unwrap().models.is_open());
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     click(&mut rt, "model-trigger");
     rt.pointer_down(250.0, 80.0);
     rt.pointer_up(250.0, 80.0);
@@ -422,7 +421,7 @@ fn models_slash_command_opens_the_picker_for_the_current_session() {
     let live = rt.state.live.as_ref().unwrap();
     assert!(live.models.is_open());
     assert!(live.app.sessions[0].draft.is_empty());
-    assert!(!live.app.sessions[0].submitting);
+    assert!(!live.app.sessions[0].submitting());
     let commands = rt.state.live.as_mut().unwrap().app.commands();
     assert!(commands.iter().any(|(_, command)| {
         matches!(
@@ -506,7 +505,7 @@ fn opencode_effort_default_controls_reset_sent_and_queued_prompts() {
                 session.remote_id = Some("ses_fake".into());
                 session.options.model = Some("local/model/a".into());
                 session.options.effort = Some("high".into());
-                session.conversation.working = working;
+                session.conversation.set_working(working);
                 app.choices.insert(
                     session.scope.clone(),
                     serde_json::from_value(serde_json::json!({

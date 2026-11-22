@@ -139,25 +139,24 @@ pub(crate) fn section(s: &Workspace, k: &Kit, project: &str) -> Option<(El, f32)
 pub(crate) fn request_removal(s: &mut Workspace, id: &str) {
     let l = live_mut(s);
     if l.app.can_remove_remote(id) {
-        l.remote.removing = Some((
-            id.into(),
-            l.app.remote.saved.checkouts[id]
+        l.panels.open_removal(crate::panels::Removal {
+            checkout: id.into(),
+            machine: l.app.remote.saved.checkouts[id]
                 .machine()
                 .map(|m| m.key.clone()),
-        ));
-        l.panels.overlay = Some(Screen::RemoveVm);
+        });
     }
 }
 
 pub(crate) fn removal(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let Some((id, c)) = l.remote.removing.as_ref().and_then(|(id, key)| {
+    let Some((id, c)) = l.panels.removal().and_then(|removal| {
         l.app
             .remote
             .saved
             .checkouts
-            .get_key_value(id)
-            .filter(|(_, c)| c.machine().map(|m| &m.key) == key.as_ref())
+            .get_key_value(&removal.checkout)
+            .filter(|(_, c)| c.machine().map(|m| &m.key) == removal.machine.as_ref())
     }) else {
         return col();
     };
@@ -216,7 +215,7 @@ pub(crate) fn removal(s: &Workspace, k: &Kit) -> El {
                         .disabled(!l.app.can_remove_remote(id))
                         .on_press(move |s: &mut Workspace| {
                             let l=live_mut(s);
-                            if l.panels.overlay==Some(Screen::RemoveVm) && l.remote.removing.as_ref().is_some_and(|(id,k)|id==&owner && k==&target) {
+                            if l.panels.removal().is_some_and(|removal| removal.checkout==owner && removal.machine==target) {
                                 l.app.remove_remote(&owner,target.as_ref());
                                 l.schedule();
                             }
@@ -229,8 +228,7 @@ pub(crate) fn removal(s: &Workspace, k: &Kit) -> El {
 
 fn cancel_removal(s: &mut Workspace) {
     let l = live_mut(s);
-    l.remote.removing = None;
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.focus();
 }
 
@@ -247,15 +245,11 @@ pub(crate) fn finish_removals(s: &mut Workspace) -> bool {
                 .any(|t| t.editor_key(id) == owner)
         })
     });
-    if l.remote
-        .removing
-        .as_ref()
-        .is_some_and(|(id, _)| removed.contains(id))
+    if l.panels
+        .removal()
+        .is_some_and(|removal| removed.contains(&removal.checkout))
     {
-        l.remote.removing = None;
-        if l.panels.overlay == Some(Screen::RemoveVm) {
-            l.panels.overlay = None;
-        }
+        l.panels.set_overlay(None);
     }
     if (l.panels.screen == Screen::Remote && l.app.remote.saved.selected.is_none())
         || (l.panels.screen == Screen::Conversation

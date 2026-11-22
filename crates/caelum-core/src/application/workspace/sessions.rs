@@ -8,8 +8,8 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter(|(_, session)| {
-                !session.archived
-                    && !session.forgotten
+                !session.archived()
+                    && !session.forgotten()
                     && self.project_is_open(&session.scope.project)
             })
             .map(|(index, _)| index)
@@ -105,7 +105,11 @@ impl Workspace {
     pub fn project_draft(&mut self, scope: Scope) -> usize {
         let scope = scope.for_new_session();
         if let Some(i) = self.sessions.iter().rposition(|s| {
-            s.scope == scope && s.remote_id.is_none() && !s.archived && !s.forgotten && !s.working()
+            s.scope == scope
+                && s.remote_id.is_none()
+                && !s.archived()
+                && !s.forgotten()
+                && !s.working()
         }) {
             self.select(i);
             i
@@ -118,8 +122,8 @@ impl Workspace {
         if let Some(i) = self.selected {
             if !self.window_background
                 && !self.conversation_hidden
-                && self.sessions[i].loaded
-                && !self.sessions[i].loading
+                && self.sessions[i].loaded()
+                && !self.sessions[i].loading()
                 && self.sessions[i].reading < 0.0
             {
                 return std::mem::take(&mut self.sessions[i].unread);
@@ -130,7 +134,7 @@ impl Workspace {
 
     pub fn select(&mut self, index: usize) {
         self.notifications.cancel();
-        if index >= self.sessions.len() || self.sessions[index].forgotten {
+        if index >= self.sessions.len() || self.sessions[index].forgotten() {
             return;
         }
         self.remote.saved.selected = None;
@@ -151,48 +155,13 @@ impl Workspace {
             self.remembered.insert(root.clone(), index);
         }
         self.selected = Some(index);
-        if !session.loaded || session.disconnected {
+        if !session.loaded() || session.disconnected {
             self.refresh(index);
         }
     }
 
-    pub fn refresh(&mut self, index: usize) {
-        let session = &mut self.sessions[index];
-        if !session.scope.provider_available()
-            || session.loading
-            || session.submitting
-            || session.relocation.pending()
-            || session.rewinding()
-        {
-            return;
-        }
-        let Some(key) = session.key() else {
-            return;
-        };
-        session.loading = true;
-        session.error = None;
-        let revision = session.revision;
-        self.request(Command::Resume(key), Pending::Resume(index, revision));
-    }
-
-    pub fn older(&mut self, index: usize) {
-        let session = &mut self.sessions[index];
-        if !session.scope.provider_available() || session.loading || session.rewinding() {
-            return;
-        }
-        let (Some(key), Some(cursor)) = (session.key(), session.next_cursor.clone()) else {
-            return;
-        };
-        session.loading = true;
-        let revision = session.revision;
-        self.request(
-            Command::History(key, Some(cursor)),
-            Pending::History(index, revision, true),
-        );
-    }
-
     pub(super) fn creating(&self, scope: &Scope) -> bool {
-        self.pending.values().any(|pending| matches!(pending, Pending::Start(index, _) if self.sessions[*index].scope == *scope))
+        self.pending.values().any(|pending| matches!(pending, Pending::Start(index) if self.sessions[*index].scope == *scope))
     }
 
     pub(super) fn apply_summaries(
@@ -213,7 +182,7 @@ impl Workspace {
                     session.scope.provider == Provider::OpenCode
                         && crate::remote::native::checkout_id(&session.scope.project).is_none()
                         && session.scope != *scope
-                        && !session.forgotten
+                        && !session.forgotten()
                         && session.remote_id.as_deref() == Some(&summary.key.id)
                 }) {
                     self.check_discovered_move(index, &scope.project, request);
@@ -225,22 +194,20 @@ impl Workspace {
                 .iter_mut()
                 .find(|session| session.key().as_ref() == Some(&summary.key))
             {
-                if session.forgotten {
+                if session.forgotten() {
                     continue;
                 }
-                if !session.archiving && request > session.archive_barrier {
-                    session.archived = archived;
-                }
+                session.observe_archive(archived, request);
                 if session.revision == 0 {
-                    session.conversation.working = summary.working;
+                    session.conversation.set_working(summary.working);
                     update_summary(session, summary, request);
                 }
             } else {
                 let mut session = Session::new(scope.clone());
                 session.remote_id = Some(summary.key.id.clone());
-                session.loaded = false;
-                session.conversation.working = summary.working;
-                session.archived = archived;
+                session.invalidate_history();
+                session.conversation.set_working(summary.working);
+                session.restore_archive(archived, request);
                 update_summary(&mut session, summary, request);
                 self.sessions.push(session);
                 self.detail_queue.push(self.sessions.len() - 1);

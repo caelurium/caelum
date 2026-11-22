@@ -61,7 +61,7 @@ fn header_identity_refresh_and_back_follow_the_review_and_restore_its_session_dr
         let l = s.live.as_mut().unwrap();
         let previous = l.panels.review.take().unwrap();
         let mut review = l.app.services.reviews.remove(&previous).unwrap();
-        let details = review.details.as_mut().unwrap();
+        let mut details = review.details().cloned().unwrap();
         details.pull_request.url = target.1.clone();
         details.pull_request.number = 42;
         details.pull_request.is_draft = true;
@@ -72,6 +72,7 @@ fn header_identity_refresh_and_back_follow_the_review_and_restore_its_session_dr
             branch_is_current: false,
             changes: None,
         });
+        review.set_details(details);
         l.drafts[0].replace_text("Continue the PR's café draft");
         l.drafts[0].set_selection(9, 17);
         l.app.services.reviews.insert(target.clone(), review);

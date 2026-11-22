@@ -19,7 +19,7 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         .iter()
         .enumerate()
         .filter(|(_, e)| {
-            e.kind == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
+            e.kind() == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
         })
         .enumerate()
         .filter(|(_, (_, e))| {
@@ -218,14 +218,14 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         format!("{count} prompts · ↑↓ Navigate · ↵ Jump · Esc Close"),
         k,
     ));
-    if session.next_cursor.is_some() {
+    if session.next_cursor().is_some() {
         body = body.child(
-            Button::new(if session.loading {
+            Button::new(if session.loading() {
                 "Loading…"
             } else {
                 "Load earlier prompts"
             })
-            .disabled(session.loading)
+            .disabled(session.loading())
             .on_press(move |s: &mut Workspace| live_mut(s).app.older(index))
             .build(k),
         );
@@ -245,7 +245,7 @@ fn jump(s: &mut Workspace, index: usize, id: &str, tx: &mut Tx) {
     }
     l.app.select(index);
     l.current_prompt = Some(id.into());
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.search.focused = false;
     tx.scroll_center_in_instant(
@@ -265,7 +265,7 @@ pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .entries
         .iter()
         .filter(|e| {
-            e.kind == EntryKind::User
+            e.kind() == EntryKind::User
                 && caelum_core::application::presentation::entry_visible(e)
                 && caelum_core::application::presentation::entry_text(e)
                     .to_lowercase()

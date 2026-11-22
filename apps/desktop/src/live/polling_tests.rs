@@ -27,12 +27,13 @@ fn idle_polling_profile() {
         l.fixture = true;
         if tools {
             let c = &mut l.app.sessions[0].conversation;
-            let seed = c.entries.last().unwrap().clone();
             for i in 0..8 {
-                let mut entry = seed.clone();
-                entry.id = format!("profile-tool-{i}");
-                entry.kind = caelum_core::application::EntryKind::Tool;
-                entry.text.clear();
+                let mut entry = caelum_core::application::Entry::new(
+                    format!("profile-tool-{i}"),
+                    caelum_core::application::EntryKind::Tool,
+                    String::new(),
+                    true,
+                );
                 entry.name = if i % 2 == 0 { "apply_patch" } else { "shell" }.into();
                 entry.input = if i % 2 == 0 {
                     json!({"path":format!("src/file-{i}.rs"),"patch":format!(

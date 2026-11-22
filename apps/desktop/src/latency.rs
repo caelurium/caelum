@@ -77,7 +77,7 @@ impl State {
                 Some(index) => {
                     live.app.selected == Some(index)
                         && live.panels.screen == Screen::Conversation
-                        && live.panels.overlay.is_none()
+                        && live.panels.overlay().is_none()
                 }
                 None => live.panels.screen == Screen::Home,
             };
@@ -100,7 +100,7 @@ impl State {
                         *drawn = true;
                     }
                     if pending.target.is_some_and(|i| {
-                        live.app.sessions[i].loaded && !live.app.sessions[i].loading
+                        live.app.sessions[i].loaded() && !live.app.sessions[i].loading()
                     }) {
                         pending.mark.record("ready", commits);
                         false

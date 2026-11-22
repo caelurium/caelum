@@ -1,9 +1,8 @@
-use std::collections::BTreeMap;
-
 use serde_json::Value;
 
 use super::Provider;
 
+mod entry;
 mod failure;
 mod handoff;
 mod opencode;
@@ -13,132 +12,69 @@ mod subagents;
 mod timing;
 #[cfg(test)]
 mod timing_tests;
+mod turn;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EntryKind {
-    User,
-    Assistant,
-    Reasoning,
-    Compaction,
-    Tool,
-    Status,
-}
-
-#[derive(Debug, Clone)]
-pub struct Entry {
-    pub id: String,
-    pub kind: EntryKind,
-    pub text: String,
-    pub name: String,
-    pub input: String,
-    pub output: String,
-    pub complete: bool,
-    pub optimistic: bool,
-    pub status: String,
-    pub started_at: Option<u64>,
-    pub background: bool,
-    pub metadata: Value,
-    pub error: String,
-    pub media: Vec<super::presentation::Media>,
-    history: String,
-    stream: String,
-    history_output: String,
-    stream_output: String,
-    reasoning: BTreeMap<(bool, u64), String>,
-}
-
-impl Entry {
-    fn new(id: String, kind: EntryKind, text: String, complete: bool) -> Self {
-        let media = super::presentation::markdown_media(&text);
-        Self {
-            media,
-            id,
-            kind,
-            text,
-            complete,
-            name: String::new(),
-            input: String::new(),
-            output: String::new(),
-            optimistic: false,
-            status: if complete { "completed" } else { "running" }.into(),
-            started_at: None,
-            background: false,
-            metadata: Value::Null,
-            error: String::new(),
-            history: String::new(),
-            stream: String::new(),
-            history_output: String::new(),
-            stream_output: String::new(),
-            reasoning: BTreeMap::new(),
-        }
-    }
-}
+pub use entry::Entry;
+pub use entry::EntryKind;
 
 #[derive(Debug, Default)]
 pub struct Conversation {
     pub activity: u64,
     pub entries: Vec<Entry>,
-    pub working: bool,
-    pub retrying: bool,
+    activity_state: Activity,
     pub used_tokens: Option<u64>,
     pub context_window: Option<u64>,
     pub usage_model: Option<String>,
     handoff_prefix: Option<String>,
     usage_at: u64,
-    step_started: Option<(String, u64)>,
-    step_model: Option<String>,
-    turn_started_at: Option<u64>,
-    turn_agent: Option<String>,
-    turn_agent_captured: bool,
-    turn_assistant_ids: Vec<String>,
-    turn_provider_started: bool,
+    step: Option<opencode::Step>,
+    turn: Option<turn::Turn>,
     output_history: timing::History,
     pub failure: failure::State,
 }
 
+#[derive(Debug, Default)]
+enum Activity {
+    #[default]
+    Idle,
+    Working,
+    Retrying,
+}
+
 impl Conversation {
+    pub fn working(&self) -> bool {
+        !matches!(self.activity_state, Activity::Idle)
+    }
+
+    pub fn retrying(&self) -> bool {
+        matches!(self.activity_state, Activity::Retrying)
+    }
+
+    pub fn set_working(&mut self, working: bool) {
+        if !working {
+            self.activity_state = Activity::Idle;
+        } else if !self.working() {
+            self.activity_state = Activity::Working;
+        }
+    }
+
+    pub fn set_retrying(&mut self, retrying: bool) {
+        if retrying {
+            self.activity_state = Activity::Retrying;
+        } else if self.retrying() {
+            self.activity_state = Activity::Working;
+        }
+    }
+
     pub fn optimistic(&mut self, id: String, prompt: String) {
-        let mut entry = Entry::new(id, EntryKind::User, prompt, true);
+        let mut entry = Entry::pending_user(id, prompt);
         entry.started_at = Some(super::presentation::now());
-        entry.optimistic = true;
         self.entries.push(entry);
-        self.working = true;
-    }
-
-    pub fn begin_turn(&mut self, agent: Option<String>, started_at: u64) {
-        self.failure.begin(started_at);
-        if !self.working || self.turn_started_at.is_none() {
-            self.turn_started_at = Some(started_at);
-            self.turn_assistant_ids.clear();
-            self.turn_agent = agent;
-            self.turn_agent_captured = true;
-            self.turn_provider_started = false;
-        } else if !self.turn_agent_captured {
-            self.turn_agent = agent;
-            self.turn_agent_captured = true;
-        }
-    }
-
-    pub fn provider_started_with_agent(&mut self, agent: Option<String>, started_at: u64) {
-        if self.turn_provider_started {
-            return;
-        }
-        if !self.working || self.turn_started_at.is_none() {
-            self.turn_started_at = Some(started_at);
-            self.turn_assistant_ids.clear();
-            self.turn_agent = agent.clone();
-            self.turn_agent_captured = true;
-        } else if !self.turn_agent_captured {
-            self.turn_agent = agent.clone();
-            self.turn_agent_captured = true;
-        }
-
-        self.turn_started_at = self.turn_started_at.map(|at| at.min(started_at));
-        self.turn_provider_started = true;
+        self.set_working(true);
     }
 
     pub fn remove_optimistic(&mut self) {
-        self.entries.retain(|entry| !entry.optimistic);
+        self.entries.retain(|entry| !entry.optimistic());
     }
 
     pub fn history(&mut self, provider: Provider, data: &[Value], older: bool) {
@@ -183,7 +119,7 @@ impl Conversation {
                             )
                             .map(|mut entry| {
                                 entry.started_at = entry.started_at.or(turn_started);
-                                if entry.kind == EntryKind::Assistant {
+                                if entry.kind() == EntryKind::Assistant {
                                     if let Some(agent) = agent_name(&item["agent"])
                                         .or_else(|| agent_name(&item["metadata"]["agent"]))
                                         .or_else(|| agent_name(&turn["agent"]))
@@ -212,7 +148,7 @@ impl Conversation {
                 .flat_map(|message| {
                     let at = message["time"]["created"].as_u64();
                     opencode_message(message).into_iter().map(move |mut entry| {
-                        if !entry.background
+                        if !entry.background()
                             || (entry.name == "subagent" && entry.metadata["source"] != "subagent")
                         {
                             entry.started_at = entry.started_at.or(at);
@@ -234,17 +170,17 @@ impl Conversation {
     }
 
     fn put(&mut self, entry: Entry) {
-        if entry.kind == EntryKind::Assistant {
+        if entry.kind() == EntryKind::Assistant {
             self.note_turn_output(&entry.id);
         }
-        if entry.kind != EntryKind::User
+        if entry.kind() != EntryKind::User
             && !self.entries.iter().any(|old| {
                 old.id == entry.id
                     && old.text == entry.text
                     && old.input == entry.input
                     && old.output == entry.output
-                    && old.complete == entry.complete
-                    && old.status == entry.status
+                    && old.complete() == entry.complete()
+                    && old.status() == entry.status()
             })
         {
             self.activity += 1;
@@ -270,7 +206,7 @@ impl Conversation {
             self.note_turn_output(&id);
         }
         let entry = &mut self.entries[index];
-        if entry.complete {
+        if entry.complete() {
             return;
         }
         self.activity += 1;
@@ -281,7 +217,7 @@ impl Conversation {
             entry.stream.push_str(delta);
             entry.text = reconciliation::reconcile(&entry.history, &entry.stream);
         }
-        self.working = true;
+        self.set_working(true);
     }
 
     pub fn settle(&mut self) {
@@ -289,68 +225,19 @@ impl Conversation {
     }
 
     fn settle_at(&mut self, ended_at: u64) {
-        let started_at = self.turn_started_at.take();
-        let assistant_id = self.turn_assistant_ids.last().cloned();
-        let turn_agent = self.turn_agent.clone();
-        if let (Some(started_at), Some(id)) = (started_at, assistant_id) {
-            if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
-                if !entry.metadata.is_object() {
-                    entry.metadata = serde_json::json!({});
-                }
-                if entry.metadata["agent"].as_str().is_none() {
-                    if let Some(agent) = turn_agent.as_deref() {
-                        entry.metadata["agent"] = agent.into();
-                    }
-                }
-                entry.metadata["ended"] = ended_at.into();
-                set_output_duration(entry, started_at, ended_at);
-            }
-        }
-        self.turn_started_at = None;
-        self.turn_agent = None;
-        self.turn_agent_captured = false;
-        self.turn_assistant_ids.clear();
-        self.turn_provider_started = false;
-        self.working = false;
-        self.retrying = false;
+        self.finish_turn(ended_at);
+        self.step = None;
+        self.set_working(false);
         for entry in &mut self.entries {
-            if !entry.background {
-                entry.complete = true;
-                if entry.status == "running"
-                    || (entry.kind == EntryKind::Compaction
-                        && matches!(entry.status.as_str(), "pending" | "in_progress"))
-                {
-                    entry.status = if entry.kind == EntryKind::Compaction {
-                        "interrupted"
-                    } else {
-                        "completed"
-                    }
-                    .into();
-                }
-            }
+            entry.settle();
         }
-    }
-
-    fn note_turn_output(&mut self, id: &str) {
-        if self.turn_started_at.is_some()
-            && !self
-                .turn_assistant_ids
-                .iter()
-                .any(|existing| existing == id)
-        {
-            self.turn_assistant_ids.push(id.into());
-        }
-    }
-
-    fn provider_started(&mut self, data: &Value) {
-        self.provider_started_with_agent(self.turn_agent.clone(), provider_started_at(data));
     }
 
     pub fn apply(&mut self, provider: Provider, method: &str, data: &Value) {
         if method == "session.retry.scheduled"
             || (method == "session.status" && data["status"]["type"] == "retry")
         {
-            self.retrying = true;
+            self.set_retrying(true);
         } else if method.ends_with("delta")
             || method.ends_with("Delta")
             || method.ends_with(".started")
@@ -358,7 +245,7 @@ impl Conversation {
             || method == "turn/started"
             || (method == "session.status" && data["status"]["type"] == "busy")
         {
-            self.retrying = false;
+            self.set_retrying(false);
         }
         match provider {
             Provider::Codex => self.codex(method, data),
@@ -381,7 +268,7 @@ impl Conversation {
                     let at = data["_created"]
                         .as_u64()
                         .unwrap_or_else(super::presentation::now);
-                    if !entry.complete {
+                    if !entry.complete() {
                         entry.started_at = Some(at);
                     } else {
                         if !entry.metadata.is_object() {
@@ -389,11 +276,13 @@ impl Conversation {
                         }
                         entry.metadata["ended"] = at.into();
                     }
-                    let already_complete =
-                        self.entries.iter().any(|e| e.id == entry.id && e.complete);
-                    if !already_complete || entry.complete {
-                        if !entry.complete {
-                            self.working = true;
+                    let already_complete = self
+                        .entries
+                        .iter()
+                        .any(|e| e.id == entry.id && e.complete());
+                    if !already_complete || entry.complete() {
+                        if !entry.complete() {
+                            self.set_working(true);
                         }
                         self.put(entry);
                     }
@@ -430,7 +319,7 @@ impl Conversation {
                         .iter_mut()
                         .find(|entry| entry.id == id)
                         .expect("inserted entry");
-                    if entry.complete {
+                    if entry.complete() {
                         return;
                     }
                     let summary = method.contains("summaryText");
@@ -455,14 +344,14 @@ impl Conversation {
                         .collect::<Vec<_>>()
                         .join("\n\n");
                     entry.text = reconciliation::reconcile(&entry.history, &entry.stream);
-                    self.working = true;
+                    self.set_working(true);
                 }
             }
             "turn/started" => {
                 self.provider_started(data);
-                self.working = true;
+                self.set_working(true);
             }
-            "thread/status/changed" => self.working = data["status"]["type"] == "active",
+            "thread/status/changed" => self.set_working(data["status"]["type"] == "active"),
             "turn/completed" => {
                 self.settle_at(
                     data["_created"]
@@ -561,13 +450,15 @@ fn codex_item(item: &Value, complete: bool) -> Option<Entry> {
     entry
         .media
         .extend(super::presentation::media(&item["content"]));
-    entry.status = item["status"]
-        .as_str()
-        .unwrap_or(if complete { "completed" } else { "running" })
-        .into();
-    if item["exitCode"].as_i64().is_some_and(|code| code != 0) {
-        entry.status = format!("failed (exit {})", item["exitCode"]);
-    }
+    let status = if item["exitCode"].as_i64().is_some_and(|code| code != 0) {
+        format!("failed (exit {})", item["exitCode"])
+    } else {
+        item["status"]
+            .as_str()
+            .unwrap_or(if complete { "completed" } else { "running" })
+            .into()
+    };
+    entry.set_progress(complete, status);
     if kind == EntryKind::Compaction {
         entry.error = display(item["error"].get("message").unwrap_or(&item["error"]));
     }
@@ -660,16 +551,16 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                             ),
                         );
                         entry.name = display(&part["name"]);
-                        entry.status = if !state["error"].is_null() {
+                        let status = if !state["error"].is_null() {
                             "failed"
                         } else {
-                            state["status"].as_str().unwrap_or(if entry.complete {
+                            state["status"].as_str().unwrap_or(if entry.complete() {
                                 "completed"
                             } else {
                                 "running"
                             })
-                        }
-                        .into();
+                        };
+                        entry.set_progress(entry.complete(), status.to_owned());
                         entry.error = display(&state["error"]);
                         entry.metadata = state["metadata"].clone();
                         entry.started_at = state["time"]["start"]
@@ -720,7 +611,10 @@ fn opencode_message(message: &Value) -> Vec<Entry> {
                     Some("running" | "pending" | "in_progress")
                 ),
             );
-            entry.status = message["status"].as_str().unwrap_or("completed").into();
+            entry.set_progress(
+                entry.complete(),
+                message["status"].as_str().unwrap_or("completed").to_owned(),
+            );
             entry.error = display(message["error"].get("message").unwrap_or(&message["error"]));
             if let Some(ended) = message["time"]["completed"].as_u64() {
                 entry.metadata = serde_json::json!({"ended": ended});

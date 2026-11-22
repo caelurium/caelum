@@ -64,14 +64,14 @@ fn main() -> Result<(), String> {
             }
             let review = &app.services.reviews[&owner];
             let ms = started.elapsed().as_secs_f64() * 1000.0;
-            if review.details.is_some() && overview.is_none() {
+            if review.details().is_some() && overview.is_none() {
                 overview = Some(ms);
                 cached = review.cached();
             }
-            if review.files_loaded && files.is_none() {
+            if review.files_loaded() && files.is_none() {
                 files = Some(ms);
             }
-            if review.details.is_some() && !review.cached() && fresh.is_none() {
+            if review.details().is_some() && !review.cached() && fresh.is_none() {
                 fresh = Some(ms);
             }
         }
@@ -82,7 +82,7 @@ fn main() -> Result<(), String> {
         json!({
             "overview_ms": overview, "files_ms": files, "fresh_details_ms": fresh,
             "all_first_pages_ms": started.elapsed().as_secs_f64() * 1000.0,
-            "cache_shown": cached, "loaded_files": review.files.len(),
+            "cache_shown": cached, "loaded_files": review.files().len(),
         })
     );
     Ok(())

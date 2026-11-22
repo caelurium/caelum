@@ -2,6 +2,8 @@
 mod feed;
 mod models;
 mod review;
+#[cfg(test)]
+pub(crate) use review::seed_review_files;
 mod scenes;
 
 use crate::Workspace;
@@ -31,39 +33,7 @@ pub fn workspace() -> Workspace {
         ]})).collect();
         session.conversation.history(Provider::Codex, &turns, false);
     }
-    let url = "https://github.com/example/evaluation/pull/1";
-    let review = live
-        .app
-        .services
-        .reviews
-        .entry(("/evaluation".into(), url.into()))
-        .or_default();
-    review.details = Some(serde_json::from_value(json!({"number":1,"title":"Large review workload","url":url,"isDraft":true,"body":"Deterministic, offline review workload.","state":"OPEN","author":null,"baseRefName":"main","headRefName":"evaluation","headRefOid":"a".repeat(40),"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","additions":10000,"deletions":10000,"changedFiles":300,"reviewDecision":null,"statusCheckRollup":[]})).unwrap());
-    review.files_loaded = true;
-    review.files = (0..300)
-        .map(|i| caelum_protocol::GitHubPullRequestFile {
-            path: format!("src/file-{i}.rs"),
-            status: "modified".into(),
-            previous_path: None,
-            additions: 100,
-            deletions: 100,
-            patch: Some(format!(
-                "@@ -1,100 +1,100 @@\n{}",
-                (0..100)
-                    .map(|n| format!("-let value_{n} = {n};\n+let value_{n} = {};\n", n + 1))
-                    .collect::<String>()
-            )),
-        })
-        .collect();
-    let checkout = live
-        .app
-        .services
-        .checkouts
-        .entry("/evaluation".into())
-        .or_default();
-    checkout
-        .pull_requests
-        .push(review.details.as_ref().unwrap().pull_request.clone());
+    review::large(live);
     live.app.select(0);
     state
 }
@@ -123,7 +93,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                     .unwrap()
                     .output = output;
             }
-            conversation.working = running;
+            conversation.set_working(running);
             if !failed && !running {
                 l.expanded.insert((0, "opencode-tool-run".into()));
             }
@@ -140,7 +110,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                 ""
             };
             conversation.history(Provider::OpenCode, &[json!({"id":"compact","type":"compaction","summary":summary,"status":status,"error":if status == "failed" {Some("The provider could not summarise the conversation. Your messages are still available.")} else {None}})], false);
-            conversation.working = status == "running";
+            conversation.set_working(status == "running");
             if status == "completed" {
                 conversation.history(Provider::OpenCode, &[json!({"id":"after","type":"assistant","content":[{"type":"text","text":"The working context is ready. I’ll continue with the tool-call layout."}],"finish":"stop"})], false);
             }
@@ -216,9 +186,8 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             let session = &mut l.app.sessions[index];
             session.title = title.into();
             session.draft = format!("Independent draft for {title}");
-            session.loaded = true;
             if provider == Provider::Codex {
-                session.conversation.working = true;
+                session.conversation.set_working(true);
             } else {
                 session.queue.push(caelum_core::application::QueuedPrompt {
                     text: "Review the reconnect changes".into(),
@@ -401,12 +370,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             | "stats-error"
             | "stats-empty"
     ) {
-        l.commands.owner = Some(0);
-        l.panels.overlay = Some(match name {
-            "timeline" | "timeline-empty" => crate::panels::Screen::Timeline,
-            "usage" | "usage-loading" => crate::panels::Screen::Usage,
-            _ => crate::panels::Screen::Stats,
-        });
+        scenes::command_overlay(l, name);
         if name == "timeline" {
             let session = &mut l.app.sessions[0];
             session.conversation = Default::default();
@@ -532,24 +496,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
                 _ => "Then check the compact layout in both themes.",
             };
             session.draft = prompt.into();
-            if matches!(name, "composer-queued" | "composer-queue-error") {
-                session.conversation.working = true;
-                session.queue = [
-                    "Review keyboard focus and session switching.",
-                    "Check attachments and multiline drafts.",
-                ]
-                .map(|text| caelum_core::application::QueuedPrompt {
-                    text: text.into(),
-                    options: session.options.clone(),
-                })
-                .into();
-                if name == "composer-queue-error" {
-                    session.conversation.working = false;
-                    session.queue_paused = true;
-                    session.error =
-                        Some("The provider is unavailable. Resume when it reconnects.".into());
-                }
-            }
+            scenes::composer_queue(session, name);
             if matches!(
                 name,
                 "composer-attachments"
@@ -674,13 +621,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         return true;
     }
     if matches!(name, "working" | "thinking" | "retrying" | "stopping") {
-        l.app.sessions[0].remote_id = Some("fixture".into());
-        l.app.sessions[0].conversation.working = true;
-        if name == "thinking" {
-            l.app.sessions[0].conversation.apply(Provider::Codex, "item/reasoning/summaryTextDelta", &json!({"itemId":"thinking","delta":"Checking the original interactions before changing the layout."}));
-        }
-        l.app.sessions[0].conversation.retrying = name == "retrying";
-        l.app.sessions[0].stopping = name == "stopping";
+        scenes::activity(l, name);
         return true;
     }
     if matches!(
@@ -814,10 +755,10 @@ pub fn design() -> Workspace {
     for title in [&sample.title, "OpenCode session", &sample.secondary_title] {
         let i = live.app.new_session(scope.clone());
         live.app.sessions[i].title = title.into();
-        live.app.sessions[i].last_activity = Some(live.feed.now - (i as u64 + 1) * 900_000);
+        live.app.sessions[i].last_activity =
+            Some(live.feed.displayed_at() - (i as u64 + 1) * 900_000);
     }
     let session = &mut live.app.sessions[0];
-    session.loaded = true;
     session.options.model = Some("Test model".into());
     session.options.effort = Some("Medium".into());
     session.draft = sample.draft.clone();
@@ -890,7 +831,8 @@ pub fn scene(state: &mut Workspace, name: &str) {
             {"id":"patch","type":"tool","name":"apply_patch","state":{"status":"completed","input":{"path":"src/workspace.rs","patch":"@@ -1 +1 @@\n-restore();\n+restore_owned_draft();"},"content":[{"type":"text","text":"Updated src/workspace.rs"}],"time":{"start":4600,"end":4800}}}
         ]})],false);
         for entry in &session.conversation.entries {
-            if name != "tools-collapsed" && entry.kind != caelum_core::application::EntryKind::User
+            if name != "tools-collapsed"
+                && entry.kind() != caelum_core::application::EntryKind::User
             {
                 l.expanded.insert((0, entry.id.clone()));
             }
@@ -914,7 +856,7 @@ pub fn scene(state: &mut Workspace, name: &str) {
                 .unwrap()
                 .clone();
             l.media.selected = Some((project.into(), media));
-            l.panels.overlay = Some(crate::panels::Screen::Image);
+            l.panels.set_overlay(Some(crate::panels::Screen::Image));
         }
         return;
     }

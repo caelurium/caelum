@@ -39,9 +39,8 @@ fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
     rt.use_clipboard(&clipboard);
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
-        l.app.sessions[0].conversation.working = true;
+        l.app.sessions[0].conversation.set_working(true);
         l.app.sessions[1].remote_id = Some("background".into());
-        l.app.sessions[1].loaded = true;
         l.app.sessions[1].title = "Background session".into();
     });
     secondary(&mut rt, "live-session-1");
@@ -68,13 +67,13 @@ fn context_menus_keep_background_session_ownership_and_keyboard_focus() {
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
     assert!(element(&rt, "session-actions-1").focused);
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
     secondary(&mut rt, "live-session-0");
     assert!(!context_item(&rt, "Archive session").focusable);
     let archive = context_item(&rt, "Archive session").key.unwrap();
     click(&mut rt, &archive);
     assert!(crate::context::is_open(&rt.state));
-    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].archived);
+    assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].archived());
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.3);
     secondary(&mut rt, "live-session-1");
@@ -176,7 +175,7 @@ fn context_menus_stay_in_bounds_and_dismiss_before_parent_overlays() {
         click(&mut rt, "workspace-trigger");
         assert!(!crate::context::is_open(&rt.state));
         assert!(
-            rt.state.live.as_ref().unwrap().panels.overlay.is_none(),
+            rt.state.live.as_ref().unwrap().panels.overlay().is_none(),
             "outside click only dismisses the menu"
         );
     }
@@ -477,7 +476,7 @@ fn context_menu_can_rename_the_clicked_worktree() {
     advance(&mut rt, 0.2);
 
     assert_eq!(
-        rt.state.live.as_ref().unwrap().panels.overlay,
+        rt.state.live.as_ref().unwrap().panels.overlay(),
         Some(crate::panels::Screen::Worktrees)
     );
     assert!(crate::worktree::is_renaming(&rt.state, path));

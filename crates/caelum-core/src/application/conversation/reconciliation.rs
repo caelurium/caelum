@@ -8,7 +8,7 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
     let mut live = std::mem::take(&mut conversation.entries);
     let mut before = conversation.handoff_rows(&mut live, &mut history);
     let ids: HashSet<_> = history.iter().map(|entry| entry.id.as_str()).collect();
-    let optimistic = if older || !live.iter().any(|entry| entry.optimistic) {
+    let optimistic = if older || !live.iter().any(|entry| entry.optimistic()) {
         BTreeMap::new()
     } else {
         adoptions(&live, &history)
@@ -56,7 +56,12 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
     let mut matches = BTreeMap::new();
     let mut end = history.len();
 
-    for (index, entry) in live.iter().enumerate().rev().filter(|(_, e)| e.optimistic) {
+    for (index, entry) in live
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|(_, e)| e.optimistic())
+    {
         if let Some(history_index) = history[..end].iter().rposition(|snapshot| {
             positions
                 .get(snapshot.id.as_str())
@@ -71,7 +76,7 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
 }
 
 fn optimistic_matches(history: &Entry, optimistic: &Entry) -> bool {
-    if history.kind != EntryKind::User || optimistic.kind != EntryKind::User {
+    if history.kind() != EntryKind::User || optimistic.kind() != EntryKind::User {
         return false;
     }
     if history.text == optimistic.text {
@@ -163,26 +168,26 @@ fn merge_missing_metadata(target: &mut serde_json::Value, fallback: &serde_json:
 
 fn merge_entry(mut snapshot: Entry, mut current: Entry) -> Entry {
     snapshot.started_at = snapshot.started_at.or(current.started_at);
-    if snapshot.background && snapshot.complete && !current.complete {
+    if snapshot.background() && snapshot.complete() && !current.complete() {
         merge_missing_metadata(&mut snapshot.metadata, &current.metadata);
     } else {
         overlay_metadata(&mut snapshot.metadata, &current.metadata);
     }
-    if snapshot.complete {
-        if snapshot.kind == EntryKind::Tool && snapshot.output.is_empty() {
+    if snapshot.complete() {
+        if snapshot.kind() == EntryKind::Tool && snapshot.output.is_empty() {
             snapshot.output = current.output;
-        }
-        if snapshot.kind == EntryKind::Compaction {
+        } else if snapshot.kind() == EntryKind::Compaction {
+            let same_status = snapshot.status() == current.status();
             if snapshot.text.is_empty() {
                 snapshot.text = current.text;
             }
-            if snapshot.error.is_empty() && snapshot.status == current.status {
+            if snapshot.error.is_empty() && same_status {
                 snapshot.error = current.error;
             }
         }
         return snapshot_entry(snapshot);
     }
-    if current.complete {
+    if current.complete() {
         current.started_at = current.started_at.or(snapshot.started_at);
         merge_missing_metadata(&mut current.metadata, &snapshot.metadata);
         return current;

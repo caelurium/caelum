@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::{Provider, Scope};
+use crate::application::{ArchiveFixture, Provider, Scope};
 use caelum_protocol::{GitRepositoryStatus, ProjectInfo, SessionDetails};
 use serde_json::json;
 
@@ -19,17 +19,17 @@ fn workspace() -> Workspace {
         .reviews
         .entry(("/repository".into(), URL.into()))
         .or_default()
-        .details = Some(
-        serde_json::from_value(json!({
-            "number": 42, "title": "Feature", "url": URL, "isDraft": false,
-            "body": "", "state": "OPEN", "author": null, "baseRefName": "main",
-            "headRefName": "feature", "headRefOid": "a".repeat(40),
-            "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
-            "additions": 1, "deletions": 0, "changedFiles": 1,
-            "reviewDecision": null, "statusCheckRollup": []
-        }))
-        .unwrap(),
-    );
+        .set_details(
+            serde_json::from_value(json!({
+                "number": 42, "title": "Feature", "url": URL, "isDraft": false,
+                "body": "", "state": "OPEN", "author": null, "baseRefName": "main",
+                "headRefName": "feature", "headRefOid": "a".repeat(40),
+                "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
+                "additions": 1, "deletions": 0, "changedFiles": 1,
+                "reviewDecision": null, "statusCheckRollup": []
+            }))
+            .unwrap(),
+        );
     app
 }
 
@@ -103,12 +103,12 @@ fn shared_branch_prefers_active_sessions_then_selection_and_recent_activity() {
     app.select(older);
     assert_eq!(app.pull_request_session("/repository", URL), Some(older));
 
-    app.sessions[older].archived = true;
+    app.sessions[older].archive_fixture(ArchiveFixture::Stable(true));
     assert_eq!(app.pull_request_session("/repository", URL), Some(newer));
-    app.sessions[newer].archived = true;
+    app.sessions[newer].archive_fixture(ArchiveFixture::Stable(true));
     app.select(other);
     assert_eq!(app.pull_request_session("/repository", URL), Some(newer));
-    assert!(app.sessions[newer].archived);
+    assert!(app.sessions[newer].archived());
     assert_eq!(app.selected, Some(other));
 }
 
@@ -126,9 +126,9 @@ fn unavailable_sessions_and_missing_review_metadata_do_not_redirect_navigation()
         let owner = session(&mut app, "/worktrees/feature", Provider::Codex, "feature");
         let other = session(&mut app, "/other", Provider::OpenCode, "feature");
         match unavailable {
-            "forgotten" => app.sessions[owner].forgotten = true,
-            "deleting" => app.sessions[owner].deleting = true,
-            "archiving" => app.sessions[owner].archiving = true,
+            "forgotten" => app.sessions[owner].archive_fixture(ArchiveFixture::Forgotten),
+            "deleting" => app.sessions[owner].archive_fixture(ArchiveFixture::Deleting),
+            "archiving" => app.sessions[owner].archive_fixture(ArchiveFixture::Archiving),
             "removed" => app.projects.retain(|p| p.path != "/worktrees/feature"),
             _ => {
                 let review = app
@@ -137,9 +137,9 @@ fn unavailable_sessions_and_missing_review_metadata_do_not_redirect_navigation()
                     .get_mut(&("/repository".into(), URL.into()))
                     .unwrap();
                 if unavailable == "loading" {
-                    review.details = None;
+                    review.clear_details();
                 } else {
-                    review.details.as_mut().unwrap().head_ref_name.clear();
+                    review.edit_details(|details| details.head_ref_name.clear());
                 }
             }
         }

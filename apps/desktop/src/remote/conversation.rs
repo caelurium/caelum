@@ -328,7 +328,7 @@ pub(super) fn view(
         .child(
             crate::quiet_button(&ui::SERVER, &label)
                 .variant(rune_kit::IconButtonVariant::Ghost)
-                .expanded(l.panels.overlay == Some(crate::panels::Screen::VmStats))
+                .expanded(l.panels.overlay() == Some(crate::panels::Screen::VmStats))
                 .on_press(move |s: &mut Workspace| {
                     super::popup::inspect_remote(live_mut(s), &stats_owner)
                 })

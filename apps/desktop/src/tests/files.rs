@@ -257,11 +257,11 @@ fn native_file_preview_attaches_an_immutable_snapshot_to_the_originating_draft()
     rt.update(|s, _| {
         s.live.as_mut().unwrap().app.sessions[0]
             .conversation
-            .working = true
+            .set_working(true)
     });
     key(&mut rt, Key::Escape, Mods::default());
     assert!(
-        !rt.state.live.as_ref().unwrap().app.sessions[0].stopping,
+        !rt.state.live.as_ref().unwrap().app.sessions[0].stopping(),
         "Escape clears the file selection before cancelling work"
     );
     assert_eq!(

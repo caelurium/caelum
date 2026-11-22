@@ -3,6 +3,12 @@ use super::{Entry, EntryKind};
 use caelum_protocol::{GitHubPullRequestDetails, GitHubStatusCheck};
 use serde_json::Value;
 
+mod activity;
+
+pub use activity::activity;
+pub use activity::Activity;
+pub use activity::ActivityKind;
+
 #[derive(Clone, Debug)]
 pub struct Media {
     pub name: String,
@@ -25,21 +31,21 @@ pub fn markdown_media(text: &str) -> Vec<Media> {
 /// The same presentation is used for transcript, navigation, selection and copying.
 /// Provider records remain intact; incomplete markup is withheld until it is unambiguous.
 pub fn entry_text(entry: &Entry) -> String {
-    let text = if entry.kind == EntryKind::User {
+    let text = if entry.kind() == EntryKind::User {
         super::split_context(&entry.text).0
     } else {
         &entry.text
     };
-    markdown_parts(text, !entry.complete).0
+    markdown_parts(text, !entry.complete()).0
 }
 
 pub fn entry_visible(entry: &Entry) -> bool {
-    matches!(entry.kind, EntryKind::Tool | EntryKind::Compaction)
-        || (entry.kind == EntryKind::Reasoning && !entry.complete)
+    matches!(entry.kind(), EntryKind::Tool | EntryKind::Compaction)
+        || (entry.kind() == EntryKind::Reasoning && !entry.complete())
         || (!entry.text.contains('<') && !entry.text.trim().is_empty())
         || !entry_text(entry).trim().is_empty()
         || !entry.media.is_empty()
-        || (entry.kind == EntryKind::User && !super::split_context(&entry.text).1.is_empty())
+        || (entry.kind() == EntryKind::User && !super::split_context(&entry.text).1.is_empty())
 }
 
 /// Byte ranges on the original text, including case-folded Unicode matches.
@@ -129,81 +135,6 @@ fn markdown_parts(text: &str, streaming: bool) -> (String, Vec<Media>) {
         }
     }
     (output, media)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ActivityKind {
-    Working,
-    Thinking,
-    Responding,
-    Tool,
-    Retrying,
-    Input,
-    Background,
-    Stopping,
-}
-
-pub struct Activity {
-    pub kind: ActivityKind,
-    pub label: String,
-}
-
-/// Activity belongs to a session, not to the most recently painted output chunk.
-pub fn activity(session: &super::Session, needs_input: bool) -> Option<Activity> {
-    if session.disconnected {
-        return None;
-    }
-    let (kind, label) = if session.stopping {
-        (ActivityKind::Stopping, "Stopping…".into())
-    } else if needs_input {
-        (ActivityKind::Input, "Waiting for input".into())
-    } else if session.submitting {
-        (ActivityKind::Working, "Working…".into())
-    } else if session.conversation.working {
-        if session.conversation.retrying {
-            (ActivityKind::Retrying, "Retrying…".into())
-        } else if let Some(entry) = session
-            .conversation
-            .entries
-            .iter()
-            .rev()
-            .take_while(|e| e.kind != EntryKind::User)
-            .find(|e| !e.complete && !e.background)
-        {
-            match entry.kind {
-                EntryKind::Reasoning => (ActivityKind::Thinking, "Thinking…".into()),
-                EntryKind::Assistant => (ActivityKind::Responding, "Responding…".into()),
-                EntryKind::Tool => {
-                    let tool = Tool::from_entry(entry, 0);
-                    (
-                        ActivityKind::Tool,
-                        if tool.name == "Run" {
-                            "Running a command…".into()
-                        } else {
-                            format!("{}…", tool.name)
-                        },
-                    )
-                }
-                EntryKind::Compaction => (ActivityKind::Working, "Compacting context…".into()),
-                _ => (ActivityKind::Working, "Working…".into()),
-            }
-        } else if !session.shells.is_empty() {
-            (
-                ActivityKind::Background,
-                "Waiting for background commands".into(),
-            )
-        } else {
-            (ActivityKind::Working, "Working…".into())
-        }
-    } else if !session.shells.is_empty() {
-        (
-            ActivityKind::Background,
-            "Waiting for background commands".into(),
-        )
-    } else {
-        return None;
-    };
-    Some(Activity { kind, label })
 }
 
 pub fn media(value: &Value) -> Vec<Media> {
@@ -321,9 +252,9 @@ impl Tool {
     pub fn from_entry(entry: &Entry, now: u64) -> Self {
         let mut input: Value =
             serde_json::from_str(&entry.input).unwrap_or(Value::String(entry.input.clone()));
-        let name = match entry.kind {
+        let name = match entry.kind() {
             EntryKind::Reasoning => {
-                if entry.complete {
+                if entry.complete() {
                     "Thought"
                 } else {
                     "Thinking"
@@ -353,7 +284,7 @@ impl Tool {
         collect_paths(&input, &mut paths);
         paths.sort();
         paths.dedup();
-        let summary = if matches!(entry.kind, EntryKind::Reasoning | EntryKind::Compaction) {
+        let summary = if matches!(entry.kind(), EntryKind::Reasoning | EntryKind::Compaction) {
             entry_text(entry)
                 .lines()
                 .find(|l| !l.trim().is_empty())
@@ -385,7 +316,8 @@ impl Tool {
         {
             details.push(cwd.into());
         }
-        if entry.background || input["background"] == true || entry.metadata["background"] == true {
+        if entry.background() || input["background"] == true || entry.metadata["background"] == true
+        {
             details.push("Background".into());
         }
         if let Some(exit) = entry.metadata["exitCode"]
@@ -404,7 +336,7 @@ impl Tool {
                 .zip(
                     entry.metadata["ended"]
                         .as_u64()
-                        .or_else(|| (!entry.complete).then_some(now)),
+                        .or_else(|| (!entry.complete()).then_some(now)),
                 )
                 .map(|(start, end)| end.saturating_sub(start))
         });
@@ -438,7 +370,7 @@ impl Tool {
         {
             Outcome::Failure
         } else {
-            outcome(&entry.status, entry.complete)
+            outcome(entry.status(), entry.complete())
         };
         let output = if name == "Run" {
             hide_shell_ids(&entry.output)

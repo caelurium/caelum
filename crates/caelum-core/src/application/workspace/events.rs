@@ -18,7 +18,7 @@ impl Workspace {
                         .then(|| self.notifications.take(self.navigation))
                         .flatten();
                     self.complete(id, pending, result);
-                    if self.store_ready {
+                    if self.restored() {
                         if let Some(target) = activation {
                             self.activate_notification(target);
                         }
@@ -192,21 +192,28 @@ impl Workspace {
         let mut shells_completed = Vec::new();
         let mut titles_completed = Vec::new();
         for (index, session) in self.sessions.iter_mut().enumerate() {
-            if session.scope.project != path || session.scope.provider != provider {
+            if session.forgotten()
+                || session.scope.project != path
+                || session.scope.provider != provider
+            {
                 continue;
             }
             if disconnected {
+                let first_disconnect = !session.disconnected;
                 let recover =
-                    !session.disconnected && (session.working() || self.selected == Some(index));
+                    first_disconnect && (session.working() || self.selected == Some(index));
+                if first_disconnect {
+                    session.cancel_history_read();
+                }
                 session.revision += 1;
-                session.conversation.working = false;
+                session.conversation.set_working(false);
                 session.queue_paused = true;
                 session.disconnected = true;
                 session.error = Some(
                     "Provider disconnected. Refresh this session to reconnect and recover history."
                         .into(),
                 );
-                if recover && !session.submitting && !session.loading {
+                if recover && !session.submitting() && !session.loading() {
                     completed.push(index);
                 }
                 continue;
@@ -255,7 +262,7 @@ impl Workspace {
                             .conversation
                             .entries
                             .iter()
-                            .any(|e| e.id == format!("opencode-shell-{id}") && e.complete)
+                            .any(|e| e.id == format!("opencode-shell-{id}") && e.complete())
                     {
                         session
                             .shells
@@ -276,7 +283,7 @@ impl Workspace {
                     .conversation
                     .entries
                     .iter()
-                    .any(|e| e.id == entry_id && !e.complete)
+                    .any(|e| e.id == entry_id && !e.complete())
                     || session.shells.iter().any(|s| s.id == shell)
                 {
                     shells_completed.push(index);
@@ -293,11 +300,10 @@ impl Workspace {
             }
             session.revision += 1;
             if matches!(method, "turn/started" | "session.execution.started") {
-                let agent = if session.inflight_prompt.is_some() {
-                    session.inflight_options.agent.clone()
-                } else {
-                    session.options.agent.clone()
-                };
+                let options = session
+                    .pending_prompt()
+                    .map_or(&session.options, |prompt| &prompt.options);
+                let agent = options.agent.clone();
                 session.conversation.provider_started_with_agent(
                     agent,
                     crate::application::conversation::provider_started_at(data),
@@ -323,7 +329,7 @@ impl Workspace {
             {
                 session.queue_paused = true;
             }
-            if was_working && !session.working() && session.loaded {
+            if was_working && !session.working() && session.loaded() {
                 completed.push(index);
             }
             if method == "error" || method == "permission.reply.failed" {
@@ -351,10 +357,10 @@ impl Workspace {
                     }
                 });
             if let Some(title) =
-                title.filter(|title| !title.is_empty() && !session.title_state.manual)
+                title.filter(|title| !title.is_empty() && !session.title_state.manual())
             {
                 session.title = title.into();
-                session.title_state.barrier = self.next_request;
+                session.title_state.note_live_rename(self.next_request);
             }
         }
         for index in completed {

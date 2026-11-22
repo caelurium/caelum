@@ -14,13 +14,17 @@ pub fn queue_summary(s: &Workspace, k: &Kit, index: usize) -> El {
     if count == 0 {
         return rune::el();
     }
-    let failed = session.inbox.items.iter().any(|item| item.error.is_some())
+    let failed = session
+        .inbox
+        .items
+        .iter()
+        .any(|item| item.error().is_some())
         || (!session.queue.is_empty() && session.error.is_some());
     let status = if failed {
         " · Needs attention"
     } else if session.queue_paused && !session.queue.is_empty() {
         " · Paused"
-    } else if session.inbox.items.iter().any(|item| item.pending) {
+    } else if session.inbox.items.iter().any(|item| item.pending()) {
         " · Saving…"
     } else {
         ""
@@ -73,7 +77,7 @@ pub fn composer_context(s: &Workspace, k: &Kit, index: usize) -> El {
     {
         context = context.child(queued_messages(s, k, index));
     }
-    if let Some(error) = &live(s).app.persistence_error {
+    if let Some(error) = live(s).app.persistence_error() {
         context = context.child(label(error, k));
     }
     context.child(crate::composer::attachments(s, k, index))
@@ -100,7 +104,7 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                 label(
                     format!(
                         "{}{}",
-                        if item.pending {
+                        if item.pending() {
                             "Saving… "
                         } else {
                             "Queued: "
@@ -117,16 +121,16 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
             .child(
                 Button::new("Remove")
                     .variant(ButtonVariant::GhostMuted)
-                    .disabled(item.pending)
+                    .disabled(item.pending())
                     .on_press(move |s: &mut Workspace| live_mut(s).app.remove_queued(index, &id))
                     .build(k)
                     .key(format!("remove-queued-{}", item.id)),
             );
         let mut item_view = col().w_full().gap(4.0);
-        if let Some(error) = &item.error {
+        if let Some(error) = item.error() {
             entry = entry.child(
                 Button::new("Retry")
-                    .disabled(item.pending)
+                    .disabled(item.pending())
                     .on_press(move |s: &mut Workspace| live_mut(s).app.retry_queued(index, &retry))
                     .build(k)
                     .key(format!("retry-queued-{}", item.id)),

@@ -49,7 +49,7 @@ fn reminder_fragments_never_enter_presented_rows_or_copied_text() {
     let literal = c
         .entries
         .iter()
-        .find(|e| e.kind == EntryKind::User)
+        .find(|e| e.kind() == EntryKind::User)
         .unwrap();
     assert!(presentation::entry_text(literal).contains("indented code"));
     assert!(presentation::entry_text(literal).contains("literal"));
@@ -57,7 +57,7 @@ fn reminder_fragments_never_enter_presented_rows_or_copied_text() {
     assert!(c
         .entries
         .iter()
-        .filter(|e| e.kind == EntryKind::Status)
+        .filter(|e| e.kind() == EntryKind::Status)
         .all(|e| !presentation::entry_visible(e)));
 }
 
@@ -94,7 +94,7 @@ fn image_prompt_history_adopts_the_optimistic_user_message_once() {
 
         assert_eq!(conversation.entries.len(), 1, "{provider:?}");
         let entry = &conversation.entries[0];
-        assert_eq!(entry.kind, EntryKind::User);
+        assert_eq!(entry.kind(), EntryKind::User);
         assert_eq!(presentation::entry_text(entry), "Describe this");
         assert_eq!(entry.media.len(), 1, "{provider:?}");
         assert_eq!(entry.media[0].source, image.content);
@@ -208,7 +208,7 @@ fn image_inbox_delivery_reconciles_the_real_submission_path_and_later_turns() {
                 turn * 2 + 1,
                 "delivery of turn {turn}"
             );
-            assert!(conversation.entries.iter().all(|entry| !entry.optimistic));
+            assert!(conversation.entries.iter().all(|entry| !entry.optimistic()));
             let entry = conversation.entries.last().unwrap();
             assert_eq!(entry.id, format!("opencode-{id}"));
             assert_eq!(presentation::entry_text(entry), text);
@@ -261,7 +261,7 @@ fn image_inbox_delivery_reconciles_the_real_submission_path_and_later_turns() {
                 refresh_transcript(&mut app, &history);
                 let entries = &app.sessions[0].conversation.entries;
                 assert_eq!(entries.len(), (turn + 1) * 2, "refresh after turn {turn}");
-                assert!(entries.iter().all(|entry| !entry.optimistic));
+                assert!(entries.iter().all(|entry| !entry.optimistic()));
                 assert_eq!(entries[0].media.len(), count);
                 let attached = split_context(&entries[0].text).1;
                 assert!(attached.iter().all(|a| a.kind != AttachmentKind::Image));

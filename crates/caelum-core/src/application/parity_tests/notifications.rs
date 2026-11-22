@@ -74,8 +74,11 @@ fn notification_activation_rejects_stale_sessions_and_preserves_drafts() {
     assert_eq!(app.sessions[1].draft, "second draft");
     for state in ["archived", "forgotten", "closed", "missing"] {
         app.select(0);
-        app.sessions[1].archived = state == "archived";
-        app.sessions[1].forgotten = state == "forgotten";
+        app.sessions[1].archive_fixture(if state == "forgotten" {
+            ArchiveFixture::Forgotten
+        } else {
+            ArchiveFixture::Stable(state == "archived")
+        });
         let mut stale = target.clone();
         if state == "closed" {
             stale.scope.project = "/closed-project".into();

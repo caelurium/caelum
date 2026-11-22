@@ -26,7 +26,7 @@ fn returning_to_a_project_restores_its_active_worktree_session() {
                     provider,
                 });
                 l.app.sessions[owner].remote_id = Some("active-worktree".into());
-                l.app.sessions[owner].conversation.working = true;
+                l.app.sessions[owner].conversation.set_working(true);
                 other_session = l.app.new_session(Scope {
                     project: "/other".into(),
                     provider,
@@ -70,7 +70,7 @@ fn returning_to_a_project_restores_its_active_worktree_session() {
                 assert_eq!(l.app.active_project.as_deref(), Some("/linked"));
                 assert_eq!(l.app.sessions.len(), count);
                 assert!(l.app.sessions[owner].working());
-                assert!(!l.app.sessions[owner].stopping);
+                assert!(!l.app.sessions[owner].stopping());
                 assert_eq!(l.drafts[owner].text, "Keep this café draft");
                 assert_eq!((l.drafts[owner].anchor, l.drafts[owner].focus), (2, 8));
                 assert_eq!(l.drafts[other_session].text, "First other draft");
@@ -138,7 +138,20 @@ fn presented_focus_tracks_pointer_tab_accessibility_and_removal() {
     );
     assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(0));
     assert!(element(&rt, "session-actions-1").opacity > 0.9);
-    rt.update(|s, _| s.live.as_mut().unwrap().app.sessions[1].forgotten = true);
+    rt.update(|s, _| {
+        let app = &mut s.live.as_mut().unwrap().app;
+        app.sessions[1].remote_id = Some("deleted-thread".into());
+        app.apply(caelum_core::application::Event::OpenCode(
+            caelum_protocol::OpenCodeEvent {
+                project_path: "/project".into(),
+                event_type: "session.deleted".into(),
+                data: serde_json::json!({"sessionID":"deleted-thread"}),
+                id: None,
+                created: None,
+                location: None,
+            },
+        ));
+    });
     advance(&mut rt, 0.5);
     check(&rt);
     assert_ne!(

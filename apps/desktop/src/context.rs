@@ -70,7 +70,7 @@ impl Scope {
             project: l.app.active_project.clone(),
             screen: l.panels.screen,
             inspector: l.panels.inspector,
-            overlay: l.panels.overlay,
+            overlay: l.panels.overlay(),
             settings: l.panels.settings_page,
             models: l.models.is_open(),
             side: l.commands.side_owner,
@@ -526,7 +526,7 @@ pub fn pull_request(el: El, project: String, url: String) -> El {
 pub fn session(el: El, index: usize) -> El {
     el.on_secondary_press(move |s: &mut Workspace, at, _| {
         let session = &live(s).app.sessions[index];
-        let archived = session.archived;
+        let archived = session.archived();
         let title = session.title.clone();
         let owner = session.key();
         let id = session.remote_id.clone();
@@ -540,7 +540,7 @@ pub fn session(el: El, index: usize) -> El {
                 Item::new("refresh", "Refresh session")
                     .icon(&ui::REFRESH)
                     .enabled(
-                        session.remote_id.is_some() && !session.loading && !session.submitting,
+                        session.remote_id.is_some() && !session.loading() && !session.submitting(),
                     ),
             )
             .separator()

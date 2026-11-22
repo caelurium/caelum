@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn stopping_before_rejected_admission_clears_the_optimistic_work() {
+    let mut workspace = Workspace::default();
+    let index = workspace.new_session(scope(Provider::Codex, "/a"));
+    workspace.sessions[index].remote_id = Some("session".into());
+    assert!(workspace.send(index, "Keep this prompt".into()));
+    let (request, command) = workspace.commands().pop().unwrap();
+    assert!(matches!(command, Command::Send(..)));
+    workspace.cancel(index);
+    assert!(workspace.sessions[index].stopping());
+    assert!(workspace.commands().is_empty());
+
+    workspace.apply(Event::Completed(request, Err("Admission rejected".into())));
+
+    let session = &workspace.sessions[index];
+    assert!(!session.working());
+    assert!(!session.stopping());
+    assert_eq!(session.failed_prompt.as_deref(), Some("Keep this prompt"));
+    assert!(session.conversation.entries.is_empty());
+    assert!(workspace.commands().is_empty());
+}
+
+#[test]
 fn queues_wait_for_reconciled_idle_and_stop_requires_explicit_resume() {
     let mut app = Workspace::default();
     let sc = scope(Provider::Codex, "/a");
@@ -160,7 +182,7 @@ fn cancellation_waits_for_admission_and_failures_remain_retryable() {
     assert!(matches!(command, Command::Cancel(_)));
     workspace.apply(Event::Completed(cancel, Err("cancel unavailable".into())));
     assert!(workspace.sessions[index].working());
-    assert!(!workspace.sessions[index].stopping);
+    assert!(!workspace.sessions[index].stopping());
 
     let other = workspace.new_session(scope(Provider::Codex, "/b"));
     workspace.send(other, "failed creation".into());

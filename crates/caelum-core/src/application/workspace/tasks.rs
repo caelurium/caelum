@@ -32,7 +32,7 @@ impl Workspace {
                 .services
                 .reviews
                 .get(&(project.clone(), url.clone()))
-                .and_then(|review| review.details.as_ref());
+                .and_then(|review| review.details());
             if details.is_none_or(|details| {
                 details.head_ref_oid != *head
                     || details.state != "OPEN"
@@ -44,11 +44,11 @@ impl Workspace {
         if let Task::RemoveWorktree { path, project } = &task {
             if self.sessions.iter().any(|s| {
                 std::path::Path::new(&s.scope.project).starts_with(path)
-                    && !s.forgotten
+                    && !s.forgotten()
                     && (s.working()
                         || s.attaching > 0
                         || s.generating
-                        || s.archiving
+                        || s.archiving()
                         || !s.queue.is_empty()
                         || !s.draft.is_empty()
                         || !s.attachments.is_empty())
@@ -259,8 +259,7 @@ impl Workspace {
                 self.projects.retain(|p| p.path != worktree.project.path);
                 for session in &mut self.sessions {
                     if session.scope.project == worktree.project.path {
-                        session.archived = true;
-                        session.archive_barrier = self.next_request;
+                        session.restore_archive(true, self.next_request);
                     }
                 }
                 self.remembered

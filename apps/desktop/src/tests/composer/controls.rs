@@ -14,7 +14,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
             rt.update(|s, _| {
                 s.live.as_mut().unwrap().app.sessions[0]
                     .conversation
-                    .working = working
+                    .set_working(working)
             });
             advance(&mut rt, 0.3);
             for name in [
@@ -68,7 +68,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
                 advance(&mut rt, 0.2);
                 assert!(element(&rt, &trigger).focused);
             }
-            assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping);
+            assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
         }
     }
 }
@@ -86,7 +86,7 @@ fn composer_submission_matches_enter_and_stop_keeps_the_next_draft() {
                         let session = &mut l.app.sessions[0];
                         session.scope.provider = provider;
                         session.remote_id = Some("session".into());
-                        session.conversation.working = working;
+                        session.conversation.set_working(working);
                         if attachment_only {
                             session.attachments.push(Attachment::new(
                                 "src/main.rs".into(),
@@ -142,7 +142,7 @@ fn composer_submission_matches_enter_and_stop_keeps_the_next_draft() {
                     }));
                     assert!(l.drafts[0].text.is_empty());
                     assert!(l.app.sessions[0].attachments.is_empty());
-                    assert!(!l.app.sessions[0].stopping);
+                    assert!(!l.app.sessions[0].stopping());
                     assert!(element(&rt, "live-draft-0").focused);
                     if working {
                         fill(&mut rt, "live-draft-0", "Keep this newer draft");
@@ -219,7 +219,7 @@ fn composer_inbox_errors_stay_visible_when_collapsed_and_retry_the_same_message(
         let session = &mut l.app.sessions[0];
         session.scope.provider = Provider::OpenCode;
         session.remote_id = Some("session".into());
-        session.conversation.working = true;
+        session.conversation.set_working(true);
         l.app.commands();
     });
     fill(&mut rt, "live-draft-0", "Keep this queued message");
@@ -357,9 +357,14 @@ fn composer_menus_use_provider_ids_restore_defaults_and_dismiss_on_session_chang
 
 #[test]
 fn composer_activity_is_visible_without_sidebar_and_settles_with_reduced_motion() {
+    use caelum_core::application::{Command, Event, Reply};
+
     for reduced in [false, true] {
         let mut rt = live_runtime_size((800.0, 620.0));
         rt.reduced_motion = reduced;
+        rt.update(|s, _| {
+            s.live.as_mut().unwrap().app.sessions[0].remote_id = Some("thread".into());
+        });
         fill(&mut rt, "live-draft-0", "Start working");
         key(&mut rt, Key::Enter, Mods::default());
         advance(&mut rt, 0.3);
@@ -371,9 +376,15 @@ fn composer_activity_is_visible_without_sidebar_and_settles_with_reduced_motion(
         assert!(element(&rt, "session-activity").visible[3] >= 24.0);
         assert!(element(&rt, "stop").focusable);
         rt.update(|s, _| {
-            let session = &mut s.live.as_mut().unwrap().app.sessions[0];
-            session.submitting = false;
-            session.conversation.settle();
+            let app = &mut s.live.as_mut().unwrap().app;
+            let request = app
+                .commands()
+                .into_iter()
+                .find(|(_, command)| matches!(command, Command::Send(..)))
+                .unwrap()
+                .0;
+            app.apply(Event::Completed(request, Ok(Reply::Done)));
+            app.sessions[0].conversation.settle();
         });
         advance(&mut rt, 0.4);
         assert!(

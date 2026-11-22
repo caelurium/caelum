@@ -31,7 +31,7 @@ enum Tab {
 impl Form {
     pub(super) fn for_entry(l: &Live) -> Self {
         Self {
-            intent: if l.panels.overlay == Some(Screen::Launcher) {
+            intent: if l.panels.overlay() == Some(Screen::Launcher) {
                 SessionIntent::New
             } else {
                 SessionIntent::Reopen
@@ -57,13 +57,13 @@ pub(crate) fn open(s: &mut Workspace, project: String) {
     l.app.dismiss_vm_handoff();
     l.remote.form = Form::for_entry(l);
     l.app.remote_picker(project);
-    l.panels.overlay = Some(Screen::RemotePicker);
+    l.panels.set_overlay(Some(Screen::RemotePicker));
     l.schedule();
 }
 
 pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let screen = l.panels.overlay;
+    let screen = l.panels.overlay();
     let standalone = screen == Some(Screen::CreateVm);
     let handoff = screen == Some(Screen::VmHandoff);
     let source = match &l.app.remote.picker {
@@ -95,7 +95,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                                 .on_press(|s: &mut Workspace| {
                                     let l = live_mut(s);
                                     l.panels.settings_page = crate::settings::Page::Remote;
-                                    l.panels.overlay = Some(Screen::Settings);
+                                    l.panels.set_overlay(Some(Screen::Settings));
                                 })
                                 .build(k),
                         ),
@@ -189,7 +189,7 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
 fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
     let l = live_mut(s);
     let handoff = screen == Some(Screen::VmHandoff);
-    if l.panels.overlay != screen
+    if l.panels.overlay() != screen
         || !matches!(&l.app.remote.picker,Some(Picker::Ready(source)) if source==owner)
         || !l.remote.form.ready(owner)
     {
@@ -259,7 +259,7 @@ fn has_machines(s: &Workspace, source: &Source) -> bool {
 
 pub(super) fn existing_height(s: &Workspace, source: &Source) -> Option<f32> {
     let l = live(s);
-    if l.panels.overlay != Some(Screen::RemotePicker) || l.remote.form.tab != Tab::Existing {
+    if l.panels.overlay() != Some(Screen::RemotePicker) || l.remote.form.tab != Tab::Existing {
         return None;
     }
     let count = l

@@ -72,7 +72,7 @@ pub fn open(s: &mut Workspace) {
     l.panels.remember(&mut l.app);
     l.app.leave_conversation();
     l.panels.screen = Screen::Home;
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.session_menu = None;
     l.models = Default::default();
     l.home.menu = Menu::Closed;

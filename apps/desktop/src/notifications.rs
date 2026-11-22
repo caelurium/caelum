@@ -101,7 +101,7 @@ pub fn dispatch(live: &mut Live) -> bool {
         live.app.activate_notification(target);
     }
     live.panels.screen = Screen::Conversation;
-    live.panels.overlay = None;
+    live.panels.set_overlay(None);
     live.panels.archived = false;
     live.models = Default::default();
     live.session_menu = None;

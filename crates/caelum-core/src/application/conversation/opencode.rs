@@ -6,6 +6,13 @@ use super::{
 };
 use crate::application::presentation;
 
+#[derive(Debug)]
+pub(super) struct Step {
+    message_id: String,
+    started_at: u64,
+    model: Option<String>,
+}
+
 impl Conversation {
     pub(super) fn opencode(&mut self, method: &str, data: &Value) {
         if !self.failure.event(method, data) {
@@ -22,12 +29,12 @@ impl Conversation {
             let latest = self
                 .entries
                 .iter()
-                .rposition(|e| e.kind == EntryKind::Compaction);
+                .rposition(|e| e.kind() == EntryKind::Compaction);
             let owner = data["inputID"].as_str().map(|id| format!("opencode-{id}"));
             let target = if let Some(id) = &owner {
                 self.entries
                     .iter()
-                    .position(|e| e.kind == EntryKind::Compaction && &e.id == id)
+                    .position(|e| e.kind() == EntryKind::Compaction && &e.id == id)
             } else {
                 latest
             };
@@ -44,14 +51,14 @@ impl Conversation {
                 });
                 if let Some(id) = id {
                     let id = format!("opencode-{id}");
-                    if !self.entries.iter().any(|e| e.id == id && e.complete) {
+                    if !self.entries.iter().any(|e| e.id == id && e.complete()) {
                         let mut entry = Entry::new(id, EntryKind::Compaction, String::new(), false);
                         entry.started_at = Some(at);
                         self.put(entry);
-                        self.working = true;
+                        self.set_working(true);
                     }
                 }
-            } else if let Some(i) = target.filter(|i| !self.entries[*i].complete) {
+            } else if let Some(i) = target.filter(|i| !self.entries[*i].complete()) {
                 if method.ends_with("delta") {
                     let id = self.entries[i].id.clone();
                     self.delta(
@@ -65,13 +72,12 @@ impl Conversation {
                     );
                 } else if method.ends_with("ended") || method.ends_with("failed") {
                     let mut entry = self.entries[i].clone();
-                    entry.complete = true;
-                    entry.status = if method.ends_with("failed") {
+                    let status = if method.ends_with("failed") {
                         "failed"
                     } else {
                         "completed"
-                    }
-                    .into();
+                    };
+                    entry.set_progress(true, status);
                     if let Some(text) = data["text"]
                         .as_str()
                         .or(data["summary"].as_str())
@@ -95,7 +101,7 @@ impl Conversation {
                 if !self
                     .entries
                     .iter()
-                    .any(|old| old.id == entry.id && old.complete && !entry.complete)
+                    .any(|old| old.id == entry.id && old.complete() && !entry.complete())
                 {
                     self.put(entry);
                 }
@@ -115,27 +121,30 @@ impl Conversation {
             }
         }
         if method == "session.step.started" {
-            self.step_model = model_id(data);
-            self.step_started = data["assistantMessageID"].as_str().map(|id| {
-                (
-                    id.into(),
-                    data["started"]
-                        .as_u64()
-                        .or(data["_created"].as_u64())
-                        .unwrap_or(0),
-                )
+            self.step = data["assistantMessageID"].as_str().map(|id| Step {
+                message_id: id.into(),
+                started_at: data["started"]
+                    .as_u64()
+                    .or(data["_created"].as_u64())
+                    .unwrap_or(0),
+                model: model_id(data),
             });
         }
         if method == "session.step.ended" {
-            let at = self
-                .step_started
+            let step = if self.step.as_ref().is_some_and(|step| {
+                Some(step.message_id.as_str()) == data["assistantMessageID"].as_str()
+            }) {
+                self.step.take()
+            } else {
+                None
+            };
+            let at = step
                 .as_ref()
-                .filter(|(id, _)| Some(id.as_str()) == data["assistantMessageID"].as_str())
-                .map(|(_, at)| *at)
+                .map(|step| step.started_at)
                 .or(data["_created"].as_u64())
                 .unwrap_or(0);
             if self.usage(&data["tokens"], at) {
-                self.usage_model = model_id(data).or_else(|| self.step_model.clone());
+                self.usage_model = model_id(data).or_else(|| step.and_then(|step| step.model));
             }
         }
         if let Some(rest) = method.strip_prefix("session.") {
@@ -191,7 +200,7 @@ impl Conversation {
                                 }
                             }
                             self.put(entry);
-                            self.working = true;
+                            self.set_working(true);
                         }
                         _ => {}
                     }
@@ -203,21 +212,20 @@ impl Conversation {
                 let id = format!("opencode-tool-{id}");
                 let previous = self.entries.iter().find(|entry| entry.id == id);
                 let complete = method.ends_with("success") || method.ends_with("failed");
-                if previous.is_some_and(|entry| entry.complete) && !complete {
+                if previous.is_some_and(|entry| entry.complete()) && !complete {
                     return;
                 }
                 let mut entry = previous
                     .cloned()
                     .unwrap_or_else(|| Entry::new(id, EntryKind::Tool, String::new(), false));
-                entry.complete = complete;
-                entry.status = if method.ends_with("failed") {
+                let status = if method.ends_with("failed") {
                     "failed"
                 } else if complete {
                     "completed"
                 } else {
                     "running"
-                }
-                .into();
+                };
+                entry.set_progress(complete, status);
                 if let Some(name) = data["name"].as_str().or(data["tool"].as_str()) {
                     entry.name = name.into();
                 }
@@ -254,11 +262,11 @@ impl Conversation {
                     entry.metadata["ended"] = ended.into();
                 }
                 subagents::tool(&mut entry);
-                if previous.is_some_and(|old| old.complete) && !entry.complete {
+                if previous.is_some_and(|old| old.complete()) && !entry.complete() {
                     return;
                 }
                 if !complete {
-                    self.working = true;
+                    self.set_working(true);
                 }
 
                 if let Some(index) = self.entries.iter().position(|e| e.id == entry.id) {
@@ -278,10 +286,10 @@ impl Conversation {
         }
         match method {
             "session.execution.started" | "session.step.started" | "session.retry.scheduled" => {
-                self.working = true
+                self.set_working(true)
             }
             "session.status" => match string(&data["status"]["type"]) {
-                "busy" | "retry" => self.working = true,
+                "busy" | "retry" => self.set_working(true),
                 "idle" => {
                     self.settle_at(data["_created"].as_u64().unwrap_or_else(presentation::now))
                 }

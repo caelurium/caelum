@@ -68,8 +68,8 @@ impl Workspace {
         let eligible = |index: usize| {
             let s = &self.sessions[index];
             s.scope.project == project
-                && !s.forgotten
-                && !s.archived
+                && !s.forgotten()
+                && !s.archived()
                 && (intent == SessionIntent::Reopen
                     || (ready
                         && s.scope.provider == Provider::Codex
@@ -101,8 +101,8 @@ impl Workspace {
 
     pub(super) fn inline_link(&self, link: &VmLink) -> Option<usize> {
         self.sessions.iter().position(|s| {
-            !s.forgotten
-                && !s.archived
+            !s.forgotten()
+                && !s.archived()
                 && checkout_id(&s.scope.project) == Some(&link.checkout)
                 && s.native_handoff
                     .as_ref()
@@ -110,7 +110,11 @@ impl Workspace {
         })
     }
 
-    pub(in crate::application::workspace) fn check_native_start(&mut self, i: usize, text: String) {
+    pub(in crate::application::workspace) fn check_native_start(
+        &mut self,
+        i: usize,
+        attempt: super::super::submission::Attempt,
+    ) {
         let s = &self.sessions[i];
         let target = self
             .native_checkout(&s.scope.project)
@@ -120,41 +124,76 @@ impl Workspace {
             s.native_handoff.as_ref().and_then(|h| h.base.clone()),
         ) {
             target.required_base = Some(base.clone());
-            self.request(
+            let request = self.request(
                 Command::Remote(Operation::Prepare(target, base.branch, None)),
-                Pending::CheckHandoff(i, text),
+                Pending::CheckHandoff(i),
             );
+            self.sessions[i].submission =
+                super::super::submission::Submission::CheckingHandoff { request, attempt };
         } else {
-            self.complete(
-                0,
-                Pending::Start(i, text),
-                Err("The handoff checkout is no longer available.".into()),
+            self.fail_submission(
+                i,
+                attempt,
+                "The handoff checkout is no longer available.".into(),
             );
         }
     }
 
-    pub(in crate::application::workspace) fn checked_native_start(
+    pub(in crate::application::workspace) fn complete_handoff_check(
         &mut self,
         i: usize,
-        text: &str,
+        id: u64,
         result: Result<Reply, String>,
-    ) -> Result<(), String> {
-        let s = &self.sessions[i];
-        let c = self
-            .native_checkout(&s.scope.project)
-            .ok_or("The handoff VM was removed.")?;
-        if s.forgotten
-            || s.stopping
-            || !matches!(result?, Reply::Remote(Outcome::Prepared {machine,root,..})
-            if c.machine().is_some_and(|m|m.key==machine.key) && c.root.as_ref()==Some(&root))
-        {
-            return Err("The handoff was stopped or the verified VM checkout is not ready.".into());
+    ) {
+        if !matches!(
+            self.sessions[i].submission,
+            super::super::submission::Submission::CheckingHandoff { request, .. } if request == id
+        ) {
+            return;
         }
-        self.request(
-            Command::Start(s.scope.clone(), s.inflight_options.clone()),
-            Pending::Start(i, text.to_owned()),
-        );
-        Ok(())
+        let super::super::submission::Submission::CheckingHandoff { attempt, .. } =
+            std::mem::take(&mut self.sessions[i].submission)
+        else {
+            unreachable!();
+        };
+        let s = &self.sessions[i];
+        let ready = match result {
+            Ok(Reply::Remote(Outcome::Prepared { machine, root, .. })) => {
+                match self.native_checkout(&s.scope.project) {
+                    Some(c)
+                        if !s.forgotten()
+                            && matches!(
+                                attempt.intent,
+                                super::super::submission::Intent::Continue
+                            )
+                            && c.machine().is_some_and(|m| m.key == machine.key)
+                            && c.root.as_ref() == Some(&root) =>
+                    {
+                        Ok(())
+                    }
+                    None => Err("The handoff VM was removed.".into()),
+                    Some(_) => Err(
+                        "The handoff was stopped or the verified VM checkout is not ready.".into(),
+                    ),
+                }
+            }
+            Ok(_) => {
+                Err("The handoff was stopped or the verified VM checkout is not ready.".into())
+            }
+            Err(e) => Err(e),
+        };
+        match ready {
+            Ok(()) => {
+                let scope = self.sessions[i].scope.clone();
+                let request = self.request(
+                    Command::Start(scope, attempt.prompt.options.clone()),
+                    Pending::Start(i),
+                );
+                self.sessions[i].submission =
+                    super::super::submission::Submission::Creating { request, attempt };
+            }
+            Err(error) => self.fail_submission(i, attempt, error),
+        }
     }
 
     pub fn native_connected(&mut self, project: &str) {
@@ -215,7 +254,7 @@ impl Workspace {
             .iter_mut()
             .filter(|s| s.scope.project == project)
         {
-            s.forgotten = true;
+            s.forget();
             s.queue_paused = true;
         }
         if self.active_project.as_ref() == Some(&project) {

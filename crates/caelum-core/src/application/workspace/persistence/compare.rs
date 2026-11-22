@@ -22,18 +22,21 @@ impl Workspace {
             managed_worktrees,
             project_roots,
         } = snapshot;
-        let retained = || self.sessions.iter().filter(|s| !s.forgotten);
+        let retained = || self.sessions.iter().filter(|s| !s.forgotten());
         let saved_index = |index: usize| {
-            self.sessions.get(index).filter(|s| !s.forgotten).map(|_| {
-                if self.sessions.len() == sessions.len() {
-                    index
-                } else {
-                    self.sessions[..index]
-                        .iter()
-                        .filter(|s| !s.forgotten)
-                        .count()
-                }
-            })
+            self.sessions
+                .get(index)
+                .filter(|s| !s.forgotten())
+                .map(|_| {
+                    if self.sessions.len() == sessions.len() {
+                        index
+                    } else {
+                        self.sessions[..index]
+                            .iter()
+                            .filter(|s| !s.forgotten())
+                            .count()
+                    }
+                })
         };
         let remembered_matches =
             |current: &HashMap<String, usize>, saved: &BTreeMap<String, usize>| {
@@ -159,22 +162,16 @@ impl Session {
             && self.scope == *scope
             && self.remote_id == *remote_id
             && self.title == *title
-            && self.title_state.turns == *title_refresh_turns
-            && self.title_state.manual == *manual_title
+            && self.title_state.turns() == *title_refresh_turns
+            && self.title_state.manual() == *manual_title
             && self.options == *options
             && self.draft == *draft
             && self.attachments == *attachments
             && self.failed_prompt == *failed_prompt
-            && match (&self.inflight_prompt, pending_submission) {
-                (Some(text), Some(prompt)) => {
-                    *text == prompt.text && self.inflight_options == prompt.options
-                }
-                (None, None) => true,
-                _ => false,
-            }
+            && self.pending_prompt() == pending_submission.as_ref()
             && self.queue == *queue
-            && self.inbox.items == *inbox
-            && self.archived == *archived
+            && self.inbox.matches_saved(inbox)
+            && self.archived() == *archived
             && self.reading == *reading
             && self.unread == *unread
     }

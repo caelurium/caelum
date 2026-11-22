@@ -12,13 +12,27 @@ type Key = (String, String, String, String);
 
 struct Pending {
     prompt: QuestionPrompt,
-    reply: Reply,
-    submitting: bool,
+    phase: Phase,
+}
+
+enum Phase {
+    Awaiting(Reply),
+    Submitting(Arc<()>),
+}
+
+enum State {
+    Disabled,
+    Active(Active),
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Active(Active::default())
+    }
 }
 
 #[derive(Default)]
-struct State {
-    disabled: bool,
+struct Active {
     revision: u64,
     pending: BTreeMap<Key, Pending>,
     subscribers: Vec<mpsc::Sender<Vec<QuestionPrompt>>>,
@@ -32,43 +46,50 @@ pub struct QuestionBroker(Arc<Mutex<State>>);
 impl QuestionBroker {
     /// Terminal clients without a question UI keep their existing behavior.
     pub fn disabled() -> Self {
-        let broker = Self::default();
-        broker.lock().disabled = true;
-        broker
+        Self(Arc::new(Mutex::new(State::Disabled)))
     }
 
     pub fn pending(&self) -> Vec<QuestionPrompt> {
-        Self::prompts(&self.lock())
+        match &*self.lock() {
+            State::Disabled => Vec::new(),
+            State::Active(active) => Self::prompts(active),
+        }
     }
 
     pub fn subscribe(&self) -> mpsc::Receiver<Vec<QuestionPrompt>> {
         let (sender, receiver) = mpsc::channel();
         let mut state = self.lock();
-        let _ = sender.send(Self::prompts(&state));
-        state.subscribers.push(sender);
+        match &mut *state {
+            State::Disabled => {
+                let _ = sender.send(Vec::new());
+            }
+            State::Active(active) => {
+                let _ = sender.send(Self::prompts(active));
+                active.subscribers.push(sender);
+            }
+        }
         receiver
     }
 
     pub fn insert(&self, prompt: QuestionPrompt, reply: Reply) -> Result<(), String> {
         validate(&prompt)?;
         let mut state = self.lock();
-        if state.disabled {
+        let State::Active(state) = &mut *state else {
             return Err("This client cannot answer agent questions".into());
-        }
+        };
         let key = key(&prompt);
         if state.pending.contains_key(&key) {
-            Self::publish(&mut state);
+            Self::publish(state);
             return Ok(());
         }
         state.pending.insert(
             key,
             Pending {
                 prompt,
-                reply,
-                submitting: false,
+                phase: Phase::Awaiting(reply),
             },
         );
-        Self::publish(&mut state);
+        Self::publish(state);
         Ok(())
     }
 
@@ -86,15 +107,18 @@ impl QuestionBroker {
             session.into(),
             request.into(),
         );
-        let reply = {
+        let (reply, attempt) = {
             let mut state = self.lock();
+            let State::Active(state) = &mut *state else {
+                return Err("Question is no longer pending".into());
+            };
             let pending = state
                 .pending
                 .get_mut(&key)
                 .ok_or("Question is no longer pending")?;
-            if pending.submitting {
+            let Phase::Awaiting(reply) = &pending.phase else {
                 return Err("An answer is already being submitted".into());
-            }
+            };
             if let Some(values) = &answer {
                 let checked = crate::application::forms::validate(&pending.prompt, values);
                 if !checked.errors.is_empty() {
@@ -107,19 +131,25 @@ impl QuestionBroker {
                 }
                 answer = Some(checked.values);
             }
-            pending.submitting = true;
-            Arc::clone(&pending.reply)
+            let reply = Arc::clone(reply);
+            let attempt = Arc::new(());
+            pending.phase = Phase::Submitting(attempt.clone());
+            (reply, attempt)
         };
 
         let result = reply(answer);
         let mut state = self.lock();
-        if let Some(pending) = state.pending.get_mut(&key) {
-            if Arc::ptr_eq(&pending.reply, &reply) {
+        if let State::Active(state) = &mut *state {
+            if let Some(pending) = state.pending.get_mut(&key) {
+                if !matches!(&pending.phase, Phase::Submitting(active) if Arc::ptr_eq(active, &attempt))
+                {
+                    return result;
+                }
                 if result.is_ok() {
                     state.pending.remove(&key);
-                    Self::publish(&mut state);
+                    Self::publish(state);
                 } else {
-                    pending.submitting = false;
+                    pending.phase = Phase::Awaiting(reply);
                 }
             }
         }
@@ -128,6 +158,9 @@ impl QuestionBroker {
 
     pub fn dismiss(&self, provider: &str, project: &str, session: &str, request: &str) {
         let mut state = self.lock();
+        let State::Active(state) = &mut *state else {
+            return;
+        };
         state.pending.remove(&(
             provider.into(),
             project.into(),
@@ -135,19 +168,25 @@ impl QuestionBroker {
             request.into(),
         ));
 
-        Self::publish(&mut state);
+        Self::publish(state);
     }
 
     pub fn clear(&self, provider: &str, project: &str, session: Option<&str>) {
         let mut state = self.lock();
+        let State::Active(state) = &mut *state else {
+            return;
+        };
         state.pending.retain(|(p, path, id, _), _| {
             p != provider || path != project || session.is_some_and(|session| id != session)
         });
-        Self::publish(&mut state);
+        Self::publish(state);
     }
 
     pub fn revision(&self) -> u64 {
-        self.lock().revision
+        match &*self.lock() {
+            State::Disabled => 0,
+            State::Active(active) => active.revision,
+        }
     }
 
     /// The event stream is subscribed before fetching. Discard a snapshot if a
@@ -166,28 +205,30 @@ impl QuestionBroker {
             }
         }
         let mut state = self.lock();
-        if state.disabled || state.revision != revision {
+        let State::Active(state) = &mut *state else {
+            return Ok(false);
+        };
+        if state.revision != revision {
             return Ok(false);
         }
         let keys: HashSet<_> = requests.iter().map(|(prompt, _)| key(prompt)).collect();
-        let before = Self::prompts(&state);
+        let before = Self::prompts(state);
         state
             .pending
             .retain(|key, _| key.0 != provider || key.1 != project || keys.contains(key));
         for (prompt, reply) in requests {
             state.pending.entry(key(&prompt)).or_insert(Pending {
                 prompt,
-                reply,
-                submitting: false,
+                phase: Phase::Awaiting(reply),
             });
         }
-        if before != Self::prompts(&state) {
-            Self::publish(&mut state);
+        if before != Self::prompts(state) {
+            Self::publish(state);
         }
         Ok(true)
     }
 
-    fn prompts(state: &State) -> Vec<QuestionPrompt> {
+    fn prompts(state: &Active) -> Vec<QuestionPrompt> {
         state
             .pending
             .values()
@@ -195,7 +236,7 @@ impl QuestionBroker {
             .collect()
     }
 
-    fn publish(state: &mut State) {
+    fn publish(state: &mut Active) {
         state.revision += 1;
         let prompts = Self::prompts(state);
         state
@@ -310,20 +351,18 @@ mod tests {
         let (started, waiting) = mpsc::channel();
         let (release, blocked) = mpsc::channel();
         let blocked = Mutex::new(blocked);
+        let reply: Reply = Arc::new(move |answer| {
+            assert!(answer.is_none());
+            started.send(()).unwrap();
+            blocked
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap();
+            Ok(())
+        });
         broker
-            .insert(
-                prompt("codex", "/a", "s1"),
-                Arc::new(move |answer| {
-                    assert!(answer.is_none());
-                    started.send(()).unwrap();
-                    blocked
-                        .lock()
-                        .unwrap()
-                        .recv_timeout(Duration::from_secs(2))
-                        .unwrap();
-                    Ok(())
-                }),
-            )
+            .insert(prompt("codex", "/a", "s1"), reply.clone())
             .unwrap();
         let worker = broker.clone();
         let task = thread::spawn(move || worker.resolve("codex", "/a", "s1", "same-id", None));
@@ -334,9 +373,7 @@ mod tests {
             .contains("already"));
         broker.dismiss("codex", "/a", "s1", "same-id");
 
-        broker
-            .insert(prompt("codex", "/a", "s1"), Arc::new(|_| Ok(())))
-            .unwrap();
+        broker.insert(prompt("codex", "/a", "s1"), reply).unwrap();
         release.send(()).unwrap();
         task.join().unwrap().unwrap();
         assert_eq!(broker.pending().len(), 1);

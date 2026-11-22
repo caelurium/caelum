@@ -17,7 +17,7 @@ pub fn open_launcher(s: &mut Workspace) {
         .filter(|scope| caelum_core::remote::native::checkout_id(&scope.project).is_none())
         .map(|scope| scope.provider)
         .unwrap_or(l.app.preferences.default_provider);
-    l.panels.overlay = Some(Screen::Launcher);
+    l.panels.set_overlay(Some(Screen::Launcher));
     l.commands.search.clear();
     l.commands.search.focused = true;
 }
@@ -210,7 +210,7 @@ fn launch(s: &mut Workspace, path: &str) {
         provider: l.panels.launch_provider,
     });
     l.sync_editors();
-    l.panels.overlay = None;
+    l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.focus();
 }

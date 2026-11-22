@@ -292,8 +292,8 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
         .icon(&crate::PLUS)
         .disabled(live.app.selected.is_none_or(|i| {
             live.app.sessions[i].scope.project != *project
-                || live.app.sessions[i].archived
-                || live.app.sessions[i].forgotten
+                || live.app.sessions[i].archived()
+                || live.app.sessions[i].forgotten()
         }))
         .on_press(move |s: &mut Workspace| {
             let live = live_mut(s);
@@ -354,14 +354,13 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
         quiet_button(&glyphs::SEARCH, "Find in file · ⌘F")
             .on_press(|s: &mut Workspace| {
                 let p = &mut live_mut(s).panels;
-                p.finding = true;
-                p.find.focused = true;
+                p.open_find();
             })
             .build(k)
             .key("find-in-file"),
     );
     browser = browser.child(actions);
-    if live.panels.finding {
+    if matches!(live.panels.finding, super::Find::Open { .. }) {
         browser = browser.child(
             row()
                 .w_full()
@@ -378,7 +377,11 @@ pub(super) fn files(s: &Workspace, k: &Kit) -> El {
                             "local-file-search",
                             |s| Some(&mut live_mut(s).panels.find),
                             |s, tx| {
-                                live_mut(s).panels.find_index = usize::MAX;
+                                if let super::Find::Open { cursor } =
+                                    &mut live_mut(s).panels.finding
+                                {
+                                    *cursor = None;
+                                }
                                 find_next(s, false, tx);
                             },
                         )
@@ -505,14 +508,15 @@ pub(super) fn find_next(s: &mut Workspace, backwards: bool, tx: &mut Tx) {
     if lines.is_empty() {
         return;
     }
-    let next = if l.panels.find_index == usize::MAX {
-        0
-    } else if backwards {
-        (l.panels.find_index + lines.len() - 1) % lines.len()
-    } else {
-        (l.panels.find_index + 1) % lines.len()
+    let super::Find::Open { cursor } = &mut l.panels.finding else {
+        return;
     };
-    l.panels.find_index = next;
+    let next = match *cursor {
+        None => 0,
+        Some(previous) if backwards => (previous + lines.len() - 1) % lines.len(),
+        Some(previous) => (previous + 1) % lines.len(),
+    };
+    *cursor = Some(next);
     if let Some(document) = l.panels.documents.get_mut(&(project, path)) {
         let line = diff::LineRef::new(diff::Side::New, lines[next] as u32);
         document

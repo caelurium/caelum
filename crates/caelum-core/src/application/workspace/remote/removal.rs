@@ -102,8 +102,8 @@ impl Workspace {
         let origin = (self.remote.saved.selected.as_deref() == Some(id) || selected_inline)
             .then(|| {
                 self.sessions.iter().position(|s| {
-                    !s.archived
-                        && !s.forgotten
+                    !s.archived()
+                        && !s.forgotten()
                         && self.project_is_open(&s.scope.project)
                         && s.vm_link.as_ref().is_some_and(|v| {
                             v.checkout == id

@@ -57,7 +57,7 @@ impl Workspace {
             return;
         };
         let known = self.sessions.iter().position(|s| {
-            !s.forgotten
+            !s.forgotten()
                 && crate::remote::native::checkout_id(&s.scope.project).is_none()
                 && s.scope.provider == Provider::OpenCode
                 && s.remote_id.as_deref() == Some(id)
@@ -81,8 +81,8 @@ impl Workspace {
                     let source_open = self.project_is_open(&session.scope.project);
                     if session.relocation.pending() {
                         self.sessions[i].relocation = Relocation::Settled(self.next_request);
-                        self.pending.retain(|_, p| !matches!(p, Pending::Resume(j, _) | Pending::History(j, _, _) if *j == i));
-                        self.sessions[i].loading = false;
+                        self.pending.retain(|_, p| !matches!(p, Pending::Resume(j) | Pending::History(j) if *j == i));
+                        self.sessions[i].cancel_history_read();
                     }
 
                     if source_open {
@@ -109,7 +109,7 @@ impl Workspace {
             || self.closed_since(destination, observed)
             || !self.has_open_checkout(destination)
             || session.relocation.destination() == Some(destination)
-            || session.forgotten
+            || session.forgotten()
         {
             return;
         }
@@ -153,7 +153,7 @@ impl Workspace {
         if request != *current {
             return;
         }
-        if !session.forgotten
+        if !session.forgotten()
             && session.key().as_ref() == Some(from)
             && !self.closed_since(destination, request)
             && self.has_open_checkout(destination)
@@ -189,8 +189,7 @@ impl Workspace {
 
     pub(super) fn resume_moved(&mut self, request: u64, index: usize, change: OpenCodeMove) {
         let session = &mut self.sessions[index];
-        session.loading = false;
-        if request > session.relocation.request() {
+        if session.finish_resume(request) && request > session.relocation.request() {
             self.verified_move(request, index, change);
         }
     }
@@ -237,7 +236,7 @@ impl Workspace {
             unreachable!()
         };
         let open = self.has_open_checkout(&change.project.path);
-        if self.sessions[index].forgotten
+        if self.sessions[index].forgotten()
             || self.sessions[index].key().as_ref() != Some(&change.from)
             || self.closed_since(&change.project.path, request)
             || (!open
@@ -259,11 +258,8 @@ impl Workspace {
             .retain(|_, pending| !pending.location_read(index));
         let session = &mut self.sessions[index];
         session.scope.project.clone_from(&change.project.path);
-        if request > session.archive_barrier {
-            session.archived = change.archived;
-            session.archive_barrier = request;
-        }
-        session.loading = false;
+        session.observe_archive(change.archived, request);
+        session.cancel_history_read();
         session.error = None;
         session.details = None;
         session.shells.clear();
@@ -309,7 +305,7 @@ impl Workspace {
 impl Pending {
     fn location_read(&self, index: usize) -> bool {
         matches!(self,
-            Self::Resume(i, _) | Self::History(i, _, _) | Self::Details(i)
+            Self::Resume(i) | Self::History(i) | Self::Details(i)
             | Self::Shells(i, _) | Self::Inbox(i, _) if *i == index)
             || matches!(self, Self::VerifyOpenCodeMove(i) if *i == index)
     }
@@ -323,16 +319,16 @@ impl Pending {
             | Self::ConversationControl(i, _, _) => *i == index,
             Self::Enqueue(i, _)
             | Self::RemoveQueued(i, _)
-            | Self::Control(i, _)
+            | Self::Control(i)
             | Self::Generate(i, _, _)
-            | Self::RegenerateTitle(i, _)
-            | Self::Archive(i, _, _, _)
+            | Self::RegenerateTitle(i)
+            | Self::Archive(i)
             | Self::DeleteSession(i)
             | Self::Attachment(i, _)
             | Self::Mention { index: i, .. }
-            | Self::CheckHandoff(i, _)
-            | Self::Start(i, _)
-            | Self::Send(i, _, _)
+            | Self::CheckHandoff(i)
+            | Self::Start(i)
+            | Self::Send(i)
             | Self::Cancel(i) => *i == index,
             Self::Request {
                 provider,

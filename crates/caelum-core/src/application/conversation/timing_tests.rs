@@ -13,6 +13,51 @@ fn output(conversation: &Conversation, id: &str) -> u64 {
 }
 
 #[test]
+fn reconciling_idle_clears_retrying_before_the_next_turn() {
+    let mut conversation = Conversation::default();
+    conversation.apply(Provider::OpenCode, "session.retry.scheduled", &json!({}));
+    assert!(conversation.working());
+    assert!(conversation.retrying());
+
+    conversation.set_working(false);
+    assert!(!conversation.working());
+    assert!(!conversation.retrying());
+    conversation.optimistic("next".into(), "New prompt".into());
+    assert!(conversation.working());
+    assert!(!conversation.retrying());
+    assert!(conversation.entries[0].optimistic());
+}
+
+#[test]
+fn out_of_order_step_completion_cannot_borrow_another_steps_model() {
+    let mut conversation = Conversation::default();
+    let start = |conversation: &mut Conversation, id, model, at| {
+        conversation.apply(
+            Provider::OpenCode,
+            "session.step.started",
+            &json!({"assistantMessageID":id, "modelID":model, "_created":at}),
+        );
+    };
+    let end = |conversation: &mut Conversation, id, at| {
+        conversation.apply(
+            Provider::OpenCode,
+            "session.step.ended",
+            &json!({"assistantMessageID":id, "_created":at,
+                    "tokens":{"input":10, "output":4, "cache":{"read":2, "write":1}}}),
+        );
+    };
+
+    start(&mut conversation, "first", "first-model", 100);
+    start(&mut conversation, "second", "second-model", 200);
+    end(&mut conversation, "first", 150);
+    assert_eq!(conversation.used_tokens, Some(17));
+    assert_eq!(conversation.usage_model, None);
+
+    end(&mut conversation, "second", 250);
+    assert_eq!(conversation.usage_model.as_deref(), Some("second-model"));
+}
+
+#[test]
 fn live_duration_includes_submission_wait_thinking_tools_and_retries() {
     for provider in Provider::ALL {
         let mut conversation = Conversation::default();
@@ -191,7 +236,7 @@ fn refresh_preserves_the_original_live_submission_and_completion_times() {
         conversation
             .entries
             .iter()
-            .filter(|entry| entry.kind == EntryKind::User)
+            .filter(|entry| entry.kind() == EntryKind::User)
             .count(),
         1
     );

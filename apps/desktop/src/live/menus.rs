@@ -20,7 +20,7 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
         .child(
             ui::choice(
                 "Refresh session",
-                if session.loading {
+                if session.loading() {
                     "Reconnecting and loading history…"
                 } else if session.remote_id.is_none() {
                     "Available after your first message"
@@ -30,9 +30,9 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
                 false,
                 k,
             )
-            .disabled(session.remote_id.is_none() || session.loading || session.submitting)
+            .disabled(session.remote_id.is_none() || session.loading() || session.submitting())
             .opacity(
-                if session.remote_id.is_none() || session.loading || session.submitting {
+                if session.remote_id.is_none() || session.loading() || session.submitting() {
                     0.5
                 } else {
                     1.0
@@ -49,7 +49,7 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
     let archive_disabled = archive_disabled(live, index);
     content = content.child(
         ui::choice(
-            if session.archived {
+            if session.archived() {
                 "Restore session"
             } else {
                 "Archive session"
@@ -67,15 +67,15 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
         .focus_highlight(k.c.hover)
         .opacity(if archive_disabled { 0.5 } else { 1.0 })
         .on_press(move |s: &mut Workspace| {
-            let archived = crate::live::live(s).app.sessions[index].archived;
+            let archived = crate::live::live(s).app.sessions[index].archived();
             live_mut(s).archive(index, !archived);
         })
         .key("archive-session"),
     );
-    if session.archived {
+    if session.archived() {
         content = content.child(
             ui::choice(
-                if session.deleting {
+                if session.deleting() {
                     "Deleting session…"
                 } else {
                     "Delete permanently…"
@@ -84,10 +84,10 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
                 false,
                 k,
             )
-            .disabled(archive_disabled || session.deleting)
+            .disabled(archive_disabled || session.deleting())
             .role("menuitem")
             .focus_highlight(k.c.hover)
-            .opacity(if archive_disabled || session.deleting {
+            .opacity(if archive_disabled || session.deleting() {
                 0.5
             } else {
                 1.0
@@ -104,8 +104,8 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
 pub(crate) fn archive_disabled(live: &Live, index: usize) -> bool {
     let session = &live.app.sessions[index];
     session.working()
-        || session.archiving
-        || session.deleting
+        || session.archiving()
+        || session.deleting()
         || !session.queue.is_empty()
         || !session.inbox.items.is_empty()
         || live.app.approvals.iter().any(|p| {
@@ -130,7 +130,7 @@ pub fn close_session_menu(s: &mut Workspace) {
 pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     super::sidebar::overlays(s, k, layers);
     let l = live(s);
-    if let Some(index) = l.app.last_archived {
+    if let Some(index) = l.app.last_archived() {
         let session = &l.app.sessions[index];
         let width =
             rune::memo::window_layout("main-pane").map_or(480.0, |r| (r[2] - 32.0).min(480.0));
@@ -163,16 +163,16 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                     ),
             )
             .child(
-                Button::new(if session.archiving {
+                Button::new(if session.archiving() {
                     "Restoring…"
                 } else {
                     "Undo"
                 })
                 .variant(ButtonVariant::GhostMuted)
-                .disabled(session.archiving)
+                .disabled(session.archiving())
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
-                    if l.app.last_archived == Some(index) {
+                    if l.app.last_archived() == Some(index) {
                         l.app.undo_archive();
                         l.sync_editors();
                     }

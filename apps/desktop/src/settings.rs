@@ -88,7 +88,7 @@ pub fn height(s: &Workspace) -> f32 {
         }
     };
     height
-        + if l.app.persistence_error.is_some() {
+        + if l.app.persistence_error().is_some() {
             64.0
         } else {
             0.0
@@ -190,7 +190,7 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         Page::About => about(s, k),
     };
     let mut content = col().w_full().gap(12.0).pr(6.0).child(body);
-    if let Some(error) = &live(s).app.persistence_error {
+    if let Some(error) = live(s).app.persistence_error() {
         content = content
             .child(ui::caption(error, k).color(k.c.danger.fg))
             .child(

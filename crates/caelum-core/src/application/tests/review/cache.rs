@@ -1,4 +1,25 @@
 use super::*;
+
+#[test]
+fn review_pages_require_the_verified_revision_and_next_cursor() {
+    let mut review = crate::application::Review::default();
+    let page = |base: &str, next_page| caelum_protocol::GitHubPullRequestFiles {
+        files: Vec::new(),
+        base_oid: base.into(),
+        next_page,
+    };
+    assert!(!review.apply_file_page("head", 1, page("base", Some(2))));
+    review.set_details(details("head", "base"));
+    assert!(!review.apply_file_page("old-head", 1, page("base", Some(2))));
+    assert!(!review.apply_file_page("head", 1, page("old-base", Some(2))));
+    assert!(review.apply_file_page("head", 1, page("base", Some(2))));
+    assert!(!review.apply_file_page("head", 3, page("base", None)));
+    assert_eq!(review.next_page(), Some(2));
+    assert!(review.apply_file_page("head", 2, page("base", None)));
+    review.clear_details();
+    assert!(!review.files_loaded());
+    assert!(review.next_page().is_none());
+}
 use crate::github::CachedReview;
 use caelum_protocol::{GitHubPullRequestDetails, GitHubPullRequestFiles};
 
@@ -47,8 +68,8 @@ fn cached_first_open_keeps_files_and_pagination_when_fresh_commits_match() {
     finish(&mut app, cache, TaskReply::ReviewCache(Some(cached())));
     let key = ("/worktree".into(), URL.into());
     let review = &app.services.reviews[&key];
-    assert!(review.cached() && review.files_loaded);
-    assert_eq!(review.files.len(), 1);
+    assert!(review.cached() && review.files_loaded());
+    assert_eq!(review.files().len(), 1);
     assert!(
         app.commands().is_empty(),
         "cache cannot launch stale followups"
@@ -59,7 +80,7 @@ fn cached_first_open_keeps_files_and_pagination_when_fresh_commits_match() {
         TaskReply::Details(details("head", "base").into()),
     );
     assert!(!app.services.reviews[&key].cached());
-    assert_eq!(app.services.reviews[&key].next_page, Some(2));
+    assert_eq!(app.services.reviews[&key].next_page(), Some(2));
     let next = app.commands();
     assert_eq!(next.len(), 3, "only feedback needs fetching");
     assert!(next
@@ -82,8 +103,8 @@ fn cached_first_open_keeps_files_and_pagination_when_fresh_commits_match() {
             next_page: None,
         }),
     );
-    assert_eq!(app.services.reviews[&key].files.len(), 1);
-    assert_eq!(app.services.reviews[&key].next_page, None);
+    assert_eq!(app.services.reviews[&key].files().len(), 1);
+    assert_eq!(app.services.reviews[&key].next_page(), None);
 }
 
 #[test]
@@ -102,14 +123,14 @@ fn cache_races_base_only_changes_and_head_changes_preserve_live_ownership() {
                 finish(&mut app, cache, TaskReply::ReviewCache(Some(cached())));
             }
             let review = &app.services.reviews[&("/a".into(), URL.into())];
-            assert_eq!(review.details.as_ref(), Some(&fresh));
+            assert_eq!(review.details(), Some(&fresh));
             assert!(!review.cached());
             assert_eq!(
-                review.files_loaded,
+                review.files_loaded(),
                 cache_first && head == "head" && base == "base"
             );
-            if !review.files_loaded {
-                assert!(review.files.is_empty());
+            if !review.files_loaded() {
+                assert!(review.files().is_empty());
                 assert!(app.commands().iter().any(|(_, c)| matches!(c,
                     Command::Task(Task::ReviewFiles { head: h, base: b, page: 1, .. }) if h == head && b == base)));
             }
@@ -153,7 +174,7 @@ fn failed_refresh_keeps_cached_content_without_admitting_mutations_or_stale_page
     }
     assert!(app.commands().is_empty());
     let review = &app.services.reviews[&("/a".into(), URL.into())];
-    assert!(review.cached() && review.files_loaded);
+    assert!(review.cached() && review.files_loaded());
     assert_eq!(review.error.as_deref(), Some("Offline"));
 }
 
@@ -169,7 +190,7 @@ fn manual_refresh_rejects_late_cache_and_old_base_pages() {
         TaskReply::Details(details("head", "base").into()),
     );
     assert!(app.services.reviews[&("/a".into(), URL.into())]
-        .details
+        .details()
         .is_none());
     app.task(Task::Details {
         project: "/a".into(),
@@ -208,7 +229,7 @@ fn manual_refresh_rejects_late_cache_and_old_base_pages() {
         old_page,
         TaskReply::ReviewFiles(cached().files.unwrap()),
     );
-    assert!(!app.services.reviews[&("/a".into(), URL.into())].files_loaded);
+    assert!(!app.services.reviews[&("/a".into(), URL.into())].files_loaded());
     finish(
         &mut app,
         new_page,
@@ -218,7 +239,7 @@ fn manual_refresh_rejects_late_cache_and_old_base_pages() {
             next_page: None,
         }),
     );
-    assert!(app.services.reviews[&("/a".into(), URL.into())].files_loaded);
+    assert!(app.services.reviews[&("/a".into(), URL.into())].files_loaded());
 }
 
 #[test]

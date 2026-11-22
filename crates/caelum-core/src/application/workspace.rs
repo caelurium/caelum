@@ -38,8 +38,10 @@ use caelum_protocol::{ApprovalPrompt, ProjectInfo, ProviderChoices, QuestionProm
 
 use super::{
     Attachment, Command, Conversation, Options, Preferences, Provider, QueuedPrompt, Scope,
-    Services, SessionKey, Snapshot, Store, Summary, Task,
+    Services, SessionKey, Summary, Task,
 };
+#[cfg(test)]
+pub(super) use archive::ArchiveFixture;
 
 pub struct Session {
     vm_link: Option<crate::remote::VmLink>,
@@ -54,12 +56,9 @@ pub struct Session {
     pub last_activity: Option<u64>,
     pub conversation: Conversation,
     pub options: Options,
-    pub loading: bool,
-    pub loaded: bool,
-    pub submitting: bool,
-    pub commanding: bool,
-    pub stopping: bool,
-    pub next_cursor: Option<String>,
+    history: history::State,
+    submission: submission::Submission,
+    native_command: Option<submission::NativeCommand>,
     pub error: Option<String>,
     /// A failed or cancelled submission stays available without replacing a
     /// newer editor draft. The UI can explicitly restore/copy it.
@@ -73,14 +72,7 @@ pub struct Session {
     pub queue: Vec<QueuedPrompt>,
     pub inbox: super::Inbox,
     pub queue_paused: bool,
-    pub archived: bool,
-    /// Discovery must have started after the last successful local archive change.
-    archive_barrier: u64,
-    /// Removed from Caelum after deletion. Kept in memory so pending requests
-    /// retain stable indices.
-    pub forgotten: bool,
-    pub archiving: bool,
-    pub deleting: bool,
+    archive_status: archive::Status,
     pub reading: f32,
     pub unread: bool,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
@@ -94,9 +86,6 @@ pub struct Session {
     pub side_completion_caret: Option<usize>,
     pub generating: bool,
     pub disconnected: bool,
-    inflight_prompt: Option<String>,
-    inflight_options: Options,
-    inflight_queued: bool,
     options_dirty: bool,
     revision: u64,
     seen_events: std::collections::VecDeque<String>,
@@ -116,12 +105,9 @@ impl Session {
             last_activity: None,
             conversation: Conversation::default(),
             options: Options::default(),
-            loading: false,
-            loaded: true,
-            submitting: false,
-            commanding: false,
-            stopping: false,
-            next_cursor: None,
+            history: Default::default(),
+            submission: Default::default(),
+            native_command: None,
             error: None,
             failed_prompt: None,
             draft: String::new(),
@@ -133,11 +119,7 @@ impl Session {
             queue: Vec::new(),
             inbox: Default::default(),
             queue_paused: false,
-            archived: false,
-            archive_barrier: 0,
-            forgotten: false,
-            archiving: false,
-            deleting: false,
+            archive_status: Default::default(),
             reading: -1.0,
             unread: false,
             shells: Vec::new(),
@@ -151,9 +133,6 @@ impl Session {
             side_completion_caret: None,
             generating: false,
             disconnected: false,
-            inflight_prompt: None,
-            inflight_options: Options::default(),
-            inflight_queued: false,
             options_dirty: false,
             revision: 0,
             seen_events: Default::default(),
@@ -168,7 +147,7 @@ impl Session {
     }
 
     pub fn working(&self) -> bool {
-        self.submitting || self.conversation.working
+        self.submitting() || self.conversation.working()
     }
 
     fn record_activity(&mut self, at: u64) {
@@ -198,13 +177,13 @@ impl Session {
             && !self.rewinding()
             && !self.relocation.pending()
             && !self.working()
-            && self.loaded
-            && !self.loading
+            && self.loaded()
+            && !self.loading()
             && !self.disconnected
-            && !self.stopping
-            && !self.archived
-            && !self.forgotten
-            && !self.archiving
+            && !self.stopping()
+            && !self.archived()
+            && !self.forgotten()
+            && !self.archiving()
             && self.attaching == 0
     }
 
@@ -213,12 +192,12 @@ impl Session {
         self.scope.provider_available()
             && !self.rewinding()
             && !self.relocation.pending()
-            && !self.archived
-            && !self.forgotten
-            && !self.stopping
-            && !self.archiving
+            && !self.archived()
+            && !self.forgotten()
+            && !self.stopping()
+            && !self.archiving()
             && self.attaching == 0
-            && !self.commanding
+            && !self.commanding()
     }
 }
 
@@ -230,17 +209,17 @@ enum Pending {
     Inbox(usize, u64),
     Enqueue(usize, String),
     RemoveQueued(usize, String),
-    Control(usize, String),
+    Control(usize),
     Generate(usize, String, u64),
-    RegenerateTitle(usize, SessionKey),
+    RegenerateTitle(usize),
     Notify,
     Load,
-    Save(Box<Snapshot>, Vec<(u64, Command)>),
+    Save,
     Task(Task),
     Commands(Scope),
     Shells(usize, u64),
     ListArchived(Scope),
-    Archive(usize, bool, Option<(usize, u64)>, u64),
+    Archive(usize),
     DeleteSession(usize),
     Attachment(usize, String),
     Mention {
@@ -256,12 +235,12 @@ enum Pending {
     Open(Option<Provider>, u64),
     List(Scope),
     Choices(Scope),
-    Resume(usize, u64),
+    Resume(usize),
     VerifyOpenCodeMove(usize),
-    History(usize, u64, bool),
-    Start(usize, String),
-    CheckHandoff(usize, String),
-    Send(usize, String, u64),
+    History(usize),
+    Start(usize),
+    CheckHandoff(usize),
+    Send(usize),
     Cancel(usize),
     Request {
         provider: String,
@@ -297,17 +276,11 @@ pub struct Workspace {
     pub preferences: Preferences,
     notifications: notifications::State,
     pub provider_commands: HashMap<Scope, Vec<caelum_protocol::OpenCodeCommandInfo>>,
-    pub persistence_error: Option<String>,
-    pub last_archived: Option<usize>,
-    archive_clock: Option<(u64, u64)>,
+    archive_notice: Option<archive::Notice>,
     archive_revision: u64,
     archive_notice_revision: u64,
-    archive_replacement: Option<usize>,
     navigation: u64,
-    store: Option<Store>,
-    store_ready: bool,
-    saving: bool,
-    saved: Option<Snapshot>,
+    persistence: persistence::State,
     durable_outgoing: Vec<(u64, Command)>,
     ready_outgoing: Vec<(u64, Command)>,
     detail_queue: Vec<usize>,
@@ -349,10 +322,7 @@ fn update_summary(session: &mut Session, summary: Summary, request: u64) {
             session.record_activity(at);
         }
     }
-    if !session.title_state.manual
-        && request > session.title_state.barrier
-        && !summary.title.trim().is_empty()
-    {
+    if session.title_state.allows_snapshot(request) && !summary.title.trim().is_empty() {
         session.title = summary.title;
     }
     if summary.options.model.is_some() && !session.options_dirty {

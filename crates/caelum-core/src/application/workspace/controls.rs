@@ -44,11 +44,7 @@ impl Workspace {
                 Some("Use a single-line title of 1–200 characters.".into());
             return false;
         }
-        if self
-            .pending
-            .values()
-            .any(|p| matches!(p, Pending::RegenerateTitle(_,key) if key == owner))
-        {
+        if self.sessions[index].title_state.updating(owner) {
             self.sessions[index].error = Some(
                 "An automatic title update is finishing. Retry the rename in a moment.".into(),
             );
@@ -90,10 +86,14 @@ impl Workspace {
         let Some(s) = self.sessions.get_mut(index) else {
             return false;
         };
-        if s.key().as_ref() != Some(owner) || s.forgotten {
+        if s.key().as_ref() != Some(owner) || s.forgotten() {
             return false;
         }
-        if s.control_busy() || s.deleting || s.archiving || s.relocation.pending() || s.disconnected
+        if s.control_busy()
+            || s.deleting()
+            || s.archiving()
+            || s.relocation.pending()
+            || s.disconnected
         {
             s.error = Some("Wait for the session to finish its current operation and reconnect before retrying.".into());
             return false;
@@ -110,16 +110,14 @@ impl Workspace {
         result: Result<Reply, String>,
     ) {
         let s = &mut self.sessions[index];
-        if s.key().as_ref() != Some(&owner) || s.forgotten {
+        if s.key().as_ref() != Some(&owner) || s.forgotten() {
             return;
         }
         s.controls = match result {
             Ok(Reply::Done) => Status::Finished(match op {
                 Operation::Rename(title) => {
                     s.title = title;
-                    s.title_state.manual = true;
-                    s.title_state.turns = 0;
-                    s.title_state.barrier = self.next_request;
+                    s.title_state = super::titles::TitleState::Manual;
                     "Session title saved.".into()
                 }
                 Operation::Export(path) => format!("Exported conversation to {}", path.display()),

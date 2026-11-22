@@ -22,22 +22,63 @@ pub struct Sample {
 
 pub struct Turn {
     pub prompt: String,
-    pub response: String,
-    pub tool: bool,
-    pub expanded: bool,
-    pub stopped: bool,
+    phase: Response,
+    pub tool: Option<Disclosure>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Disclosure {
+    Closed,
+    Open,
+}
+
+enum Response {
+    Complete(String),
+    Streaming {
+        text: &'static str,
+        visible: String,
+        clock: StreamClock,
+    },
+    Stopped(String),
+}
+
+enum StreamClock {
+    NotDrawn,
+    Running { since: f64 },
+}
+
+impl Turn {
+    pub fn response(&self) -> &str {
+        match &self.phase {
+            Response::Complete(text) | Response::Stopped(text) => text,
+            Response::Streaming { visible, .. } => visible,
+        }
+    }
+
+    pub fn working(&self) -> bool {
+        matches!(self.phase, Response::Streaming { .. })
+    }
+
+    pub fn stopped(&self) -> bool {
+        matches!(self.phase, Response::Stopped(_))
+    }
+
+    pub fn toggle_tool(&mut self) {
+        self.tool = self.tool.map(|disclosure| match disclosure {
+            Disclosure::Open => Disclosure::Closed,
+            Disclosure::Closed => Disclosure::Open,
+        });
+    }
+
+    pub fn expanded(&self) -> bool {
+        self.tool == Some(Disclosure::Open)
+    }
 }
 
 pub struct Session {
     pub title: String,
     pub draft: TextEdit,
     pub turns: Vec<Turn>,
-    stream: Option<Stream>,
-}
-
-struct Stream {
-    text: String,
-    started: Option<f64>,
 }
 
 impl Session {
@@ -46,19 +87,18 @@ impl Session {
             title,
             draft: TextEdit::new(""),
             turns: Vec::new(),
-            stream: None,
         }
     }
 
     pub fn working(&self) -> bool {
-        self.stream.is_some()
+        self.turns.last().is_some_and(Turn::working)
     }
 
     pub fn stop(&mut self) {
-        if self.stream.take().is_some()
-            && let Some(turn) = self.turns.last_mut()
+        if let Some(turn) = self.turns.last_mut()
+            && let Response::Streaming { visible, .. } = &mut turn.phase
         {
-            turn.stopped = true;
+            turn.phase = Response::Stopped(std::mem::take(visible));
         }
     }
 }
@@ -83,10 +123,8 @@ impl Workspace {
         first.draft = TextEdit::new(sample.draft.clone());
         first.turns.push(Turn {
             prompt: sample.prompt.clone(),
-            response: sample.response.clone(),
-            tool: true,
-            expanded: false,
-            stopped: false,
+            phase: Response::Complete(sample.response.clone()),
+            tool: Some(Disclosure::Closed),
         });
         let second = Session::new(sample.secondary_title.clone());
         let diff = DiffState::new(diff::parse(&sample.patch));
@@ -168,7 +206,7 @@ impl Workspace {
         if let Some(live) = &mut self.live {
             if live.panels.screen == crate::panels::Screen::Remote {
                 if let Some(id) = live.app.remote.saved.selected.clone()
-                    && live.panels.overlay.is_none()
+                    && live.panels.overlay().is_none()
                     && live.app.can_open_vm_session(&id)
                 {
                     crate::remote::new_session(self, &id);
@@ -214,14 +252,12 @@ impl Workspace {
         }
         session.turns.push(Turn {
             prompt,
-            response: String::new(),
-            tool: false,
-            expanded: false,
-            stopped: false,
-        });
-        session.stream = Some(Stream {
-            text: "## Reviewing the details\n\nThis is a **simulated response** so you can try Rune’s interaction and rendering.\n\n- Resize the sidebar and changes inspector.\n- Switch sessions while this reply arrives; each draft stays with its session.\n- Select or copy text, then try a multiline message.\n\n```css\n.workspace {\n  --radius: 12px;\n  --space: 16px;\n  --motion: 160ms;\n}\n```\n\nOpen **Changes** to compare the sample patch.".into(),
-            started: None,
+            phase: Response::Streaming {
+                text: "## Reviewing the details\n\nThis is a **simulated response** so you can try Rune’s interaction and rendering.\n\n- Resize the sidebar and changes inspector.\n- Switch sessions while this reply arrives; each draft stays with its session.\n- Select or copy text, then try a multiline message.\n\n```css\n.workspace {\n  --radius: 12px;\n  --space: 16px;\n  --motion: 160ms;\n}\n```\n\nOpen **Changes** to compare the sample patch.",
+                visible: String::new(),
+                clock: StreamClock::NotDrawn,
+            },
+            tool: None,
         });
         session.draft.clear();
         session.draft.focused = true;
@@ -239,7 +275,7 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
         if !live.app.remote.removed.is_empty() {
             return crate::remote::finish_removals(s);
         }
-        if live.panels.overlay == Some(crate::panels::Screen::VmHandoff)
+        if live.panels.overlay() == Some(crate::panels::Screen::VmHandoff)
             && live.app.enter_confirmed_vm()
         {
             crate::remote::enter_new(s);
@@ -249,22 +285,32 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
     }
     let mut changed = false;
     for session in &mut s.sessions {
-        let Some(stream) = &mut session.stream else {
+        let Some(turn) = session.turns.last_mut() else {
             continue;
         };
-        let start = *stream.started.get_or_insert(now);
+        let Response::Streaming {
+            text,
+            visible,
+            clock,
+        } = &mut turn.phase
+        else {
+            continue;
+        };
+        let start = match clock {
+            StreamClock::NotDrawn => {
+                *clock = StreamClock::Running { since: now };
+                now
+            }
+            StreamClock::Running { since } => *since,
+        };
         let count = ((now - start).max(0.0) * 90.0) as usize;
-        let next: String = stream.text.chars().take(count).collect();
-        let done = next.len() == stream.text.len();
-        let turn = session
-            .turns
-            .last_mut()
-            .expect("a stream belongs to a turn");
-        changed |= turn.response != next || done;
-        turn.response = next;
-        if done {
-            session.stream = None;
+        let next: String = text.chars().take(count).collect();
+        if next.len() == text.len() {
+            turn.phase = Response::Complete(next);
+            changed = true;
         } else {
+            changed |= *visible != next;
+            *visible = next;
             tx.wake_after(Duration::from_millis(25));
         }
     }

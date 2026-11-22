@@ -44,7 +44,7 @@ fn addressing_review_feedback_submits_to_the_target_and_preserves_its_draft() {
         .reviews
         .entry(("/project".into(), url.into()))
         .or_default();
-    r.details = Some(serde_json::from_value(json!({"number":1,"title":"Review","url":url,"isDraft":false,"body":"","state":"OPEN","author":null,"baseRefName":"main","headRefName":"feature","headRefOid":"abc","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":1,"deletions":0,"changedFiles":1,"reviewDecision":null,"statusCheckRollup":[]})).unwrap());
+    r.set_details(serde_json::from_value(json!({"number":1,"title":"Review","url":url,"isDraft":false,"body":"","state":"OPEN","author":null,"baseRefName":"main","headRefName":"feature","headRefOid":"abc","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","additions":1,"deletions":0,"changedFiles":1,"reviewDecision":null,"statusCheckRollup":[]})).unwrap());
     r.discussion.push(serde_json::from_value(json!({"id":"comment","body":"Preserve the newer draft.","url":url,"author":null,"createdAt":"2026-11-07","state":null,"diffHunk":null})).unwrap());
     r.selected_comments.insert("comment".into());
     app.sessions[1].draft = "Independent draft".into();

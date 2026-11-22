@@ -66,7 +66,7 @@ pub(super) fn entry(shell: &Value, output: &Value) -> Option<Entry> {
         shell["status"] != "running",
     );
     entry.name = "Background shell".into();
-    entry.background = true;
+    entry.set_background();
     entry.started_at = shell["time"]["started"]
         .as_u64()
         .or(shell["started"].as_u64())
@@ -93,7 +93,7 @@ pub(super) fn entry(shell: &Value, output: &Value) -> Option<Entry> {
     } else {
         output
     });
-    entry.status = if shell["exit"].as_i64().is_some_and(|code| code != 0) {
+    let status = if shell["exit"].as_i64().is_some_and(|code| code != 0) {
         format!("failed (exit {})", shell["exit"])
     } else {
         match shell["status"].as_str().unwrap_or("completed") {
@@ -104,5 +104,6 @@ pub(super) fn entry(shell: &Value, output: &Value) -> Option<Entry> {
         }
         .into()
     };
+    entry.set_progress(entry.complete(), status);
     Some(entry)
 }

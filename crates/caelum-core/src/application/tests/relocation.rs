@@ -116,7 +116,7 @@ fn moved_session_preserves_its_local_slot_and_reconnects_in_the_verified_checkou
     assert_eq!(session.conversation.entries[0].text, "History");
     assert_eq!(session.queue.len(), 1);
     assert!(session.queue_paused);
-    assert!(session.loading);
+    assert!(session.loading());
     let commands = app.commands();
     assert!(commands.iter().any(|(_, command)| matches!(command, Command::Resume(key) if key.scope.project == "/new" && key.id == "ses_moved")));
     assert!(!commands.iter().any(|(_, command)| matches!(
@@ -155,7 +155,7 @@ fn reconnect_discards_old_checkout_reads_and_late_lists_cannot_duplicate_the_ses
     moved(&mut app, request, key, "/stale");
     assert_eq!(app.sessions.len(), 1);
     assert_eq!(app.sessions[index].scope.project, "/new");
-    assert!(app.sessions[index].loading);
+    assert!(app.sessions[index].loading());
     assert!(app.sessions[index].error.is_none());
     assert!(app.sessions[index].inbox.items.is_empty());
 }
@@ -304,7 +304,7 @@ fn archive_state_comes_from_fresh_destination_metadata_even_if_an_older_list_arr
         Ok(Reply::Sessions(vec![summary(scope, "ses_moved")])),
     ));
     assert_eq!(app.sessions[index].scope.project, "/new");
-    assert!(app.sessions[index].archived);
+    assert!(app.sessions[index].archived());
     assert!(!app.session_feed(Some("/new"), "", false).contains(&index));
 }
 
@@ -328,9 +328,9 @@ fn reconnect_waits_for_local_mutations_and_retains_their_failure_before_retry() 
         Err("OpenCode session does not belong to this project".into()),
     ));
     assert_eq!(app.sessions[index].scope.project, "/new");
-    assert!(!app.sessions[index].forgotten);
-    assert!(!app.sessions[index].archived);
-    assert!(!app.sessions[index].archiving);
+    assert!(!app.sessions[index].forgotten());
+    assert!(!app.sessions[index].archived());
+    assert!(!app.sessions[index].archiving());
     assert_eq!(app.sessions[index].draft, "Keep the draft");
     assert!(app
         .commands()
@@ -370,7 +370,7 @@ fn mismatched_relocation_reply_cannot_change_the_session_owner() {
         moved(&mut app, request, from, "/new");
         assert_eq!(app.sessions[index].scope.project, "/old");
         assert!(app.sessions[index].error.is_some());
-        assert!(!app.sessions[index].loading);
+        assert!(!app.sessions[index].loading());
     }
 }
 
@@ -388,7 +388,7 @@ fn real_moved_session_reconnection_smoke() {
     });
     let index = app.new_session(scope(Provider::OpenCode, &source));
     app.sessions[index].remote_id = Some(id.clone());
-    app.sessions[index].loaded = false;
+    app.sessions[index].invalidate_history();
     let discover = std::env::var_os("CAELUM_SMOKE_DISCOVER_DESTINATION").is_some();
     if discover {
         app.projects.push(ProjectInfo {
@@ -425,7 +425,7 @@ fn real_moved_session_reconnection_smoke() {
             "reconnection failed: {:?}",
             session.error
         );
-        if session.loaded && !session.loading {
+        if session.loaded() && !session.loading() {
             assert_eq!(session.scope.project, destination);
             assert_eq!(app.selected, Some(index));
             assert_eq!(

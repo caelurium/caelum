@@ -290,7 +290,7 @@ fn history(state: &mut Workspace, action: caelum_core::application::HistoryActio
     ));
     l.commands.owner = Some(index);
     l.commands.search.focused = true;
-    l.panels.overlay = Some(panels::Screen::Fork);
+    l.panels.set_overlay(Some(panels::Screen::Fork));
     if action == caelum_core::application::HistoryAction::Rewind {
         let boundary = l.app.fork_picker().unwrap().points[1].boundary.clone();
         l.app.fork_at(&boundary);
@@ -357,4 +357,46 @@ fn provider_failure(s: &mut Workspace, rejected: bool) {
     );
     session.draft = "Keep the next prompt editable.".into();
     l.sync_editors();
+}
+
+pub(super) fn activity(l: &mut crate::live::Live, name: &str) {
+    use caelum_core::application::Provider;
+    use serde_json::json;
+
+    l.app.sessions[0].remote_id = Some("fixture".into());
+    l.app.sessions[0].conversation.set_working(true);
+    match name {
+        "thinking" => l.app.sessions[0].conversation.apply(Provider::Codex, "item/reasoning/summaryTextDelta", &json!({"itemId":"thinking","delta":"Checking the original interactions before changing the layout."})),
+        "retrying" => l.app.sessions[0].conversation.set_retrying(true),
+        "stopping" => l.app.cancel(0),
+        _ => {}
+    }
+}
+
+pub(super) fn command_overlay(l: &mut crate::live::Live, name: &str) {
+    l.commands.owner = Some(0);
+    l.panels.set_overlay(Some(match name {
+        "timeline" | "timeline-empty" => crate::panels::Screen::Timeline,
+        "usage" | "usage-loading" => crate::panels::Screen::Usage,
+        _ => crate::panels::Screen::Stats,
+    }));
+}
+
+pub(super) fn composer_queue(session: &mut caelum_core::application::Session, name: &str) {
+    if matches!(name, "composer-queued" | "composer-queue-error") {
+        session.conversation.set_working(name == "composer-queued");
+        session.queue = [
+            "Review keyboard focus and session switching.",
+            "Check attachments and multiline drafts.",
+        ]
+        .map(|text| caelum_core::application::QueuedPrompt {
+            text: text.into(),
+            options: session.options.clone(),
+        })
+        .into();
+        if name == "composer-queue-error" {
+            session.queue_paused = true;
+            session.error = Some("The provider is unavailable. Resume when it reconnects.".into());
+        }
+    }
 }

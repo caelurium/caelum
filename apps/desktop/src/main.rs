@@ -204,9 +204,9 @@ fn transcript(
             .w_full()
             .gap(22.0)
             .child(user);
-        if turn.tool {
+        if turn.tool.is_some() {
             let toggle = Button::new(format!("Run {}", s.sample.command))
-                .icon(if turn.expanded {
+                .icon(if turn.expanded() {
                     &glyphs::CHEVRON_DOWN
                 } else {
                     &glyphs::CARET_RIGHT
@@ -214,13 +214,13 @@ fn transcript(
                 .variant(ButtonVariant::GhostMuted)
                 .on_press(move |s: &mut Workspace| {
                     let turn = &mut s.active_mut().turns[i];
-                    turn.expanded = !turn.expanded;
+                    turn.toggle_tool();
                 })
                 .build(k)
                 .key(format!("tool-{i}"))
-                .expanded(turn.expanded);
+                .expanded(turn.expanded());
             let mut tool = col().w_full().gap(8.0).child(toggle.self_start());
-            if turn.expanded {
+            if turn.expanded() {
                 tool = tool.child(
                     text(s.sample.output.clone())
                         .font(k.ty.mono)
@@ -234,7 +234,7 @@ fn transcript(
             }
             entry = entry.child(tool);
         }
-        let working = s.active().working() && i + 1 == s.active().turns.len();
+        let working = turn.working();
         let answer = col()
             .w_full()
             .gap(10.0)
@@ -246,7 +246,7 @@ fn transcript(
                     .child(
                         text(if working {
                             "Rune · generating sample…"
-                        } else if turn.stopped {
+                        } else if turn.stopped() {
                             "Rune · stopped"
                         } else {
                             "Rune · sample response"
@@ -257,14 +257,14 @@ fn transcript(
                     .child(
                         quiet_button(&glyphs::COPY, "Copy response")
                             .on_press_tx(move |s: &mut Workspace, tx| {
-                                tx.copy(s.active().turns[i].response.clone());
+                                tx.copy(s.active().turns[i].response().to_owned());
                             })
                             .build(k)
                             .key(format!("copy-{i}")),
                     ),
             )
             .child(
-                Markdown::new(&turn.response)
+                Markdown::new(turn.response())
                     .selectable(true)
                     .streaming(working)
                     .reveal(if reduced_motion { 0.0 } else { 0.12 })
@@ -620,7 +620,7 @@ fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if s.live.as_ref().is_some_and(|l| l.models.is_open()) {
         return models::key(s, ev, tx);
     }
-    if s.live.is_some() && live::live(s).panels.overlay.is_some() {
+    if s.live.is_some() && live::live(s).panels.overlay().is_some() {
         return panels::on_key(s, ev, tx);
     }
     if s.live.is_some()

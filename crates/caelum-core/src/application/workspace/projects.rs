@@ -66,10 +66,10 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter(|(_, session)| {
-                !session.archived
-                    && !session.forgotten
-                    && !session.archiving
-                    && !session.deleting
+                !session.archived()
+                    && !session.forgotten()
+                    && !session.archiving()
+                    && !session.deleting()
                     && (session.scope.project == path
                         || (crate::remote::native::checkout_id(&session.scope.project).is_none()
                             && self.group_path(&session.scope.project) == path))
@@ -101,10 +101,10 @@ impl Workspace {
             .iter()
             .enumerate()
             .filter(|(_, session)| {
-                !session.archived
-                    && !session.forgotten
-                    && !session.archiving
-                    && !session.deleting
+                !session.archived()
+                    && !session.forgotten()
+                    && !session.archiving()
+                    && !session.deleting()
                     && self.project_is_open(&session.scope.project)
             })
             .max_by_key(|(index, session)| {
@@ -158,7 +158,7 @@ impl Workspace {
         }
         let usable = |i: usize| {
             let session = &self.sessions[i];
-            session.scope.project == path && !session.archived && !session.forgotten
+            session.scope.project == path && !session.archived() && !session.forgotten()
         };
         let index = self
             .remembered_checkouts
@@ -208,7 +208,7 @@ impl Workspace {
         self.closed_projects.insert(root.clone(), self.next_request);
         self.projects.retain(|p| !closed.contains(&p.path));
         if let Some(index) = self
-            .last_archived
+            .last_archived()
             .filter(|i| self.group_path(&self.sessions[*i].scope.project) == root)
         {
             self.dismiss_archive(index);

@@ -86,7 +86,7 @@ pub(crate) fn history(
     l.commands.search.clear();
     l.commands.search.focused = true;
     l.commands.fork_selected = None;
-    l.panels.overlay = Some(Screen::Fork);
+    l.panels.set_overlay(Some(Screen::Fork));
     true
 }
 
@@ -110,7 +110,7 @@ pub(crate) fn export(s: &mut Workspace, index: usize, format: ExportFormat, tx: 
         move |s: &mut Workspace, result, _| {
             let l = live_mut(s);
             if l.app.sessions[index].key().as_ref() != Some(&owner)
-                || l.app.sessions[index].forgotten
+                || l.app.sessions[index].forgotten()
             {
                 return;
             }
@@ -136,7 +136,7 @@ pub(crate) fn rename(s: &mut Workspace, index: usize) -> bool {
     title.set_selection(0, title.text.len());
     l.commands.rename = Some(RenameForm { owner, title });
     l.commands.owner = Some(index);
-    l.panels.overlay = Some(Screen::Rename);
+    l.panels.set_overlay(Some(Screen::Rename));
     true
 }
 
@@ -146,7 +146,7 @@ fn submit(s: &mut Workspace, _: &mut Tx) {
         return;
     };
     if l.app.rename_session(index, &form.owner, &form.title.text) {
-        l.panels.overlay = None;
+        l.panels.set_overlay(None);
         l.commands.rename = None;
         l.focus();
     }

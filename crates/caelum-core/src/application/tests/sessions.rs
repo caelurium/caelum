@@ -22,7 +22,7 @@ fn refresh_open_sessions_refreshes_every_open_active_session_only() {
     app.sessions[other_project].remote_id = Some("other-project".into());
     let archived = app.new_session(scope(Provider::Codex, "/a"));
     app.sessions[archived].remote_id = Some("archived".into());
-    app.sessions[archived].archived = true;
+    app.sessions[archived].archive_fixture(ArchiveFixture::Stable(true));
     let closed_project = app.new_session(scope(Provider::Codex, "/closed"));
     app.sessions[closed_project].remote_id = Some("closed-project".into());
 
@@ -38,11 +38,11 @@ fn refresh_open_sessions_refreshes_every_open_active_session_only() {
         .collect();
     resumed.sort();
     assert_eq!(resumed, ["first", "other-project", "second"]);
-    assert!(app.sessions[first].loading);
-    assert!(app.sessions[second].loading);
-    assert!(app.sessions[other_project].loading);
-    assert!(!app.sessions[archived].loading);
-    assert!(!app.sessions[closed_project].loading);
+    assert!(app.sessions[first].loading());
+    assert!(app.sessions[second].loading());
+    assert!(app.sessions[other_project].loading());
+    assert!(!app.sessions[archived].loading());
+    assert!(!app.sessions[closed_project].loading());
 }
 
 #[test]
@@ -61,13 +61,13 @@ fn refresh_open_sessions_reloads_catalogues_for_each_open_scope_once() {
     app.sessions[duplicate].remote_id = Some("duplicate".into());
     let busy = app.new_session(scope(Provider::OpenCode, "/b"));
     app.sessions[busy].remote_id = Some("busy".into());
-    app.sessions[busy].submitting = true;
+    assert!(app.send(busy, "Start turn".into()));
     app.new_session(scope(Provider::Codex, "/b"));
     app.new_session(scope(Provider::OpenCode, "/linked"));
     let archived = app.new_session(scope(Provider::OpenCode, "/archived"));
-    app.sessions[archived].archived = true;
+    app.sessions[archived].archive_fixture(ArchiveFixture::Stable(true));
     let forgotten = app.new_session(scope(Provider::OpenCode, "/forgotten"));
-    app.sessions[forgotten].forgotten = true;
+    app.sessions[forgotten].archive_fixture(ArchiveFixture::Forgotten);
     app.new_session(scope(Provider::OpenCode, "/closed"));
     app.select(first);
     app.sessions[first].draft = "Keep this draft".into();
@@ -184,6 +184,6 @@ fn provider_session_discovery_includes_archived_history() {
     ));
 
     assert_eq!(workspace.sessions.len(), 2);
-    assert!(!workspace.sessions[0].archived);
-    assert!(workspace.sessions[1].archived);
+    assert!(!workspace.sessions[0].archived());
+    assert!(workspace.sessions[1].archived());
 }

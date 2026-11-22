@@ -14,7 +14,7 @@ impl Workspace {
     ) {
         let project = match pending {
             // Boat checks the base before the VM provider starts a thread.
-            Pending::CheckHandoff(i, _) => Some(self.sessions[*i].scope.project.as_str()),
+            Pending::CheckHandoff(i) => Some(self.sessions[*i].scope.project.as_str()),
             _ => Binding::owner(command).map(|p| p.as_str()),
         };
         if let Some(project) = project.filter(|p| checkout_id(p).is_some()) {
@@ -34,7 +34,7 @@ impl Workspace {
             session.revision += 1;
             session.queue_paused = true;
             session.disconnected = session.remote_id.is_some();
-            session.conversation.working = false;
+            session.conversation.set_working(false);
         }
         self.deferred_lists
             .retain(|scope, _| scope.project != project);
@@ -55,11 +55,7 @@ impl Workspace {
         self.outgoing.retain(keep);
         self.ready_outgoing.retain(keep);
         self.durable_outgoing.retain(keep);
-        for pending in self.pending.values_mut() {
-            if let Pending::Save(_, commands) = pending {
-                commands.retain(keep);
-            }
-        }
+        self.persistence.retain_saving_commands(keep);
         let error = "VM connection closed. Delivery is unconfirmed; check the session history before retrying.";
         ids.into_iter()
             .map(|r| Event::Completed(r, Err(error.into())))

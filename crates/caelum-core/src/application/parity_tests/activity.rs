@@ -36,7 +36,7 @@ fn completed_outputs_keep_the_used_agent_and_full_turn_duration() {
         .conversation
         .entries
         .iter()
-        .find(|entry| entry.kind == crate::application::EntryKind::Assistant)
+        .find(|entry| entry.kind() == crate::application::EntryKind::Assistant)
         .unwrap();
     assert_eq!(open_code.metadata["agent"], "build");
     assert_eq!(open_code.metadata["outputDurationMs"], 4000);
@@ -77,7 +77,7 @@ fn completed_outputs_keep_the_used_agent_and_full_turn_duration() {
         .conversation
         .entries
         .iter()
-        .find(|entry| entry.kind == crate::application::EntryKind::Assistant)
+        .find(|entry| entry.kind() == crate::application::EntryKind::Assistant)
         .unwrap();
     assert_eq!(codex.metadata["agent"], "plan");
     assert_eq!(codex.metadata["outputDurationMs"], 5000);
@@ -158,7 +158,14 @@ fn unread_and_notifications_follow_visibility_and_do_not_replay_completed_activi
         .commands()
         .iter()
         .any(|(_, c)| matches!(c, Command::Notify(..))));
-    app.sessions[0].loading = false;
+    for (request, command) in commands {
+        if matches!(command, Command::Resume(_)) {
+            app.apply(Event::Completed(
+                request,
+                Err("offline test fixture".into()),
+            ));
+        }
+    }
     app.conversation_hidden = false;
     app.sessions[0].reading = 300.0;
     assert!(!app.acknowledge());
@@ -205,7 +212,8 @@ fn session_activity_survives_gaps_and_obeys_waiting_retry_and_terminal_states() 
     let mut app = workspace();
     assert!(app.send(1, "Work on this".into()));
     assert_eq!(activity(&app.sessions[1], false).unwrap().kind, A::Working);
-    app.sessions[1].submitting = false;
+    let send = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(send, Ok(Reply::Done)));
     app.sessions[1].conversation.apply(
         Provider::Codex,
         "item/reasoning/summaryTextDelta",
@@ -231,8 +239,8 @@ fn session_activity_survives_gaps_and_obeys_waiting_retry_and_terminal_states() 
     assert_eq!(activity(&app.sessions[1], true).unwrap().kind, A::Input);
     app.cancel(1);
     assert_eq!(activity(&app.sessions[1], false).unwrap().kind, A::Stopping);
-    app.sessions[1].stopping = false;
-    app.sessions[1].conversation.settle();
+    let stop = app.commands().pop().unwrap().0;
+    app.apply(Event::Completed(stop, Ok(Reply::Done)));
     assert!(activity(&app.sessions[1], false).is_none());
     app.sessions[1].shells.push(
         serde_json::from_value(json!({"id":"shell","command":"cargo test","startedAt":1})).unwrap(),

@@ -29,7 +29,7 @@ fn session_rows_refresh_cached_branch_labels_without_remounting_the_draft() {
     ] {
         rt.update(|s, _| {
             let l = s.live.as_mut().unwrap();
-            l.app.sessions[0].conversation.working = working;
+            l.app.sessions[0].conversation.set_working(working);
             assert!(l.apply_events([Event::Checkout(project.into())]));
             let request = l
                 .app
@@ -189,7 +189,7 @@ fn waiting_sessions_remain_visible_until_their_last_background_command_finishes(
 
 #[test]
 fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes() {
-    use caelum_core::application::EntryKind;
+    use caelum_core::application::{Command, EntryKind, Event, Reply};
 
     for state in [
         "responding",
@@ -205,7 +205,7 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
         rt.update(|s, _| {
             s.live.as_mut().unwrap().app.sessions[0]
                 .conversation
-                .working = true
+                .set_working(true)
         });
         advance(&mut rt, 0.2);
         assert!(rt.find("session-waiting-0").is_some());
@@ -214,17 +214,25 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
             let session = &mut l.app.sessions[0];
             match state {
                 "responding" => {
-                    session
+                    let entry = session
                         .conversation
                         .entries
                         .iter_mut()
                         .rev()
-                        .find(|entry| entry.kind == EntryKind::Assistant)
-                        .unwrap()
-                        .complete = false
+                        .find(|entry| entry.kind() == EntryKind::Assistant)
+                        .unwrap();
+                    *entry = caelum_core::application::Entry::new(
+                        entry.id.clone(),
+                        EntryKind::Assistant,
+                        entry.text.clone(),
+                        false,
+                    );
                 }
-                "submitting" => session.submitting = true,
-                "retrying" => session.conversation.retrying = true,
+                "submitting" => {
+                    session.conversation.set_working(false);
+                    assert!(l.app.send(0, "Start turn".into()));
+                }
+                "retrying" => session.conversation.set_retrying(true),
                 "input" => l.app.approvals.push(caelum_protocol::ApprovalPrompt {
                     provider: "opencode".into(),
                     project_path: session.scope.project.clone(),
@@ -233,10 +241,26 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
                     summary: "Run checks?".into(),
                     description: "cargo test".into(),
                 }),
-                "stopping" => session.stopping = true,
+                "stopping" => l.app.cancel(0),
                 "disconnected" => session.disconnected = true,
-                "archiving" => session.archiving = true,
-                "deleting" => session.deleting = true,
+                "archiving" => {
+                    session.conversation.set_working(false);
+                    l.app.archive(0, true);
+                    assert!(l.app.sessions[0].archiving());
+                }
+                "deleting" => {
+                    session.conversation.set_working(false);
+                    l.app.archive(0, true);
+                    let request = l
+                        .app
+                        .commands()
+                        .into_iter()
+                        .find(|(_, command)| matches!(command, Command::Archive(..)))
+                        .unwrap()
+                        .0;
+                    l.app.apply(Event::Completed(request, Ok(Reply::Done)));
+                    assert!(l.app.delete_archived_session(0));
+                }
                 _ => unreachable!(),
             }
         });

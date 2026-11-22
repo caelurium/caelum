@@ -101,15 +101,15 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .center_y()
         .justify_end()
         .gap(6.0)
-        .children((session.working() || session.stopping).then(|| {
-            Button::new(if session.stopping {
+        .children((session.working() || session.stopping()).then(|| {
+            Button::new(if session.stopping() {
                 "Stopping…"
             } else {
                 "Stop"
             })
             .icon(&STOP)
             .variant(ButtonVariant::GhostMuted)
-            .disabled(session.stopping)
+            .disabled(session.stopping())
             .on_press(move |s: &mut Workspace| {
                 let live = live_mut(s);
                 live.schedule();
@@ -209,7 +209,9 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .prominent()
             .placement(Placement::TopStart)
             .open(live.models.is_open())
-            .disabled(session.archived || session.archiving || !session.scope.provider_available())
+            .disabled(
+                session.archived() || session.archiving() || !session.scope.provider_available(),
+            )
             .on_toggle(|s: &mut Workspace| crate::models::open(s, None))
             .trigger(k)
             .max_w(maximum.min(220.0))
@@ -257,7 +259,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .width(280.0)
                     .placement(Placement::TopStart)
                     .open(live.menu == Some(("effort", index)))
-                    .disabled(session.archived || session.archiving)
+                    .disabled(session.archived() || session.archiving())
                     .on_toggle(|s: &mut Workspace| toggle_menu(s, "effort"))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
@@ -288,7 +290,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .width(280.0)
                     .placement(Placement::TopStart)
                     .open(live.menu == Some(("agent", index)))
-                    .disabled(session.archived || session.archiving)
+                    .disabled(session.archived() || session.archiving())
                     .on_toggle(|s: &mut Workspace| toggle_menu(s, "agent"))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
