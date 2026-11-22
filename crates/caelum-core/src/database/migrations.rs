@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::DatabaseError;
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 6;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 7;
 
 pub(super) fn migrate(connection: &mut Connection) -> Result<(), DatabaseError> {
     let mut version =
@@ -127,6 +127,35 @@ pub(super) fn migrate(connection: &mut Connection) -> Result<(), DatabaseError> 
                 WHERE branch IS NOT NULL;",
         )?;
         transaction.pragma_update(None, "user_version", 6)?;
+        transaction.commit()?;
+    }
+    if version < 7 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch(
+            "CREATE TABLE session_branches_v7 (
+                project_path TEXT NOT NULL,
+                provider TEXT NOT NULL CHECK (provider IN ('codex', 'opencode', 'antigravity')),
+                session_id TEXT NOT NULL,
+                branch TEXT,
+                PRIMARY KEY (project_path, provider, session_id)
+             );
+             INSERT INTO session_branches_v7
+                SELECT project_path, provider, session_id, branch FROM session_branches;
+             DROP TABLE session_branches;
+             ALTER TABLE session_branches_v7 RENAME TO session_branches;
+             CREATE TABLE session_branch_history_v7 (
+                project_path TEXT NOT NULL,
+                provider TEXT NOT NULL CHECK (provider IN ('codex', 'opencode', 'antigravity')),
+                session_id TEXT NOT NULL,
+                branch TEXT NOT NULL,
+                PRIMARY KEY (project_path, provider, session_id, branch)
+             );
+             INSERT INTO session_branch_history_v7
+                SELECT project_path, provider, session_id, branch FROM session_branch_history;
+             DROP TABLE session_branch_history;
+             ALTER TABLE session_branch_history_v7 RENAME TO session_branch_history;",
+        )?;
+        transaction.pragma_update(None, "user_version", 7)?;
         transaction.commit()?;
     }
     Ok(())

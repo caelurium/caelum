@@ -55,10 +55,11 @@ fn fork_slash_command_uses_the_chosen_turn_and_preserves_the_parent_editor() {
     });
     advance(&mut rt, 0.2);
     let l = rt.state.live.as_ref().unwrap();
+    let child_index = caelum_core::application::Provider::ALL.len();
     assert_eq!(l.panels.overlay(), None);
-    assert_eq!(l.app.selected, Some(2));
+    assert_eq!(l.app.selected, Some(child_index));
     assert_eq!(l.drafts[0].text, "Unsent café draft");
-    assert!(l.drafts[2].text.is_empty());
+    assert!(l.drafts[child_index].text.is_empty());
 }
 
 #[test]
@@ -138,6 +139,7 @@ fn archive_toast_pauses_for_presented_keyboard_focus_then_expires() {
 fn refresh_sessions_button_refreshes_every_open_session() {
     use caelum_core::application::{Command, Provider, Scope};
     let mut rt = live_runtime_size((800.0, 620.0));
+    let mut background = 0;
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         let app = &mut l.app;
@@ -147,7 +149,7 @@ fn refresh_sessions_button_refreshes_every_open_session() {
             path: "/background".into(),
             name: "Background".into(),
         });
-        let background = app.new_session(Scope {
+        background = app.new_session(Scope {
             project: "/background".into(),
             provider: Provider::OpenCode,
         });
@@ -161,7 +163,7 @@ fn refresh_sessions_button_refreshes_every_open_session() {
     let app = &mut rt.state.live.as_mut().unwrap().app;
     assert!(app.sessions[0].loading());
     assert!(app.sessions[1].loading());
-    assert!(app.sessions[2].loading());
+    assert!(app.sessions[background].loading());
     let commands = app.commands();
     assert!(commands.iter().any(|(_, command)| {
         matches!(command, Command::Choices(scope)
@@ -258,7 +260,10 @@ fn launcher_reuses_the_selected_project_draft_and_returns_keyboard_focus() {
             ..Default::default()
         },
     );
-    assert_eq!(rt.state.live.as_ref().unwrap().app.sessions.len(), 2);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions.len(),
+        caelum_core::application::Provider::ALL.len()
+    );
     assert_eq!(
         rt.state.live.as_ref().unwrap().drafts[0].text,
         "Keep my original draft"
@@ -289,7 +294,10 @@ fn closing_local_sessions_and_undo_keep_the_workspace_editable() {
         let live = rt.state.live.as_ref().unwrap();
         assert!(live.app.sessions[0].archived());
         assert_eq!(live.app.selected, Some(1));
-        assert_eq!(live.app.sessions.len(), 2);
+        assert_eq!(
+            live.app.sessions.len(),
+            caelum_core::application::Provider::ALL.len()
+        );
         assert!(live.panels.overlay().is_none());
         assert_eq!(live.drafts[1].text, "Independent background draft");
         element(&rt, "live-draft-1");
@@ -383,7 +391,10 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
                 .apply(Event::Completed(request, Ok(Reply::Done)));
         });
         assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(1));
-        assert_eq!(rt.state.live.as_ref().unwrap().app.sessions.len(), 2);
+        assert_eq!(
+            rt.state.live.as_ref().unwrap().app.sessions.len(),
+            caelum_core::application::Provider::ALL.len()
+        );
         assert_eq!(rt.state.live.as_ref().unwrap().app.last_archived(), Some(0));
         advance(&mut rt, 0.4);
         click(&mut rt, "undo-archive");
@@ -439,7 +450,10 @@ fn closing_provider_sessions_handles_completion_failure_and_selection_changes() 
         advance(&mut rt, 0.4);
         let live = rt.state.live.as_ref().unwrap();
         assert_eq!(live.app.selected, Some(1));
-        assert_eq!(live.app.sessions.len(), 2);
+        assert_eq!(
+            live.app.sessions.len(),
+            caelum_core::application::Provider::ALL.len()
+        );
         assert_eq!(live.drafts[1].text, "Still writing here");
 
         click(&mut rt, "toggle-archived");

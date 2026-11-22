@@ -184,7 +184,7 @@ fn fork_checks_admission_again_and_failures_do_not_change_the_parent() {
 
 #[test]
 fn edit_uses_the_exclusive_boundary_and_seeds_only_the_child_with_captured_context() {
-    for provider in Provider::ALL {
+    for provider in [Provider::Codex, Provider::OpenCode] {
         let (mut app, owner) = parent(provider);
         let captured = Attachment::new(
             "src/example.rs".into(),
@@ -205,6 +205,7 @@ fn edit_uses_the_exclusive_boundary_and_seeds_only_the_child_with_captured_conte
                 json!({"id":"msg_a","type":"user","text":prompt}),
                 ForkBoundary::OpenCodeBefore("msg_a".into()),
             ),
+            Provider::Antigravity => unreachable!(),
         };
         assert!(app.open_history_action(0, HistoryAction::Edit, None));
         provider_page(&mut app, vec![record], None);

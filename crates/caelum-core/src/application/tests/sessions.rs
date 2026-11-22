@@ -98,6 +98,7 @@ fn refresh_open_sessions_reloads_catalogues_for_each_open_scope_once() {
     assert_eq!(
         catalogues,
         [
+            ("/a".into(), "antigravity"),
             ("/a".into(), "codex"),
             ("/a".into(), "opencode"),
             ("/b".into(), "codex"),

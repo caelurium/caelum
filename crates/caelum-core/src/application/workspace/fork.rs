@@ -159,6 +159,7 @@ impl ForkPicker {
                         format!("opencode-{id}"),
                     )
                 }
+                Provider::Antigravity => continue,
             };
             let shown = presentation::visible_text(split_context(&prompt).0);
             let label = shown

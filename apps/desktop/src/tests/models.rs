@@ -193,6 +193,7 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
     use caelum_core::application::{Command, Event, Provider, Reply, Scope};
 
     let mut rt = live_runtime();
+    let mut background = 0;
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.projects.push(caelum_protocol::ProjectInfo {
@@ -203,6 +204,7 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
             project: "/background".into(),
             provider: Provider::OpenCode,
         });
+        background = index;
         let session = &mut l.app.sessions[index];
         session.remote_id = Some("restored-session".into());
         session.draft = "Keep this café draft".into();
@@ -233,7 +235,7 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
 
     rt.update(|s, _| s.live.as_mut().unwrap().app.select(0));
     advance(&mut rt, 0.1);
-    rt.update(|s, _| s.live.as_mut().unwrap().app.select(2));
+    rt.update(|s, _| s.live.as_mut().unwrap().app.select(background));
     advance(&mut rt, 0.1);
     let retry = rt
         .state
@@ -275,14 +277,20 @@ fn selecting_a_session_loads_its_model_effort_and_agent_controls() {
     key(&mut rt, Key::End, Mods::default());
     key(&mut rt, Key::Enter, Mods::default());
     let l = rt.state.live.as_ref().unwrap();
-    assert_eq!(l.app.selected, Some(2));
-    assert_eq!(l.drafts[2].text, "Keep this café draft");
-    assert_eq!(l.app.sessions[2].options.effort.as_deref(), Some("high"));
-    assert_eq!(l.app.sessions[2].options.agent.as_deref(), Some("plan"));
+    assert_eq!(l.app.selected, Some(background));
+    assert_eq!(l.drafts[background].text, "Keep this café draft");
+    assert_eq!(
+        l.app.sessions[background].options.effort.as_deref(),
+        Some("high")
+    );
+    assert_eq!(
+        l.app.sessions[background].options.agent.as_deref(),
+        Some("plan")
+    );
 
     rt.update(|s, _| s.live.as_mut().unwrap().app.select(0));
     advance(&mut rt, 0.1);
-    rt.update(|s, _| s.live.as_mut().unwrap().app.select(2));
+    rt.update(|s, _| s.live.as_mut().unwrap().app.select(background));
     advance(&mut rt, 0.1);
     assert!(rt.state.live.as_mut().unwrap().app.commands().is_empty());
 }

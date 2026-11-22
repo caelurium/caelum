@@ -81,6 +81,7 @@ fn image_prompt_history_adopts_the_optimistic_user_message_once() {
                 "id":"user-message", "type":"user", "text":"Describe this",
                 "files":[{"mime":"image/png", "uri":image.content.clone(), "name":image.path.clone()}]
             }),
+            Provider::Antigravity => unreachable!(),
         };
         if provider == Provider::Codex {
             conversation.apply(

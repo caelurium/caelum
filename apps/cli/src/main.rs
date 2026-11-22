@@ -13,10 +13,12 @@ use std::{
 use std::process::Command;
 
 use caelum_core::{
-    approvals::ApprovalBroker, codex::CodexProvider, opencode::OpenCodeProvider,
-    processes::ProcessRegistry, projects::Project,
+    antigravity::AntigravityProvider, approvals::ApprovalBroker, codex::CodexProvider,
+    opencode::OpenCodeProvider, processes::ProcessRegistry, projects::Project,
 };
-use caelum_protocol::{ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent};
+use caelum_protocol::{
+    AntigravityEvent, ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
@@ -36,6 +38,7 @@ struct Cli {
 enum ProviderKind {
     Codex,
     Opencode,
+    Antigravity,
 }
 
 impl ProviderKind {
@@ -43,6 +46,7 @@ impl ProviderKind {
         match self {
             Self::Codex => "codex",
             Self::Opencode => "opencode",
+            Self::Antigravity => "antigravity",
         }
     }
 }
@@ -145,6 +149,7 @@ fn launch_project_in_desktop(project: Project) -> Result<(), Box<dyn std::error:
 struct AgentProviders {
     codex: CodexProvider,
     opencode: OpenCodeProvider,
+    antigravity: AntigravityProvider,
     approvals: ApprovalBroker,
     processes: Arc<ProcessRegistry>,
 }
@@ -164,6 +169,7 @@ impl AgentProviders {
                 approvals.clone(),
                 caelum_core::questions::QuestionBroker::disabled(),
             ),
+            antigravity: AntigravityProvider::new(Arc::clone(&processes), approvals.clone()),
             approvals,
             processes,
         }
@@ -173,6 +179,7 @@ impl AgentProviders {
         match provider {
             ProviderKind::Codex => EventReceiver::Codex(self.codex.subscribe()),
             ProviderKind::Opencode => EventReceiver::OpenCode(self.opencode.subscribe()),
+            ProviderKind::Antigravity => EventReceiver::Antigravity(self.antigravity.subscribe()),
         }
     }
 
@@ -194,6 +201,18 @@ impl AgentProviders {
                 Ok(Session {
                     id: result.session.id,
                     title: result.session.title,
+                })
+            }
+            ProviderKind::Antigravity => {
+                let result = self.antigravity.start_session_with_options(
+                    project.path(),
+                    None,
+                    None,
+                    None,
+                )?;
+                Ok(Session {
+                    id: result.session.id,
+                    title: (!result.session.title.is_empty()).then_some(result.session.title),
                 })
             }
         }
@@ -220,6 +239,15 @@ impl AgentProviders {
                     title: result.session.title,
                 })
             }
+            ProviderKind::Antigravity => {
+                let (result, _) = self
+                    .antigravity
+                    .resume_session(project.path(), session_id)?;
+                Ok(Session {
+                    id: result.session.id,
+                    title: (!result.session.title.is_empty()).then_some(result.session.title),
+                })
+            }
         }
     }
 
@@ -236,6 +264,14 @@ impl AgentProviders {
                 self.opencode
                     .send_prompt(project.path(), session_id, prompt)?
             }
+            ProviderKind::Antigravity => self.antigravity.send_prompt_with_options(
+                project.path(),
+                session_id,
+                prompt,
+                None,
+                None,
+                None,
+            )?,
         }
         Ok(())
     }
@@ -268,6 +304,16 @@ impl AgentProviders {
                     title: session.title,
                 })
                 .collect()),
+            ProviderKind::Antigravity => Ok(self
+                .antigravity
+                .list_sessions(project.path())?
+                .sessions
+                .into_iter()
+                .map(|session| Session {
+                    id: session.id,
+                    title: (!session.title.is_empty()).then_some(session.title),
+                })
+                .collect()),
         }
     }
 }
@@ -277,6 +323,7 @@ impl Drop for AgentProviders {
         self.approvals.shutdown();
         self.codex.shutdown();
         self.opencode.shutdown();
+        self.antigravity.shutdown();
         self.processes.shutdown();
     }
 }
@@ -289,6 +336,7 @@ struct Session {
 enum EventReceiver {
     Codex(Receiver<CodexEvent>),
     OpenCode(Receiver<OpenCodeEvent>),
+    Antigravity(Receiver<AntigravityEvent>),
 }
 
 impl EventReceiver {
@@ -296,6 +344,9 @@ impl EventReceiver {
         match self {
             Self::Codex(receiver) => receiver.recv_timeout(timeout).map(ProviderEvent::Codex),
             Self::OpenCode(receiver) => receiver.recv_timeout(timeout).map(ProviderEvent::OpenCode),
+            Self::Antigravity(receiver) => receiver
+                .recv_timeout(timeout)
+                .map(ProviderEvent::Antigravity),
         }
     }
 }
@@ -303,6 +354,7 @@ impl EventReceiver {
 enum ProviderEvent {
     Codex(CodexEvent),
     OpenCode(OpenCodeEvent),
+    Antigravity(AntigravityEvent),
 }
 
 fn chat(
@@ -527,6 +579,38 @@ fn event_outcome(event: &ProviderEvent, session_id: &str, turn: OpenCodeTurn) ->
     match event {
         ProviderEvent::Codex(event) => codex_event_outcome(event, session_id),
         ProviderEvent::OpenCode(event) => opencode_event_outcome(event, session_id, turn),
+        ProviderEvent::Antigravity(event) => antigravity_event_outcome(event, session_id),
+    }
+}
+
+fn antigravity_event_outcome(event: &AntigravityEvent, session_id: &str) -> EventOutcome {
+    if event.method == "antigravity/processExited" {
+        return EventOutcome::Disconnected("Antigravity ACP server exited unexpectedly");
+    }
+    if event.session_id.as_deref() != Some(session_id) {
+        return EventOutcome::Ignore;
+    }
+    match event.method.as_str() {
+        "agent_message_chunk" => event.params["content"]["text"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(|text| EventOutcome::Output(text.to_owned()))
+            .unwrap_or(EventOutcome::Ignore),
+        "tool_call" => {
+            let label = event.params["title"]
+                .as_str()
+                .or_else(|| event.params["name"].as_str())
+                .unwrap_or("tool");
+            EventOutcome::Activity(format!("Antigravity tool: {label}"))
+        }
+        "antigravity/turnCompleted" => {
+            EventOutcome::Finished(match event.params["stopReason"].as_str() {
+                Some("cancelled") => TurnStatus::Interrupted,
+                Some("error") => TurnStatus::Failed,
+                _ => TurnStatus::Completed,
+            })
+        }
+        _ => EventOutcome::Ignore,
     }
 }
 

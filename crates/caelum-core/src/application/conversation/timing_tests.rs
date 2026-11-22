@@ -124,11 +124,41 @@ fn live_duration_includes_submission_wait_thinking_tools_and_retries() {
                     json!({"turn":{"id":"turn-1"}, "_created":130_000}),
                 ),
             ],
+            Provider::Antigravity => vec![
+                ("antigravity/turnStarted", json!({"_created": 3_000})),
+                (
+                    "agent_thought_chunk",
+                    json!({"content": {"type": "text", "text": "Thinking"}}),
+                ),
+                (
+                    "tool_call",
+                    json!({"toolCallId": "build", "name": "bash", "status": "in_progress"}),
+                ),
+                (
+                    "tool_call_update",
+                    json!({"toolCallId": "build", "status": "completed"}),
+                ),
+                (
+                    "agent_message_chunk",
+                    json!({"content": {"type": "text", "text": "Built"}}),
+                ),
+                ("antigravity/turnCompleted", json!({"_created": 130_000})),
+            ],
         };
         for (method, data) in events {
             conversation.apply(provider, method, &data);
         }
-        let id = format!("{}-answer", provider.as_str());
+        let id = if provider == Provider::Antigravity {
+            conversation
+                .entries
+                .iter()
+                .rev()
+                .find(|entry| entry.kind() == EntryKind::Assistant)
+                .map(|entry| entry.id.clone())
+                .unwrap()
+        } else {
+            format!("{}-answer", provider.as_str())
+        };
         assert_eq!(output(&conversation, &id), 129_000, "{provider:?}");
         conversation.settle_at(900_000);
         assert_eq!(output(&conversation, &id), 129_000, "duplicate settlement");

@@ -3,8 +3,8 @@ use crate::application::{
     TaskReply,
 };
 use caelum_protocol::{
-    ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent, ProjectInfo, ProviderChoices,
-    QuestionPrompt, SessionHistoryPage,
+    AntigravityEvent, ApprovalDecision, ApprovalPrompt, CodexEvent, OpenCodeEvent, ProjectInfo,
+    ProviderChoices, QuestionPrompt, SessionHistoryPage,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -122,6 +122,7 @@ pub enum Event {
     Completed(u64, Result<Reply, String>),
     Codex(CodexEvent),
     OpenCode(OpenCodeEvent),
+    Antigravity(AntigravityEvent),
     Approvals(Vec<ApprovalPrompt>),
     Questions(Vec<QuestionPrompt>),
     Branch(caelum_protocol::SessionBranchUpdate),

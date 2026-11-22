@@ -9,12 +9,14 @@ use std::{
 };
 
 use crate::{
-    approvals::ApprovalBroker, codex::CodexProvider, opencode::OpenCodeProvider,
-    processes::ProcessRegistry, projects::Project, questions::QuestionBroker,
+    antigravity::AntigravityProvider, approvals::ApprovalBroker, codex::CodexProvider,
+    opencode::OpenCodeProvider, processes::ProcessRegistry, projects::Project,
+    questions::QuestionBroker,
 };
 
 use super::{Options, Provider, SessionKey, Summary, Task};
 
+mod antigravity;
 #[path = "checkout_watch.rs"]
 mod checkout_watch;
 mod conversation;
@@ -35,6 +37,7 @@ pub struct ProviderRuntime {
     vm: Option<Arc<crate::remote::native::Access>>,
     pub codex: CodexProvider,
     pub opencode: OpenCodeProvider,
+    pub antigravity: AntigravityProvider,
     pub approvals: ApprovalBroker,
     pub questions: QuestionBroker,
     pub processes: Arc<ProcessRegistry>,
@@ -58,6 +61,7 @@ impl Default for ProviderRuntime {
                 approvals.clone(),
                 questions.clone(),
             ),
+            antigravity: AntigravityProvider::new(processes.clone(), approvals.clone()),
             processes,
             remote: Arc::default(),
             approvals,
@@ -82,6 +86,8 @@ impl ProviderRuntime {
             let db = crate::database::WorkspaceDatabase::open(parent.join("branches.sqlite3"))
                 .map_err(|e| e.to_string())?;
             self.branches.reset(db)?;
+            self.antigravity
+                .open_metadata(parent.join("antigravity-sessions.json"))?;
         }
         Ok(())
     }
@@ -97,6 +103,7 @@ impl ProviderRuntime {
         self.processes.shutdown();
         self.codex.shutdown();
         self.opencode.shutdown();
+        self.antigravity.shutdown();
     }
 
     fn execute(&self, command: &Command) -> Result<Reply, String> {
@@ -142,6 +149,10 @@ impl ProviderRuntime {
                     .opencode
                     .set_title(&key.scope.project, &key.id, title)
                     .map_err(|e| e.to_string()),
+                Provider::Antigravity => self
+                    .antigravity
+                    .rename(&key.scope.project, &key.id, title)
+                    .map_err(|e| e.to_string()),
             },
             Command::Export(key, title, format, path) => self.export(key, title, *format, path),
             Command::Rewind {
@@ -159,6 +170,9 @@ impl ProviderRuntime {
                     .opencode
                     .rewind(&key.scope.project, &key.id, before, tip, *files)
                     .map_err(|e| e.to_string()),
+                Provider::Antigravity => {
+                    Err("Antigravity ACP does not support rewinding sessions.".into())
+                }
             },
             Command::CheckpointFiles(key, from, to) => {
                 if key.scope.provider != Provider::OpenCode {
@@ -196,11 +210,19 @@ impl ProviderRuntime {
             }
             Command::Save(store, state) => return store.save(state).map(|()| Reply::Done),
             Command::Commands(scope) => {
-                return self
-                    .opencode
-                    .commands(&scope.project)
-                    .map(Reply::Commands)
-                    .map_err(|e| e.to_string())
+                return match scope.provider {
+                    Provider::OpenCode => self
+                        .opencode
+                        .commands(&scope.project)
+                        .map(Reply::Commands)
+                        .map_err(|e| e.to_string()),
+                    Provider::Antigravity => self
+                        .antigravity
+                        .commands(&scope.project)
+                        .map(Reply::Commands)
+                        .map_err(|e| e.to_string()),
+                    Provider::Codex => Ok(Reply::Commands(Vec::new())),
+                };
             }
             Command::Shells(key) => {
                 return self
@@ -218,6 +240,10 @@ impl ProviderRuntime {
                     .opencode
                     .set_session_archived(&key.scope.project, &key.id, *archived)
                     .map_err(|e| e.to_string()),
+                Provider::Antigravity => self
+                    .antigravity
+                    .set_session_archived(&key.scope.project, &key.id, *archived)
+                    .map_err(|e| e.to_string()),
             },
             Command::DeleteSession(key) => match key.scope.provider {
                 Provider::Codex => self
@@ -226,6 +252,10 @@ impl ProviderRuntime {
                     .map_err(|e| e.to_string()),
                 Provider::OpenCode => self
                     .opencode
+                    .delete_session(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
+                Provider::Antigravity => self
+                    .antigravity
                     .delete_session(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string()),
             },
@@ -237,6 +267,10 @@ impl ProviderRuntime {
                         .map_err(|e| e.to_string())?,
                     Provider::OpenCode => self
                         .opencode
+                        .session_details(&key.scope.project, &key.id)
+                        .map_err(|e| e.to_string())?,
+                    Provider::Antigravity => self
+                        .antigravity
                         .session_details(&key.scope.project, &key.id)
                         .map_err(|e| e.to_string())?,
                 };
@@ -292,6 +326,7 @@ impl ProviderRuntime {
                             },
                         })
                         .collect(),
+                    Provider::Antigravity => self.list_antigravity(scope)?,
                 };
                 return Ok(Reply::Sessions(summaries));
             }
@@ -335,6 +370,7 @@ impl ProviderRuntime {
                             },
                         })
                         .collect(),
+                    Provider::Antigravity => self.list_archived_antigravity(scope)?,
                 };
                 return Ok(Reply::Sessions(summaries));
             }
@@ -346,6 +382,10 @@ impl ProviderRuntime {
                         .map_err(|e| e.to_string()),
                     Provider::OpenCode => self
                         .opencode
+                        .choices(&scope.project)
+                        .map_err(|e| e.to_string()),
+                    Provider::Antigravity => self
+                        .antigravity
                         .choices(&scope.project)
                         .map_err(|e| e.to_string()),
                 }
@@ -398,6 +438,7 @@ impl ProviderRuntime {
                             },
                         })
                         .map_err(|e| e.to_string()),
+                    Provider::Antigravity => self.start_antigravity(scope, options),
                 }
                 .map(Reply::Session);
             }
@@ -423,6 +464,7 @@ impl ProviderRuntime {
                         .map(Reply::Session)
                         .map_err(|e| e.to_string()),
                     Provider::OpenCode => self.resume_opencode(key),
+                    Provider::Antigravity => self.resume_antigravity(key),
                 };
             }
             Command::History(key, cursor) => {
@@ -493,6 +535,17 @@ impl ProviderRuntime {
                         )
                         .map_err(|e| e.to_string())
                 }
+                Provider::Antigravity => self
+                    .antigravity
+                    .send_prompt_with_options(
+                        &key.scope.project,
+                        &key.id,
+                        prompt,
+                        options.model.as_deref(),
+                        options.effort.as_deref(),
+                        options.agent.as_deref(),
+                    )
+                    .map_err(|e| e.to_string()),
             },
             Command::Cancel(key) => match key.scope.provider {
                 Provider::Codex => self
@@ -501,6 +554,10 @@ impl ProviderRuntime {
                     .map_err(|e| e.to_string()),
                 Provider::OpenCode => self
                     .opencode
+                    .cancel_turn(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
+                Provider::Antigravity => self
+                    .antigravity
                     .cancel_turn(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string()),
             },
@@ -576,6 +633,13 @@ impl Runtime {
             runtime.forward(providers.opencode.subscribe(), move |event| {
                 let update = branches.opencode_event(&event);
                 std::iter::once(Event::OpenCode(event))
+                    .chain(update.map(Event::Branch))
+                    .collect()
+            });
+            let branches = providers.branches.clone();
+            runtime.forward(providers.antigravity.subscribe(), move |event| {
+                let update = branches.antigravity_event(&event);
+                std::iter::once(Event::Antigravity(event))
                     .chain(update.map(Event::Branch))
                     .collect()
             });

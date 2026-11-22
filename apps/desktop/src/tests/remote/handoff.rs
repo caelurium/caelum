@@ -399,7 +399,10 @@ fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_on
             .is_empty()
     );
     assert_eq!(l.home.editor.text, c.thread.draft);
-    assert_eq!(l.app.sessions.len(), 2);
+    assert_eq!(
+        l.app.sessions.len(),
+        caelum_core::application::Provider::ALL.len()
+    );
 }
 
 #[test]

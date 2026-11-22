@@ -122,7 +122,7 @@ fn composer_submission_matches_enter_and_stop_keeps_the_next_draft() {
                     }
                     let l = rt.state.live.as_mut().unwrap();
                     let commands = l.app.commands();
-                    let prompt = if working && provider == Provider::Codex {
+                    let prompt = if working && provider != Provider::OpenCode {
                         assert_eq!(l.app.sessions[0].queue.len(), 1);
                         l.app.sessions[0].queue[0].text.clone()
                     } else {

@@ -15,6 +15,7 @@ use migrations::migrate;
 #[cfg(test)]
 use migrations::CURRENT_SCHEMA_VERSION;
 const PROVIDERS: [&str; 2] = ["codex", "opencode"];
+const BRANCH_PROVIDERS: [&str; 3] = ["codex", "opencode", "antigravity"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionBranchHistory {
@@ -386,7 +387,7 @@ impl WorkspaceDatabase {
         provider: &str,
         session_id: &str,
     ) -> Result<Option<SessionBranchHistory>, DatabaseError> {
-        validate_provider(provider)?;
+        validate_branch_provider(provider)?;
         let connection = self.lock();
         let branch: Option<Option<String>> = connection.query_row(
             "SELECT branch FROM session_branches WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
@@ -414,7 +415,7 @@ impl WorkspaceDatabase {
         branch: Option<&str>,
     ) -> Result<(), DatabaseError> {
         validate_nonempty("project path", path)?;
-        validate_provider(provider)?;
+        validate_branch_provider(provider)?;
         validate_nonempty("session ID", session_id)?;
         let mut connection = self.lock();
         let transaction = connection.transaction()?;
@@ -500,6 +501,14 @@ fn set_active_project_in_transaction(
 
 fn validate_provider(provider: &str) -> Result<(), DatabaseError> {
     if PROVIDERS.contains(&provider) {
+        Ok(())
+    } else {
+        Err(DatabaseError::UnsupportedProvider(provider.to_owned()))
+    }
+}
+
+fn validate_branch_provider(provider: &str) -> Result<(), DatabaseError> {
+    if BRANCH_PROVIDERS.contains(&provider) {
         Ok(())
     } else {
         Err(DatabaseError::UnsupportedProvider(provider.to_owned()))
@@ -1053,5 +1062,27 @@ mod tests {
             )
             .unwrap();
         assert!(!history_table_exists);
+    }
+
+    #[test]
+    fn session_branches_accept_antigravity_provider() {
+        let directory = TestDirectory::new("antigravity-branch");
+        let path = directory.database_path();
+        let database = WorkspaceDatabase::open(&path).unwrap();
+        database
+            .record_session_branch("/work/one", "antigravity", "acp-1", Some("feat/acp"))
+            .unwrap();
+        drop(database);
+
+        let reopened = WorkspaceDatabase::open(&path).unwrap();
+        assert_eq!(
+            reopened
+                .session_branch("/work/one", "antigravity", "acp-1")
+                .unwrap(),
+            Some(SessionBranchHistory {
+                branch: Some("feat/acp".into()),
+                branches: vec!["feat/acp".into()],
+            })
+        );
     }
 }

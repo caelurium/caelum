@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn history_reconciles_overlaps_lagging_deltas_and_unicode_for_both_providers() {
-    for provider in Provider::ALL {
+    for provider in [Provider::Codex, Provider::OpenCode] {
         let mut conversation = Conversation::default();
         let (method, delta, history, complete) = match provider {
             Provider::Codex => (
@@ -27,6 +27,7 @@ fn history_reconciles_overlaps_lagging_deltas_and_unicode_for_both_providers() {
                     json!({"assistantMessageID":"answer","text":"Hello café ☁️ done"}),
                 ),
             ),
+            Provider::Antigravity => unreachable!(),
         };
         conversation.apply(provider, method, &delta);
         conversation.history(provider, &history, false);
@@ -76,7 +77,7 @@ fn repeated_prompts_and_older_pages_do_not_duplicate_or_adopt_the_wrong_message(
 
 #[test]
 fn an_unmatched_image_prompt_cannot_block_reconciliation_of_later_turns() {
-    for provider in Provider::ALL {
+    for provider in [Provider::Codex, Provider::OpenCode] {
         let image = Attachment::image("screenshot.png".into(), b"\x89PNG\r\n\x1a\n").unwrap();
         let mut conversation = Conversation::default();
         conversation.optimistic(
@@ -90,7 +91,7 @@ fn an_unmatched_image_prompt_cannot_block_reconciliation_of_later_turns() {
                 Provider::Codex => conversation.apply(provider, "item/started", &json!({
                     "item":{"id":id,"type":"userMessage","content":[{"type":"text","text":"Follow up"}]},
                 })),
-                Provider::OpenCode => conversation.history(provider, &[
+                Provider::OpenCode | Provider::Antigravity => conversation.history(provider, &[
                     json!({"id":id,"type":"user","text":"Follow up"}),
                 ], false),
             }

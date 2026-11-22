@@ -110,11 +110,15 @@ fn edit_opens_a_prefilled_independent_composer_and_rewind_requires_a_separate_co
                     }),
                 ));
             });
+            let child_index = caelum_core::application::Provider::ALL.len();
             assert_eq!(
-                rt.state.live.as_ref().unwrap().drafts[2].text,
+                rt.state.live.as_ref().unwrap().drafts[child_index].text,
                 "Original prompt"
             );
-            assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(2));
+            assert_eq!(
+                rt.state.live.as_ref().unwrap().app.selected,
+                Some(child_index)
+            );
         }
     }
 }

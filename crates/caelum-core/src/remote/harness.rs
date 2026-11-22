@@ -110,6 +110,7 @@ impl From<Provider> for Speaker {
         match provider {
             Provider::Codex => Self::Codex,
             Provider::OpenCode => Self::OpenCode,
+            Provider::Antigravity => Self::Codex,
         }
     }
 }
