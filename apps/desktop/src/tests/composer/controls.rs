@@ -18,6 +18,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
             });
             advance(&mut rt, 0.3);
             for name in [
+                "provider-trigger",
                 "model-trigger",
                 "effort-trigger",
                 "agent-trigger",
@@ -52,8 +53,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
                 assert_eq!(element(&rt, "send").label.as_deref(), Some("Send message"));
                 assert!(rt.find("stop").is_none());
             }
-            assert!(rt.find("provider-trigger").is_none());
-            for name in ["effort", "agent"] {
+            for name in ["provider", "effort", "agent"] {
                 let trigger = format!("{name}-trigger");
                 click(&mut rt, &trigger);
                 let menu = element(&rt, &format!("{name}-content"));

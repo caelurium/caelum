@@ -70,6 +70,11 @@ and files. Text fields offer Undo, Redo, Cut, Copy, Paste and Select all, preser
 their selection and editing history. **⇧F10** or the Menu key opens the focused
 item's menu; arrows navigate, Enter chooses, and Escape or Tab dismisses it.
 
+Use **Provider** beside the model picker to open another provider’s draft in the
+same project. If it has no draft yet, Caelum creates one. The conversation and
+unsent text stay with their original session. Switching does not change the
+default provider in Settings.
+
 Choose the model, reasoning effort and available agent in the composer. Selecting
 a session automatically loads its catalogue when missing, including after a restart.
 Effort and agent controls have distinct icons and labelled popouts with readable names,
