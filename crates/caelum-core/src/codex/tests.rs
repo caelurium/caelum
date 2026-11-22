@@ -263,7 +263,13 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
     assert!(provider.ensure_checkout_idle(project.path()).is_err());
     connection.remove_pending_turn("thread-existing");
     provider.ensure_checkout_idle(project.path()).unwrap();
-    let nested_connection = Arc::clone(provider.inner.lock_connections().get(&nested).unwrap());
+    let nested_connection = provider
+        .inner
+        .lock_connections()
+        .get(&nested)
+        .unwrap()
+        .stored()
+        .unwrap();
     nested_connection.alive.store(false, Ordering::Release);
     provider.ensure_checkout_idle(project.path()).unwrap();
     assert_eq!(
@@ -271,6 +277,8 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
             .inner
             .lock_connections()
             .get(&nested)
+            .unwrap()
+            .stored()
             .unwrap()
             .process_id,
         nested_connection.process_id

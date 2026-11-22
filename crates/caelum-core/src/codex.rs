@@ -5,7 +5,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex, MutexGuard,
+        Arc, Condvar, Mutex, MutexGuard,
     },
     time::Duration,
 };
@@ -50,9 +50,109 @@ struct ProviderInner {
     processes: Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
     questions: QuestionBroker,
-    connections: Mutex<HashMap<PathBuf, Arc<CodexConnection>>>,
+    connections: Mutex<HashMap<PathBuf, Arc<ConnectionSlot>>>,
     subscribers: EventSubscribers,
     closed: AtomicBool,
+}
+
+/// One checkout's connection attempt. The provider map is never locked during I/O.
+#[derive(Default)]
+struct ConnectionSlot {
+    state: Mutex<ConnectionState>,
+    ready: Condvar,
+}
+
+#[derive(Default)]
+enum ConnectionState {
+    #[default]
+    Empty,
+    Connecting(Arc<AtomicBool>),
+    Ready(Arc<CodexConnection>),
+    Closed,
+}
+
+impl ConnectionSlot {
+    fn connect(
+        &self,
+        processes: &ProcessRegistry,
+        connect: impl FnOnce(Arc<AtomicBool>) -> Result<Arc<CodexConnection>, CodexError>,
+    ) -> Result<Arc<CodexConnection>, CodexError> {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            match &*state {
+                ConnectionState::Ready(connection) if connection.alive.load(Ordering::Acquire) => {
+                    return Ok(Arc::clone(connection));
+                }
+                ConnectionState::Connecting(_) => {
+                    state = self.ready.wait(state).unwrap_or_else(|e| e.into_inner());
+                }
+                ConnectionState::Closed => return Err(CodexError::Closed),
+                _ => break,
+            }
+        }
+        let alive = Arc::new(AtomicBool::new(true));
+        let previous = std::mem::replace(&mut *state, ConnectionState::Connecting(alive.clone()));
+        drop(state);
+        if let ConnectionState::Ready(dead) = previous {
+            dead.close(processes);
+        }
+        let result = connect(alive);
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if matches!(*state, ConnectionState::Closed) {
+            drop(state);
+            if let Ok(connection) = result {
+                connection.close(processes);
+            }
+            return Err(CodexError::Closed);
+        }
+        *state = match &result {
+            Ok(connection) => ConnectionState::Ready(Arc::clone(connection)),
+            Err(_) => ConnectionState::Empty,
+        };
+        self.ready.notify_all();
+        result
+    }
+
+    fn current(&self) -> Option<Arc<CodexConnection>> {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        while matches!(*state, ConnectionState::Connecting(_)) {
+            state = self.ready.wait(state).unwrap_or_else(|e| e.into_inner());
+        }
+        match &*state {
+            ConnectionState::Ready(connection) if connection.alive.load(Ordering::Acquire) => {
+                Some(Arc::clone(connection))
+            }
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    fn stored(&self) -> Option<Arc<CodexConnection>> {
+        match &*self.state.lock().unwrap_or_else(|e| e.into_inner()) {
+            ConnectionState::Ready(connection) => Some(Arc::clone(connection)),
+            _ => None,
+        }
+    }
+
+    fn retire(&self) -> Option<Arc<CodexConnection>> {
+        let previous = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            std::mem::replace(&mut *state, ConnectionState::Closed)
+        };
+        let connection = match previous {
+            ConnectionState::Connecting(alive) => {
+                alive.store(false, Ordering::Release);
+                None
+            }
+            ConnectionState::Ready(connection) => {
+                connection.alive.store(false, Ordering::Release);
+                Some(connection)
+            }
+            _ => None,
+        };
+        self.ready.notify_all();
+        connection
+    }
 }
 
 struct CodexConnection {
@@ -136,16 +236,17 @@ impl CodexProvider {
     }
 
     pub fn ensure_checkout_idle(&self, checkout: &Path) -> Result<(), CodexError> {
-        let connections: Vec<_> = self
+        let slots: Vec<_> = self
             .inner
             .lock_connections()
             .iter()
-            .filter(|(path, connection)| {
-                path.starts_with(checkout) && connection.alive.load(Ordering::Acquire)
-            })
-            .map(|(path, connection)| (path.clone(), Arc::clone(connection)))
+            .filter(|(path, _)| path.starts_with(checkout))
+            .map(|(path, slot)| (path.clone(), Arc::clone(slot)))
             .collect();
-        for (path, connection) in connections {
+        for (path, slot) in slots {
+            let Some(connection) = slot.current() else {
+                continue;
+            };
             let starting = !connection
                 .pending_turns
                 .lock()
@@ -166,19 +267,26 @@ impl CodexProvider {
     }
 
     pub fn release_checkout(&self, checkout: &Path) {
-        let mut connections = self.inner.lock_connections();
-        let paths: Vec<_> = connections
-            .keys()
-            .filter(|path| path.starts_with(checkout))
-            .cloned()
-            .collect();
-        for path in paths {
-            if let Some(connection) = connections.remove(&path) {
-                self.inner
-                    .questions
-                    .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
-                connection.close(&self.inner.processes);
-            }
+        let removed = {
+            let mut connections = self.inner.lock_connections();
+            let paths: Vec<_> = connections
+                .keys()
+                .filter(|path| path.starts_with(checkout))
+                .cloned()
+                .collect();
+            paths
+                .into_iter()
+                .filter_map(|path| {
+                    let connection = connections.remove(&path)?.retire();
+                    self.inner
+                        .questions
+                        .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
+                    connection
+                })
+                .collect::<Vec<_>>()
+        };
+        for connection in removed {
+            connection.close(&self.inner.processes);
         }
     }
 
@@ -191,29 +299,38 @@ impl CodexProvider {
             let mut connections = self.inner.lock_connections();
             std::mem::take(&mut *connections)
         };
-        for (path, connection) in connections {
+        for (path, slot) in connections {
             self.inner
                 .questions
                 .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
-            connection.close(&self.inner.processes);
+            if let Some(connection) = slot.retire() {
+                connection.close(&self.inner.processes);
+            }
         }
         self.inner.lock_subscribers().clear();
     }
 
     fn connection(&self, project: &Project) -> Result<Arc<CodexConnection>, CodexError> {
-        if self.inner.closed.load(Ordering::Acquire) {
-            return Err(CodexError::Closed);
-        }
-
-        let mut connections = self.inner.lock_connections();
-        if let Some(connection) = connections.get(project.path()) {
-            if connection.alive.load(Ordering::Acquire) {
-                return Ok(Arc::clone(connection));
+        let slot = {
+            let mut connections = self.inner.lock_connections();
+            if self.inner.closed.load(Ordering::Acquire) {
+                return Err(CodexError::Closed);
             }
-            let dead = connections
-                .remove(project.path())
-                .expect("entry was just found");
-            dead.close(&self.inner.processes);
+            connections
+                .entry(project.path().to_path_buf())
+                .or_default()
+                .clone()
+        };
+        slot.connect(&self.inner.processes, |alive| self.connect(project, alive))
+    }
+
+    fn connect(
+        &self,
+        project: &Project,
+        alive: Arc<AtomicBool>,
+    ) -> Result<Arc<CodexConnection>, CodexError> {
+        if !alive.load(Ordering::Acquire) {
+            return Err(CodexError::Closed);
         }
 
         let (process_id, writer, reader) = if let Some(access) = &self.inner.remote {
@@ -266,7 +383,7 @@ impl CodexProvider {
             writer: Arc::new(writer),
             pending: Arc::new(Mutex::new(HashMap::new())),
             next_id: AtomicU64::new(1),
-            alive: Arc::new(AtomicBool::new(true)),
+            alive,
             thread_ids: Mutex::new(HashSet::new()),
             pending_turns: Arc::new(Mutex::new(VecDeque::new())),
             turn_threads: Arc::new(Mutex::new(HashMap::new())),
@@ -337,7 +454,6 @@ impl CodexProvider {
             }
             access.codex_used.store(true, Ordering::Release);
         }
-        connections.insert(project.path().to_path_buf(), Arc::clone(&connection));
         Ok(connection)
     }
 
@@ -365,8 +481,10 @@ impl Drop for ProviderInner {
             .connections
             .get_mut()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        for (path, connection) in std::mem::take(connections) {
-            connection.close(&self.processes);
+        for (path, slot) in std::mem::take(connections) {
+            if let Some(connection) = slot.retire() {
+                connection.close(&self.processes);
+            }
             self.questions
                 .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
         }
@@ -473,7 +591,7 @@ pub enum CodexError {
 }
 
 impl ProviderInner {
-    fn lock_connections(&self) -> MutexGuard<'_, HashMap<PathBuf, Arc<CodexConnection>>> {
+    fn lock_connections(&self) -> MutexGuard<'_, HashMap<PathBuf, Arc<ConnectionSlot>>> {
         self.connections.lock().unwrap_or_else(|p| p.into_inner())
     }
 

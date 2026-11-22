@@ -73,7 +73,29 @@ pub fn removal(app: &Application, project: &str, path: &str) -> Option<Task> {
         project: project.into(),
         path: path.into(),
     };
-    (!app.services.busy(&task)).then_some(task)
+    let rename = Task::RenameWorktree {
+        project: project.into(),
+        path: path.into(),
+        name: String::new(),
+        directory: String::new(),
+    };
+    (!app.services.busy(&task) && !app.services.busy(&rename)).then_some(task)
+}
+
+fn is_removing(app: &Application, project: &str, path: &str) -> bool {
+    app.services.busy(&Task::RemoveWorktree {
+        project: project.into(),
+        path: path.into(),
+    })
+}
+
+fn is_renaming_task(app: &Application, project: &str, path: &str) -> bool {
+    app.services.busy(&Task::RenameWorktree {
+        project: project.into(),
+        path: path.into(),
+        name: String::new(),
+        directory: String::new(),
+    })
 }
 
 pub fn select_project(s: &mut Workspace, path: &str) {
@@ -230,13 +252,12 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
     };
     let parent = project_name(app, project);
     let refresh = refresh_task(app, project);
-    let mutation = Task::CreateWorktree {
+    let creating = app.services.busy(&Task::CreateWorktree {
         project: project.into(),
         branch: String::new(),
         base: String::new(),
         directory: String::new(),
-    };
-    let busy = app.services.busy(&mutation);
+    });
     let mut body = col().w_full().h_full().min_h(0.0).gap(12.0).child(
         row()
             .w_full()
@@ -280,10 +301,16 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
         let path = tree.project.path.clone();
         let tree_name = name(tree);
         let editing = crate::worktree::is_renaming(s, &tree.path);
+        let removing = is_removing(app, project, &tree.path);
+        let tree_busy = removing || is_renaming_task(app, project, &tree.path);
         let detail = format!(
             "{} · {}",
             tree.branch.as_deref().unwrap_or("Detached HEAD"),
-            status(app, tree)
+            if removing {
+                "Removing…".into()
+            } else {
+                status(app, tree)
+            }
         );
         let mut line = row()
             .w_full()
@@ -295,7 +322,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
                     .grow(1.0)
                     .min_w(0.0)
                     .h(58.0)
-                    .disabled(!tree.available || busy)
+                    .disabled(!tree.available || tree_busy)
                     .label(format!("Open worktree {tree_name} for {parent}"))
                     .help(format!("{}\n{}\n{detail}", parent, tree.project.path))
                     .key(crate::code_view::source_key(
@@ -307,7 +334,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
                 tree.path.clone(),
                 crate::code_view::source_key(&tree.project.path, "manage-checkout"),
             ));
-        if !editing {
+        if !editing && !removing {
             line = line.child(crate::worktree::rename_control(
                 s,
                 k,
@@ -317,7 +344,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
             ));
         }
         line = line.child(
-            ui::Button::new("Remove")
+            ui::Button::new(if removing { "Removing…" } else { "Remove" })
                 .variant(ButtonVariant::GhostMuted)
                 .disabled(removal(app, project, &tree.path).is_none())
                 .on_press({
@@ -424,7 +451,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
                 ui::Button::new("New worktree")
                     .icon(&crate::PLUS)
                     .variant(ButtonVariant::Contrast)
-                    .disabled(busy)
+                    .disabled(creating)
                     .on_press({
                         let path = project.to_owned();
                         move |s: &mut Workspace| crate::worktree::open(s, path.clone(), provider)
@@ -505,7 +532,12 @@ pub fn sidebar(s: &Workspace, k: &Kit, project: &str) -> Option<(El, f32)> {
             let path = tree.project.path.clone();
             let selected = app.active_project.as_ref() == Some(&path);
             let branch = tree.branch.as_deref().unwrap_or("Detached HEAD");
-            let status = status(app, tree);
+            let removing = is_removing(app, project, &tree.path);
+            let status = if removing {
+                "Removing…".into()
+            } else {
+                status(app, tree)
+            };
             let mut help = format!("{parent} / {}\n{branch}\n{path}\n{status}", name(tree));
             if let Some(reason) = &tree.locked {
                 help.push_str(&format!("\nLocked: {reason}"));
@@ -520,8 +552,12 @@ pub fn sidebar(s: &Workspace, k: &Kit, project: &str) -> Option<(El, f32)> {
                         if selected { " · Current checkout" } else { "" }
                     ))
                     .help(help)
-                    .disabled(!tree.available)
-                    .opacity(if tree.available { 1.0 } else { 0.5 })
+                    .disabled(!tree.available || removing)
+                    .opacity(if tree.available && !removing {
+                        1.0
+                    } else {
+                        0.5
+                    })
                     .on_press(move |s: &mut Workspace| select(s, &path)),
                 project.into(),
                 tree.path.clone(),

@@ -457,7 +457,11 @@ impl OpenCodeProvider {
     ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
-        let session = self.session(&server, &project, session_id)?;
+        let session = if archived {
+            self.session(&server, &project, session_id)?
+        } else {
+            self.session_metadata(&server, &project, session_id)?
+        };
         if archived && session.is_working {
             return Err(OpenCodeError::Protocol(
                 "stop the running turn before archiving this session".into(),
