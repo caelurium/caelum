@@ -3,10 +3,14 @@ use serde_json::Value;
 
 use super::{Entry, EntryKind};
 
-pub fn running(entries: &[Entry]) -> usize {
+pub(super) fn running_entries(entries: &[Entry]) -> impl DoubleEndedIterator<Item = &Entry> {
     entries
         .iter()
         .filter(|entry| entry.name == "subagent" && !entry.complete())
+}
+
+pub fn running(entries: &[Entry]) -> usize {
+    running_entries(entries)
         .map(|entry| child_id(entry).unwrap_or(&entry.id))
         .collect::<std::collections::HashSet<_>>()
         .len()

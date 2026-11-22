@@ -485,56 +485,13 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             .a11y_hidden()
     }));
     let toolbar = Toolbar::new()
-        .leading(
-            row()
-                .gap(10.0)
-                .min_w(0.0)
-                .shrink()
-                .center_y()
-                .child(
-                    text(
-                        s.live
-                            .as_ref()
-                            .and_then(|l| match l.panels.screen {
-                                panels::Screen::Remote => l
-                                    .app
-                                    .remote
-                                    .saved
-                                    .selected
-                                    .as_ref()
-                                    .and_then(|id| l.app.remote.saved.checkouts.get(id))
-                                    .and_then(|c| c.source.repository.rsplit('/').next()),
-                                panels::Screen::Home => None,
-                                _ => l
-                                    .app
-                                    .active_project
-                                    .as_ref()
-                                    .map(|path| l.app.checkout_directory(path))
-                                    .and_then(|path| std::path::Path::new(path).file_name())
-                                    .and_then(|name| name.to_str()),
-                            })
-                            .unwrap_or("caelum"),
-                    )
-                    .font(k.ty.ui)
-                    .color(k.c.text_muted)
-                    .max_w(160.0)
-                    .min_w(0.0)
-                    .truncate()
-                    .shrink(),
-                )
-                .child(text("/").font(k.ty.ui).color(k.c.text_faint))
-                .child(
-                    text(s.title().to_owned())
-                        .font(k.ty.ui_medium)
-                        .color(k.c.text_base)
-                        .truncate()
-                        .min_w(0.0)
-                        .shrink(),
-                )
-                .children(live::session_attention(s, &k)),
-        )
+        .leading(live::heading(s, &k))
         .trailing(if s.live.is_some() {
-            context::workspace_button(s, &k)
+            row()
+                .center_y()
+                .gap(4.0)
+                .child(panels::conversations::trigger(&k))
+                .child(context::workspace_button(s, &k))
         } else {
             quiet_button(
                 &shell::INSPECTOR,

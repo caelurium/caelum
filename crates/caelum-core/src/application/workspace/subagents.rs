@@ -5,6 +5,21 @@ impl Workspace {
     /// Resolve the current task again at activation, then use the existing
     /// scoped resume path. Merely rendering a task never loads a child session.
     pub fn open_subagent(&mut self, parent: usize, entry_id: &str) -> Option<usize> {
+        let index = self.resolve_subagent(parent, entry_id)?;
+        self.select(index);
+        Some(index)
+    }
+
+    /// Load the linked child's history in place, without selecting it or marking it read.
+    pub fn peek_subagent(&mut self, parent: usize, entry_id: &str) -> Option<usize> {
+        let index = self.resolve_subagent(parent, entry_id)?;
+        if !self.sessions[index].loaded() || self.sessions[index].disconnected {
+            self.refresh(index);
+        }
+        Some(index)
+    }
+
+    fn resolve_subagent(&mut self, parent: usize, entry_id: &str) -> Option<usize> {
         let owner = self.sessions.get(parent)?;
         if owner.forgotten() || owner.scope.provider != Provider::OpenCode {
             return None;
@@ -38,7 +53,6 @@ impl Workspace {
             self.sessions.push(session);
             index
         };
-        self.select(index);
         Some(index)
     }
 

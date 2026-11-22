@@ -4,30 +4,34 @@
 mod attention;
 mod composer;
 mod events;
+mod heading;
 mod menus;
 mod patches;
 #[cfg(test)]
 mod polling_tests;
+mod reading;
 mod runtime;
 mod sidebar;
 mod transcript;
 
-pub(crate) use attention::session_attention;
 pub use composer::composer;
 pub use composer::open_effort;
+pub(crate) use heading::heading;
 pub(crate) use menus::archive_disabled;
 pub use menus::close_session_menu;
 pub use menus::delete_confirmation;
 pub use menus::overlays;
+pub(crate) use reading::Bookmark;
 pub use runtime::setup;
 pub use sidebar::on_key as sidebar_key;
+pub(crate) use sidebar::select as select_session;
 pub use sidebar::sidebar;
 pub use transcript::transcript;
 
-use std::{cell::Cell, collections::HashSet, rc::Rc};
+use std::{cell::Cell, collections::HashSet};
 
 use caelum_core::application::{Event, Runtime, Scope, Workspace as Application};
-use rune::{FileDialogOptions, ScrollPos, TextEdit, Tx, Waker};
+use rune::{FileDialogOptions, TextEdit, Tx, Waker};
 
 use crate::Workspace;
 
@@ -70,7 +74,7 @@ pub struct Live {
     pub focus_key: Option<String>,
     focus_observation: Cell<Option<(u64, bool)>>,
     pub archive_hovered: bool,
-    reading: Vec<Rc<Cell<ScrollPos>>>,
+    reading: Vec<reading::Place>,
     last_selected: Option<usize>,
     history_lengths: Vec<usize>,
     last_screen: crate::panels::Screen,
@@ -136,22 +140,13 @@ impl Live {
         }
     }
 
-    pub(crate) fn reading_position(&self, index: usize) -> ScrollPos {
-        self.reading[index].get()
-    }
-
     pub(crate) fn sync_editors(&mut self) {
         while self.drafts.len() < self.app.sessions.len() {
             let session = &self.app.sessions[self.drafts.len()];
             self.drafts.push(TextEdit::new(&session.draft));
             self.composer.editors.push(Default::default());
             self.commands.previous_drafts.push(session.draft.clone());
-            let mut position = ScrollPos::default();
-            if session.reading >= 0.0 {
-                position.offset[1] = session.reading;
-                position.max[1] = session.reading + 10.0;
-            }
-            self.reading.push(Rc::new(Cell::new(position)));
+            self.reading.push(reading::Place::new(session.reading));
         }
     }
 
@@ -433,7 +428,7 @@ impl Live {
         }
         for (i, editor) in self.drafts.iter().enumerate() {
             self.app.sessions[i].draft.clone_from(&editor.text);
-            let position = self.reading[i].get();
+            let position = self.reading_position(i);
             self.app.sessions[i].reading = if position.offset[1] >= position.max[1] - 1.0 {
                 -1.0
             } else {
@@ -636,13 +631,7 @@ impl Live {
             }
             self.last_selected = self.app.selected;
             if let Some(index) = self.app.selected {
-                let position = self.reading[index].get();
-                let key = format!("live-transcript-{index}");
-                if position.offset[1] >= position.max[1] - 1.0 {
-                    tx.scroll_to_bottom_instant(key);
-                } else {
-                    tx.scroll_to_y(key, position.offset[1]);
-                }
+                self.enter_transcript(index, tx);
             }
             changed = true;
         }

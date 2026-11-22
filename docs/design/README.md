@@ -99,7 +99,7 @@ inline composer choices. Worktree creation provides a selected suggested branch,
 searchable base and automatic location preview. Background commands show three
 visual lines and open a captured-session output reader. Hide/Show collapses them to
 a command-count row, remembered per session during the app run. Sessions waiting on
-background commands show an amber waiting label in the sidebar until foreground
+background commands show a waiting label in the workspace accent until foreground
 work resumes or the last command finishes. User messages use
 content-sized neutral Markdown bubbles with grouped attachments and copy actions.
 Statistics uses summary/chart/token/model sections; timeline has date groups,
@@ -110,9 +110,21 @@ excerpts, highlighted search and stable prompt jumps.
 | Dark workspace | ![Reference dark](previews/react-dark.png) | ![Native dark](previews/rune-dark.png) |
 | Light inspector | ![Reference inspector](previews/react-light-inspector.png) | ![Native inspector](previews/rune-light-inspector.png) |
 
-The conversation title reserves room for one attention signal: **Needs input**
-first, otherwise a link to requested PR changes. The toolbar’s only trailing control
-is the **…** workspace menu. Open **Settings → Appearance** there to change colour mode.
+The project-tinted conversation heading opens the prompt timeline. Beside it,
+**Needs input** takes precedence over a link to requested PR changes. The
+toolbar's tiled button opens the conversation overview (⌘J); **…** still opens
+the workspace menu.
+
+The overview shows conversations with running or queued work, or a question or
+approval waiting for the reader. Cards disappear when conversations go idle;
+those still active keep their relative order. They share the sidebar's project
+colours and sit over a still version of Home's ASCII sky. **Needs input** moves
+between pending requests. When all work finishes, the [idle overview](previews/rune-light-conversation-overview-idle-small.png)
+explains which conversations will appear.
+
+| Conversation overview | Compact overview |
+| --- | --- |
+| ![Active conversations with a question, a running turn, an approval and a queued prompt](previews/rune-dark-conversation-overview.png) | ![The same active conversations in two columns in light mode](previews/rune-light-conversation-overview-small.png) |
 
 | Requested PR changes · compact | Workspace menu · compact |
 | --- | --- |

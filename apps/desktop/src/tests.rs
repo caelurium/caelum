@@ -6,6 +6,7 @@ mod attention;
 mod composer;
 mod context;
 mod conversation_controls;
+mod conversations;
 mod files;
 mod home;
 mod layout;
