@@ -82,6 +82,32 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                 .or(option["value"].as_str())
                 .unwrap_or("Answer");
 
+            let indicator = row()
+                .size(16.0, 16.0)
+                .center()
+                .radius(if multiple { 4.0 } else { 8.0 })
+                .fill(if selected {
+                    k.alpha(k.c.text_accent, 0.16)
+                } else {
+                    rune::Color::TRANSPARENT
+                })
+                .border(
+                    1.0,
+                    if selected {
+                        k.c.text_accent
+                    } else {
+                        k.c.border_strong
+                    },
+                )
+                .children(selected.then(|| {
+                    if multiple {
+                        rune::icon(k.glyph.check_small, 11.0).color(k.c.text_accent)
+                    } else {
+                        rune::el().size(6.0, 6.0).radius(3.0).fill(k.c.text_accent)
+                    }
+                }))
+                .a11y_hidden();
+
             let choice = k
                 .interactive(
                     row()
@@ -91,17 +117,18 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                         .py(8.0)
                         .gap(10.0)
                         .center_y()
-                        .child(
-                            rune::icon(k.glyph.check_small, 14.0)
-                                .color(k.c.text_accent)
-                                .opacity(if selected { 1.0 } else { 0.0 }),
-                        )
+                        .child(indicator)
                         .child(
                             col()
                                 .grow(1.0)
                                 .min_w(0.0)
                                 .gap(2.0)
-                                .child(text(label).font(k.ty.ui).color(k.c.text_base).wrap())
+                                .child(
+                                    text(label)
+                                        .font(if selected { k.ty.ui_medium } else { k.ty.ui })
+                                        .color(k.c.text_base)
+                                        .wrap(),
+                                )
                                 .children(
                                     option["description"]
                                         .as_str()
@@ -262,13 +289,31 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                     .gap(8.0)
                     .px(4.0)
                     .pb(8.0)
-                    .child(ui::caption("Your input needed", k).grow(1.0))
-                    .children(
-                        (count > 1).then(|| {
-                            ui::caption(format!("{count} pending"), k).key("question-count")
-                        }),
-                    ),
+                    .child(
+                        rune::el()
+                            .size(6.0, 6.0)
+                            .radius(3.0)
+                            .fill(k.c.warning.fg)
+                            .a11y_hidden(),
+                    )
+                    .child(
+                        text("Input needed")
+                            .font(k.ty.small_medium)
+                            .color(k.c.warning.fg)
+                            .grow(1.0),
+                    )
+                    .children((count > 1).then(|| {
+                        text(format!("{count} pending"))
+                            .font(k.ty.small)
+                            .color(k.c.warning.fg)
+                            .px(6.0)
+                            .py(1.0)
+                            .radius(4.0)
+                            .fill(k.alpha(k.c.warning.fg, 0.14))
+                            .key("question-count")
+                    })),
             )
+            .child(ui::divider(k).opacity(0.5).mb(6.0))
             .child(
                 col()
                     .key(scroll_key(index, prompt))
@@ -291,34 +336,50 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, prompt: &QuestionPrompt, paddi
                     .key("question-actions")
                     .w_full()
                     .center_y()
-                    .justify_end()
-                    .gap(6.0)
+                    .justify_between()
+                    .gap(8.0)
                     .min_h(32.0)
                     .child(
-                        ui::Button::new(
-                            if matches!(draft.status, Status::Submitting { dismiss: true, .. }) {
-                                "Dismissing…"
-                            } else {
-                                "Dismiss"
-                            },
-                        )
-                        .variant(ButtonVariant::GhostMuted)
-                        .disabled(pending || !crate::remote::native::ready(l))
-                        .on_press_tx(move |s: &mut Workspace, tx| submit(s, &dismiss, true, tx))
-                        .build(k)
-                        .key(format!("question-dismiss-{}", prompt.request_id))
-                        .help("Dismiss this question · Escape"),
+                        ui::caption(ui::shortcut("⌘Enter Submit · Esc Dismiss"), k)
+                            .truncate()
+                            .grow(1.0)
+                            .min_w(0.0),
                     )
                     .child(
-                        ui::Button::new(submit_label)
-                            .variant(ButtonVariant::Contrast)
-                            .disabled(pending || !crate::remote::native::ready(l))
-                            .on_press_tx(move |s: &mut Workspace, tx| {
-                                submit(s, &submit_prompt, false, tx)
-                            })
-                            .build(k)
-                            .key(format!("question-submit-{}", prompt.request_id))
-                            .help(ui::shortcut("Submit answers · ⌘Enter")),
+                        row()
+                            .center_y()
+                            .gap(6.0)
+                            .child(
+                                ui::Button::new(
+                                    if matches!(
+                                        draft.status,
+                                        Status::Submitting { dismiss: true, .. }
+                                    ) {
+                                        "Dismissing…"
+                                    } else {
+                                        "Dismiss"
+                                    },
+                                )
+                                .variant(ButtonVariant::Outline)
+                                .disabled(pending || !crate::remote::native::ready(l))
+                                .on_press_tx(move |s: &mut Workspace, tx| {
+                                    submit(s, &dismiss, true, tx)
+                                })
+                                .build(k)
+                                .key(format!("question-dismiss-{}", prompt.request_id))
+                                .help("Dismiss this question · Escape"),
+                            )
+                            .child(
+                                ui::Button::new(submit_label)
+                                    .variant(ButtonVariant::Contrast)
+                                    .disabled(pending || !crate::remote::native::ready(l))
+                                    .on_press_tx(move |s: &mut Workspace, tx| {
+                                        submit(s, &submit_prompt, false, tx)
+                                    })
+                                    .build(k)
+                                    .key(format!("question-submit-{}", prompt.request_id))
+                                    .help(ui::shortcut("Submit answers · ⌘Enter")),
+                            ),
                     ),
             ),
         padding,
