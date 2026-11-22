@@ -15,7 +15,7 @@ fn losing_a_link_retires_the_send_and_only_admits_new_work_after_its_connected_n
         },
         async move |attempt_state, out| {
             let (lost, signal) = tokio::sync::oneshot::channel::<()>();
-            let writer = attempt_state.activate();
+            let (active, writer) = attempt_state.activate();
             let (sent, observed) = blocking::channel();
             if attempt.send((lost, observed)).is_err() {
                 return "test receiver dropped".into();
@@ -25,8 +25,8 @@ fn losing_a_link_retires_the_send_and_only_admits_new_work_after_its_connected_n
             loop {
                 tokio::select! {
                     _=&mut signal=>return "tunnel closed".into(),
-                    cmd=attempt_state.next_request()=>if let Some(cmd)=cmd {
-                        attempt_state.pending.insert(cmd.0);
+                    cmd=active.requests.recv()=>if let Some(cmd)=cmd {
+                        active.pending.insert(cmd.0);
                         if sent.send(cmd).is_err() {
                             return "test command receiver dropped".into();
                         }

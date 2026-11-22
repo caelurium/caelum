@@ -20,41 +20,48 @@ enum Message {
     Connected(Link),
     Notice(Notice),
 }
-struct Attempt {
-    connected: bool,
+struct ActiveAttempt {
     pending: BTreeSet<u64>,
-    requests: Option<mpsc::Receiver<(u64, Command)>>,
+    requests: mpsc::Receiver<(u64, Command)>,
 }
+
+enum Attempt {
+    Connecting,
+    Active(ActiveAttempt),
+}
+
 impl Attempt {
     fn new() -> Self {
-        Self {
-            connected: false,
+        Self::Connecting
+    }
+
+    fn activate(&mut self) -> (&mut ActiveAttempt, Link) {
+        let (writer, requests) = mpsc::channel(128);
+        *self = Self::Active(ActiveAttempt {
             pending: BTreeSet::new(),
-            requests: None,
-        }
+            requests,
+        });
+        let Self::Active(active) = self else {
+            unreachable!();
+        };
+        (active, writer)
     }
-    fn activate(&mut self) -> Link {
-        let (writer, rx) = mpsc::channel(128);
-        self.connected = true;
-        self.requests = Some(rx);
-        writer
-    }
-    async fn next_request(&mut self) -> Option<(u64, Command)> {
-        let req = self.requests.as_mut()?.recv().await?;
-        Some(req)
-    }
-    fn retire(mut self) -> Option<BTreeSet<u64>> {
-        if !self.connected {
+
+    fn retire(self) -> Option<BTreeSet<u64>> {
+        let Self::Active(mut active) = self else {
             return None;
+        };
+        active.requests.close();
+        while let Ok((id, _)) = active.requests.try_recv() {
+            active.pending.insert(id);
         }
-        if let Some(mut rx) = self.requests.take() {
-            rx.close();
-            while let Ok((id, _)) = rx.try_recv() {
-                self.pending.insert(id);
-            }
-        }
-        Some(self.pending)
+        Some(active.pending)
     }
+}
+
+enum BrokerSync {
+    Pending,
+    Attached,
 }
 struct Output {
     tx: mpsc::Sender<Message>,
@@ -270,40 +277,42 @@ async fn session(access: Arc<super::Access>, attempt: &mut Attempt, out: &Output
         access.clone(),
     );
     let rt = workers.0.as_mut().unwrap();
-    let mut brokers_attached = false;
-    let writer = attempt.activate();
+    let mut brokers = BrokerSync::Pending;
+    let (active, writer) = attempt.activate();
     out.publish(Message::Connected(writer)).await;
     loop {
         tokio::select! {
             _ = wake.notified() => for event in rt.drain() {
                 // An empty, newly constructed broker isn't a snapshot of the VM.
                 // Keep visible questions and answer drafts until Codex has resubscribed.
-                if !brokers_attached && access.codex_used.load(std::sync::atomic::Ordering::Acquire) {
-                    brokers_attached = true;
-                    deliver(&mut attempt.pending, out, Event::Approvals(providers.approvals.pending())).await;
-                    deliver(&mut attempt.pending, out, Event::Questions(providers.questions.pending())).await;
+                if matches!(brokers, BrokerSync::Pending)
+                    && access.codex_used.load(std::sync::atomic::Ordering::Acquire)
+                {
+                    brokers = BrokerSync::Attached;
+                    deliver(&mut active.pending, out, Event::Approvals(providers.approvals.pending())).await;
+                    deliver(&mut active.pending, out, Event::Questions(providers.questions.pending())).await;
                 }
                 let event = match event {
                     Event::Codex(ref e) if e.method == "codex/processExited" => {
                         return "VM Codex WebSocket disconnected.".into()
                     }
-                    Event::Approvals(_) | Event::Questions(_) if !brokers_attached => continue,
+                    Event::Approvals(_) | Event::Questions(_) if matches!(brokers, BrokerSync::Pending) => continue,
                     Event::Approvals(_) => Event::Approvals(providers.approvals.pending()),
                     Event::Questions(_) => Event::Questions(providers.questions.pending()),
                     e => e,
                 };
-                deliver(&mut attempt.pending, out, event).await;
+                deliver(&mut active.pending, out, event).await;
             },
-            req = attempt.next_request() => match req {
+            req = active.requests.recv() => match req {
                 Some((id, cmd)) => {
-                    if attempt.pending.len() >= 512 || !attempt.pending.insert(id) {
+                    if active.pending.len() >= 512 || !active.pending.insert(id) {
                         out.send(Notice::Event(Box::new(Event::Completed(
                             id,
                             Err("Too many pending native workspace requests.".into()),
                         ))))
                         .await;
                     } else if let Err(e) = rt.submit(id, cmd) {
-                        deliver(&mut attempt.pending, out, Event::Completed(id, Err(e))).await;
+                        deliver(&mut active.pending, out, Event::Completed(id, Err(e))).await;
                     }
                 }
                 None => return "VM workspace closed.".into(),

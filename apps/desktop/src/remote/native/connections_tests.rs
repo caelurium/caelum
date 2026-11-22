@@ -1,9 +1,9 @@
-use super::{Connection, Connections};
+use super::{Connection, Connections, Phase};
 use caelum_core::{
     application::{Command, Provider, Runtime, Scope, SessionKey, Workspace},
     remote::{
         Host, MachineId,
-        native::{Binding, NativeTarget, Status},
+        native::{Binding, NativeTarget},
     },
 };
 use std::collections::BTreeMap;
@@ -22,10 +22,7 @@ fn codex_reads_wait_for_the_vm_connection_and_keep_the_verified_checkout_owner()
     let binding = Binding::new("checkout", &target).unwrap();
     let connection = Connection {
         binding,
-        status: Status::Connecting,
-        client: None,
-        reads: Vec::new(),
-        initial: None,
+        phase: Phase::TestConnecting { reads: Vec::new() },
     };
     let mut connections = Connections(BTreeMap::from([("checkout".into(), connection)]));
     let app = Workspace::default();
@@ -42,8 +39,10 @@ fn codex_reads_wait_for_the_vm_connection_and_keep_the_verified_checkout_owner()
         .submit(&mut local, &app, None, 17, Command::History(key, None))
         .unwrap();
 
-    let [(request, Command::History(key, None))] = connections.0["checkout"].reads.as_slice()
-    else {
+    let Phase::TestConnecting { reads } = &connections.0["checkout"].phase else {
+        panic!("expected the connection to remain in connecting state")
+    };
+    let [(request, Command::History(key, None))] = reads.as_slice() else {
         panic!("expected the request to stay queued until SSH connects")
     };
     assert_eq!(*request, 17);
