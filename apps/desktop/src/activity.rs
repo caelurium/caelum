@@ -766,12 +766,14 @@ pub fn context(s: &Workspace, k: &Kit, index: usize, wide: bool) -> El {
         ),
         None => "Context usage has not been reported by this provider yet.".into(),
     };
+    let reported = usage.used_tokens.is_some();
     let mut meter = row().gap(5.0).center_y().child(
         ProgressCircle::new(percent.unwrap_or(0.0).min(100.0) as f32 / 100.0)
             .label("Context usage")
-            .build(k),
+            .build(k)
+            .opacity(if reported { 1.0 } else { 0.55 }),
     );
-    if wide {
+    if wide && reported {
         meter = meter.child(ui::caption(summary.clone(), k));
     }
     meter
