@@ -65,6 +65,16 @@ class CaptureTests(unittest.TestCase):
         plan = capture_plan(Path("caelum-desktop"), output)
         names = [item[0] for item in plan]
         self.assertEqual(len(names), len(set(names)))
+        self.assertNotIn(
+            "session-project-filter-trigger",
+            {
+                event["key"]
+                for _, _, events in plan
+                if events
+                for event in events
+                if "key" in event
+            },
+        )
         for theme in ("dark", "light"):
             for suffix in ("", "-small"):
                 name = f"rune-{theme}-patch-expanded{suffix}"

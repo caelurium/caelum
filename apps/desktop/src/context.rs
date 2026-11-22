@@ -94,6 +94,7 @@ struct Item {
     id: &'static str,
     title: &'static str,
     enabled: bool,
+    danger: bool,
     icon: Option<&'static Icon>,
     shortcut: Option<&'static str>,
 }
@@ -104,12 +105,17 @@ impl Item {
             id,
             title,
             enabled: true,
+            danger: false,
             icon: None,
             shortcut: None,
         }
     }
     fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+    fn danger(mut self, danger: bool) -> Self {
+        self.danger = danger;
         self
     }
     fn icon(mut self, icon: &'static Icon) -> Self {
@@ -217,15 +223,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .iter()
         .flatten()
         .any(|item| item.icon.is_some());
-    layers.push(
-        rune::el()
-            .key("context-scrim")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .on_press(close)
-            .on_secondary_press(|s: &mut Workspace, _, _| close(s)),
-    );
+    layers.push(ui::popup_scrim("context-scrim", close));
     let (mut menu, label) = match opened.point {
         Some(at) => (
             rune_kit::Menu::new("context").at(at.x, at.y),
@@ -244,6 +242,7 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         };
         let id = item.id;
         let mut row = MenuItem::new(item.title)
+            .danger(item.danger)
             .disabled(!item.enabled)
             .on_select_tx(move |s: &mut Workspace, tx| {
                 if live(s).context.revision != revision || !is_open(s) {
@@ -459,6 +458,7 @@ pub fn worktree(el: El, project: String, path: String, origin: String) -> El {
             .item(
                 Item::new("delete", "Delete worktree")
                     .icon(&glyphs::CLOSE)
+                    .danger(true)
                     .enabled(crate::checkouts::removal(app, &project, &path).is_some()),
             );
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
@@ -565,6 +565,8 @@ pub fn session(el: El, index: usize) -> El {
         if archived {
             menu = menu.separator().item(
                 Item::new("delete", "Delete session permanently")
+                    .icon(&glyphs::CLOSE)
+                    .danger(true)
                     .enabled(!crate::live::archive_disabled(live(s), index)),
             );
         }

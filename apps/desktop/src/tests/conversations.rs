@@ -228,7 +228,7 @@ fn overview_windows_large_projects_and_finds_sessions_outside_the_sidebar_filter
     let mut rt = design_runtime("session-feed-many", (800.0, 620.0));
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
-        l.feed.project = Some("/projects/caelum".into());
+        l.app.preferences.session_scope = caelum_core::application::SessionScope::CurrentProject;
         l.panels.sessions.replace_text("no match");
         for session in l.app.sessions.iter_mut().filter(|s| s.title.ends_with('9')) {
             session.conversation.set_working(true);

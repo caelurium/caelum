@@ -117,17 +117,17 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     let mut pane = col().w_full().h_full().min_h(0.0).gap(8.0);
     if tabs {
         pane = pane.child(
-            row()
+            ui::segmented_track(k)
+                .self_start()
                 .role("tablist")
                 .label("VM destination")
-                .gap(4.0)
                 .child(
-                    ui::highlighted_tab("Existing VM", existing, k)
+                    ui::segment("Existing VM", existing, k)
                         .key("handoff-existing-vm")
                         .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::Existing),
                 )
                 .child(
-                    ui::highlighted_tab("New VM", !existing, k)
+                    ui::segment("New VM", !existing, k)
                         .key("handoff-new-vm")
                         .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::New),
                 ),

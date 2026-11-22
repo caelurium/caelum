@@ -15,13 +15,6 @@ use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
 use super::{live, live_mut};
 use crate::{PLUS, Workspace, context::EditMenu, quiet_button, ui};
 
-#[derive(Default, PartialEq, Eq)]
-enum Menu {
-    #[default]
-    Closed,
-    Filter,
-}
-
 enum Recency {
     Paused {
         displayed_at: u64,
@@ -43,8 +36,6 @@ impl Recency {
 pub struct State {
     badges: badge::State,
     discovered: std::collections::HashSet<caelum_core::application::Scope>,
-    pub project: Option<String>,
-    menu: Menu,
     recency: Recency,
     visible: Vec<FeedSession>,
     query: Option<(Option<String>, String, bool)>,
@@ -57,8 +48,6 @@ impl Default for State {
         Self {
             badges: Default::default(),
             discovered: Default::default(),
-            project: None,
-            menu: Menu::Closed,
             recency: Recency::Paused {
                 displayed_at: caelum_core::application::presentation::now(),
             },
@@ -104,13 +93,10 @@ impl State {
             }
         }
     }
-    pub fn close(&mut self) {
-        self.menu = Menu::Closed;
-    }
+    pub fn close(&mut self) {}
     pub fn hidden(&mut self) {
         self.visible.clear();
         self.set_display_clock(self.displayed_at());
-        self.close();
     }
     pub fn poll(
         &mut self,
@@ -121,36 +107,27 @@ impl State {
         clock: bool,
     ) -> bool {
         let mut changed = self.badges.sync(app);
-        if self
-            .project
-            .as_ref()
-            .is_some_and(|p| !app.project_is_open(p))
-        {
-            self.project = None;
-            changed = true;
-        }
-        let project = app.feed_project(self.project.as_deref()).map(str::to_owned);
+        let project = app.feed_project(None).map(str::to_owned);
         let selected = app.selected_feed_session();
         let request_scope = (app.preferences.session_scope, project.clone());
         if self.request_scope.as_ref() != Some(&request_scope) {
-            app.refresh_feed_pull_requests(self.project.as_deref());
+            app.refresh_feed_pull_requests(None);
             self.request_scope = Some(request_scope);
             tx.scroll_to_y("requests-scroll", 0.0);
         } else if self.selected != selected
             && let Some(path) = app.active_project.clone()
-            && app.feed_includes_project(&path, self.project.as_deref())
+            && app.feed_includes_project(&path, None)
         {
             app.refresh_feed_pull_requests(Some(&path));
         }
         let query = (project, query.to_owned(), archived);
         if self.query.as_ref() != Some(&query) {
-            let rows = app.sidebar_sessions(self.project.as_deref(), &query.1, archived);
+            let rows = app.sidebar_sessions(None, &query.1, archived);
             self.visible.retain(|i| rows.contains(i));
             tx.scroll_to_y("sidebar-scroll", 0.0);
             self.query = Some(query);
         }
         if self.selected != selected {
-            self.menu = Menu::Closed;
             self.selected = selected;
             if let Some(row) = &self.selected {
                 tx.scroll_into_view(row::key(row));
@@ -189,8 +166,6 @@ impl State {
 
 impl super::Live {
     pub(crate) fn reveal_new_session(&mut self) {
-        self.feed.project = None;
-        self.feed.close();
         self.feed.selected = None;
         self.panels.sessions.clear();
         self.panels.archived = false;
@@ -222,11 +197,10 @@ fn age(at: Option<u64>, now: u64) -> (String, Option<u64>) {
 
 pub fn sidebar(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let rows = Rc::new(l.app.sidebar_sessions(
-        l.feed.project.as_deref(),
-        &l.panels.sessions.text,
-        l.panels.archived,
-    ));
+    let rows = Rc::new(
+        l.app
+            .sidebar_sessions(None, &l.panels.sessions.text, l.panels.archived),
+    );
     let (keys, builders, visible) = (rows.clone(), rows.clone(), rows.clone());
     let kit = k.clone();
     let sessions = if rows.is_empty() {
@@ -321,7 +295,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                             .on_press(|s: &mut Workspace| {
                                 let l = live_mut(s);
                                 l.app.refresh_project();
-                                l.app.refresh_feed_pull_requests(l.feed.project.as_deref());
+                                l.app.refresh_feed_pull_requests(None);
                                 l.app.discover_open_sessions();
                                 l.app.refresh_open_sessions();
                             })
@@ -332,7 +306,6 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
             .build(k)
             .key("sessions-heading"),
         )
-        .child(projects::filter(s).trigger(k).w_full())
         .child(
             row()
                 .key("session-search-field")
@@ -392,17 +365,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
         .child(requests::view(s, k))
 }
 
-pub(super) fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
-    if live(s).panels.overlay().is_some() {
-        return;
-    }
-    match live(s).feed.menu {
-        Menu::Filter => {
-            projects::filter(s).build(k, layers);
-        }
-        Menu::Closed => {}
-    }
-}
+pub(super) fn overlays(_s: &Workspace, _k: &Kit, _layers: &mut Vec<El>) {}
 
 pub(crate) fn select(s: &mut Workspace, index: usize) {
     let l = live_mut(s);
@@ -424,13 +387,6 @@ pub(crate) fn select(s: &mut Workspace, index: usize) {
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     let l = live(s);
-    if l.feed.menu != Menu::Closed {
-        if ev.key == Key::Escape {
-            live_mut(s).feed.menu = Menu::Closed;
-            return true;
-        }
-        return false;
-    }
     if !l.panels.sessions.text.is_empty() && ev.key == Key::Escape {
         live_mut(s).panels.sessions.clear();
         return true;

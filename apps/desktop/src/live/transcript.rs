@@ -534,29 +534,60 @@ pub(super) fn timeline_row(
         content = content.child(
             col()
                 .w_full()
-                .gap(10.0)
+                .gap(12.0)
                 .padding(16.0)
                 .radius(10.0)
-                .border(1.0, k.c.border_focus)
+                .fill(k.c.layer_01)
+                .border(1.0, k.c.warning.border)
                 .child(
-                    text(prompt.summary.clone())
-                        .font(k.ty.ui_medium)
-                        .color(k.c.text_base)
-                        .wrap(),
+                    col()
+                        .w_full()
+                        .gap(4.0)
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .center_y()
+                                .child(
+                                    rune::icon(&ui::BELL, 13.0)
+                                        .color(k.c.warning.icon)
+                                        .a11y_hidden(),
+                                )
+                                .child(
+                                    text("Approval needed")
+                                        .font(k.ty.small_medium)
+                                        .color(k.c.warning.fg),
+                                ),
+                        )
+                        .child(
+                            text(prompt.summary.clone())
+                                .font(k.ty.ui_medium)
+                                .color(k.c.text_base)
+                                .wrap(),
+                        ),
                 )
-                .child(
-                    text(prompt.description.clone())
-                        .font(k.ty.mono)
-                        .color(k.c.text_muted)
-                        .wrap()
-                        .selectable(true),
-                )
+                .children((!prompt.description.is_empty()).then(|| {
+                    col()
+                        .w_full()
+                        .px(12.0)
+                        .py(10.0)
+                        .radius(6.0)
+                        .fill(k.c.bg_base)
+                        .border(1.0, k.c.border_base)
+                        .child(
+                            text(prompt.description.clone())
+                                .font(k.ty.mono)
+                                .color(k.c.text_muted)
+                                .wrap()
+                                .selectable(true),
+                        )
+                }))
                 .child(
                     row()
                         .gap(8.0)
+                        .center_y()
                         .child(
                             Button::new("Allow once")
-                                .variant(ButtonVariant::Outline)
+                                .variant(ButtonVariant::Contrast)
                                 .disabled(!crate::remote::native::ready(live))
                                 .on_press(move |s: &mut Workspace| {
                                     live_mut(s)
@@ -568,7 +599,7 @@ pub(super) fn timeline_row(
                         )
                         .child(
                             Button::new("Deny")
-                                .variant(ButtonVariant::GhostMuted)
+                                .variant(ButtonVariant::Outline)
                                 .disabled(!crate::remote::native::ready(live))
                                 .on_press(move |s: &mut Workspace| {
                                     live_mut(s)

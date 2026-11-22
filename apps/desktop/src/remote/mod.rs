@@ -61,6 +61,14 @@ pub(crate) struct State {
     checked_deadlines: std::collections::HashSet<(caelum_core::remote::MachineId, i64)>,
 }
 
+fn machine_dot_color(state: &str, k: &Kit) -> rune::Color {
+    match state {
+        "running" | "ready" | "active" | "idle" => k.c.success.icon,
+        "creating" | "starting" | "cloning" | "resuming" | "stopping" => k.c.warning.icon,
+        _ => k.c.icon_muted,
+    }
+}
+
 pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
     let mut view = col()
         .w_full()
@@ -79,15 +87,60 @@ pub(crate) fn settings(s: &Workspace, k: &Kit) -> El {
         )
         .child(connection(s, k));
     if let Some(list) = &live(s).app.remote.inventory {
+        let mut machines = col().w_full().gap(6.0);
         if list.machines.is_empty() {
-            view = view.child(ui::caption("Connected · No machines yet", k));
+            machines = machines.child(
+                row()
+                    .w_full()
+                    .px(12.0)
+                    .py(10.0)
+                    .radius(8.0)
+                    .fill(k.c.layer_01)
+                    .border(1.0, k.c.border_base)
+                    .child(ui::caption("Connected · No machines yet", k)),
+            );
+        } else {
+            for machine in &list.machines {
+                machines = machines.child(
+                    row()
+                        .w_full()
+                        .min_h(40.0)
+                        .px(12.0)
+                        .py(8.0)
+                        .gap(10.0)
+                        .center_y()
+                        .radius(8.0)
+                        .fill(k.c.layer_01)
+                        .border(1.0, k.c.border_base)
+                        .child(
+                            rune::el()
+                                .size(6.0, 6.0)
+                                .radius(3.0)
+                                .fill(machine_dot_color(&machine.state, k)),
+                        )
+                        .child(
+                            rune::text(&machine.name)
+                                .font(k.ty.ui_medium)
+                                .color(k.c.text_base)
+                                .truncate()
+                                .min_w(0.0)
+                                .grow(1.0),
+                        )
+                        .child(
+                            row()
+                                .px(8.0)
+                                .py(2.0)
+                                .radius(4.0)
+                                .fill(k.c.layer_02)
+                                .child(ui::caption(&machine.state, k)),
+                        ),
+                );
+            }
         }
-        for machine in &list.machines {
-            view = view.child(ui::caption(
-                format!("{} · {}", machine.name, machine.state),
-                k,
-            ));
-        }
+        view = view
+            .child(ui::divider(k))
+            .child(ui::caption("Connected machines", k))
+            .child(machines);
     }
     view
 }
@@ -107,7 +160,9 @@ fn connection(s: &Workspace, k: &Kit) -> El {
         )
         .child(
             row()
+                .w_full()
                 .gap(8.0)
+                .center_y()
                 .child(
                     ui::Button::new("Connect Boat")
                         .disabled(busy || l.remote.key.text.trim().is_empty())
@@ -122,6 +177,7 @@ fn connection(s: &Workspace, k: &Kit) -> El {
                 )
                 .child(
                     ui::Button::new("Refresh")
+                        .icon(&ui::REFRESH)
                         .disabled(busy)
                         .on_press(|s: &mut Workspace| {
                             let l = live_mut(s);
@@ -130,8 +186,10 @@ fn connection(s: &Workspace, k: &Kit) -> El {
                         })
                         .build(k),
                 )
+                .child(rune::el().grow(1.0))
                 .children(remote.inventory.as_ref().map(|_| {
                     ui::Button::new("Disconnect")
+                        .variant(rune_kit::ButtonVariant::GhostMuted)
                         .disabled(busy)
                         .on_press(|s: &mut Workspace| {
                             let l = live_mut(s);
