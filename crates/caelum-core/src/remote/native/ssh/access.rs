@@ -132,11 +132,15 @@ impl Access {
                 let _ = child.kill().await;
                 return Err("VM output exceeds the preview limit.".into());
             }
-            let diagnostics = diagnostics
-                .await
-                .map_err(|e| e.to_string())?
-                .map_err(|e| e.to_string())?;
-            let status = child.wait().await.map_err(|e| e.to_string())?;
+            let (diagnostics, status) = tokio::try_join!(
+                async {
+                    diagnostics
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .map_err(|e| e.to_string())
+                },
+                async { child.wait().await.map_err(|e| e.to_string()) },
+            )?;
             if !status.code().is_some_and(|c| codes.contains(&c)) {
                 let detail = diagnostic(&diagnostics);
                 return Err(if detail.is_empty() {

@@ -122,15 +122,25 @@ impl Access {
                 .await
                 .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
         };
+        let target = [path];
+        let untracked_paths = ["/dev/null", path];
+        let untracked_fut = async {
+            if change.index_status == "?" {
+                read(&["--no-index"], &untracked_paths, &[0, 1]).await
+            } else {
+                Ok(String::new())
+            }
+        };
+        let (staged, unstaged, untracked) = tokio::try_join!(
+            read(&["--cached"], &target, &[0]),
+            read(&[], &target, &[0]),
+            untracked_fut,
+        )?;
         Ok(GitFileDiff {
             path: path.into(),
-            staged: read(&["--cached"], &[path], &[0]).await?,
-            unstaged: read(&[], &[path], &[0]).await?,
-            untracked: if change.index_status == "?" {
-                read(&["--no-index"], &["/dev/null", path], &[0, 1]).await?
-            } else {
-                String::new()
-            },
+            staged,
+            unstaged,
+            untracked,
         })
     }
     pub(super) async fn search(

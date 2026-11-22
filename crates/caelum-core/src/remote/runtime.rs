@@ -128,13 +128,10 @@ impl Backend {
                 {
                     return Err("The VM checkout has a different GitHub origin.".into());
                 }
-                let base = git.handoff_base(project).await?;
+                let (base, boat) = tokio::try_join!(git.handoff_base(project), self.connected())?;
                 let mut target = target.clone();
                 target.required_base = Some(base.clone());
-                self.connected()
-                    .await?
-                    .prepare(&target, &base.branch, None)
-                    .await
+                boat.prepare(&target, &base.branch, None).await
             }
             Operation::Lifetime(key, lifetime) => self
                 .connected()

@@ -160,8 +160,10 @@ impl Access {
                 return Err("VM path is not a regular file.".into());
             }
             let file = s.open(&physical).await.map_err(error)?;
-            let attrs = file.metadata().await.map_err(error)?;
-            let after = s.canonicalize(requested).await.map_err(error)?;
+            let (attrs, after) =
+                tokio::try_join!(async { file.metadata().await.map_err(error) }, async {
+                    s.canonicalize(requested).await.map_err(error)
+                },)?;
             if !attrs.is_regular() || after != physical {
                 return Err("VM path changed while it was being opened.".into());
             }
