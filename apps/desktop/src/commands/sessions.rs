@@ -125,22 +125,30 @@ pub(super) fn sessions(s: &Workspace, k: &Kit, index: usize) -> El {
         body = body.child(ui::caption(error, k).color(k.c.danger.fg));
     }
     let refresh_scope = scope.clone();
+    let project_label = project.rsplit('/').next().unwrap_or(&project);
     body.child(ui::divider(k)).child(
         row()
             .w_full()
             .center_y()
             .justify_between()
-            .child(ui::caption(
-                format!(
-                    "{} · {} sessions · {} · ↑↓ Navigate · ↵ Open",
-                    scope.provider.as_str(),
-                    matches.len(),
-                    project
-                ),
-                k,
-            ))
+            .gap(8.0)
+            .child(
+                ui::caption(
+                    format!(
+                        "{} · {} sessions · {} · ↑↓ Navigate · ↵ Open",
+                        scope.provider.as_str(),
+                        matches.len(),
+                        project_label
+                    ),
+                    k,
+                )
+                .truncate()
+                .grow(1.0)
+                .min_w(0.0),
+            )
             .child(
                 Button::new("Refresh")
+                    .icon(&ui::REFRESH)
                     .variant(ButtonVariant::Outline)
                     .on_press(move |s: &mut Workspace| {
                         live_mut(s).app.discover_sessions(refresh_scope.clone())

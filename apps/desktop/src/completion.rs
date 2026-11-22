@@ -5,8 +5,8 @@ use crate::{
     ui,
 };
 use caelum_core::application::{Completion, CompletionKind, Provider, Task};
-use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col};
-use rune_kit::{Kit, Placement, popover};
+use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, icon, row, text};
+use rune_kit::{Kit, Placement, ScrollBar, popover};
 
 #[derive(Default)]
 pub struct Menu {
@@ -442,29 +442,48 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
 
     layers.push(popover::anchored(
         k,
-        popover::raised(k, view(s, k).w(width), 8.0),
+        popover::raised(k, panel(s, k).w(width), ui::POPUP_RADIUS),
         "composer-editor",
         Placement::TopStart,
-        4.0,
+        ui::POPUP_OFFSET,
     ));
 }
 
 pub fn view(s: &Workspace, k: &Kit) -> El {
+    if token(s).is_none() {
+        return col();
+    }
+    panel(s, k)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
+        .radius(ui::POPUP_RADIUS)
+}
+
+fn panel(s: &Workspace, k: &Kit) -> El {
     let Some(token) = token(s) else {
         return col();
     };
     let items = choices(s, &token);
-    let selected = live(s).completion.active.min(items.len().saturating_sub(1));
-    let title = match token.kind {
-        CompletionKind::Command => "Commands · ↑↓ Navigate · Tab Complete · Enter Run",
-        CompletionKind::File => "Files · Tab / Enter Attach",
-        CompletionKind::PullRequest => "Session pull requests · Tab / Enter Attach",
+    let count = items.len();
+    let selected = live(s).completion.active.min(count.saturating_sub(1));
+    let (heading, hint) = match token.kind {
+        CompletionKind::Command => ("Slash commands", "↑↓ Navigate · Tab Complete · ↵ Run"),
+        CompletionKind::File => ("Attach file", "↑↓ Navigate · Tab / ↵ Attach"),
+        CompletionKind::PullRequest => ("Attach pull request", "↑↓ Navigate · Tab / ↵ Attach"),
     };
-    let mut content = col()
-        .w_full()
-        .min_h(0.0)
-        .gap(3.0)
-        .child(ui::caption(title, k).truncate());
+    let count_label = match (token.kind, count) {
+        (_, 0) => None,
+        (CompletionKind::Command, 1) => Some("1 command".into()),
+        (CompletionKind::Command, n) => Some(format!("{n} commands")),
+        (_, 1) => Some("1 match".into()),
+        (_, n) => Some(format!("{n} matches")),
+    };
+    let mut content = col().w_full().min_h(0.0).gap(4.0).child(ui::popup_header(
+        heading,
+        None,
+        count_label.map(|label| ui::caption(label, k)),
+        k,
+    ));
     let l = live(s);
     let index = l.app.selected.unwrap();
     let project = &l.app.sessions[index].scope.project;
@@ -475,7 +494,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                 query: token.query.clone(),
             });
     if busy {
-        content = content.child(ui::skeleton("Loading context", 1, k));
+        content = content.child(ui::skeleton("Loading context", 1, k).px(8.0));
     }
     if let Some(error) = l.app.sessions[index].error.as_ref().or_else(|| {
         l.app
@@ -484,7 +503,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
             .get(project)
             .and_then(|c| c.error.as_ref())
     }) {
-        content = content.child(ui::caption(error, k).color(k.c.danger.fg));
+        content = content.child(ui::caption(error, k).color(k.c.danger.fg).px(8.0));
     }
     let mut options = col().w_full().gap(2.0);
     if items.is_empty() && !busy {
@@ -495,7 +514,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
         let t = token.clone();
         let choice = item.clone();
         options = options.child(
-            ui::choice(&item.title, &item.detail, i == selected, k)
+            completion_row(&item, token.kind, i == selected, k)
                 .disabled(busy)
                 .on_press_tx(move |s: &mut Workspace, tx| {
                     choose(s, choice.clone(), t.clone(), false, tx)
@@ -510,17 +529,135 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                 .w_full()
                 .shrink()
                 .min_h(0.0)
-                .max_h(170.0)
+                .max_h(210.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(options),
+                .child(options)
+                .scroll_bar(k),
         )
-        .padding(8.0)
-        .fill(k.c.layer_01)
-        .border(1.0, k.c.border_base)
-        .radius(8.0)
+        .child(ui::divider(k))
+        .child(
+            row()
+                .w_full()
+                .px(8.0)
+                .pt(3.0)
+                .pb(1.0)
+                .gap(8.0)
+                .center_y()
+                .justify_between()
+                .child(ui::caption(hint, k).truncate().grow(1.0).min_w(0.0))
+                .child(ui::caption("Esc", k)),
+        )
+        .padding(6.0)
         .keeps_text_selection()
         .on_press(|_: &mut Workspace| {})
         .key("completion-menu")
+}
+
+fn completion_row(item: &Choice, kind: CompletionKind, selected: bool, k: &Kit) -> El {
+    let glyph = match kind {
+        CompletionKind::Command => &ui::TERMINAL,
+        CompletionKind::File => &ui::FILE,
+        CompletionKind::PullRequest => &ui::BRANCH,
+    };
+    let icon_color = if selected {
+        k.c.text_accent
+    } else {
+        k.c.icon_muted
+    };
+    let body = match kind {
+        CompletionKind::Command => row()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(10.0)
+            .center_y()
+            .child(
+                text(&item.title)
+                    .font(k.ty.mono)
+                    .color(if selected {
+                        k.c.text_accent
+                    } else {
+                        k.c.text_base
+                    })
+                    .min_w(96.0),
+            )
+            .children(
+                (!item.detail.is_empty())
+                    .then(|| ui::caption(&item.detail, k).truncate().grow(1.0).min_w(0.0)),
+            ),
+        CompletionKind::File => {
+            let (parent, name) = item
+                .title
+                .rsplit_once('/')
+                .unwrap_or(("", item.title.as_str()));
+            row()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text(name)
+                        .font(k.ty.ui_medium)
+                        .color(k.c.text_base)
+                        .truncate(),
+                )
+                .children(
+                    (!parent.is_empty())
+                        .then(|| ui::caption(parent, k).truncate().grow(1.0).min_w(0.0)),
+                )
+        }
+        CompletionKind::PullRequest => row()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(8.0)
+            .center_y()
+            .child(text(&item.title).font(k.ty.mono).color(if selected {
+                k.c.text_accent
+            } else {
+                k.c.text_muted
+            }))
+            .child(
+                text(&item.detail)
+                    .font(k.ty.ui_medium)
+                    .color(k.c.text_base)
+                    .truncate()
+                    .grow(1.0)
+                    .min_w(0.0),
+            ),
+    };
+    let description = if item.detail.is_empty() {
+        item.title.as_str()
+    } else {
+        item.detail.as_str()
+    };
+    k.interactive(
+        row()
+            .w_full()
+            .min_h(34.0)
+            .px(8.0)
+            .py(6.0)
+            .gap(8.0)
+            .center_y()
+            .radius(6.0)
+            .fill(if selected {
+                k.c.hover
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .child(icon(glyph, 13.0).color(icon_color).a11y_hidden())
+            .child(body)
+            .child(
+                text("↵")
+                    .font(k.ty.small)
+                    .color(k.c.text_muted)
+                    .opacity(if selected { 1.0 } else { 0.0 })
+                    .a11y_hidden(),
+            ),
+    )
+    .role("button")
+    .label(&item.title)
+    .description(description)
+    .focusable(true)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
 }

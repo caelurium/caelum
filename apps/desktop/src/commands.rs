@@ -4,6 +4,7 @@ mod dispatch;
 mod fork;
 mod sessions;
 mod timeline;
+mod usage;
 
 pub(crate) use controls::{export, history, rename};
 pub use dispatch::dispatch;
@@ -26,7 +27,7 @@ use crate::{
 use caelum_core::application::Task;
 use caelum_protocol::OpenCodeStatsFilter;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
-use rune_kit::{ButtonVariant, Kit, Markdown, Progress, ScrollBar, glyphs};
+use rune_kit::{ButtonVariant, Kit, Markdown, ScrollBar, glyphs};
 
 pub struct State {
     rename: Option<controls::RenameForm>,
@@ -179,6 +180,7 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
             if session.side_error.is_some() {
                 actions = actions.child(
                     Button::new("Retry")
+                        .variant(ButtonVariant::Contrast)
                         .on_press_tx(ask)
                         .build(k)
                         .key("retry-side-question"),
@@ -186,11 +188,15 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
             } else {
                 actions = actions.child(
                     Button::new("Copy answer")
+                        .icon(&glyphs::COPY)
+                        .variant(ButtonVariant::Contrast)
                         .on_press_tx(move |_: &mut Workspace, tx| tx.copy(copy.clone()))
                         .build(k),
                 );
             }
-            body = body.child(actions);
+            body = body
+                .child(ui::divider(k))
+                .child(actions.w_full().justify_end());
         }
     } else {
         body = body
@@ -217,13 +223,24 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
                 2,
                 4,
             ))
+            .child(ui::divider(k))
             .child(
-                Button::new("Ask")
-                    .disabled(
-                        l.commands.side_editor.text.trim().is_empty() || session.attaching > 0,
-                    )
-                    .on_press_tx(ask)
-                    .build(k),
+                row()
+                    .w_full()
+                    .center_y()
+                    .justify_between()
+                    .gap(8.0)
+                    .child(ui::caption("Enter to ask · Esc to close", k))
+                    .child(
+                        Button::new("Ask")
+                            .variant(ButtonVariant::Contrast)
+                            .disabled(
+                                l.commands.side_editor.text.trim().is_empty()
+                                    || session.attaching > 0,
+                            )
+                            .on_press_tx(ask)
+                            .build(k),
+                    ),
             );
     }
     if let Some(activity) = crate::activity::session_activity(s, index) {
@@ -250,188 +267,10 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
         Screen::Fork => fork::view(s, k),
         Screen::Timeline => timeline(s, k, index),
         Screen::Sessions => sessions(s, k, index),
-        Screen::Usage => usage(s, k, index),
+        Screen::Usage => usage::view(s, k, index),
         Screen::Stats => stats(s, k, index, layers),
         _ => col(),
     }
-}
-
-fn usage(s: &Workspace, k: &Kit, index: usize) -> El {
-    let l = live(s);
-    let scope = &l.app.sessions[index].scope;
-    let project = &scope.project;
-    let provider = scope.provider;
-    let task = Task::Usage {
-        project: project.clone(),
-        provider,
-    };
-    let busy = l.app.services.busy(&task);
-    let value = l
-        .app
-        .services
-        .checkouts
-        .get(project)
-        .and_then(|c| c.usage.get(&provider));
-    let mut body = ui::card(k).child(crate::activity::context(s, k, index, true));
-    if let Some(value) = value {
-        if provider == caelum_core::application::Provider::Antigravity {
-            body = antigravity_usage_body(body, value, k);
-        } else {
-            body = opencode_usage_body(body, value, k);
-        }
-    } else {
-        let label = if provider == caelum_core::application::Provider::Antigravity {
-            "Loading Antigravity usage"
-        } else {
-            "Loading OpenCode Go usage"
-        };
-        body = body.child(if busy {
-            ui::skeleton(label, 3, k)
-        } else {
-            ui::empty(
-                "No usage reported",
-                "Refresh to check your subscription allowances.",
-                k,
-            )
-        });
-    }
-    service_status(body, s, k, task, value.is_some())
-}
-
-fn antigravity_usage_body(mut body: El, value: &serde_json::Value, k: &Kit) -> El {
-    if let Some(tier) = value["tier"]["name"].as_str().filter(|s| !s.is_empty()) {
-        body = body.child(ui::caption(tier, k));
-    }
-    let mut reported = false;
-    for group in value["groups"].as_array().into_iter().flatten() {
-        let name = group["name"].as_str().unwrap_or("Models");
-        let mut section = col()
-            .w_full()
-            .gap(6.0)
-            .child(text(name).font(k.ty.ui_medium).color(k.c.text_base));
-        if let Some(desc) = group["description"].as_str().filter(|s| !s.is_empty()) {
-            section = section.child(ui::caption(desc, k));
-        }
-        for bucket in group["buckets"].as_array().into_iter().flatten() {
-            let Some(remaining) = bucket["remaining_fraction"].as_f64() else {
-                continue;
-            };
-            reported = true;
-            let remaining_pct = (remaining * 100.0).clamp(0.0, 100.0);
-            let used_pct = (100.0 - remaining_pct).max(0.0);
-            let label = bucket["name"]
-                .as_str()
-                .or(bucket["window"].as_str())
-                .unwrap_or("Quota");
-            section = section
-                .child(ui::caption(
-                    format!(
-                        "{label} · {used_pct:.0}% used · {remaining_pct:.0}% remaining{}",
-                        if remaining_pct <= 0.0 {
-                            " · Limit reached"
-                        } else {
-                            ""
-                        }
-                    ),
-                    k,
-                ))
-                .child(
-                    Progress::new(Some((used_pct / 100.0).clamp(0.0, 1.0) as f32))
-                        .label(format!("{label} used"))
-                        .build(k),
-                );
-            if let Some(desc) = bucket["description"].as_str().filter(|s| !s.is_empty()) {
-                section = section.child(ui::caption(desc, k));
-            }
-        }
-        body = body.child(section);
-    }
-    if !reported {
-        body = body.child(ui::caption("No Antigravity quotas reported", k));
-    }
-    if let Some(url) = value["tier"]["upgradeUri"]
-        .as_str()
-        .filter(|s| !s.is_empty())
-    {
-        let url = url.to_owned();
-        body = body.child(
-            Button::new("Manage plan")
-                .on_press_tx(move |_: &mut Workspace, tx| {
-                    let _ = tx.open_url(&url);
-                })
-                .build(k),
-        );
-    }
-    body
-}
-
-fn opencode_usage_body(mut body: El, value: &serde_json::Value, k: &Kit) -> El {
-    body = body.child(ui::caption(
-        value["workspace"]["name"].as_str().unwrap_or("OpenCode Go"),
-        k,
-    ));
-    let mut reported = false;
-    for name in ["rolling", "weekly", "monthly"] {
-        let allowance = &value["go"][name];
-        if let Some(percent) = allowance["percent"].as_f64() {
-            reported = true;
-            body = body
-                .child(ui::caption(
-                    format!(
-                        "{name} · {percent:.0}% used · {:.0}% remaining{}",
-                        (100.0 - percent).max(0.0),
-                        if allowance["limited"] == true {
-                            " · Limit reached"
-                        } else {
-                            ""
-                        }
-                    ),
-                    k,
-                ))
-                .child(
-                    Progress::new(Some((percent / 100.0).clamp(0.0, 1.0) as f32))
-                        .label(format!("{name} allowance used"))
-                        .build(k),
-                );
-            if let Some(reset) = allowance["resetsAt"].as_u64() {
-                body = body.child(ui::caption(
-                    format!(
-                        "Resets in {}",
-                        caelum_core::application::presentation::duration(
-                            reset.saturating_sub(caelum_core::application::presentation::now())
-                        )
-                    ),
-                    k,
-                ));
-            }
-        }
-    }
-    if !reported {
-        body = body.child(ui::caption("No OpenCode Go allowances reported", k));
-    }
-    if let Some(budgets) = value["budgets"].as_array() {
-        for budget in budgets {
-            body = body.child(ui::caption(
-                format!(
-                    "Console budget · ${:.2} / ${:.2}",
-                    budget["spent"].as_f64().unwrap_or(0.0),
-                    budget["limit"].as_f64().unwrap_or(0.0)
-                ),
-                k,
-            ));
-        }
-    }
-    if let Some(url) = value["workspace"]["usageURL"].as_str() {
-        let url = url.to_owned();
-        body = body.child(
-            Button::new("Open usage dashboard")
-                .on_press_tx(move |_: &mut Workspace, tx| {
-                    let _ = tx.open_url(&url);
-                })
-                .build(k),
-        );
-    }
-    body
 }
 
 fn stats_task(s: &Workspace) -> Option<Task> {
@@ -461,19 +300,22 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
         .services
         .checkouts
         .get(&l.app.sessions[index].scope.project);
-    let mut ranges = row().w_full().gap(4.0).center_y();
+    let mut track = ui::segmented_track(k);
     for (name, days) in [
         ("All history", None),
         ("7 days", Some(7)),
         ("30 days", Some(30)),
     ] {
-        ranges = ranges.child(ui::tab(name, l.commands.stats_days == days, k).on_press(
-            move |s: &mut Workspace| {
-                live_mut(s).commands.stats_days = days;
-                refresh_stats(s);
-            },
-        ));
+        track = track.child(
+            ui::segment(name, l.commands.stats_days == days, k).on_press(
+                move |s: &mut Workspace| {
+                    live_mut(s).commands.stats_days = days;
+                    refresh_stats(s);
+                },
+            ),
+        );
     }
+    let ranges = row().w_full().gap(8.0).center_y().child(track);
     let project_name = checkout
         .and_then(|c| {
             c.stats_projects
@@ -510,7 +352,7 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
         .iter()
         .find(|p| p.1 == l.commands.stats_project)
         .map(|p| p.0.as_str());
-    ranges = ranges.child(rune::el().grow(1.0)).child(
+    let ranges = ranges.child(rune::el().grow(1.0)).child(
         crate::select::Select::new("stats-project", &options)
             .current(current)
             .display(project_name)
@@ -755,7 +597,7 @@ fn compact(n: f64) -> String {
         format!("{n:.0}")
     }
 }
-fn service_status(mut body: El, s: &Workspace, k: &Kit, task: Task, cached: bool) -> El {
+pub(super) fn service_status(mut body: El, s: &Workspace, k: &Kit, task: Task, cached: bool) -> El {
     let services = &live(s).app.services;
     if let Some(error) = services.error(&task) {
         body = body.child(ui::notice(
@@ -771,17 +613,21 @@ fn service_status(mut body: El, s: &Workspace, k: &Kit, task: Task, cached: bool
             k,
         ));
     }
-    body = body.child(
-        Button::new(if services.busy(&task) {
-            "Loading…"
-        } else if services.error(&task).is_some() {
-            "Retry"
-        } else {
-            "Refresh"
-        })
-        .disabled(services.busy(&task))
-        .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
-        .build(k),
+    body = body.child(ui::divider(k)).child(
+        row().w_full().justify_end().child(
+            Button::new(if services.busy(&task) {
+                "Loading…"
+            } else if services.error(&task).is_some() {
+                "Retry"
+            } else {
+                "Refresh"
+            })
+            .icon(&ui::REFRESH)
+            .variant(ButtonVariant::Outline)
+            .disabled(services.busy(&task))
+            .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
+            .build(k),
+        ),
     );
     col()
         .key("command-results")

@@ -6,8 +6,8 @@ use crate::{
     ui::{self, Button},
 };
 use caelum_core::application::{ExportFormat, HistoryAction, SessionKey, commands::LocalCommand};
-use rune::{El, FileDialogOptions, TextEdit, Tx, col};
-use rune_kit::Kit;
+use rune::{El, FileDialogOptions, TextEdit, Tx, col, row};
+use rune_kit::{ButtonVariant, Kit};
 
 pub(super) struct RenameForm {
     owner: SessionKey,
@@ -175,11 +175,15 @@ pub(super) fn rename_view(s: &Workspace, k: &Kit) -> El {
                 .as_ref()
                 .map(|e| ui::caption(e, k).color(k.c.danger.fg).wrap()),
         )
+        .child(ui::divider(k))
         .child(
-            Button::new("Save title")
-                .disabled(form.title.text.trim().is_empty())
-                .on_press_tx(submit)
-                .build(k)
-                .key("rename-save"),
+            row().w_full().justify_end().child(
+                Button::new("Save title")
+                    .variant(ButtonVariant::Contrast)
+                    .disabled(form.title.text.trim().is_empty())
+                    .on_press_tx(submit)
+                    .build(k)
+                    .key("rename-save"),
+            ),
         )
 }
