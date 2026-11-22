@@ -75,7 +75,9 @@ A native Rust desktop and CLI for Codex and OpenCode sessions. See
 - `nix develop -c make check`: structure, formatting, Clippy, Rust and Python tests.
 - `make structure`: shared Rust file/folder structure guardrails.
 - `make dev PROJECT=.`: run the desktop. `make cli`: build the standalone CLI.
-- `make previews`: native light/dark references for visual changes.
+- `make previews`: native light/dark references for visual changes. While
+  iterating, `python3 apps/desktop/preview/capture.py --only <scene> --crop <key>`
+  renders one element and `--strip` renders a replay as a contact sheet.
 - Use the most relevant existing checks while iterating and complete `make check`
   before reporting a change as finished. Native desktop checks require macOS;
   portable core, protocol and CLI checks also run on Linux.

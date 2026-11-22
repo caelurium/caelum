@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Capture the real native views with deterministic design data."""
+"""Capture the real native views with deterministic design data.
+
+The default run captures the whole catalogue for CI. `--only` narrows it to the
+previews a feature touches; `--crop` frames one element and `--strip` renders a
+scripted replay as a contact sheet.
+"""
 from pathlib import Path
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -100,23 +105,105 @@ scenes += ("home", "home-empty", "home-draft", "home-projects")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 
 
-def capture_plan(binary, output):
+def preview_catalogue():
+    entries = {}
+    for label in scenes:
+        entries["default" if not label else label] = ("scene", label, None)
+    for label, (scene, events) in interactions.items():
+        entries[label] = ("interaction", scene, events)
+    return entries
+
+
+def selected_previews(only):
+    catalogue = preview_catalogue()
+    if isinstance(only, str):
+        only = (only,)
+    names = []
+    for value in only:
+        names.extend(name.strip() for name in value.split(",") if name.strip())
+    unknown = sorted(set(names) - set(catalogue))
+    if unknown:
+        raise ValueError(f"Unknown previews: {', '.join(unknown)} (use --list)")
+    if not names:
+        return [(name, *entry) for name, entry in catalogue.items()]
+    return [(name, *catalogue[name]) for name in dict.fromkeys(names)]
+
+
+def strip_timing(events):
+    end = max((event.get("t", 0.0) for event in events or ()), default=0.0)
+    mark = next(
+        (event["t"] for event in events or () if event.get("type") == "mark" and event.get("name") == "end"),
+        None,
+    )
+    end = mark if mark is not None else end + 0.4
+    frames = max(1, round(end * 30))
+    return frames, max(1, round(frames / 4))
+
+
+def script_at(at, events):
+    if not at or not at.startswith("mark:") or not events:
+        return at, events
+    name = at.removeprefix("mark:")
+    if any(event.get("type") == "mark" and event.get("name") == name for event in events):
+        return at, events
+    if name != "end":
+        raise ValueError(f"Unknown mark: {name}")
+    end = strip_timing(events)[0] / 30
+    return at, [*events, {"t": end, "type": "mark", "name": name}]
+
+
+def capture_plan(
+    binary,
+    output,
+    *,
+    only=(),
+    themes=("dark", "light"),
+    sizes=(False, True),
+    crop=None,
+    strip=False,
+    strip_crops=(),
+    annotate=False,
+    at=None,
+):
+    previews = selected_previews(only)
+    if crop and len(previews) != 1:
+        raise ValueError("--crop needs exactly one --only label")
+    if strip:
+        if not only:
+            raise ValueError("--strip needs --only to select interaction previews")
+        if any(kind != "interaction" for _, kind, _, _ in previews):
+            raise ValueError("--strip only applies to interaction previews")
+    if strip_crops and not strip:
+        raise ValueError("--strip-crop needs --strip")
+    if at and at.startswith("mark:") and any(not events for _, _, _, events in previews):
+        raise ValueError("--at mark:NAME needs an interaction with a script")
     plan = []
-    for theme in ("dark", "light"):
-        for compact in (False, True):
-            for label in (*scenes, *interactions):
-                scene, events = interactions.get(label, (label, None))
-                name = f"rune-{theme}" + (f"-{label}" if label else "") + ("-small" if compact else "")
+    for theme in themes:
+        for compact in sizes:
+            for label, _kind, scene, events in previews:
+                at_value, events = script_at(at, events)
+                name = f"rune-{theme}" + (f"-{label}" if label != "default" else "") + ("-small" if compact else "")
                 script = output / f"{name}-input.json"
                 command = [
                     str(binary), "--design-fixture", "--theme", theme,
-                    "--scale", "1", "--at", "1.8" if label == "patch-expanded" else "1", "--size",
+                    "--scale", "1", "--at", at_value if at_value is not None else ("1.8" if label == "patch-expanded" else "1"), "--size",
                     "800x620" if compact or scene in ("compact", "crowded") else "1280x1000",
                     *(["--scene", scene] if scene else []),
+                    *(["--crop", crop] if crop else []),
                     "--snap", str(output / f"{name}.png"),
                     "--tree", str(output / f"{name}.json"),
                     *(["--script", str(script)] if events else []),
                 ]
+                if strip:
+                    frames, every = strip_timing(events)
+                    command += [
+                        "--strip", str(output / f"{name}-strip.png"),
+                        "--frames", str(frames), "--fps", "30",
+                        "--every", str(every), "--cols", "2", "--keys", "--pointer",
+                        *(arg for x, y, w, h in strip_crops for arg in ("--crop", f"{x:g},{y:g},{w:g},{h:g}")),
+                    ]
+                elif annotate and events:
+                    command += ["--keys", "--pointer"]
                 plan.append((name, command, events))
     return plan
 
@@ -127,16 +214,20 @@ def capture_one(item, output, timeout):
     log = ""
     error = None
     try:
-        for suffix in (".png", ".json", ".log", "-input.json"):
+        for suffix in (".png", "-strip.png", ".json", ".log", "-input.json"):
             (output / f"{name}{suffix}").unlink(missing_ok=True)
         if events:
             (output / f"{name}-input.json").write_text(json.dumps(events))
         result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=timeout)
         log = result.stdout + result.stderr
         result.check_returncode()
-        with (output / f"{name}.png").open("rb") as image:
-            if image.read(8) != b"\x89PNG\r\n\x1a\n":
-                raise ValueError("Missing or invalid PNG")
+        pngs = [output / f"{name}.png"]
+        if "--strip" in command:
+            pngs.append(output / f"{name}-strip.png")
+        for png in pngs:
+            with png.open("rb") as image:
+                if image.read(8) != b"\x89PNG\r\n\x1a\n":
+                    raise ValueError(f"Missing or invalid PNG: {png.name}")
         json.loads((output / f"{name}.json").read_text())
     except subprocess.TimeoutExpired as failure:
         log = (failure.stdout or b"").decode(errors="replace") + (failure.stderr or b"").decode(errors="replace")
@@ -170,16 +261,58 @@ def capture_all(plan, output, workers, timeout=60):
     if failed:
         raise RuntimeError(f"{len(failed)} captures failed (see individual logs): {', '.join(failed)}")
     print(f"Captured {len(results)} native states with {workers} workers in {output}")
+    return results
+
+
+def rect(value):
+    try:
+        numbers = tuple(float(number) for number in value.split(","))
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected x,y,w,h") from None
+    if len(numbers) != 4:
+        raise argparse.ArgumentTypeError("expected x,y,w,h")
+    return numbers
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", type=Path, default=root / "apps/desktop/preview-results")
     parser.add_argument("--workers", type=int, choices=range(1, 5), default=min(4, os.cpu_count() or 1))
+    parser.add_argument("--list", action="store_true", help="list scene and interaction previews")
+    parser.add_argument("--only", action="append", metavar="NAME", help="capture only this scene or interaction (repeatable, comma-separated)")
+    parser.add_argument("--theme", choices=("both", "dark", "light"), default="both")
+    parser.add_argument("--size", choices=("both", "normal", "compact"), default="both")
+    parser.add_argument("--crop", metavar="KEY", help="crop the still to an element key; needs one --only preview")
+    parser.add_argument("--strip", action="store_true", help="render an interaction as a contact sheet")
+    parser.add_argument("--strip-crop", action="append", type=rect, metavar="X,Y,W,H", help="crop each contact-sheet frame (repeatable)")
+    parser.add_argument("--annotate", action="store_true", help="draw keycaps and pointer ripples on interaction stills")
+    parser.add_argument("--at", metavar="TIME", help="snapshot time, or mark:NAME (default 1, or 1.8 for patch-expanded)")
     args = parser.parse_args()
+    if args.list:
+        for name, (kind, scene, _events) in preview_catalogue().items():
+            suffix = f" (scene: {scene})" if kind == "interaction" else ""
+            print(f"{kind:11} {name}{suffix}")
+        return
+    themes = ("dark", "light") if args.theme == "both" else (args.theme,)
+    sizes = (False, True) if args.size == "both" else (args.size == "compact",)
+    try:
+        plan = capture_plan(
+            root / "target/debug/caelum-desktop", args.output.resolve(),
+            only=args.only or (), themes=themes, sizes=sizes, crop=args.crop,
+            strip=args.strip, strip_crops=args.strip_crop or (), annotate=args.annotate,
+            at=args.at,
+        )
+    except ValueError as error:
+        parser.error(str(error))
     subprocess.run(["cargo", "build", "--locked", "-p", "caelum-desktop"], check=True, cwd=root)
     output = args.output.resolve()
-    capture_all(capture_plan(root / "target/debug/caelum-desktop", output), output, args.workers)
+    results = capture_all(plan, output, args.workers)
+    if args.only:
+        commands = dict((item[0], item[1]) for item in plan)
+        for result in results:
+            print(output / f"{result['name']}.png")
+            if "--strip" in commands[result["name"]]:
+                print(output / f"{result['name']}-strip.png")
 
 
 if __name__ == "__main__":

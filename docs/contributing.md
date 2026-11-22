@@ -68,7 +68,9 @@ nix develop -c python3 scripts/dev/macos_app.py --build-only
 ```
 
 For visual changes, run `make previews` and inspect light/dark, inspector,
-compact and settings scenes. Native frame measurements are described in
+compact and settings scenes. While iterating, `capture.py --only <scene> --crop <key>`
+renders one element and `--strip` renders a replay as a contact sheet; `--list`
+prints the catalogue. Native frame measurements are described in
 [performance](performance/README.md).
 
 ## CI layout

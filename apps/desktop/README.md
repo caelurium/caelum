@@ -60,11 +60,13 @@ Append one of these modes to `cargo run --locked -p caelum-desktop --`:
   and a 300-file synthetic PR.
 
 These modes do not start providers or write workspace state. Capture previews
-with `python3 apps/desktop/preview/capture.py`; see [design](../../docs/design/README.md)
-and [performance](../../docs/performance/README.md) for headless interaction replay
-and native frame-measurement commands. Pinned Rune's `--native` mode does not
-dispatch `--script` events; check OS interaction in the running application.
-The 360 light/dark, normal/compact captures include populated, empty, loading,
+with `python3 apps/desktop/preview/capture.py`; `--list` shows the catalogue and
+`--only <scene> --crop <key>` renders one element while iterating. See
+[design](../../docs/design/README.md) and [performance](../../docs/performance/README.md)
+for headless interaction replay and native frame-measurement commands. Pinned
+Rune's `--native` mode does not dispatch `--script` events; check OS interaction
+in the running application.
+The 864 light/dark, normal/compact captures include populated, empty, loading,
 error, hover, focus and disabled states. Use `--scene models` (or `worktrees`,
 `shells`, `review-loading`, `composer-options`, `files-tabs`, `tools-collapsed`,
 `merge-ready`, `merge-blocked`, `shells-collapsed`, `vercel`, `vercel-settings`, `sidebar-projects`, `crowded`) with `--design-fixture`

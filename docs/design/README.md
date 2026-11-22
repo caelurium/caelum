@@ -306,6 +306,13 @@ inside `nix develop`:
 python3 apps/desktop/preview/capture.py
 cargo run --locked -p caelum-desktop -- --design-fixture
 
+# List the catalogue, then capture only the feature being changed.
+python3 apps/desktop/preview/capture.py --list
+python3 apps/desktop/preview/capture.py \
+  --only composer-options --theme dark --size normal --crop message-composer
+python3 apps/desktop/preview/capture.py \
+  --only composer-agent --theme dark --size normal --strip
+
 cargo run --locked -p caelum-desktop -- \
   --fixtures --script apps/desktop/preview/interaction.json \
   --theme dark --scale 1 --at 9 \
@@ -327,9 +334,17 @@ cargo run --locked -p caelum-desktop -- \
 Pinned Rune's `--native` mode does not dispatch `--script` events. Use the
 headless commands above for scripted input and the running app for OS interaction.
 
-The capture script writes **752 states**: 139 scenes and 49 headless
-pointer/keyboard replays, each in light/dark and normal/compact layouts. Coverage
-includes all five Settings pages, models, launcher, session popovers/worktree forms, commands, shells,
+The capture script writes **864 states**: 155 scenes and 61 headless
+pointer/keyboard replays, each in light/dark and normal/compact layouts. For a
+feature pass, `--only` narrows the catalogue, `--crop KEY` frames one element
+(keys and rects are in the capture's tree JSON), and `--strip` renders an
+interaction as a contact sheet with keycaps and pointer ripples
+(`--strip-crop X,Y,W,H` crops each tile) and `--annotate` adds the same input
+overlays to an interaction still. `--at` accepts a time or `mark:NAME`;
+catalogue replays get an `end` mark automatically. Targeted runs keep the same
+PNG, tree and log names in `apps/desktop/preview-results/`; the full run remains
+the CI source of truth.
+Coverage includes all five Settings pages, models, launcher, session popovers/worktree forms, commands, shells,
 Files/Changes, populated PR discussion/diffs, statistics/timeline, activity states,
 loading/error/empty views, questions, images, hover and keyboard focus. The latest
 fixtures include long composer options, multiple file tabs, collapsed tools,
