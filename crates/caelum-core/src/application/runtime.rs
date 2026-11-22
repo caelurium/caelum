@@ -592,6 +592,7 @@ pub struct Runtime {
     providers: Option<ProviderRuntime>,
     requests: tokio::sync::mpsc::Sender<worker::Request>,
     history: tokio::sync::mpsc::Sender<worker::Request>,
+    actions: tokio::sync::mpsc::Sender<worker::Request>,
     control: tokio::sync::mpsc::Sender<worker::Request>,
     inbox: Option<Receiver<Event>>,
     sender: SyncSender<Event>,
@@ -661,11 +662,13 @@ impl Runtime {
         let (sender, inbox) = mpsc::sync_channel(1024);
         let (requests, normal) = tokio::sync::mpsc::channel(1024);
         let (history, conversations) = tokio::sync::mpsc::channel(128);
+        let (actions, user_actions) = tokio::sync::mpsc::channel(128);
         let (control, urgent) = tokio::sync::mpsc::channel(128);
         let closed = Arc::new(AtomicBool::new(false));
         let workers = worker::Workers::start(
             normal,
             conversations,
+            user_actions,
             urgent,
             execute,
             sender.clone(),
@@ -678,6 +681,7 @@ impl Runtime {
             providers: None,
             requests,
             history,
+            actions,
             control,
             inbox: Some(inbox),
             sender,
@@ -744,6 +748,17 @@ impl Runtime {
                 | Command::Inbox(_)
         ) {
             &self.history
+        } else if matches!(
+            command,
+            Command::Archive(..)
+                | Command::DeleteSession(..)
+                | Command::Task(
+                    Task::RemoveWorktree { .. }
+                        | Task::RenameWorktree { .. }
+                        | Task::CreateWorktree { .. }
+                )
+        ) {
+            &self.actions
         } else {
             &self.requests
         };

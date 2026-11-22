@@ -249,9 +249,9 @@ impl Task {
             Self::Git { .. } => "git".into(),
             Self::Diff { path, .. } => format!("diff:{path}"),
             Self::Worktrees { .. } => "worktrees".into(),
-            Self::CreateWorktree { .. }
-            | Self::RemoveWorktree { .. }
-            | Self::RenameWorktree { .. } => "worktree-mutation".into(),
+            Self::CreateWorktree { .. } => "worktree-create".into(),
+            Self::RemoveWorktree { path, .. } => format!("worktree-remove:{path}"),
+            Self::RenameWorktree { path, .. } => format!("worktree-rename:{path}"),
             Self::Discover { branch, .. } => format!("discover:{branch}"),
             Self::Details { url, .. } => format!("details:{url}"),
             Self::ReviewCache { url, .. } => format!("review-cache:{url}"),

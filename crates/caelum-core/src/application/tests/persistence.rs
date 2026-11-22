@@ -205,3 +205,37 @@ fn saving_errors_never_block_cancellation_or_permission_replies() {
         .iter()
         .any(|(_, c)| matches!(c, Command::Approve(..))));
 }
+
+#[test]
+fn archive_delete_and_worktree_removal_do_not_wait_for_in_flight_saves() {
+    let mut app = Workspace::default();
+    let active = app.new_session(scope(Provider::Codex, "/a"));
+    app.sessions[active].remote_id = Some("s-active".into());
+    let archived = app.new_session(scope(Provider::Codex, "/a"));
+    app.sessions[archived].remote_id = Some("s-archived".into());
+    app.sessions[archived].archive_fixture(ArchiveFixture::Stable(true));
+    app.enable_store("/unused-in-reducer-test".into());
+    let (load, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(load, Ok(Reply::Snapshot(None))));
+    let (save, command) = app.commands().pop().unwrap();
+    assert!(matches!(command, Command::Save(..)));
+
+    app.archive(active, true);
+    assert!(app.delete_archived_session(archived));
+    app.task(Task::RemoveWorktree {
+        project: "/a".into(),
+        path: "/worktrees/a".into(),
+    });
+    let commands = app.commands();
+    assert!(commands
+        .iter()
+        .any(|(_, c)| matches!(c, Command::Archive(_, true))));
+    assert!(commands
+        .iter()
+        .any(|(_, c)| matches!(c, Command::DeleteSession(_))));
+    assert!(commands
+        .iter()
+        .any(|(_, c)| matches!(c, Command::Task(Task::RemoveWorktree { .. }))));
+
+    app.apply(Event::Completed(save, Ok(Reply::Done)));
+}

@@ -36,8 +36,9 @@ attachment/project requests. First send creates a fresh stable session only afte
 admission, transferring its captured context through the normal durable submission
 path. Home request generations reject results for an older target or draft.
 
-`Runtime` dispatches from three bounded Tokio mailboxes with separate limits for
-blocking work: eight normal, two conversation and two control commands at a time.
+`Runtime` dispatches from four bounded Tokio mailboxes with separate limits for
+blocking work: eight normal, two conversation, four user-action and two control
+commands at a time.
 It uses a 1,024-event inbox and 256-event UI drains. Arrival wakes Rune; provider
 I/O does not run on the UI thread. Cancellation and permission
 replies bypass the normal persistence gate. Resume, history pagination and inbox

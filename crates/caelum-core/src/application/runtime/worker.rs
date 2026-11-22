@@ -16,6 +16,7 @@ pub(super) type Request = (u64, Command);
 
 const NORMAL_LIMIT: usize = 8;
 const HISTORY_LIMIT: usize = 2;
+const ACTIONS_LIMIT: usize = 4;
 const CONTROL_LIMIT: usize = 2;
 
 pub(super) struct Workers {
@@ -24,9 +25,11 @@ pub(super) struct Workers {
 }
 
 impl Workers {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn start(
         normal: mpsc::Receiver<Request>,
         history: mpsc::Receiver<Request>,
+        actions: mpsc::Receiver<Request>,
         control: mpsc::Receiver<Request>,
         execute: Execute,
         sender: SyncSender<Event>,
@@ -38,7 +41,9 @@ impl Workers {
             .name("caelum-commands".into())
             .spawn(move || {
                 let runtime = tokio::runtime::Builder::new_current_thread()
-                    .max_blocking_threads(NORMAL_LIMIT + HISTORY_LIMIT + CONTROL_LIMIT)
+                    .max_blocking_threads(
+                        NORMAL_LIMIT + HISTORY_LIMIT + ACTIONS_LIMIT + CONTROL_LIMIT,
+                    )
                     .build()
                     .expect("start command runtime");
                 let run = move |(id, command): Request| {
@@ -58,11 +63,12 @@ impl Workers {
                         biased;
                         _ = stopped => {}
                         _ = async {
-                            // History and controls keep their own capacity even
-                            // when catalogues, diffs, and discovery are blocked.
+                            // History, user actions, and controls keep their own capacity
+                            // even when catalogues, diffs, and discovery are blocked.
                             tokio::join!(
                                 dispatch(normal, NORMAL_LIMIT, run.clone()),
                                 dispatch(history, HISTORY_LIMIT, run.clone()),
+                                dispatch(actions, ACTIONS_LIMIT, run.clone()),
                                 dispatch(control, CONTROL_LIMIT, run),
                             );
                         } => {}
