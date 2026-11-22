@@ -491,3 +491,64 @@ fn discovering_worktrees_loads_their_provider_choices() {
             if scope.project == "/external")
     }));
 }
+
+#[test]
+fn multiple_worktrees_can_be_removed_concurrently_without_duplicating_the_same_target() {
+    let mut app = Workspace::default();
+    for path in ["/main", "/linked-a", "/linked-b"] {
+        app.projects.push(ProjectInfo {
+            name: path.into(),
+            path: path.into(),
+        });
+    }
+    app.project_roots.insert("/linked-a".into(), "/main".into());
+    app.project_roots.insert("/linked-b".into(), "/main".into());
+
+    app.task(Task::RemoveWorktree {
+        project: "/main".into(),
+        path: "/linked-a".into(),
+    });
+    app.task(Task::RemoveWorktree {
+        project: "/main".into(),
+        path: "/linked-a".into(),
+    });
+    app.task(Task::RemoveWorktree {
+        project: "/main".into(),
+        path: "/linked-b".into(),
+    });
+
+    let removals: Vec<_> = app
+        .commands()
+        .into_iter()
+        .filter_map(|(id, command)| match command {
+            Command::Task(Task::RemoveWorktree { path, .. }) => Some((id, path)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(removals.len(), 2);
+    assert_eq!(removals[0].1, "/linked-a");
+    assert_eq!(removals[1].1, "/linked-b");
+
+    for (id, path) in removals {
+        app.apply(Event::Completed(
+            id,
+            Ok(Reply::Task(TaskReply::Worktree(
+                caelum_protocol::GitWorktree {
+                    path: path.clone(),
+                    project: ProjectInfo {
+                        name: path.clone(),
+                        path,
+                    },
+                    label: None,
+                    branch: Some("feature".into()),
+                    main: false,
+                    locked: None,
+                    prunable: None,
+                    available: true,
+                },
+            ))),
+        ));
+    }
+    assert!(!app.projects.iter().any(|p| p.path == "/linked-a"));
+    assert!(!app.projects.iter().any(|p| p.path == "/linked-b"));
+}

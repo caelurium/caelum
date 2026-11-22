@@ -3,6 +3,10 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
     process::{Command, Output},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, OnceLock,
+    },
 };
 
 use caelum_protocol::{GitWorktree, GitWorktrees, ProjectInfo};
@@ -98,31 +102,35 @@ impl WorktreeClient {
 }
 
 impl WorktreePaths {
-    fn list(
+    fn list_entries(
         &self,
-        path: impl AsRef<Path>,
-        base_directory: &str,
-    ) -> Result<Option<GitWorktrees>, WorktreeError> {
-        let project = Project::open(path)?;
-        let root = git(project.path(), &["rev-parse", "--show-toplevel"])?;
-        if !root.status.success() {
-            if String::from_utf8_lossy(&root.stderr).contains("not a git repository") {
-                return Ok(None);
-            }
-            return Err(command_error(root));
-        }
-        let root = PathBuf::from(text(&root.stdout)).canonicalize()?;
+        project: &Project,
+    ) -> Result<Option<(PathBuf, PathBuf, Vec<GitWorktree>)>, WorktreeError> {
+        let Some((root, common)) = repo_dirs(project.path())? else {
+            return Ok(None);
+        };
         let prefix = project
             .path()
             .strip_prefix(&root)
             .map_err(|_| WorktreeError::InvalidPath)?;
-        let common = common_git_dir(project.path())?;
         let records = checked(project.path(), &["worktree", "list", "--porcelain", "-z"])?;
         let mut worktrees = parse_worktrees(&records, prefix)?;
         let labels = read_labels(&common)?;
         for entry in &mut worktrees {
             entry.label = labels.get(&entry.path).cloned();
         }
+        Ok(Some((root, common, worktrees)))
+    }
+
+    fn list(
+        &self,
+        path: impl AsRef<Path>,
+        base_directory: &str,
+    ) -> Result<Option<GitWorktrees>, WorktreeError> {
+        let project = Project::open(path)?;
+        let Some((root, common, mut worktrees)) = self.list_entries(&project)? else {
+            return Ok(None);
+        };
         let primary = worktrees.first().ok_or(WorktreeError::NotRepository)?;
         let group = primary.project.clone();
         let name = Path::new(&primary.path)
@@ -291,10 +299,10 @@ impl WorktreePaths {
         worktree_path: &str,
     ) -> Result<GitWorktree, WorktreeError> {
         let project = Project::open(project_path)?;
-        let entry = self
-            .list(project.path(), "")?
-            .ok_or(WorktreeError::NotRepository)?
-            .worktrees
+        let (_, common, worktrees) = self
+            .list_entries(&project)?
+            .ok_or(WorktreeError::NotRepository)?;
+        let entry = worktrees
             .into_iter()
             .find(|entry| entry.path == worktree_path)
             .ok_or(WorktreeError::UnknownWorktree)?;
@@ -305,8 +313,9 @@ impl WorktreePaths {
             return Err(WorktreeError::Locked);
         }
 
-        let common = common_git_dir(project.path())?;
-        checked(project.path(), &["worktree", "remove", "--", &entry.path])?;
+        if !try_fast_remove(project.path(), Path::new(&entry.path))? {
+            checked(project.path(), &["worktree", "remove", "--", &entry.path])?;
+        }
         if let Ok(mut labels) = read_labels(&common) {
             if labels.remove(&entry.path).is_some() {
                 let _ = write_labels(&common, &labels);
@@ -322,11 +331,10 @@ impl WorktreePaths {
         name: &str,
     ) -> Result<GitWorktree, WorktreeError> {
         let project = Project::open(project_path)?;
-        let listing = self
-            .list(project.path(), "")?
+        let (_, common, worktrees) = self
+            .list_entries(&project)?
             .ok_or(WorktreeError::NotRepository)?;
-        let mut entry = listing
-            .worktrees
+        let mut entry = worktrees
             .into_iter()
             .find(|entry| entry.path == worktree_path)
             .ok_or(WorktreeError::UnknownWorktree)?;
@@ -335,7 +343,6 @@ impl WorktreePaths {
         }
 
         let name = validate_worktree_name(name)?;
-        let common = common_git_dir(project.path())?;
         let mut labels = read_labels(&common)?;
         let folder = Path::new(&entry.path)
             .file_name()
@@ -439,17 +446,97 @@ fn parse_worktrees(bytes: &[u8], prefix: &Path) -> Result<Vec<GitWorktree>, Work
 }
 
 const LABELS_FILE: &str = "caelum-worktree-labels.json";
+const TRASH_DIR: &str = ".caelum-trash";
+static TRASH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn labels_path(common: &Path) -> PathBuf {
     common.join(LABELS_FILE)
 }
 
-fn common_git_dir(project: &Path) -> Result<PathBuf, WorktreeError> {
-    let common = checked(
+fn repo_dirs(project: &Path) -> Result<Option<(PathBuf, PathBuf)>, WorktreeError> {
+    let output = git(
         project,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--show-toplevel",
+            "--git-common-dir",
+        ],
     )?;
-    Ok(PathBuf::from(text(&common)).canonicalize()?)
+    if !output.status.success() {
+        if String::from_utf8_lossy(&output.stderr).contains("not a git repository") {
+            return Ok(None);
+        }
+        return Err(command_error(output));
+    }
+    let text = text(&output.stdout);
+    let mut lines = text.lines();
+    let root = lines.next().ok_or(WorktreeError::NotRepository)?;
+    let common = lines.next().ok_or(WorktreeError::NotRepository)?;
+    Ok(Some((
+        PathBuf::from(root).canonicalize()?,
+        PathBuf::from(common).canonicalize()?,
+    )))
+}
+
+fn trash_cleanup_sender() -> &'static mpsc::Sender<(PathBuf, PathBuf)> {
+    static CLEANUP: OnceLock<mpsc::Sender<(PathBuf, PathBuf)>> = OnceLock::new();
+    CLEANUP.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<(PathBuf, PathBuf)>();
+        let _ = std::thread::Builder::new()
+            .name("caelum-worktree-cleanup".into())
+            .spawn(move || {
+                while let Ok((staged, trash_root)) = receiver.recv() {
+                    let _ = fs::remove_dir_all(&staged);
+                    let _ = fs::remove_dir(&trash_root);
+                }
+            });
+        sender
+    })
+}
+
+/// Stage a clean worktree into a same-filesystem sibling trash folder so
+/// `git worktree prune` finishes immediately and recursive deletion runs off
+/// the worktree actor. Dirty checkouts and submodules fall back to Git.
+fn try_fast_remove(project: &Path, worktree: &Path) -> Result<bool, WorktreeError> {
+    if !worktree.is_dir() || worktree.join(".gitmodules").exists() {
+        return Ok(false);
+    }
+    let status = git(
+        worktree,
+        &["status", "--porcelain", "--untracked-files=normal"],
+    )?;
+    if !status.status.success() || !status.stdout.is_empty() {
+        return Ok(false);
+    }
+    let Some(parent) = worktree.parent() else {
+        return Ok(false);
+    };
+    let trash_root = parent.join(TRASH_DIR);
+    if fs::create_dir_all(&trash_root).is_err() {
+        return Ok(false);
+    }
+    let name = worktree
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("worktree");
+    let staged = trash_root.join(format!(
+        "{}-{}-{}",
+        std::process::id(),
+        TRASH_COUNTER.fetch_add(1, Ordering::Relaxed),
+        name
+    ));
+    if fs::rename(worktree, &staged).is_err() {
+        let _ = fs::remove_dir(&trash_root);
+        return Ok(false);
+    }
+    if let Err(error) = checked(project, &["worktree", "prune", "--expire=now"]) {
+        let _ = fs::rename(&staged, worktree);
+        let _ = fs::remove_dir(&trash_root);
+        return Err(error);
+    }
+    let _ = trash_cleanup_sender().send((staged, trash_root));
+    Ok(true)
 }
 
 fn read_labels(common: &Path) -> Result<BTreeMap<String, String>, WorktreeError> {
@@ -815,7 +902,8 @@ mod tests {
             .rename(&test.repo, &entry.path, "Fix checkout picker")
             .unwrap();
         test.client.remove(&test.repo, &entry.path).unwrap();
-        assert!(!labels_path(&common_git_dir(&test.repo).unwrap()).exists());
+        let (_, common) = repo_dirs(&test.repo).unwrap().unwrap();
+        assert!(!labels_path(&common).exists());
     }
 
     #[test]

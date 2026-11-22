@@ -17,6 +17,7 @@ impl super::Runtime {
             let Ok(mut watch) = CheckoutWatch::new() else {
                 return;
             };
+            let mut watched = BTreeSet::new();
             while !closed.load(Ordering::Acquire) {
                 match receiver.recv_timeout(Duration::from_millis(350)) {
                     Ok(mut projects) => {
@@ -24,11 +25,14 @@ impl super::Runtime {
                             projects = latest;
                         }
                         watch.sync(projects.iter().cloned());
+                        let next: BTreeSet<String> = projects.into_iter().collect();
+                        let added = next.difference(&watched).cloned();
                         watch
                             .dirty
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
-                            .extend(projects);
+                            .extend(added);
+                        watched = next;
                     }
                     Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => return,
