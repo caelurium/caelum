@@ -273,6 +273,8 @@ impl Workspace {
                 let saved_index = session_indices.len();
                 session_indices.insert(index, saved_index);
                 Some(SavedSession {
+                    previous_threads: s.provider_switch.threads.clone(),
+                    needs_context: s.provider_switch.needs_context,
                     native_handoff: s.native_handoff.clone(),
                     vm_link: s.vm_link.clone(),
                     last_activity: s.last_activity,

@@ -1,4 +1,4 @@
-use caelum_core::application::{Provider, Scope};
+use caelum_core::application::Provider;
 use rune::{El, TextStyle, col, row, text_input};
 use rune_kit::{ButtonVariant, Kit, Placement};
 
@@ -204,7 +204,8 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .collect(),
             )
             .label("Provider")
-            .menu_description("Open this provider’s draft in the same project.")
+            .menu_description("Choose the provider for the next message in this conversation.")
+            .disabled(!live.app.can_switch_provider(index))
             .current(Some(session.scope.provider.as_str()))
             .placement(Placement::TopStart)
             .open(live.menu == Some(("provider", index)))
@@ -215,17 +216,9 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 if l.app.selected != Some(index) || l.menu != Some(("provider", index)) {
                     return;
                 }
-                let scope = &l.app.sessions[index].scope;
                 if let Some(&provider) = providers.iter().find(|p| p.as_str() == value)
-                    && provider != scope.provider
+                    && l.app.switch_provider(index, provider)
                 {
-                    let target = Scope {
-                        project: scope.project.clone(),
-                        provider,
-                    };
-                    l.app.project_draft(target);
-                    l.reveal_new_session();
-                    l.sync_editors();
                     l.schedule();
                 }
                 l.menu = None;

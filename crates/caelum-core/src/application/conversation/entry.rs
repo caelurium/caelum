@@ -99,6 +99,7 @@ impl State {
 
 #[derive(Debug, Clone)]
 pub struct Entry {
+    pub(crate) previous_thread: Option<usize>,
     pub id: String,
     state: State,
     pub text: String,
@@ -133,7 +134,7 @@ impl Entry {
     }
 
     pub fn optimistic(&self) -> bool {
-        matches!(self.state, State::User(User::Optimistic))
+        self.previous_thread.is_none() && matches!(self.state, State::User(User::Optimistic))
     }
 
     pub fn background(&self) -> bool {
@@ -189,6 +190,7 @@ impl Entry {
         let media = crate::application::presentation::markdown_media(&text);
         Self {
             media,
+            previous_thread: None,
             id,
             state: State::new(kind, complete),
             text,

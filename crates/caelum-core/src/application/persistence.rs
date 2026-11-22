@@ -156,6 +156,10 @@ impl Preferences {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedSession {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) previous_threads: std::sync::Arc<Vec<PreviousThread>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) needs_context: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_handoff: Option<crate::remote::Continuation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -182,6 +186,12 @@ pub struct SavedSession {
     pub reading: f32,
     #[serde(default)]
     pub unread: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct PreviousThread {
+    pub key: super::SessionKey,
+    pub context: crate::remote::Chat,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

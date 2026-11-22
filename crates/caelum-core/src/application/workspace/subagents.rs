@@ -1,5 +1,5 @@
 use super::{Session, Workspace};
-use crate::application::{subagents::Subagent, Provider};
+use crate::application::{subagents::Subagent, Provider, SessionKey};
 
 impl Workspace {
     /// Resolve the current task again at activation, then use the existing
@@ -21,7 +21,7 @@ impl Workspace {
 
     fn resolve_subagent(&mut self, parent: usize, entry_id: &str) -> Option<usize> {
         let owner = self.sessions.get(parent)?;
-        if owner.forgotten() || owner.scope.provider != Provider::OpenCode {
+        if owner.forgotten() {
             return None;
         }
         let entry = owner
@@ -31,14 +31,20 @@ impl Workspace {
             .find(|e| e.id == entry_id)?;
         let task = Subagent::from_entry(entry)?;
         let child = task.session_id?;
-        if owner.remote_id.as_deref() == Some(&child) {
+        let scope = owner.previous_scope(entry).unwrap_or(&owner.scope).clone();
+        let key = SessionKey {
+            scope: scope.clone(),
+            id: child.clone(),
+        };
+        if scope.provider != Provider::OpenCode
+            || owner.has_previous_key(&key)
+            || (scope == owner.scope && owner.remote_id.as_deref() == Some(&child))
+        {
             return None;
         }
-        let scope = owner.scope.clone();
-        let existing = self
-            .sessions
-            .iter()
-            .position(|s| s.scope == scope && s.remote_id.as_deref() == Some(&child));
+        let existing = self.sessions.iter().position(|s| {
+            (s.scope == scope && s.remote_id.as_deref() == Some(&child)) || s.has_previous_key(&key)
+        });
         let index = if let Some(index) = existing {
             if self.sessions[index].forgotten() || self.sessions[index].archived() {
                 return None;
@@ -62,13 +68,11 @@ impl Workspace {
         self.sessions.iter().position(|parent| {
             !parent.forgotten()
                 && !parent.archived()
-                && parent.scope == child.scope
-                && parent.remote_id.as_deref() != Some(id)
-                && parent
-                    .conversation
-                    .entries
-                    .iter()
-                    .any(|entry| crate::application::subagents::child_id(entry) == Some(id))
+                && (parent.scope != child.scope || parent.remote_id != child.remote_id)
+                && parent.conversation.entries.iter().any(|entry| {
+                    parent.previous_scope(entry).unwrap_or(&parent.scope) == &child.scope
+                        && crate::application::subagents::child_id(entry) == Some(id)
+                })
         })
     }
 }

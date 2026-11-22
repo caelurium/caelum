@@ -1,7 +1,7 @@
 use super::{Provider, ProviderRuntime, SessionKey};
 use crate::{
     application::{presentation, Conversation, EntryKind},
-    remote::{Chat, Message},
+    remote::{Chat, Message, RecentChat},
 };
 use caelum_protocol::SessionHistoryPage;
 use std::collections::HashSet;
@@ -18,9 +18,7 @@ fn collect(
     provider: Provider,
     mut read: impl FnMut(Option<&str>) -> Result<SessionHistoryPage, String>,
 ) -> Result<Chat, String> {
-    const MAX_BYTES: usize = 64 * 1024;
-    let mut chat = Chat::default();
-    let mut bytes = 0;
+    let mut chat = RecentChat::default();
     let mut entries = HashSet::new();
     let mut cursors = HashSet::new();
     let mut cursor = None;
@@ -41,17 +39,9 @@ fn collect(
             if text.trim().is_empty() || !entries.insert(entry.id) {
                 continue;
             }
-            if chat.messages.len() == 200 || text.len() > MAX_BYTES - bytes {
-                if chat.messages.is_empty() {
-                    // Keep a useful suffix even for a single oversized response.
-                    let start = text.ceil_char_boundary(text.len() - MAX_BYTES);
-                    chat.messages.push(message(text[start..].into()));
-                }
-                chat.clipped = true;
+            if !chat.push(message(text)) {
                 break 'pages;
             }
-            bytes += text.len();
-            chat.messages.push(message(text));
         }
         cursor = page.next_cursor;
         let Some(next) = &cursor else { break };
@@ -59,12 +49,10 @@ fn collect(
             return Err("The provider returned a repeated or empty history cursor.".into());
         }
         if cursors.len() >= 128 {
-            chat.clipped = true;
-            break;
+            return Ok(chat.finish(true));
         }
     }
-    chat.messages.reverse();
-    Ok(chat)
+    Ok(chat.finish(false))
 }
 
 #[cfg(test)]
