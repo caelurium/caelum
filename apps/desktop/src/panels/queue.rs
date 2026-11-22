@@ -1,4 +1,4 @@
-use rune::{El, TextEdit, col, row};
+use rune::{El, TextEdit, col, row, text};
 use rune_kit::{ButtonVariant, Kit, glyphs};
 
 use crate::live::{live, live_mut};
@@ -92,7 +92,59 @@ pub(super) fn queued_preview(text: &str) -> &str {
 
 fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
     let session = &live(s).app.sessions[index];
-    let mut context = col().key("queued-messages").w_full().gap(4.0);
+    let total = session.queue.len() + session.inbox.items.len();
+    let mut header = row()
+        .w_full()
+        .center_y()
+        .gap(6.0)
+        .child(text("Queued").font(k.ty.small_medium).color(k.c.text_base))
+        .child(ui::caption(format!("{total}"), k))
+        .children(
+            (session.queue_paused && !session.queue.is_empty()).then(|| {
+                text("Paused")
+                    .font(k.ty.small)
+                    .color(k.c.warning.fg)
+                    .px(6.0)
+                    .py(1.0)
+                    .radius(4.0)
+                    .fill(k.alpha(k.c.warning.fg, 0.14))
+            }),
+        )
+        .child(rune::el().grow(1.0));
+    if session.queue_paused && !session.queue.is_empty() {
+        header = header.child(
+            Button::new("Resume queued messages")
+                .variant(ButtonVariant::Outline)
+                .on_press(move |s: &mut Workspace| live_mut(s).app.resume_queue(index))
+                .build(k)
+                .h(24.0)
+                .px(8.0)
+                .key("resume-queued-messages"),
+        );
+    } else if !session.queue.is_empty() {
+        header = header.child(
+            Button::new("Pause queue")
+                .variant(ButtonVariant::Outline)
+                .on_press(move |s: &mut Workspace| {
+                    live_mut(s).app.sessions[index].queue_paused = true
+                })
+                .build(k)
+                .h(24.0)
+                .px(8.0)
+                .key("pause-queued-messages"),
+        );
+    }
+    let mut context = col()
+        .key("queued-messages")
+        .w_full()
+        .gap(4.0)
+        .padding(6.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base);
+    if !session.queue.is_empty() {
+        context = context.child(header);
+    }
     for item in &session.inbox.items {
         let id = item.id.clone();
         let retry = id.clone();
@@ -124,15 +176,20 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                     .disabled(item.pending())
                     .on_press(move |s: &mut Workspace| live_mut(s).app.remove_queued(index, &id))
                     .build(k)
+                    .h(24.0)
+                    .px(6.0)
                     .key(format!("remove-queued-{}", item.id)),
             );
         let mut item_view = col().w_full().gap(4.0);
         if let Some(error) = item.error() {
             entry = entry.child(
                 Button::new("Retry")
+                    .variant(ButtonVariant::Outline)
                     .disabled(item.pending())
                     .on_press(move |s: &mut Workspace| live_mut(s).app.retry_queued(index, &retry))
                     .build(k)
+                    .h(24.0)
+                    .px(8.0)
                     .key(format!("retry-queued-{}", item.id)),
             );
             item_view = item_view.child(label(error, k).color(k.c.danger.fg).wrap());
@@ -144,14 +201,25 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
     {
         context = context.child(label(error, k).color(k.c.danger.fg));
     }
+    let count = session.queue.len();
     for (position, queued) in session.queue.iter().enumerate() {
         context = context.child(
             row()
                 .w_full()
                 .center_y()
                 .gap(4.0)
+                .px(4.0)
+                .radius(6.0)
                 .child(
-                    label(queued_preview(&queued.text), k)
+                    text(format!("{}", position + 1))
+                        .font(k.ty.mono)
+                        .color(k.c.text_faint)
+                        .w(16.0),
+                )
+                .child(
+                    text(queued_preview(&queued.text))
+                        .font(k.ty.small)
+                        .color(k.c.text_base)
                         .help(queued_preview(&queued.text))
                         .truncate()
                         .grow(1.0)
@@ -168,6 +236,18 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                         })
                         .build(k)
                         .key(format!("move-queued-{index}-{position}")),
+                )
+                .child(
+                    quiet_button(&glyphs::CHEVRON_DOWN, "Move queued message later")
+                        .disabled(position + 1 >= count)
+                        .on_press(move |s: &mut Workspace| {
+                            let queue = &mut live_mut(s).app.sessions[index].queue;
+                            if position + 1 < queue.len() {
+                                queue.swap(position, position + 1);
+                            }
+                        })
+                        .build(k)
+                        .key(format!("move-queued-down-{index}-{position}")),
                 )
                 .child(
                     Button::new("Edit")
@@ -194,6 +274,8 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                             }
                         })
                         .build(k)
+                        .h(24.0)
+                        .px(6.0)
                         .key(format!("edit-queued-{index}-{position}")),
                 )
                 .child(
@@ -206,28 +288,10 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                             }
                         })
                         .build(k)
+                        .h(24.0)
+                        .px(6.0)
                         .key(format!("remove-local-queued-{index}-{position}")),
                 ),
-        );
-    }
-    if session.queue_paused && !session.queue.is_empty() {
-        context = context.child(
-            Button::new("Resume queued messages")
-                .variant(ButtonVariant::Outline)
-                .on_press(move |s: &mut Workspace| live_mut(s).app.resume_queue(index))
-                .build(k)
-                .key("resume-queued-messages"),
-        );
-    }
-    if !session.queue_paused && !session.queue.is_empty() {
-        context = context.child(
-            Button::new("Pause queue")
-                .variant(ButtonVariant::GhostMuted)
-                .on_press(move |s: &mut Workspace| {
-                    live_mut(s).app.sessions[index].queue_paused = true
-                })
-                .build(k)
-                .key("pause-queued-messages"),
         );
     }
     context
