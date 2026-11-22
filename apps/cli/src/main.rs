@@ -169,7 +169,11 @@ impl AgentProviders {
                 approvals.clone(),
                 caelum_core::questions::QuestionBroker::disabled(),
             ),
-            antigravity: AntigravityProvider::new(Arc::clone(&processes), approvals.clone()),
+            antigravity: AntigravityProvider::new(
+                Arc::clone(&processes),
+                approvals.clone(),
+                caelum_core::questions::QuestionBroker::disabled(),
+            ),
             approvals,
             processes,
         }

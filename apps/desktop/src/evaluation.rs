@@ -393,16 +393,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         if name == "timeline-empty" {
             l.app.sessions[0].conversation = Default::default();
         }
-        if name == "usage" {
-            l.app.services.checkouts.get_mut(project).unwrap().usage = Some(
-                json!({"workspace":{"name":"Personal workspace"},"go":{"rolling":{"percent":24},"weekly":{"percent":68},"monthly":{"percent":12}}}),
-            );
-        }
-        if name == "usage-loading" {
-            l.app.task(caelum_core::application::Task::Usage {
-                project: project.into(),
-            });
-        }
+        scenes::apply_usage(&mut l.app, project, name);
         if matches!(name, "stats" | "stats-empty") {
             let tokens = json!({"input":420000,"output":120000,"reasoning":80000,"cache":{"read":920000,"write":12000}});
             l.app.services.checkouts.get_mut(project).unwrap().stats = Some(serde_json::from_value(json!({

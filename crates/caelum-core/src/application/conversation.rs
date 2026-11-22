@@ -238,6 +238,14 @@ impl Conversation {
         }
     }
 
+    pub(super) fn settle_streaming(&mut self) {
+        for entry in &mut self.entries {
+            if matches!(entry.kind(), EntryKind::Assistant | EntryKind::Reasoning) {
+                entry.settle();
+            }
+        }
+    }
+
     pub fn apply(&mut self, provider: Provider, method: &str, data: &Value) {
         if method == "session.retry.scheduled"
             || (method == "session.status" && data["status"]["type"] == "retry")

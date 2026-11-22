@@ -91,7 +91,9 @@ impl Services {
                 self.images.insert((project.clone(), source.clone()), data);
             }
             (Task::Updates, TaskReply::Updates(update)) => self.update = Some(update),
-            (Task::Usage { .. }, TaskReply::Usage(usage)) => checkout.usage = Some(usage),
+            (Task::Usage { provider, .. }, TaskReply::Usage(usage)) => {
+                checkout.usage.insert(*provider, usage);
+            }
             (Task::Stats { .. }, TaskReply::Stats(stats, projects)) => {
                 checkout.stats = Some(stats);
                 checkout.stats_projects = projects;

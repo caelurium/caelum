@@ -14,10 +14,12 @@ use caelum_protocol::{AntigravityEvent, ApprovalDecision, PermissionRequest};
 use serde_json::{json, Value};
 
 use super::{
-    lock, protocol, AcpConnection, AntigravityError, EventSubscribers, PendingCall, ReaderContext,
-    APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
+    lock,
+    progress::{ProgressEffect, SessionProgressTracker, REACTIVE_SETTLE_DELAY},
+    protocol, questions, AcpConnection, AntigravityError, EventSubscribers, PendingCall,
+    PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
 };
-use crate::{approvals::ApprovalBroker, processes::ProcessRegistry};
+use crate::{approvals::ApprovalBroker, processes::ProcessRegistry, questions::QuestionBroker};
 
 impl AcpConnection {
     pub(super) fn request(&self, method: &str, params: Value) -> Result<Value, AntigravityError> {
@@ -52,25 +54,14 @@ impl AcpConnection {
         session_id: &str,
         params: Value,
     ) -> Result<(), AntigravityError> {
-        if !self.alive.load(Ordering::Acquire) {
-            return Err(AntigravityError::ConnectionClosed);
-        }
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let id_key = id.to_string();
-        lock(&self.pending).insert(
-            id_key.clone(),
-            PendingCall::Prompt {
-                session_id: session_id.to_owned(),
-            },
-        );
-        if let Err(error) = write_message(
+        send_prompt_parts(
             &self.writer,
-            &json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": params }),
-        ) {
-            lock(&self.pending).remove(&id_key);
-            return Err(AntigravityError::Transport(error));
-        }
-        Ok(())
+            &self.pending,
+            &self.next_id,
+            &self.alive,
+            session_id,
+            params,
+        )
     }
 
     pub(super) fn notify(&self, method: &str, params: Value) -> Result<(), AntigravityError> {
@@ -85,11 +76,41 @@ impl AcpConnection {
     }
 }
 
+pub(super) fn send_prompt_parts(
+    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    pending: &PendingRequests,
+    next_id: &Arc<AtomicU64>,
+    alive: &Arc<AtomicBool>,
+    session_id: &str,
+    params: Value,
+) -> Result<(), AntigravityError> {
+    if !alive.load(Ordering::Acquire) {
+        return Err(AntigravityError::ConnectionClosed);
+    }
+    let id = next_id.fetch_add(1, Ordering::Relaxed);
+    let id_key = id.to_string();
+    lock(pending).insert(
+        id_key.clone(),
+        PendingCall::Prompt {
+            session_id: session_id.to_owned(),
+        },
+    );
+    if let Err(error) = write_message(
+        writer,
+        &json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": params }),
+    ) {
+        lock(pending).remove(&id_key);
+        return Err(AntigravityError::Transport(error));
+    }
+    Ok(())
+}
+
 pub(super) fn spawn_connection(
     executable: Result<PathBuf, AntigravityError>,
     project_path: &Path,
     processes: &Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
+    questions: QuestionBroker,
     subscribers: EventSubscribers,
 ) -> Result<Arc<AcpConnection>, AntigravityError> {
     let executable = executable?;
@@ -122,8 +143,9 @@ pub(super) fn spawn_connection(
 
     let writer = Arc::new(Mutex::new(stdin));
     let pending = Arc::new(Mutex::new(HashMap::new()));
+    let next_id = Arc::new(AtomicU64::new(1));
     let alive = Arc::new(AtomicBool::new(true));
-    let working_sessions = Arc::new(Mutex::new(HashSet::new()));
+    let progress = Arc::new(Mutex::new(SessionProgressTracker::default()));
     let replays = Arc::new(Mutex::new(HashMap::new()));
     let commands = Arc::new(Mutex::new(Vec::new()));
     let session_options = Arc::new(Mutex::new(HashMap::new()));
@@ -132,12 +154,13 @@ pub(super) fn spawn_connection(
         process_id,
         writer: writer.clone(),
         pending: pending.clone(),
-        next_id: AtomicU64::new(1),
+        next_id: next_id.clone(),
         alive: alive.clone(),
         loaded_sessions: Mutex::new(HashSet::new()),
-        working_sessions: working_sessions.clone(),
+        progress: progress.clone(),
         replays: replays.clone(),
         choices: Arc::new(Mutex::new(None)),
+        tier: Arc::new(Mutex::new(None)),
         commands: commands.clone(),
         session_options: session_options.clone(),
         session_changes: Mutex::new(HashMap::new()),
@@ -148,11 +171,13 @@ pub(super) fn spawn_connection(
         ReaderContext {
             pending,
             writer,
+            next_id,
             alive,
             subscribers,
             approvals,
+            questions,
             project_path: project_path.to_path_buf(),
-            working_sessions,
+            progress,
             replays,
             commands,
             session_options,
@@ -179,11 +204,13 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
         let ReaderContext {
             pending,
             writer,
+            next_id,
             alive,
             subscribers,
             approvals,
+            questions,
             project_path,
-            working_sessions,
+            progress,
             replays,
             commands,
             session_options,
@@ -221,27 +248,8 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                         let _ = sender.send(result);
                     }
                     Some(PendingCall::Prompt { session_id }) => {
-                        lock(&working_sessions).remove(&session_id);
-                        let params = match result {
-                            Ok(res) => json!({
-                                "sessionId": session_id,
-                                "stopReason": res["stopReason"].as_str().unwrap_or("end_turn"),
-                            }),
-                            Err(error) => json!({
-                                "sessionId": session_id,
-                                "stopReason": "error",
-                                "error": error,
-                            }),
-                        };
-                        publish_event(
-                            &subscribers,
-                            AntigravityEvent {
-                                project_path: project.clone(),
-                                session_id: Some(session_id),
-                                method: "antigravity/turnCompleted".into(),
-                                params,
-                            },
-                        );
+                        let effect = lock(&progress).on_prompt_replied(&session_id, result);
+                        dispatch_progress_effect(&project, effect, &subscribers, &progress);
                     }
                     None => {}
                 }
@@ -268,7 +276,13 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                     handle_session_update(
                         &project,
                         &params,
+                        &writer,
+                        &pending,
+                        &next_id,
+                        &alive,
+                        &questions,
                         &subscribers,
+                        &progress,
                         &replays,
                         &commands,
                         &session_options,
@@ -278,6 +292,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
         }
 
         alive.store(false, Ordering::Release);
+        questions.clear(PROVIDER_NAME, &project, None);
         let remaining: Vec<_> = lock(&pending).drain().map(|(_, call)| call).collect();
         for call in remaining {
             match call {
@@ -285,7 +300,10 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                     let _ = sender.send(Err("Antigravity ACP connection closed".into()));
                 }
                 PendingCall::Prompt { session_id } => {
-                    lock(&working_sessions).remove(&session_id);
+                    let _ = lock(&progress).on_prompt_replied(
+                        &session_id,
+                        Err("Antigravity ACP connection closed".into()),
+                    );
                     publish_event(
                         &subscribers,
                         AntigravityEvent {
@@ -301,7 +319,10 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 }
             }
         }
-        lock(&working_sessions).clear();
+        let disconnected_effects = lock(&progress).on_disconnected();
+        for effect in disconnected_effects {
+            dispatch_progress_effect(&project, effect, &subscribers, &progress);
+        }
         publish_event(
             &subscribers,
             AntigravityEvent {
@@ -314,10 +335,17 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_session_update(
     project: &str,
     params: &Value,
+    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    pending: &PendingRequests,
+    next_id: &Arc<AtomicU64>,
+    alive: &Arc<AtomicBool>,
+    questions: &QuestionBroker,
     subscribers: &EventSubscribers,
+    progress: &Arc<Mutex<SessionProgressTracker>>,
     replays: &super::ReplayBuffers,
     commands: &Arc<Mutex<Vec<caelum_protocol::OpenCodeCommandInfo>>>,
     session_options: &Arc<Mutex<HashMap<String, super::SessionOptionState>>>,
@@ -350,6 +378,40 @@ fn handle_session_update(
         }
     }
 
+    if matches!(kind, "tool_call" | "tool_call_update") && questions::is_ask_question(update) {
+        if let (Some(sid), Some(tool_id)) = (
+            session_id.as_deref(),
+            update["toolCallId"].as_str().filter(|s| !s.is_empty()),
+        ) {
+            match update["status"].as_str() {
+                Some("pending") => {
+                    questions::register_from_update(
+                        questions,
+                        questions::QuestionReplyContext {
+                            project_path: project.to_owned(),
+                            session_id: sid.to_owned(),
+                            writer: writer.clone(),
+                            pending: pending.clone(),
+                            next_id: next_id.clone(),
+                            alive: alive.clone(),
+                            progress: progress.clone(),
+                            subscribers: subscribers.clone(),
+                        },
+                        update,
+                    );
+                }
+                Some("completed" | "failed" | "cancelled" | "interrupted" | "error") => {
+                    questions.dismiss(PROVIDER_NAME, project, sid, tool_id);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let effect = session_id
+        .as_deref()
+        .and_then(|sid| lock(progress).on_session_update(sid, kind, update));
+
     if !kind.is_empty() {
         publish_event(
             subscribers,
@@ -360,6 +422,72 @@ fn handle_session_update(
                 params: update.clone(),
             },
         );
+    }
+
+    if let Some(effect) = effect {
+        dispatch_progress_effect(project, effect, subscribers, progress);
+    }
+}
+
+pub(super) fn dispatch_progress_effect(
+    project: &str,
+    effect: ProgressEffect,
+    subscribers: &EventSubscribers,
+    progress: &Arc<Mutex<SessionProgressTracker>>,
+) {
+    match effect {
+        ProgressEffect::TurnYielded { session_id } => {
+            publish_event(
+                subscribers,
+                AntigravityEvent {
+                    project_path: project.to_owned(),
+                    session_id: Some(session_id.clone()),
+                    method: "antigravity/turnYielded".into(),
+                    params: json!({ "sessionId": session_id }),
+                },
+            );
+        }
+        ProgressEffect::TurnCompleted {
+            session_id,
+            stop_reason,
+            error,
+        } => {
+            let params = match error {
+                Some(error) => json!({
+                    "sessionId": session_id,
+                    "stopReason": stop_reason,
+                    "error": error,
+                }),
+                None => json!({
+                    "sessionId": session_id,
+                    "stopReason": stop_reason,
+                }),
+            };
+            publish_event(
+                subscribers,
+                AntigravityEvent {
+                    project_path: project.to_owned(),
+                    session_id: Some(session_id),
+                    method: "antigravity/turnCompleted".into(),
+                    params,
+                },
+            );
+        }
+        ProgressEffect::ScheduleSettle {
+            session_id,
+            generation,
+        } => {
+            let project = project.to_owned();
+            let subscribers = subscribers.clone();
+            let progress = progress.clone();
+            thread::spawn(move || {
+                thread::sleep(REACTIVE_SETTLE_DELAY);
+                let completed = lock(&progress).on_settle_timer(&session_id, generation);
+                if let Some(effect) = completed {
+                    dispatch_progress_effect(&project, effect, &subscribers, &progress);
+                }
+            });
+        }
     }
 }
 

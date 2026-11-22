@@ -53,15 +53,12 @@ impl Default for ProviderRuntime {
         let processes = Arc::new(ProcessRegistry::default());
         let approvals = ApprovalBroker::default();
         let questions = QuestionBroker::default();
+        let (p, a, q) = (processes.clone(), approvals.clone(), questions.clone());
         Self {
             vm: None,
-            codex: CodexProvider::new(processes.clone(), approvals.clone(), questions.clone()),
-            opencode: OpenCodeProvider::new(
-                processes.clone(),
-                approvals.clone(),
-                questions.clone(),
-            ),
-            antigravity: AntigravityProvider::new(processes.clone(), approvals.clone()),
+            codex: CodexProvider::new(p.clone(), a.clone(), q.clone()),
+            opencode: OpenCodeProvider::new(p.clone(), a.clone(), q.clone()),
+            antigravity: AntigravityProvider::new(p, a, q),
             processes,
             remote: Arc::default(),
             approvals,

@@ -87,8 +87,11 @@ pub const COMMANDS: &[(&str, &str, LocalCommand)] = &[
 
 impl LocalCommand {
     pub fn available(self, provider: Provider) -> bool {
-        provider == Provider::OpenCode
-            || !matches!(self, Self::Usage | Self::Stats | Self::SideQuestion)
+        match self {
+            Self::Usage => matches!(provider, Provider::OpenCode | Provider::Antigravity),
+            Self::Stats | Self::SideQuestion => provider == Provider::OpenCode,
+            _ => true,
+        }
     }
     pub fn parse(input: &str, provider: Provider) -> Result<Option<(Self, &str)>, String> {
         let Some(input) = input.trim().strip_prefix('/') else {
@@ -100,7 +103,11 @@ impl LocalCommand {
             return Ok(None);
         };
         if !command.available(provider) {
-            return Err(format!("/{name} is only available with OpenCode."));
+            return Err(if *command == Self::Usage {
+                "/usage is only available with OpenCode and Antigravity.".into()
+            } else {
+                format!("/{name} is only available with OpenCode.")
+            });
         }
         if !matches!(
             *command,
@@ -156,5 +163,17 @@ mod tests {
             );
             assert!(LocalCommand::parse("/variants xhigh", provider).is_err());
         }
+    }
+
+    #[test]
+    fn usage_command_is_available_for_opencode_and_antigravity() {
+        for provider in [Provider::OpenCode, Provider::Antigravity] {
+            assert_eq!(
+                LocalCommand::parse("/usage", provider),
+                Ok(Some((LocalCommand::Usage, "")))
+            );
+            assert!(LocalCommand::parse("/usage extra", provider).is_err());
+        }
+        assert!(LocalCommand::parse("/usage", Provider::Codex).is_err());
     }
 }
