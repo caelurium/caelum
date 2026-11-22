@@ -246,23 +246,17 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
 
 fn jump(s: &mut Workspace, index: usize, id: &str, tx: &mut Tx) {
     let l = live_mut(s);
-    if !l.app.sessions[index]
-        .conversation
-        .entries
-        .iter()
-        .any(|e| e.id == id)
-    {
+    let session = &l.app.sessions[index];
+    let Some(entry) = session.conversation.entries.iter().find(|e| e.id == id) else {
         return;
-    }
+    };
+    let target = format!("live-entry-{index}-{}", session.transcript_id(entry));
     l.app.select(index);
     l.current_prompt = Some(id.into());
     l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.search.focused = false;
-    tx.scroll_center_in_instant(
-        format!("live-rows-{index}"),
-        format!("live-entry-{index}-{id}"),
-    );
+    tx.scroll_center_in_instant(format!("live-rows-{index}"), target);
 }
 
 pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {

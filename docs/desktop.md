@@ -86,9 +86,10 @@ and files. Text fields offer Undo, Redo, Cut, Copy, Paste and Select all, preser
 their selection and editing history. **⇧F10** or the Menu key opens the focused
 item's menu; arrows navigate, Enter chooses, and Escape or Tab dismisses it.
 
-Use **Provider** beside the model picker to open another provider’s draft in the
-same project. If it has no draft yet, Caelum creates one. The conversation and
-unsent text stay with their original session. Switching does not change the
+Use **Provider** beside the model picker between turns to change who answers
+next. The conversation, draft and attachments stay in place. On the next send,
+the new provider receives recent user and assistant messages as context. Earlier
+responses keep their original provider labels. Switching does not change the
 default provider in Settings.
 
 Choose the model, reasoning effort and available agent in the composer. Selecting

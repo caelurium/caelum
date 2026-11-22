@@ -15,9 +15,11 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
 pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent) -> El {
     let tool = Tool::from_entry(entry, now());
+    let row_id = live(s).app.sessions[index].transcript_id(entry);
     let id = entry.id.clone();
-    let disclosure = id.clone();
-    let expanded = live(s).expanded.contains(&(index, id.clone()));
+    let disclosure = row_id.to_string();
+    let escape_disclosure = disclosure.clone();
+    let expanded = live(s).expanded.contains(&(index, disclosure.clone()));
     let state = match tool.outcome {
         Outcome::Running => "Running",
         Outcome::Success => "Completed",
@@ -57,21 +59,23 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         .expanded(expanded)
         .focusable(true)
         .focus_ring(1.5, 0.0, k.c.border_focus)
-        .key(format!("subagent-{index}-{}", entry.id))
+        .key(format!("subagent-{index}-{row_id}"))
         .on_key(move |s: &mut Workspace, ev, tx| {
             if ev.key == rune::Key::Escape
-                && live_mut(s).expanded.remove(&(index, disclosure.clone()))
+                && live_mut(s)
+                    .expanded
+                    .remove(&(index, escape_disclosure.clone()))
             {
-                tx.keep_on_screen(format!("subagent-{index}-{disclosure}"));
+                tx.keep_on_screen(format!("subagent-{index}-{escape_disclosure}"));
                 return true;
             }
             false
         })
         .on_press_tx(move |s: &mut Workspace, tx| {
-            tx.keep_on_screen(format!("subagent-{index}-{id}"));
+            tx.keep_on_screen(format!("subagent-{index}-{disclosure}"));
             let l = live_mut(s);
-            if !l.expanded.remove(&(index, id.clone())) {
-                l.expanded.insert((index, id.clone()));
+            if !l.expanded.remove(&(index, disclosure.clone())) {
+                l.expanded.insert((index, disclosure.clone()));
                 l.app.peek_subagent(index, &id);
                 l.sync_editors();
             }
@@ -116,7 +120,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                     }
                 })
                 .build(k)
-                .key(format!("subagent-open-{index}-{}", entry.id)),
+                .key(format!("subagent-open-{index}-{row_id}")),
         );
     }
     content = content.child(footer);

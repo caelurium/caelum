@@ -15,6 +15,7 @@ mod tools;
 pub use chat::Chat;
 pub use chat::Continuation;
 pub use chat::Message;
+pub(crate) use chat::RecentChat;
 pub(crate) use checkout::github_slug;
 pub use checkout::ProviderDefaults;
 pub use checkout::PublishedBase;

@@ -61,6 +61,10 @@ impl Session {
     }
 
     pub fn next_cursor(&self) -> Option<&str> {
+        self.active_cursor().or_else(|| self.previous_cursor())
+    }
+
+    pub(super) fn active_cursor(&self) -> Option<&str> {
         match &self.history {
             State::Idle(Availability::Loaded(cursor))
             | State::Resuming(Availability::Loaded(cursor), _)
@@ -119,6 +123,10 @@ impl Workspace {
             || session.relocation.pending()
             || session.forgotten()
         {
+            return;
+        }
+        if session.active_cursor().is_none() {
+            self.read_previous_page(index);
             return;
         }
         let (Some(key), State::Idle(Availability::Loaded(Some(cursor)))) =
@@ -229,6 +237,22 @@ impl Workspace {
             }
         }
         if !older && session.revision == revision {
+            if page.data.is_empty()
+                && page.next_cursor.is_none()
+                && !session.working()
+                && session
+                    .conversation
+                    .entries
+                    .iter()
+                    .all(|e| e.previous_thread.is_some())
+                && session
+                    .provider_switch
+                    .threads
+                    .last()
+                    .is_some_and(|t| !t.context.messages.is_empty())
+            {
+                session.provider_switch.needs_context = true;
+            }
             if session.scope.provider == Provider::OpenCode {
                 session
                     .conversation
@@ -252,7 +276,7 @@ impl Workspace {
         let cursor = if older || !loaded {
             page.next_cursor
         } else {
-            session.next_cursor().map(str::to_owned)
+            session.active_cursor().map(str::to_owned)
         };
         session.history = State::Idle(Availability::Loaded(cursor));
         session.disconnected = false;

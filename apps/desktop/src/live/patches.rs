@@ -95,8 +95,18 @@ impl Live {
                 let entries = &session.conversation.entries;
 
                 position
-                    .and_then(|i| entries.get(i).filter(|e| &e.id == id).map(|e| (i, e)))
-                    .or_else(|| entries.iter().enumerate().find(|(_, e)| &e.id == id))
+                    .and_then(|i| {
+                        entries
+                            .get(i)
+                            .filter(|e| session.transcript_id(e) == id.as_str())
+                            .map(|e| (i, e))
+                    })
+                    .or_else(|| {
+                        entries
+                            .iter()
+                            .enumerate()
+                            .find(|(_, e)| session.transcript_id(e) == id.as_str())
+                    })
             });
             let Some((position, entry)) = entry else {
                 self.patch_inputs.remove(key);

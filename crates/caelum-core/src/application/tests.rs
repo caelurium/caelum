@@ -5,6 +5,7 @@ mod fork;
 mod history;
 mod persistence;
 mod projects;
+mod provider_switch;
 mod relocation;
 mod resume;
 mod review;
