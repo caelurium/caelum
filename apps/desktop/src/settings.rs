@@ -329,26 +329,36 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         project: project.clone(),
     };
     let choices = app.choices.get(&scope);
-    body = body.child(
+    let (status_label, status_color) = if app.notices.contains_key(&scope) {
+        ("Unavailable", k.c.danger.fg)
+    } else if choices.is_some() {
+        ("Available", k.c.success.fg)
+    } else {
+        ("Not connected", k.c.text_muted)
+    };
+    let status_pill = row()
+        .center_y()
+        .gap(5.0)
+        .px(7.0)
+        .py(2.0)
+        .radius(5.0)
+        .fill(k.alpha(status_color, 0.12))
+        .child(
+            rune::el()
+                .size(6.0, 6.0)
+                .radius(3.0)
+                .fill(status_color)
+                .a11y_hidden(),
+        )
+        .child(text(status_label).font(k.ty.small).color(status_color));
+    let mut panel = ui::card(k).gap(8.0).child(
         row()
             .w_full()
-            .py(10.0)
             .gap(8.0)
             .center_y()
             .child(tabs)
-            .child(
-                ui::caption(
-                    if app.notices.contains_key(&scope) {
-                        "Unavailable"
-                    } else if choices.is_some() {
-                        "Available"
-                    } else {
-                        "Not connected"
-                    },
-                    k,
-                )
-                .grow(1.0),
-            )
+            .child(rune::el().grow(1.0))
+            .child(status_pill)
             .child(
                 crate::quiet_button(&ui::REFRESH, "Refresh provider status")
                     .on_press(move |s: &mut Workspace| live_mut(s).app.refresh_choices(provider))
@@ -357,7 +367,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             ),
     );
     if let Some(error) = app.notices.get(&scope) {
-        body = body.child(ui::notice("Connection unavailable", error, k));
+        panel = panel.child(ui::notice("Connection unavailable", error, k));
     }
     let options = app.provider_options(&scope).cloned().unwrap_or_default();
     let model = choices.and_then(|c| {
@@ -376,7 +386,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(model) = model.filter(|_| options.model.is_some()) {
         model_picker = model_picker.display(&model.name);
     }
-    body = body.child(setting_row("Model", "", model_picker.trigger(k), k));
+    panel = panel.child(setting_row("Model", "", model_picker.trigger(k), k));
     let mut efforts = vec!["Model default".into()];
     if let Some(model) = model {
         efforts.extend(model.efforts.iter().map(|e| e.id.clone()));
@@ -387,7 +397,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         efforts.push(saved.clone());
     }
     let effort_scope = scope.clone();
-    body = body.child(setting_row(
+    panel = panel.child(setting_row(
         "Reasoning effort",
         "",
         picker(
@@ -411,7 +421,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         if let Some(choices) = choices {
             agents.extend(choices.agents.iter().map(|a| a.id.clone()));
         }
-        body = body.child(setting_row(
+        panel = panel.child(setting_row(
             "Agent",
             "",
             picker(
@@ -430,7 +440,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             k,
         ));
     }
-    let mut actions = row().w_full().gap(6.0).pt(10.0);
+    let mut actions = row().w_full().gap(6.0).justify_end();
     if let Some(model) = &options.model {
         let id = model.clone();
         let favorite = app
@@ -450,7 +460,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .build(k),
         );
     }
-    body.child(ui::divider(k)).child(
+    panel = panel.child(ui::divider(k)).child(
         actions.child(
             Button::new("Reset provider defaults")
                 .variant(ButtonVariant::GhostMuted)
@@ -459,6 +469,18 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 })
                 .build(k),
         ),
+    );
+    body.child(
+        col()
+            .w_full()
+            .gap(8.0)
+            .pt(12.0)
+            .child(
+                text("Provider defaults")
+                    .font(k.ty.ui_medium)
+                    .color(k.c.text_base),
+            )
+            .child(panel),
     )
 }
 
