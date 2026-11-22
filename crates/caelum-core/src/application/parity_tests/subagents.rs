@@ -248,7 +248,10 @@ fn opening_a_subagent_reuses_its_scoped_session_without_changing_parent_drafts()
     };
     app.sessions[1].remote_id = Some("ses_child".into());
     app.select(1);
-    let child = app.open_subagent(0, "opencode-tool-task").unwrap();
+    let child = app.peek_subagent(0, "opencode-tool-task").unwrap();
+    assert_eq!(app.selected, Some(1));
+    assert_eq!(app.peek_subagent(0, "opencode-tool-task"), Some(child));
+    assert_eq!(app.open_subagent(0, "opencode-tool-task"), Some(child));
     assert_ne!(child, 1);
     assert_eq!(app.sessions[child].scope, app.sessions[0].scope);
     assert_eq!(app.selected, Some(child));

@@ -36,8 +36,9 @@ attachment/project requests. First send creates a fresh stable session only afte
 admission, transferring its captured context through the normal durable submission
 path. Home request generations reject results for an older target or draft.
 
-`Runtime` dispatches from three bounded Tokio mailboxes with separate limits for
-blocking work: eight normal, two conversation and two control commands at a time.
+`Runtime` dispatches from four bounded Tokio mailboxes with separate limits for
+blocking work: eight normal, two conversation, four user-action and two control
+commands at a time.
 It uses a 1,024-event inbox and 256-event UI drains. Arrival wakes Rune; provider
 I/O does not run on the UI thread. Cancellation and permission
 replies bypass the normal persistence gate. Resume, history pagination and inbox
@@ -147,6 +148,14 @@ Each session has an independent native editor and reading position. Settings,
 worktree and session dialogs scope focus. Long transcripts, file previews and
 review patches are windowed/bounded. Provider/model/effort/agent choices are
 captured when a message is queued. Rendering state never owns provider processes.
+
+In a local conversation, `workspace/provider_switch.rs` keeps the slot stable
+across provider changes. Earlier turns retain their original provider thread
+keys for history reads; only the current thread accepts new turns. The first
+message to the new backend carries up to 200 recent user/assistant messages
+(64 KiB of text). Caelum hides this context in the transcript and retries it
+if the provider rejects the send. Provider-native operations such as export
+read the current backend thread.
 
 ## Persistence and migration
 

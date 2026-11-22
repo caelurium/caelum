@@ -587,9 +587,7 @@ pub struct Runtime {
     checkout_watch: Option<mpsc::Sender<Vec<String>>>,
     watched_projects: Vec<String>,
     providers: Option<ProviderRuntime>,
-    requests: tokio::sync::mpsc::Sender<worker::Request>,
-    history: tokio::sync::mpsc::Sender<worker::Request>,
-    control: tokio::sync::mpsc::Sender<worker::Request>,
+    mailboxes: worker::Mailboxes,
     inbox: Option<Receiver<Event>>,
     sender: SyncSender<Event>,
     wake: Arc<dyn Fn() + Send + Sync>,
@@ -656,26 +654,14 @@ impl Runtime {
 
     pub(super) fn with_executor(execute: Execute, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
         let (sender, inbox) = mpsc::sync_channel(1024);
-        let (requests, normal) = tokio::sync::mpsc::channel(1024);
-        let (history, conversations) = tokio::sync::mpsc::channel(128);
-        let (control, urgent) = tokio::sync::mpsc::channel(128);
         let closed = Arc::new(AtomicBool::new(false));
-        let workers = worker::Workers::start(
-            normal,
-            conversations,
-            urgent,
-            execute,
-            sender.clone(),
-            wake.clone(),
-            closed.clone(),
-        );
+        let (mailboxes, workers) =
+            worker::Workers::start(execute, sender.clone(), wake.clone(), closed.clone());
         Self {
             checkout_watch: None,
             watched_projects: Vec::new(),
             providers: None,
-            requests,
-            history,
-            control,
+            mailboxes,
             inbox: Some(inbox),
             sender,
             wake,
@@ -721,38 +707,12 @@ impl Runtime {
         if self.closed.load(Ordering::Acquire) {
             return Err("Application is shutting down".into());
         }
-        let queue = if matches!(
-            command,
-            Command::Cancel(_)
-                | Command::Remote(crate::remote::Operation::Interrupt(..))
-                | Command::Task(Task::Shell { stop: true, .. })
-                | Command::Approve(..)
-                | Command::Answer(..)
-                | Command::Save(..)
-                | Command::Load(_)
-        ) {
-            &self.control
-        } else if matches!(
-            command,
-            Command::Resume(_)
-                | Command::History(..)
-                | Command::HandoffChat(_)
-                | Command::CodexControlHistory(..)
-                | Command::Inbox(_)
-        ) {
-            &self.history
-        } else {
-            &self.requests
-        };
         crate::diagnostics::command("submitted", id, &command);
-        queue
-            .try_send((id, command))
-            .inspect_err(|_| {
-                if let Some(mark) = crate::diagnostics::mark("request", "rejected", id, 0) {
-                    mark.record("rejected", 0);
-                }
-            })
-            .map_err(|_| "Too many pending requests; try again shortly".into())
+        self.mailboxes.try_send(id, command).inspect_err(|_| {
+            if let Some(mark) = crate::diagnostics::mark("request", "rejected", id, 0) {
+                mark.record("rejected", 0);
+            }
+        })
     }
 
     pub fn watch_checkouts(&mut self, mut projects: Vec<String>) {

@@ -9,6 +9,17 @@ use caelum_core::application::EntryKind;
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
 use rune_kit::Kit;
 
+pub(crate) fn open(s: &mut Workspace) {
+    let l = live_mut(s);
+    let Some(index) = l.app.selected else { return };
+    l.commands.owner = Some(index);
+    l.commands.search.clear();
+    l.commands.timeline_selected = l.current_prompt.clone();
+    l.commands.timeline_current = l.current_prompt.clone();
+    l.panels.set_overlay(Some(Screen::Timeline));
+    l.commands.search.focused = true;
+}
+
 pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
     let l = live(s);
     let session = &l.app.sessions[index];
@@ -235,23 +246,17 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
 
 fn jump(s: &mut Workspace, index: usize, id: &str, tx: &mut Tx) {
     let l = live_mut(s);
-    if !l.app.sessions[index]
-        .conversation
-        .entries
-        .iter()
-        .any(|e| e.id == id)
-    {
+    let session = &l.app.sessions[index];
+    let Some(entry) = session.conversation.entries.iter().find(|e| e.id == id) else {
         return;
-    }
+    };
+    let target = format!("live-entry-{index}-{}", session.transcript_id(entry));
     l.app.select(index);
     l.current_prompt = Some(id.into());
     l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.search.focused = false;
-    tx.scroll_center_in_instant(
-        format!("live-rows-{index}"),
-        format!("live-entry-{index}-{id}"),
-    );
+    tx.scroll_center_in_instant(format!("live-rows-{index}"), target);
 }
 
 pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {

@@ -138,6 +138,8 @@ fn from_legacy(old: caelum_protocol::WorkspaceSnapshot) -> Snapshot {
 
 pub(super) fn saved(scope: Scope, remote_id: Option<String>) -> SavedSession {
     SavedSession {
+        previous_threads: Default::default(),
+        needs_context: false,
         native_handoff: None,
         vm_link: None,
         last_activity: None,

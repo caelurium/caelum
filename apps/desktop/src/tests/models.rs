@@ -620,7 +620,28 @@ fn settings_provider_and_composer_choices_apply_to_first_send() {
             .provider,
         Provider::Codex
     );
-    assert!(rt.find("provider-trigger").is_none());
+    fill(&mut rt, &draft, "Continue this draft");
+    click(&mut rt, "provider-trigger");
+    click(&mut rt, "option0");
+    assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(index));
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().drafts[index].text,
+        "Continue this draft"
+    );
+    assert!(element(&rt, &draft).focused);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[index]
+            .scope
+            .provider,
+        Provider::Codex
+    );
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().drafts[0].text,
+        "Keep this Codex draft"
+    );
+    click(&mut rt, "provider-trigger");
+    click(&mut rt, "option1");
+    assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(index));
     assert_eq!(
         rt.state.live.as_ref().unwrap().app.sessions[index]
             .scope

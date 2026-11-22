@@ -199,11 +199,26 @@ impl Workspace {
     }
 
     pub fn needs_input(&self, session: &Session) -> bool {
-        self.approvals.iter().any(|p| {
+        self.has_question(session) || self.pending_approval(session, true).is_some()
+    }
+
+    pub(in crate::application) fn pending_approval(
+        &self,
+        session: &Session,
+        project_approvals: bool,
+    ) -> Option<&ApprovalPrompt> {
+        self.approvals.iter().find(|p| {
             p.project_path == session.scope.project
                 && p.provider == session.scope.provider.as_str()
-                && (p.session_id.is_none() || p.session_id == session.remote_id)
-        }) || self.questions.iter().any(|p| {
+                && match &p.session_id {
+                    Some(id) => Some(id) == session.remote_id.as_ref(),
+                    None => project_approvals,
+                }
+        })
+    }
+
+    pub(in crate::application) fn has_question(&self, session: &Session) -> bool {
+        self.questions.iter().any(|p| {
             p.project_path == session.scope.project
                 && p.provider == session.scope.provider.as_str()
                 && Some(&p.session_id) == session.remote_id.as_ref()
@@ -285,13 +300,15 @@ impl Workspace {
             self.admit_prompt(index, key, attempt);
         } else {
             let text = &attempt.prompt.text;
-            session.title = text
-                .lines()
-                .next()
-                .unwrap_or(text)
-                .chars()
-                .take(60)
-                .collect();
+            if session.provider_switch.threads.is_empty() {
+                session.title = text
+                    .lines()
+                    .next()
+                    .unwrap_or(text)
+                    .chars()
+                    .take(60)
+                    .collect();
+            }
             if session.native_handoff.is_some() {
                 self.check_native_start(index, attempt);
             } else {
@@ -304,15 +321,27 @@ impl Workspace {
     }
 
     fn admit_prompt(&mut self, index: usize, key: SessionKey, attempt: Attempt) {
-        self.admit_prompt_text(index, key, attempt.prompt.text.clone(), attempt);
+        let s = &self.sessions[index];
+        let text = if let Some(thread) = s
+            .provider_switch
+            .threads
+            .last()
+            .filter(|_| s.provider_switch.needs_context)
+        {
+            thread.context.prompt(&attempt.prompt.text)
+        } else {
+            attempt.prompt.text.clone()
+        };
+        self.admit_prompt_text(index, key, text, attempt);
     }
 
     fn admit_first_prompt(&mut self, index: usize, key: SessionKey, attempt: Attempt) {
-        let text = match &self.sessions[index].native_handoff {
-            Some(handoff) => handoff.chat.prompt(&attempt.prompt.text),
-            None => attempt.prompt.text.clone(),
-        };
-        self.admit_prompt_text(index, key, text, attempt);
+        if let Some(handoff) = &self.sessions[index].native_handoff {
+            let text = handoff.chat.prompt(&attempt.prompt.text);
+            self.admit_prompt_text(index, key, text, attempt);
+        } else {
+            self.admit_prompt(index, key, attempt);
+        }
     }
 
     fn admit_prompt_text(&mut self, index: usize, key: SessionKey, text: String, attempt: Attempt) {
@@ -426,6 +455,9 @@ impl Workspace {
         else {
             unreachable!();
         };
+        if result.is_ok() {
+            session.provider_switch.needs_context = false;
+        }
         match result {
             Ok(()) if matches!(attempt.intent, Intent::Stop) => self.stop_provider(index, key),
             Ok(()) => {

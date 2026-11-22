@@ -1,3 +1,4 @@
+use caelum_core::application::Provider;
 use rune::{El, TextStyle, col, row, text_input};
 use rune_kit::{ButtonVariant, Kit, Placement};
 
@@ -192,6 +193,41 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     };
     let session = &live.app.sessions[index];
     let choices = live.app.choices.get(&session.scope);
+    let providers = Provider::for_project(Some(&session.scope.project));
+    if providers.len() > 1 {
+        content = content.child(
+            Select::choices(
+                "provider",
+                providers
+                    .iter()
+                    .map(|p| Choice::new(p.as_str(), p.name()))
+                    .collect(),
+            )
+            .label("Provider")
+            .menu_description("Choose the provider for the next message in this conversation.")
+            .disabled(!live.app.can_switch_provider(index))
+            .current(Some(session.scope.provider.as_str()))
+            .placement(Placement::TopStart)
+            .open(live.menu == Some(("provider", index)))
+            .on_toggle(|s: &mut Workspace| toggle_menu(s, "provider"))
+            .on_close(|s: &mut Workspace| live_mut(s).menu = None)
+            .on_choose(move |s: &mut Workspace, value, _| {
+                let l = live_mut(s);
+                if l.app.selected != Some(index) || l.menu != Some(("provider", index)) {
+                    return;
+                }
+                if let Some(&provider) = providers.iter().find(|p| p.as_str() == value)
+                    && l.app.switch_provider(index, provider)
+                {
+                    l.schedule();
+                }
+                l.menu = None;
+                l.focus();
+            })
+            .build(k, layers)
+            .max_w(maximum),
+        );
+    }
     content = content.child(
         Select::new::<&str>("model", &[])
             .current(

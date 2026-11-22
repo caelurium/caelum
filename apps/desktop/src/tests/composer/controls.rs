@@ -18,6 +18,7 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
             });
             advance(&mut rt, 0.3);
             for name in [
+                "provider-trigger",
                 "model-trigger",
                 "effort-trigger",
                 "agent-trigger",
@@ -52,9 +53,12 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
                 assert_eq!(element(&rt, "send").label.as_deref(), Some("Send message"));
                 assert!(rt.find("stop").is_none());
             }
-            assert!(rt.find("provider-trigger").is_none());
-            for name in ["effort", "agent"] {
+            for name in ["provider", "effort", "agent"] {
                 let trigger = format!("{name}-trigger");
+                if name == "provider" && working {
+                    assert!(!element(&rt, &trigger).focusable);
+                    continue;
+                }
                 click(&mut rt, &trigger);
                 let menu = element(&rt, &format!("{name}-content"));
                 assert!(
@@ -71,6 +75,39 @@ fn narrow_composer_wraps_all_options_and_keeps_queue_and_stop_reachable() {
             assert!(!rt.state.live.as_ref().unwrap().app.sessions[0].stopping());
         }
     }
+}
+
+#[test]
+fn switching_in_a_conversation_keeps_the_mounted_transcript_and_draft() {
+    use caelum_core::application::{Attachment, Provider};
+
+    let mut rt = design_runtime("tool-output-long", (1280.0, 1000.0));
+    rt.update(|s, _| {
+        s.live.as_mut().unwrap().app.sessions[0].remote_id = Some("original".into());
+        s.live.as_mut().unwrap().app.attach(
+            0,
+            Attachment::new("notes.txt".into(), "Context".into(), None, false),
+        );
+    });
+    fill(&mut rt, "live-draft-0", "Keep typing here");
+    let tool = "tool-0-opencode-tool-run";
+    let before = element(&rt, tool);
+    assert_eq!(before.expanded, Some(true));
+    let count = rt.state.live.as_ref().unwrap().app.sessions.len();
+    click(&mut rt, "provider-trigger");
+    click(&mut rt, "option1");
+    let live = rt.state.live.as_ref().unwrap();
+    assert_eq!(live.app.selected, Some(0));
+    assert_eq!(live.app.sessions.len(), count);
+    assert_eq!(live.app.sessions[0].scope.provider, Provider::OpenCode);
+    assert_eq!(live.app.sessions[0].attachments[0].content, "Context");
+    assert_eq!(live.drafts[0].text, "Keep typing here");
+    assert!(element(&rt, "live-draft-0").focused);
+    let after = element(&rt, tool);
+    assert_eq!(after.expanded, before.expanded);
+    assert_eq!(after.key, before.key);
+    assert_eq!(after.rect[0], before.rect[0]);
+    assert_eq!(after.rect[2..], before.rect[2..]);
 }
 
 #[test]

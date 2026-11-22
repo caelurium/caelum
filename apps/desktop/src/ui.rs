@@ -645,10 +645,7 @@ pub fn activity_color(
 ) -> rune::Color {
     use caelum_core::application::presentation::ActivityKind;
     match activity.kind {
-        ActivityKind::Input
-        | ActivityKind::Background
-        | ActivityKind::Retrying
-        | ActivityKind::Stopping => k.c.warning.fg,
+        ActivityKind::Input | ActivityKind::Retrying | ActivityKind::Stopping => k.c.warning.fg,
         _ => k.c.text_accent,
     }
 }

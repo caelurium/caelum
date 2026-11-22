@@ -11,6 +11,7 @@ pub use fork::fork_key;
 pub(crate) use fork::header as history_header;
 use sessions::sessions;
 pub use sessions::sessions_key;
+pub(crate) use timeline::open as open_timeline;
 use timeline::timeline;
 pub use timeline::timeline_key;
 

@@ -8,6 +8,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
     if !matches!(
         name,
         "session-feed"
+            | "conversation-overview"
             | "session-feed-current"
             | "session-feed-empty"
             | "session-feed-many"
@@ -115,7 +116,50 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
     }
     l.app.select(0);
     l.sync_editors();
+    if name == "conversation-overview" {
+        overview(l);
+        crate::panels::conversations::open(state, &mut rune::Tx::default());
+    }
     true
+}
+
+fn overview(l: &mut Live) {
+    use caelum_core::application::{Entry, EntryKind, QueuedPrompt};
+    let session = &mut l.app.sessions[1];
+    session.title = "Reconnect after sleep".into();
+    session.remote_id = Some("reconnect-example".into());
+    l.app.questions.push(caelum_protocol::QuestionPrompt {
+        provider: session.scope.provider.as_str().into(),
+        project_path: session.scope.project.clone(),
+        session_id: "reconnect-example".into(),
+        request_id: "retry-choice".into(),
+        title: "Questions".into(),
+        fields: vec![
+            json!({"key":"retry","type":"boolean","title":"Retry policy",
+            "description":"Should a manual disconnect stop automatic retries?", "default":true}),
+        ],
+    });
+    l.app.sessions[2].title = "Review the provider adapters".into();
+    l.app.sessions[2].conversation.entries.push(Entry::new(
+        "adapters".into(),
+        EntryKind::Assistant,
+        "All three providers now keep their own session and model defaults.".into(),
+        true,
+    ));
+    l.app.sessions[3].conversation.set_working(true);
+    let session = &l.app.sessions[4];
+    l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+        provider: session.scope.provider.as_str().into(),
+        project_path: session.scope.project.clone(),
+        session_id: session.remote_id.clone(),
+        request_id: "preview-site".into(),
+        summary: "Allow the agent to start the preview server?".into(),
+        description: String::new(),
+    });
+    l.app.sessions[5].queue.push(QueuedPrompt {
+        text: "Compare the cold and incremental build times before the next release.".into(),
+        options: Default::default(),
+    });
 }
 
 pub(super) fn sidebar_projects(l: &mut Live, project: &str) {

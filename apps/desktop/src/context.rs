@@ -447,7 +447,13 @@ pub fn worktree(el: El, project: String, path: String, origin: String) -> El {
             .item(
                 Item::new("rename", "Rename worktree")
                     .icon(&ui::EDIT)
-                    .enabled(!app.services.busy(&rename)),
+                    .enabled(
+                        !app.services.busy(&rename)
+                            && !app.services.busy(&Task::RemoveWorktree {
+                                project: project.clone(),
+                                path: path.clone(),
+                            }),
+                    ),
             )
             .separator()
             .item(

@@ -59,7 +59,9 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             .enumerate()
             .filter(|(_, e)| caelum_core::application::presentation::entry_visible(e))
             .map(|(i, entry)| {
-                entry.id.hash(&mut version);
+                live.app.sessions[index]
+                    .transcript_id(entry)
+                    .hash(&mut version);
                 i
             })
             .collect(),
@@ -67,7 +69,7 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
     let count = visible.len();
     let keys = visible.clone();
     let rows = visible.clone();
-    let reading = live.reading[index].clone();
+    let reading = live.reading[index].position.clone();
     let kit = k.clone();
     col()
         .key(format!("live-transcript-{index}"))
@@ -92,12 +94,16 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                         if row == 0 {
                             return format!("live-header-{index}").into();
                         }
-                        match crate::live::live(s).app.sessions[index]
+                        let session = &crate::live::live(s).app.sessions[index];
+                        match session
                             .conversation
                             .entries
                             .get(keys.get(row - 1).copied().unwrap_or(usize::MAX))
                         {
-                            Some(entry) => format!("live-entry-{index}-{}", entry.id).into(),
+                            Some(entry) => {
+                                format!("live-entry-{index}-{}", session.transcript_id(entry))
+                                    .into()
+                            }
                             None => format!("live-tail-{index}").into(),
                         }
                     },
@@ -125,7 +131,11 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
                     let entries = &l.app.sessions[index].conversation.entries;
                     let next: HashSet<_> = positions
                         .iter()
-                        .filter_map(|i| entries.get(*i).map(|e| (index, e.id.clone())))
+                        .filter_map(|i| {
+                            entries.get(*i).map(|e| {
+                                (index, l.app.sessions[index].transcript_id(e).into_owned())
+                            })
+                        })
                         .collect();
                     l.visible_entries = next;
                     if let Some(first) = positions.first().filter(|i| **i < entries.len()) {
@@ -218,17 +228,19 @@ pub(super) fn timeline_row(
         return content;
     }
     if let Some(entry) = session.conversation.entries.get(row_index - 1) {
+        let row_id = session.transcript_id(entry);
+        let source = session.previous_scope(entry).unwrap_or(&session.scope);
         let mut item = col()
             .w_full()
             .gap(8.0)
-            .key(format!("live-entry-{index}-{}", entry.id));
+            .key(format!("live-entry-{index}-{row_id}"));
         match entry.kind() {
             EntryKind::User => {
                 let (_, files) = caelum_core::application::split_context(&entry.text);
                 let message = caelum_core::application::presentation::entry_text(entry);
                 let mut bubble =
                     ui::user_bubble(&message, !files.is_empty() || !entry.media.is_empty(), k)
-                        .key(format!("user-bubble-{index}-{}", entry.id));
+                        .key(format!("user-bubble-{index}-{row_id}"));
                 if !message.trim().is_empty() {
                     bubble = bubble.child(
                         Markdown::new(&message)
@@ -301,7 +313,7 @@ pub(super) fn timeline_row(
                 if has_files {
                     bubble = bubble.child(attachments);
                 }
-                let copy_key = format!("copy-user-{index}-{}", entry.id);
+                let copy_key = format!("copy-user-{index}-{row_id}");
                 let focused = live
                     .focus_key
                     .as_ref()
@@ -334,7 +346,7 @@ pub(super) fn timeline_row(
                                     .child(icon(&glyphs::SPARKLE, 13.0).color(k.c.icon_muted))
                                     .child(
                                         text(if entry.complete() {
-                                            ui::provider_name(session.scope.provider)
+                                            ui::provider_name(source.provider)
                                         } else {
                                             "Responding…"
                                         })
@@ -359,7 +371,7 @@ pub(super) fn timeline_row(
                                         }
                                     })
                                     .build(k)
-                                    .key(format!("copy-response-{index}-{}", entry.id)),
+                                    .key(format!("copy-response-{index}-{row_id}")),
                             ),
                     )
                     .child(
@@ -379,7 +391,7 @@ pub(super) fn timeline_row(
                     let agent = entry.metadata["agent"].as_str().map(|id| {
                         live.app
                             .choices
-                            .get(&session.scope)
+                            .get(source)
                             .and_then(|choices| choices.agents.iter().find(|agent| agent.id == id))
                             .map_or(id, |agent| agent.name.as_str())
                     });
@@ -395,7 +407,7 @@ pub(super) fn timeline_row(
                     if let Some(details) = details {
                         item = item.child(
                             text(details)
-                                .key(format!("output-details-{index}-{}", entry.id))
+                                .key(format!("output-details-{index}-{row_id}"))
                                 .font(k.ty.small)
                                 .color(k.c.text_muted),
                         );
@@ -428,8 +440,11 @@ pub(super) fn timeline_row(
             item,
             caelum_core::application::presentation::entry_text(entry),
             index,
-            format!("live-entry-{index}-{}", entry.id),
-            (entry.kind() == EntryKind::User && !entry.optimistic()).then(|| entry.id.clone()),
+            format!("live-entry-{index}-{row_id}"),
+            (entry.kind() == EntryKind::User
+                && !entry.optimistic()
+                && session.previous_scope(entry).is_none())
+            .then(|| entry.id.clone()),
         ));
     }
     if let Some(notice) = session.conversation.failure.notice() {

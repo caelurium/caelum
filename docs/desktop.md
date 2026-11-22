@@ -41,6 +41,19 @@ and machine name identify the checkout. A new VM chat appears as soon as you
 create it, even before its first message. Select any of the VM’s chats to
 return to its transcript and draft.
 
+**⌘J** (**Ctrl+J** on Linux) or the tiled **Conversation overview** button in
+the toolbar shows only active conversations across open projects, including VMs.
+A conversation appears while work is running or queued, or while a question or
+approval is waiting for you. Once it’s idle, its tile disappears; you can still
+find it and its draft in **Sessions**. Filter active conversations by title,
+project or branch, or click **needs input** to highlight the next request.
+Use the arrows and Return, or click a tile, to resume a conversation at its
+reading position. Escape or the same shortcut returns to the previous view.
+The sidebar filter and each session's draft stay independent.
+
+The conversation heading carries its project's colour. Click the title to browse
+and jump between prompts without typing a command or replacing the draft.
+
 **Needs input** appears on a session row when its agent has a question or approval
 waiting. In the open conversation, the same label appears beside the session title.
 When there is no pending input, **PR #… · Changes requested** links directly to
@@ -69,6 +82,12 @@ context menus. Actions apply to the item you clicked, including background sessi
 and files. Text fields offer Undo, Redo, Cut, Copy, Paste and Select all, preserving
 their selection and editing history. **⇧F10** or the Menu key opens the focused
 item's menu; arrows navigate, Enter chooses, and Escape or Tab dismisses it.
+
+Use **Provider** beside the model picker between turns to change who answers
+next. The conversation, draft and attachments stay in place. On the next send,
+the new provider receives recent user and assistant messages as context. Earlier
+responses keep their original provider labels. Switching does not change the
+default provider in Settings.
 
 Choose the model, reasoning effort and available agent in the composer. Selecting
 a session automatically loads its catalogue when missing, including after a restart.

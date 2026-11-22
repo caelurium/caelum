@@ -65,12 +65,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
         LocalCommand::Files => panels::show(s, Screen::Files),
         LocalCommand::Changes => panels::show(s, Screen::Changes),
         LocalCommand::Settings => panels::show(s, Screen::Settings),
-        LocalCommand::Timeline => {
-            l.commands.timeline_selected = l.current_prompt.clone();
-            l.commands.timeline_current = l.current_prompt.clone();
-            l.panels.set_overlay(Some(Screen::Timeline));
-            l.commands.search.focused = true;
-        }
+        LocalCommand::Timeline => super::open_timeline(s),
         LocalCommand::Usage => {
             l.panels.set_overlay(Some(Screen::Usage));
             let scope = l.app.sessions[index].scope.clone();

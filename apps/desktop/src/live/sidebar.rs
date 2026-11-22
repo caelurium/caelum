@@ -71,6 +71,10 @@ impl Default for State {
 }
 
 impl State {
+    pub(crate) fn project_ink(&self, app: &Application, path: &str, k: &Kit) -> rune::Color {
+        self.badges.ink(app, path, k)
+    }
+
     pub fn displayed_at(&self) -> u64 {
         self.recency.displayed_at()
     }
@@ -400,7 +404,7 @@ pub(super) fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     }
 }
 
-pub(super) fn select(s: &mut Workspace, index: usize) {
+pub(crate) fn select(s: &mut Workspace, index: usize) {
     let l = live_mut(s);
     let trace = l.latency.begin("navigate");
     l.latency.track(trace, Some(index), true);

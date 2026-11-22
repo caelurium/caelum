@@ -10,10 +10,11 @@ struct Summary {
     unread: bool,
     failure: Option<u64>,
     last_activity: Option<u64>,
+    peek: Option<String>,
 }
 
 impl Summary {
-    fn new(session: &Session) -> Self {
+    fn new(session: &Session, peek: bool) -> Self {
         Self {
             title: session.title.clone(),
             working: session.working(),
@@ -21,6 +22,7 @@ impl Summary {
             unread: session.unread,
             failure: session.conversation.failure.notice().map(|n| n.generation),
             last_activity: session.last_activity,
+            peek: peek.then(|| peek_text(session)),
         }
     }
 
@@ -31,7 +33,16 @@ impl Summary {
             && self.unread == session.unread
             && self.failure == session.conversation.failure.notice().map(|n| n.generation)
             && self.last_activity == session.last_activity
+            && self
+                .peek
+                .as_ref()
+                .is_none_or(|previous| *previous == peek_text(session))
     }
+}
+
+fn peek_text(session: &Session) -> String {
+    caelum_core::application::presentation::latest_message(&session.conversation.entries)
+        .map_or_else(String::new, |(_, text)| text)
 }
 
 impl Live {
@@ -132,6 +143,28 @@ impl Live {
         {
             return None;
         }
-        Some((index, Summary::new(session)))
+        let peek = provider == Provider::OpenCode
+            && self.panels.screen == crate::panels::Screen::Conversation
+            && self.panels.overlay().is_none()
+            && !self.expanded.is_disjoint(&self.visible_entries)
+            && self.app.selected.is_some_and(|i| {
+                let parent = &self.app.sessions[i];
+                parent.scope == session.scope
+                    && parent
+                        .conversation
+                        .entries
+                        .iter()
+                        .rev()
+                        .filter(|e| e.name == "subagent")
+                        .any(|e| {
+                            let row = (i, e.id.clone());
+                            self.visible_entries.contains(&row)
+                                && self.expanded.contains(&row)
+                                && caelum_core::application::subagents::Subagent::from_entry(e)
+                                    .is_some_and(|t| t.session_id.as_deref() == Some(id))
+                        })
+            })
+            && crate::questions::active(self, index).is_none();
+        Some((index, Summary::new(session, peek)))
     }
 }
