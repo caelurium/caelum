@@ -332,7 +332,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
             .build(k)
             .key("sessions-heading"),
         )
-        .child(projects::filter(s).trigger(k).w_full())
+        .child(projects::filter(s).trigger(k).w_full().h(30.0))
         .child(
             row()
                 .key("session-search-field")

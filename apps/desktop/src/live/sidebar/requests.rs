@@ -51,7 +51,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             ));
         }
     }
-    col()
+    let mut section = col()
         .w_full()
         .min_h(0.0)
         .max_h(180.0)
@@ -61,21 +61,20 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                 .count(seen.len())
                 .build(k)
                 .key("requests-heading"),
-        )
-        .child(
+        );
+    if !seen.is_empty() {
+        section = section.child(
             col()
                 .key("requests-scroll")
                 .w_full()
                 .min_h(0.0)
-                .max_h(if seen.is_empty() { 32.0 } else { 140.0 })
+                .max_h(140.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(if seen.is_empty() {
-                    ui::caption("No pull requests in this scope", k).padding(8.0)
-                } else {
-                    rows
-                })
+                .child(rows)
                 .scroll_bar(k),
-        )
+        );
+    }
+    section
 }

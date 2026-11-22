@@ -28,6 +28,7 @@ pub(super) fn filter(s: &Workspace) -> Select {
         )
         .collect();
     Select::choices("session-project-filter", choices)
+        .appearance(rune_kit::SelectAppearance::Field)
         .label("Filter sessions and pull requests by project")
         .current(Some(l.feed.project.as_deref().unwrap_or("")))
         .open(l.feed.menu == Menu::Filter)
