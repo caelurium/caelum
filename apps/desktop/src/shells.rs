@@ -11,7 +11,7 @@ use caelum_core::application::{
 };
 use caelum_protocol::OpenCodeBackgroundShell;
 use rune::{El, col, row, text};
-use rune_kit::{ButtonVariant, Kit, ScrollBar};
+use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
 pub struct Panel {
     pub index: usize,
@@ -97,11 +97,37 @@ fn header(
     project: &str,
     remote: &str,
     running: bool,
-    prefix: &str,
+    copy_output: Option<&str>,
     k: &Kit,
 ) -> El {
+    let prefix = if copy_output.is_some() { "output-" } else { "" };
     let read = task(project, remote, &shell.id, false);
     let stop = task(project, remote, &shell.id, true);
+    let status = if running {
+        row()
+            .center_y()
+            .gap(5.0)
+            .px(6.0)
+            .py(2.0)
+            .radius(5.0)
+            .fill(k.alpha(k.c.text_accent, 0.12))
+            .child(
+                rune::el()
+                    .size(5.0, 5.0)
+                    .radius(2.5)
+                    .fill(k.c.text_accent)
+                    .a11y_hidden(),
+            )
+            .child(ui::busy_text("Running", k.ty.small, k))
+    } else {
+        text("Finished")
+            .font(k.ty.small)
+            .color(k.c.text_muted)
+            .px(6.0)
+            .py(2.0)
+            .radius(5.0)
+            .fill(k.c.layer_02)
+    };
     row()
         .w_full()
         .center_y()
@@ -116,15 +142,15 @@ fn header(
                 .grow(1.0)
                 .help(&shell.command),
         )
-        .children(running.then(|| ui::busy_text("Running", k.ty.small, k)))
-        .child(ui::caption(
-            if running {
-                duration(now().saturating_sub(shell.started_at))
-            } else {
-                "Finished".into()
-            },
-            k,
-        ))
+        .child(status)
+        .children(running.then(|| ui::caption(duration(now().saturating_sub(shell.started_at)), k)))
+        .children(copy_output.map(|value| {
+            let copy = value.to_owned();
+            quiet_button(&glyphs::COPY, "Copy command output")
+                .on_press_tx(move |_: &mut Workspace, tx| tx.copy(copy.clone()))
+                .build(k)
+                .key(format!("{prefix}copy-shell-{}", shell.id))
+        }))
         .child(
             quiet_button(&ui::REFRESH, "Refresh command output")
                 .disabled(!running || app.services.busy(&read))
@@ -138,10 +164,13 @@ fn header(
             } else {
                 "Stop"
             })
-            .variant(ButtonVariant::GhostMuted)
+            .icon(&crate::STOP)
+            .variant(ButtonVariant::Outline)
             .disabled(!running || app.services.busy(&stop))
             .on_press(move |s: &mut Workspace| live_mut(s).app.task(stop.clone()))
             .build(k)
+            .h(26.0)
+            .px(8.0)
             .key(format!("{prefix}stop-shell-{}", shell.id)),
         )
 }
@@ -217,7 +246,15 @@ pub fn view(s: &Workspace, k: &Kit, index: usize) -> El {
             rune::Color::TRANSPARENT
         } else {
             k.c.layer_01
-        });
+        })
+        .border(
+            1.0,
+            if collapsed {
+                rune::Color::TRANSPARENT
+            } else {
+                k.c.border_base
+            },
+        );
     if collapsed {
         return body.child(summary);
     }
@@ -252,7 +289,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize) -> El {
             &session.scope.project,
             remote,
             true,
-            "",
+            None,
             k,
         ))
         .child(preview)
@@ -335,7 +372,7 @@ pub fn panel(s: &Workspace, k: &Kit) -> El {
         &panel.scope.project,
         &panel.remote,
         running,
-        "output-",
+        Some(output),
         k,
     ));
     if let Some(error) = l
@@ -366,6 +403,8 @@ pub fn panel(s: &Workspace, k: &Kit) -> El {
             .min_h(0.0)
             .radius(8.0)
             .fill(k.c.bg_deep)
+            .border(1.0, k.c.border_base)
+            .clip_rounded(8.0)
             .scroll(rune::ScrollSpec { stick_bottom: true })
             .child(
                 text(output)
