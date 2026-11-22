@@ -47,6 +47,26 @@ fn scope_filters_include_linked_checkouts_but_exclude_closed_archived_and_forgot
 }
 
 #[test]
+fn overview_order_and_membership_are_independent_of_recency_and_sidebar_scope() {
+    let mut app = workspace();
+    let all = [
+        FeedSession::Local(0),
+        FeedSession::Local(1),
+        FeedSession::Local(2),
+    ];
+    app.preferences.session_scope = SessionScope::CurrentProject;
+    app.sessions[1].last_activity = Some(u64::MAX);
+    app.select(2);
+    assert_eq!(app.overview_sessions(""), all);
+    assert_eq!(app.overview_sessions("beta"), [FeedSession::Local(1)]);
+    app.close_project("/beta");
+    app.sessions[2].archive_fixture(ArchiveFixture::Stable(true));
+    assert_eq!(app.overview_sessions(""), [FeedSession::Local(0)]);
+    app.sessions[0].archive_fixture(ArchiveFixture::Forgotten);
+    assert!(app.overview_sessions("").is_empty());
+}
+
+#[test]
 fn search_matches_project_names_branches_and_unicode_worktree_labels() {
     let mut app = workspace();
     app.projects[0].name = "Café".into();

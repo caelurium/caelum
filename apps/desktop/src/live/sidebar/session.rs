@@ -53,8 +53,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     };
     let provider = ui::provider_name(session.scope.provider);
     let age = super::age(session.last_activity, l.feed.displayed_at()).0;
-    let ink = if pending || waiting {
+    let ink = if pending {
         k.c.warning.icon
+    } else if waiting {
+        k.c.text_accent
     } else if error.is_some() {
         k.c.danger.fg
     } else {
@@ -67,7 +69,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             .size(5.0, 5.0)
             .radius(3.0)
             .fill(if pending || waiting {
-                k.c.warning.icon
+                ink
             } else if error.is_some() {
                 k.c.danger.fg
             } else {
@@ -92,7 +94,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         .role("status")
         .label(status)
         .help(status)
-        .color(k.c.warning.fg)
+        .color(ink)
     } else {
         text(&branch).color(k.c.text_muted)
     };
@@ -112,7 +114,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
                 11.0,
             )
             .color(if pending || waiting {
-                k.c.warning.icon
+                ink
             } else {
                 k.c.icon_muted
             }),

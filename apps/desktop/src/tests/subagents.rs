@@ -1,4 +1,5 @@
 use super::*;
+use crate::live;
 use caelum_core::application::{Command, Event, Provider};
 use serde_json::json;
 
@@ -128,6 +129,62 @@ fn parent_activity_takes_precedence_while_subagents_are_running() {
     assert_eq!(activity(state), Some(ActivityKind::Stopping));
     state.live.as_mut().unwrap().app.sessions[0].disconnected = true;
     assert!(activity(state).is_none());
+}
+
+#[test]
+fn peeking_loads_the_child_without_navigating_and_shows_its_own_question() {
+    let mut rt = fixture((800.0, 620.0), "running");
+    let header = "subagent-0-opencode-tool-explore";
+    click(&mut rt, header);
+    click(&mut rt, header);
+    let child = live::live(&rt.state)
+        .app
+        .sessions
+        .iter()
+        .position(|session| session.remote_id.as_deref() == Some("ses_explore"))
+        .unwrap();
+    let delta = || {
+        Event::OpenCode(caelum_protocol::OpenCodeEvent {
+            project_path: "/project".into(),
+            event_type: "session.text.delta".into(),
+            data: json!({"sessionID":"ses_explore","assistantMessageID":"progress","delta":"Checking retries. ","_created":1000}),
+            id: None,
+            created: Some(1000),
+            location: None,
+        })
+    };
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        assert!(l.apply_events([delta()]));
+        assert!(l.apply_events([delta()]), "visible child text changed");
+    });
+    advance(&mut rt, 0.1);
+    assert!(rt.elements().iter().any(|e| !e.exiting && e.text.as_deref() == Some("Checking retries. Checking retries.")));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let session = &l.app.sessions[child];
+        l.apply(Event::Questions(vec![caelum_protocol::QuestionPrompt {
+            provider: session.scope.provider.as_str().into(),
+            project_path: session.scope.project.clone(),
+            session_id: "ses_explore".into(),
+            request_id: "child-question".into(),
+            title: "Should a manual disconnect stop retries?".into(),
+            fields: vec![],
+        }]));
+    });
+    advance(&mut rt, 0.2);
+    assert_eq!(live::live(&rt.state).app.selected, Some(0));
+    assert!(rt.elements().iter().any(
+        |e| !e.exiting && e.text.as_deref() == Some("Should a manual disconnect stop retries?")
+    ));
+    assert!(rt.accessibility_action(header, rune::accesskit::Action::Focus, None));
+    key(&mut rt, Key::Escape, Mods::default());
+    advance(&mut rt, 0.25);
+    assert_eq!(element(&rt, header).expanded, Some(false));
+    rt.update(|s, _| assert!(!s.live.as_mut().unwrap().apply_events([delta()])));
+    let app = &live::live(&rt.state).app;
+    assert_eq!(app.selected, Some(0));
+    assert!(!app.sessions[0].stopping());
 }
 
 #[test]

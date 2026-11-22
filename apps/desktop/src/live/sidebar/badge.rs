@@ -66,10 +66,14 @@ impl State {
             .unwrap_or_else(|| preferred(root))
     }
 
+    pub(super) fn ink(&self, app: &Workspace, path: &str, k: &Kit) -> rune::Color {
+        let (light, dark) = PALETTE[self.index(app, path)];
+        hex(if k.dark { dark } else { light }).unwrap()
+    }
+
     pub(super) fn view(&self, app: &Workspace, path: &str, k: &Kit) -> El {
         let name = crate::checkouts::project_name(app, app.group_path(path));
-        let (light, dark) = PALETTE[self.index(app, path)];
-        let ink = hex(if k.dark { dark } else { light }).unwrap();
+        let ink = self.ink(app, path, k);
         row()
             .key("project-badge")
             .size(18.0, 18.0)

@@ -99,7 +99,7 @@ inline composer choices. Worktree creation provides a selected suggested branch,
 searchable base and automatic location preview. Background commands show three
 visual lines and open a captured-session output reader. Hide/Show collapses them to
 a command-count row, remembered per session during the app run. Sessions waiting on
-background commands show an amber waiting label in the sidebar until foreground
+background commands show a waiting label in the workspace accent until foreground
 work resumes or the last command finishes. User messages use
 content-sized neutral Markdown bubbles with grouped attachments and copy actions.
 Statistics uses summary/chart/token/model sections; timeline has date groups,
@@ -110,9 +110,19 @@ excerpts, highlighted search and stable prompt jumps.
 | Dark workspace | ![Reference dark](previews/react-dark.png) | ![Native dark](previews/rune-dark.png) |
 | Light inspector | ![Reference inspector](previews/react-light-inspector.png) | ![Native inspector](previews/rune-light-inspector.png) |
 
-The conversation title reserves room for one attention signal: **Needs input**
-first, otherwise a link to requested PR changes. The toolbar’s only trailing control
-is the **…** workspace menu. Open **Settings → Appearance** there to change colour mode.
+The project-tinted conversation heading opens the prompt timeline. Beside it,
+**Needs input** takes precedence over a link to requested PR changes. The
+toolbar's tiled button opens the conversation overview (⌘J); **…** still opens
+the workspace menu.
+
+The overview keeps each conversation in the same place as its contents change.
+The cards share the sidebar's project colours and sit over a still version of
+Home's ASCII sky. A pending question or approval takes precedence over a draft
+or excerpt; **needs input** moves between those cards without rearranging them.
+
+| Conversation overview | Compact overview |
+| --- | --- |
+| ![Six conversations across four projects in dark mode](previews/rune-dark-conversation-overview.png) | ![The same conversations in two columns in light mode](previews/rune-light-conversation-overview-small.png) |
 
 | Requested PR changes · compact | Workspace menu · compact |
 | --- | --- |

@@ -104,7 +104,11 @@ impl Workspace {
     pub fn session_feed(&self, project: Option<&str>, query: &str, archived: bool) -> Vec<usize> {
         let query = query.trim().to_lowercase();
         let mut indices: Vec<_> = self
-            .matching_local_sessions(project, &query, archived)
+            .matching_local_sessions(
+                |path| self.feed_includes_project(path, project),
+                &query,
+                archived,
+            )
             .map(|(index, _)| index)
             .collect();
         indices
@@ -114,7 +118,7 @@ impl Workspace {
 
     fn matching_local_sessions<'a>(
         &'a self,
-        project: Option<&'a str>,
+        includes: impl Fn(&str) -> bool + 'a,
         query: &'a str,
         archived: bool,
     ) -> impl Iterator<Item = (usize, &'a Session)> + 'a {
@@ -124,7 +128,7 @@ impl Workspace {
             .filter(move |(_, session)| {
                 !session.forgotten()
                     && session.archived() == archived
-                    && self.feed_includes_project(&session.scope.project, project)
+                    && includes(&session.scope.project)
                     && (query.is_empty()
                         || format!(
                             "{} {} {} {} {} {}",

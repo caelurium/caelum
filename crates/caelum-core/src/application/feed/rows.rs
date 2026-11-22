@@ -42,14 +42,40 @@ impl Workspace {
         query: &str,
         archived: bool,
     ) -> Vec<FeedSession> {
+        let mut rows = self.feed_rows(
+            |path| self.feed_includes_project(path, project),
+            query,
+            archived,
+        );
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
+    /// Open conversations across all projects, in identity order so activity never moves a tile.
+    pub fn overview_sessions(&self, query: &str) -> Vec<FeedSession> {
+        let mut rows: Vec<_> = self
+            .feed_rows(|path| self.project_is_open(path), query, false)
+            .into_iter()
+            .map(|(_, row)| row)
+            .collect();
+        rows.sort_unstable();
+        rows
+    }
+
+    fn feed_rows(
+        &self,
+        includes: impl Fn(&str) -> bool,
+        query: &str,
+        archived: bool,
+    ) -> Vec<(Reverse<Option<u64>>, FeedSession)> {
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
-            .matching_local_sessions(project, &query, archived)
+            .matching_local_sessions(&includes, &query, archived)
             .map(|(i, s)| (Reverse(s.last_activity), FeedSession::Local(i)))
             .collect();
         if !archived {
             for (id, c) in &self.remote.saved.checkouts {
-                if !self.feed_includes_project(&c.source.project, project) {
+                if !includes(&c.source.project) {
                     continue;
                 }
                 let matches_vm = query.is_empty() || {
@@ -89,7 +115,6 @@ impl Workspace {
                 }
             }
         }
-        rows.sort_unstable();
-        rows.into_iter().map(|(_, row)| row).collect()
+        rows
     }
 }

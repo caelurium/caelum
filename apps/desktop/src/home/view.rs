@@ -27,7 +27,9 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
     } else {
         background
     };
-    let background = background.children(k.dark.then(|| super::art::view(reduced_motion)));
+    let background = background.children(
+        (k.dark && l.panels.overlay().is_none()).then(|| super::art::view(reduced_motion)),
+    );
     let content = col()
         .key("home-content")
         .w_full()
