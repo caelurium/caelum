@@ -15,7 +15,34 @@ pub(crate) fn heading(s: &Workspace, k: &Kit) -> El {
             .app
             .session_worktree(session)
             .map_or_else(|| name.to_owned(), |tree| format!("{name} / {tree}"));
+        let branch = l.app.session_branch(session);
         let ink = l.feed.project_ink(&l.app, path, k);
+        let eyebrow = row()
+            .center_y()
+            .min_w(0.0)
+            .gap(6.0)
+            .child(
+                text(project)
+                    .font(k.ty.small)
+                    .color(k.c.text_muted)
+                    .truncate(),
+            )
+            .children(branch.map(|branch| {
+                row()
+                    .center_y()
+                    .gap(3.0)
+                    .px(5.0)
+                    .py(1.0)
+                    .radius(4.0)
+                    .fill(k.c.layer_02)
+                    .child(icon(&ui::BRANCH, 10.0).color(k.c.icon_muted).a11y_hidden())
+                    .child(
+                        text(branch)
+                            .font(rune::TextStyle::new(10.5, 450.0))
+                            .color(k.c.text_muted)
+                            .truncate(),
+                    )
+            }));
         let title = k
             .interactive(
                 col()
@@ -23,12 +50,7 @@ pub(crate) fn heading(s: &Workspace, k: &Kit) -> El {
                     .shrink()
                     .px(5.0)
                     .radius(5.0)
-                    .child(
-                        text(project)
-                            .font(k.ty.small)
-                            .color(k.c.text_muted)
-                            .truncate(),
-                    )
+                    .child(eyebrow)
                     .child(
                         row()
                             .center_y()

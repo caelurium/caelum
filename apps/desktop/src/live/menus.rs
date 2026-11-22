@@ -195,7 +195,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                 } else {
                     "Undo"
                 })
-                .variant(ButtonVariant::GhostMuted)
+                .variant(ButtonVariant::Outline)
                 .disabled(session.archiving())
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
@@ -205,6 +205,8 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                     }
                 })
                 .build(k)
+                .h(28.0)
+                .px(10.0)
                 .key("undo-archive"),
             )
             .child(
