@@ -48,7 +48,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit, state: &State) -> El {
         .gap(12.0)
         .child(icon(&crate::ORBIT, if compact { 26.0 } else { 32.0 }).color(k.c.text_accent))
         .child(
-            text("Conversations")
+            text("Active conversations")
                 .font(TextStyle::new(if compact { 26.0 } else { 34.0 }, 550.0))
                 .color(k.c.text_base)
                 .grow(1.0)
@@ -62,7 +62,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit, state: &State) -> El {
         );
     let search = ui::field(
         &state.search,
-        "Filter conversations",
+        "Filter active conversations",
         "Filter by title, project or branch…",
         k,
     )
@@ -127,15 +127,15 @@ pub(crate) fn view(s: &Workspace, k: &Kit, state: &State) -> El {
         .child(el().grow(1.0))
         .child(search);
     let body = if rows.is_empty() {
-        let (title, detail) = if state.search.text.is_empty() {
+        let (title, detail) = if state.search.text.trim().is_empty() {
             (
-                "No conversations yet",
-                "Open a project and start a session to see it here.",
+                "No active conversations",
+                "Conversations appear here while work is running, queued or waiting for your input.",
             )
         } else {
             (
-                "No matches",
-                "Try a different session title, project or branch.",
+                "No matching active conversations",
+                "Try a different title, project or branch.",
             )
         };
         col()
@@ -193,17 +193,11 @@ fn grid(rows: Vec<FeedSession>, state: &State, compact: bool, k: &Kit) -> El {
                     .h(height)
                     .pb(10.0)
                     .gap(12.0);
-                for id in chunk {
-                    line = line.child(card::tile(
-                        s,
-                        id,
-                        selected.as_ref() == Some(id),
-                        compact,
-                        &kit,
-                    ));
-                }
-                for _ in chunk.len()..columns {
-                    line = line.child(el().grow(1.0).min_w(0.0));
+                for col_index in 0..columns {
+                    let tile = chunk
+                        .get(col_index)
+                        .map(|id| card::tile(s, id, selected.as_ref() == Some(id), compact, &kit));
+                    line = line.child(col().grow(1.0).min_w(0.0).h_full().children(tile));
                 }
                 line
             },

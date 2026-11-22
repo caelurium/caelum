@@ -115,14 +115,16 @@ The project-tinted conversation heading opens the prompt timeline. Beside it,
 toolbar's tiled button opens the conversation overview (⌘J); **…** still opens
 the workspace menu.
 
-The overview keeps each conversation in the same place as its contents change.
-The cards share the sidebar's project colours and sit over a still version of
-Home's ASCII sky. A pending question or approval takes precedence over a draft
-or excerpt; **needs input** moves between those cards without rearranging them.
+The overview shows conversations with running or queued work, or a question or
+approval waiting for the reader. Cards disappear when conversations go idle;
+those still active keep their relative order. They share the sidebar's project
+colours and sit over a still version of Home's ASCII sky. **Needs input** moves
+between pending requests. When all work finishes, the [idle overview](previews/rune-light-conversation-overview-idle-small.png)
+explains which conversations will appear.
 
 | Conversation overview | Compact overview |
 | --- | --- |
-| ![Six conversations across four projects in dark mode](previews/rune-dark-conversation-overview.png) | ![The same conversations in two columns in light mode](previews/rune-light-conversation-overview-small.png) |
+| ![Active conversations with a question, a running turn, an approval and a queued prompt](previews/rune-dark-conversation-overview.png) | ![The same active conversations in two columns in light mode](previews/rune-light-conversation-overview-small.png) |
 
 | Requested PR changes · compact | Workspace menu · compact |
 | --- | --- |

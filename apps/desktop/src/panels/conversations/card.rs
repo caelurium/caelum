@@ -2,23 +2,19 @@ use super::{choose, tile_key};
 use crate::{Workspace, checkouts, live::live, ui};
 use caelum_core::{
     application::{
-        EntryKind, FeedSession,
-        presentation::{excerpt, latest_message, visible_text},
+        EntryKind, FeedSession, OverviewActivity,
+        presentation::{ActivityKind, excerpt},
     },
-    remote::{Message, Speaker, Turn},
+    remote::Turn,
 };
 use rune::{Color, El, Icon, TextStyle, col, el, icon, row, text};
-use rune_kit::{Kit, glyphs};
+use rune_kit::Kit;
 
 enum Note {
     Question(String),
     Approval(String),
     Working(String),
-    Draft(String),
-    Reply(String),
-    Prompt(String),
-    Error(String),
-    Empty(&'static str),
+    Queued(String),
 }
 
 impl Note {
@@ -27,107 +23,55 @@ impl Note {
             Self::Question(v) => ("Needs your input", &ui::BELL, k.c.warning.fg, v),
             Self::Approval(v) => ("Approval needed", &ui::BELL, k.c.warning.fg, v),
             Self::Working(v) => ("In progress", &ui::CLOCK, k.c.text_accent, v),
-            Self::Draft(v) => ("Unsent draft", &ui::EDIT, k.c.text_muted, v),
-            Self::Reply(v) => ("Latest reply", &glyphs::SPARKLE, k.c.text_muted, v),
-            Self::Prompt(v) => ("Last prompt", &ui::EDIT, k.c.text_muted, v),
-            Self::Error(v) => ("Needs attention", &ui::BELL, k.c.danger.fg, v),
-            Self::Empty(v) => ("Conversation", &crate::ORBIT, k.c.text_muted, v),
+            Self::Queued(v) => ("Queued", &ui::CLOCK, k.c.text_muted, v),
         }
     }
 }
 
-fn local_note(s: &Workspace, index: usize) -> Note {
+fn local_note(s: &Workspace, index: usize) -> Option<Note> {
     let l = live(s);
     let session = &l.app.sessions[index];
-    if let Some(question) = crate::questions::preview(l, index) {
-        return Note::Question(question);
-    }
-    if let Some(p) = l.app.approvals.iter().find(|p| {
-        p.project_path == session.scope.project
-            && p.provider == session.scope.provider.as_str()
-            && (p.session_id.is_none() || p.session_id == session.remote_id)
-    }) {
-        return Note::Approval(excerpt(&p.summary));
-    }
-    if let Some(error) = session.error.as_deref().or_else(|| {
-        session
-            .conversation
-            .failure
-            .notice()
-            .map(|n| n.message.as_str())
-    }) {
-        return Note::Error(excerpt(error));
-    }
-    if let Some(activity) = crate::activity::session_activity(s, index) {
-        let task = (activity.kind
-            == caelum_core::application::presentation::ActivityKind::Background)
-            .then(|| {
-                session
-                    .conversation
-                    .entries
-                    .iter()
-                    .rev()
-                    .take_while(|e| e.kind() != EntryKind::User)
-                    .find(|e| e.name == "subagent" && !e.complete())
-                    .and_then(caelum_core::application::subagents::Subagent::from_entry)
+    Some(match l.app.overview_activity(session)? {
+        OverviewActivity::Question => Note::Question(crate::questions::preview(l, index)?),
+        OverviewActivity::Approval(summary) => Note::Approval(excerpt(summary)),
+        OverviewActivity::Agent => {
+            let activity = crate::activity::session_activity(s, index);
+            let task = activity
+                .as_ref()
+                .filter(|a| a.kind == ActivityKind::Background)
+                .and_then(|_| {
+                    session
+                        .conversation
+                        .entries
+                        .iter()
+                        .rev()
+                        .take_while(|e| e.kind() != EntryKind::User)
+                        .find(|e| e.name == "subagent" && !e.complete())
+                })
+                .and_then(caelum_core::application::subagents::Subagent::from_entry);
+            Note::Working(match task {
+                Some(t) => excerpt(&t.description),
+                None => activity.map_or_else(|| "Working…".into(), |a| a.label),
             })
-            .flatten();
-        return Note::Working(task.map_or(activity.label, |t| excerpt(&t.description)));
-    }
-    let draft = l
-        .drafts
-        .get(index)
-        .map_or(session.draft.as_str(), |d| &d.text);
-    if !draft.trim().is_empty() {
-        return Note::Draft(excerpt(draft));
-    }
-    if let Some(a) = session.attachments.first() {
-        return Note::Draft(format!("Attachment · {}", excerpt(&a.path)));
-    }
-    if let Some((kind, shown)) = latest_message(&session.conversation.entries) {
-        return if kind == EntryKind::User {
-            Note::Prompt(shown)
-        } else {
-            Note::Reply(shown)
-        };
-    }
-    Note::Empty(if session.remote_id.is_some() {
-        "Open to read the conversation."
-    } else {
-        "Ready for a first message."
+        }
+        OverviewActivity::Command => Note::Working("Running a provider command…".into()),
+        OverviewActivity::SideQuestion => Note::Working("Answering a side question…".into()),
+        OverviewActivity::Queued(prompt) => {
+            Note::Queued(excerpt(crate::panels::queue::queued_preview(prompt)))
+        }
     })
 }
 
-fn vm_note(t: &caelum_core::remote::Thread) -> Note {
+fn vm_note(t: &caelum_core::remote::Thread) -> Option<Note> {
     let status = match t.turn {
-        Turn::Idle => None,
-        Turn::Submitting => Some("Sending the prompt…"),
-        Turn::Queued(_) => Some("Queued on the VM…"),
-        Turn::Following(_) => Some("Working on the VM…"),
-        Turn::Finishing(_) => Some("Receiving final updates…"),
-        Turn::Stopping(_) => Some("Stopping the turn…"),
+        Turn::Idle => return None,
+        Turn::Queued(_) => return Some(Note::Queued("Waiting to run on the VM…".into())),
+        Turn::Submitting => "Sending the prompt…",
+        Turn::Following(_) => "Working on the VM…",
+        Turn::Finishing(_) => "Receiving final updates…",
+        Turn::Stopping(_) => "Stopping the turn…",
     };
-    if let Some(status) = status {
-        return Note::Working(status.into());
-    }
-    if !t.draft.trim().is_empty() {
-        return Note::Draft(excerpt(&t.draft));
-    }
-    for line in t.lines.iter().rev() {
-        if line.speaker.is_assistant() {
-            return Note::Reply(excerpt(&visible_text(&line.text)));
-        }
-        if line.speaker == Speaker::You {
-            return Note::Prompt(excerpt(&line.text));
-        }
-    }
-    if let Some(message) = t.continued.as_ref().and_then(|c| c.chat.messages.last()) {
-        return match message {
-            Message::User(v) => Note::Prompt(excerpt(v)),
-            Message::Assistant(v) => Note::Reply(excerpt(&visible_text(v))),
-        };
-    }
-    Note::Empty("Ready for a first message.")
+    Some(Note::Working(status.into()))
 }
 
 pub(super) fn tile(
@@ -165,6 +109,9 @@ pub(super) fn tile(
             )
         }
     };
+    let Some(note) = note else {
+        return el();
+    };
     let name = checkouts::project_name(app, app.group_path(project));
     let identity = destination.map_or_else(|| name.to_owned(), |d| format!("{name} / {d}"));
     let ink = l.feed.project_ink(app, project, k);
@@ -172,8 +119,7 @@ pub(super) fn tile(
     let owner = id.clone();
     k.interactive(
         col()
-            .min_w(0.0)
-            .grow(1.0)
+            .w_full()
             .h_full()
             .px(if compact { 14.0 } else { 18.0 })
             .py(if compact { 11.0 } else { 16.0 })

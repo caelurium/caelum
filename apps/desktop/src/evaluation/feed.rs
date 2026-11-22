@@ -124,7 +124,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
 }
 
 fn overview(l: &mut Live) {
-    use caelum_core::application::{Entry, EntryKind};
+    use caelum_core::application::{Entry, EntryKind, QueuedPrompt};
     let session = &mut l.app.sessions[1];
     session.title = "Reconnect after sleep".into();
     session.remote_id = Some("reconnect-example".into());
@@ -147,14 +147,19 @@ fn overview(l: &mut Live) {
         true,
     ));
     l.app.sessions[3].conversation.set_working(true);
-    l.app.sessions[4].conversation.entries.push(Entry::new(
-        "landing".into(),
-        EntryKind::Assistant,
-        "The new layout is ready. Both themes now use the same reading width.".into(),
-        true,
-    ));
-    l.drafts[5]
-        .replace_text("Compare the cold and incremental build times before the next release.");
+    let session = &l.app.sessions[4];
+    l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+        provider: session.scope.provider.as_str().into(),
+        project_path: session.scope.project.clone(),
+        session_id: session.remote_id.clone(),
+        request_id: "preview-site".into(),
+        summary: "Allow the agent to start the preview server?".into(),
+        description: String::new(),
+    });
+    l.app.sessions[5].queue.push(QueuedPrompt {
+        text: "Compare the cold and incremental build times before the next release.".into(),
+        options: Default::default(),
+    });
 }
 
 pub(super) fn sidebar_projects(l: &mut Live, project: &str) {

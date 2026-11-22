@@ -26,6 +26,7 @@ interactions = {
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
     "question-pending": ("questions", [{"t": 0.25, "key": "question-submit-fixture"}]),
     "session-feed-filter": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}]),
+    "conversation-overview-idle": ("session-feed", [{"t": 0.25, "key": "open-conversations"}]),
     "session-feed-search": ("session-feed", [{"t": 0.25, "key": "session-search"}, {"t": 0.4, "paste": "focus"}]),
     "session-feed-project": ("session-feed", [{"t": 0.25, "key": "session-project-filter-trigger"}, {"t": 0.5, "key": "option2"}]),
     "composer-focus": ("", [{"t": 0.25, "key": "live-draft-0"}]),

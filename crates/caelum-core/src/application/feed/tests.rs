@@ -57,6 +57,18 @@ fn overview_order_and_membership_are_independent_of_recency_and_sidebar_scope() 
     app.preferences.session_scope = SessionScope::CurrentProject;
     app.sessions[1].last_activity = Some(u64::MAX);
     app.select(2);
+    app.sessions[2].draft = "Return to this draft".into();
+    app.sessions[1].unread = true;
+    app.sessions[0].error = Some("The previous turn failed.".into());
+    assert!(app.overview_sessions("").is_empty());
+    assert!(app.overview_sessions("beta").is_empty());
+    assert_eq!(
+        app.sidebar_sessions(Some("/beta"), "beta", false),
+        [FeedSession::Local(1)]
+    );
+    for session in &mut app.sessions {
+        session.conversation.set_working(true);
+    }
     assert_eq!(app.overview_sessions(""), all);
     assert_eq!(app.overview_sessions("beta"), [FeedSession::Local(1)]);
     app.close_project("/beta");
@@ -64,6 +76,58 @@ fn overview_order_and_membership_are_independent_of_recency_and_sidebar_scope() 
     assert_eq!(app.overview_sessions(""), [FeedSession::Local(0)]);
     app.sessions[0].archive_fixture(ArchiveFixture::Forgotten);
     assert!(app.overview_sessions("").is_empty());
+}
+
+#[test]
+fn overview_keeps_queued_and_background_work_only_while_it_is_live() {
+    let mut app = workspace();
+    app.sessions[0].conversation.set_working(true);
+    assert!(app.send(0, "Next prompt".into()));
+    app.sessions[0].conversation.set_working(false);
+    app.sessions[1].scope.provider = Provider::OpenCode;
+    let item = json!({"type":"user", "payload":{"text":"Next on the provider"}});
+    app.sessions[1].inbox.event(
+        "session.inbox.enqueued",
+        &json!({"inboxID":"next", "item":item}),
+    );
+    app.sessions[2].shells.push(
+        serde_json::from_value(json!({"id":"build", "command":"cargo build", "startedAt":1}))
+            .unwrap(),
+    );
+    assert_eq!(app.overview_sessions(""), [0, 1, 2].map(FeedSession::Local));
+
+    app.sessions[0].queue_paused = true;
+    let inbox = &mut app.sessions[1].inbox;
+    inbox.settle("next");
+    inbox.enqueue("failed".into(), "Undelivered prompt".into(), 12);
+    inbox.complete_mutation("failed", 12, Err("Delivery failed".into()));
+    assert_eq!(app.overview_sessions(""), [FeedSession::Local(2)]);
+    app.sessions[2].disconnected = true;
+    assert!(app.overview_sessions("").is_empty());
+}
+
+#[test]
+fn overview_does_not_activate_idle_conversations_for_a_project_wide_approval() {
+    let mut app = workspace();
+    let other = app.new_session(app.sessions[0].scope.clone());
+    app.approvals.push(caelum_protocol::ApprovalPrompt {
+        provider: "codex".into(),
+        project_path: "/alpha".into(),
+        session_id: None,
+        request_id: "approval".into(),
+        summary: "Allow the operation?".into(),
+        description: String::new(),
+    });
+    assert!(app.overview_sessions("").is_empty());
+    app.sessions[other].conversation.set_working(true);
+    assert_eq!(app.overview_sessions(""), [FeedSession::Local(other)]);
+    app.approvals[0].session_id = app.sessions[0].remote_id.clone();
+    assert_eq!(
+        app.overview_sessions(""),
+        [0, other].map(FeedSession::Local)
+    );
+    app.approvals.clear();
+    assert_eq!(app.overview_sessions(""), [FeedSession::Local(other)]);
 }
 
 #[test]

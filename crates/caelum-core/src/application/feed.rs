@@ -2,7 +2,9 @@
 use super::{Session, Task, Workspace};
 use serde::{Deserialize, Serialize};
 
+mod active;
 mod rows;
+pub use active::OverviewActivity;
 pub use rows::FeedSession;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

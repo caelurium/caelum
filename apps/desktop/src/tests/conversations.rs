@@ -1,5 +1,8 @@
 use super::*;
-use crate::{live::live, panels::Screen};
+use crate::{
+    live::{live, live_mut},
+    panels::Screen,
+};
 use caelum_core::application::{Command, Entry, EntryKind, Event};
 
 fn overview_shortcut(rt: &mut Runtime<Workspace>) {
@@ -27,7 +30,9 @@ fn tile_shows(rt: &Runtime<Workspace>, key: &str, content: &str) -> bool {
 fn overview_preserves_the_reading_place_and_native_draft_through_escape_and_switches() {
     let mut rt = design_runtime("session-feed", (800.0, 620.0));
     rt.update(|s, _| {
-        let session = &mut s.live.as_mut().unwrap().app.sessions[0];
+        let sessions = &mut live_mut(s).app.sessions;
+        sessions[1].conversation.set_working(true);
+        let session = &mut sessions[0];
         session.conversation.entries = (0..60)
             .map(|i| {
                 Entry::new(
@@ -92,14 +97,28 @@ fn overview_preserves_the_reading_place_and_native_draft_through_escape_and_swit
 
 #[test]
 fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows() {
-    for (size, down) in [((800.0, 620.0), 2), ((1280.0, 1000.0), 3)] {
+    for (size, down) in [((800.0, 620.0), 4), ((1280.0, 1000.0), 5)] {
         let mut rt = design_runtime("conversation-overview", size);
         let tile = "overview-session-1";
         let rect = element(&rt, tile).rect;
+        assert!((element(&rt, "overview-session-5").rect[2] - rect[2]).abs() <= 1.0);
         assert!(tile_shows(&rt, tile, "Should a manual disconnect"));
+        assert!(rt.find("overview-session-0").is_none());
+        assert!(rt.find("overview-session-2").is_none());
+        assert!(tile_shows(
+            &rt,
+            "overview-session-4",
+            "Allow the agent to start the preview"
+        ));
+        assert!(tile_shows(
+            &rt,
+            "overview-session-5",
+            "Compare the cold and incremental"
+        ));
         rt.update(|s, _| {
             let l = s.live.as_mut().unwrap();
             l.app.sessions[1].last_activity = Some(u64::MAX);
+            l.app.sessions[1].conversation.set_working(true);
             l.drafts[1].replace_text("Return to this draft");
             let mut wrong_project = l.app.questions[0].clone();
             wrong_project.project_path = "/projects/rune".into();
@@ -107,8 +126,8 @@ fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows(
         });
         advance(&mut rt, 0.25);
         assert_eq!(element(&rt, tile).rect, rect);
-        assert!(tile_shows(&rt, tile, "Unsent draft"));
-        assert!(tile_shows(&rt, tile, "Return to this draft"));
+        assert!(tile_shows(&rt, tile, "In progress"));
+        assert!(!tile_shows(&rt, tile, "Return to this draft"));
         key(&mut rt, Key::Down, Mods::default());
         key(&mut rt, Key::Enter, Mods::default());
         advance(&mut rt, 0.3);
@@ -118,12 +137,55 @@ fn overview_updates_the_question_in_place_and_opens_the_tile_chosen_with_arrows(
 }
 
 #[test]
+fn overview_adds_and_removes_background_sessions_live_under_the_current_search() {
+    let mut rt = design_runtime("session-feed", (800.0, 620.0));
+    overview_shortcut(&mut rt);
+    assert!(tile_shows(
+        &rt,
+        "conversation-overview",
+        "No active conversations"
+    ));
+    fill(&mut rt, "overview-search", "keyboard focus");
+    assert!(tile_shows(
+        &rt,
+        "conversation-overview",
+        "No matching active conversations"
+    ));
+    let event = |method: &str| {
+        Event::Codex(caelum_protocol::CodexEvent {
+            project_path: "/projects/rune".into(),
+            method: method.into(),
+            params: serde_json::json!({"threadId":"fixture-3", "turn":{"id":"turn"}}),
+            request_id: None,
+        })
+    };
+    rt.update(|s, _| assert!(live_mut(s).apply_events([event("turn/started")])));
+    advance(&mut rt, 0.25);
+    assert!(tile_shows(&rt, "overview-session-3", "In progress"));
+    rt.update(|s, _| assert!(live_mut(s).apply_events([event("turn/completed")])));
+    advance(&mut rt, 0.25);
+    assert!(rt.find("overview-session-3").is_none());
+    assert!(tile_shows(
+        &rt,
+        "conversation-overview",
+        "No matching active conversations"
+    ));
+    key(&mut rt, Key::Enter, Mods::default());
+    assert!(element(&rt, "overview-search").focused);
+    assert_eq!(live(&rt.state).app.selected, Some(0));
+}
+
+#[test]
 fn overview_windows_large_projects_and_finds_sessions_outside_the_sidebar_filter() {
     let mut rt = design_runtime("session-feed-many", (800.0, 620.0));
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.feed.project = Some("/projects/caelum".into());
         l.panels.sessions.replace_text("no match");
+        for session in l.app.sessions.iter_mut().filter(|s| s.title.ends_with('9')) {
+            session.conversation.set_working(true);
+        }
+        assert_eq!(l.app.overview_sessions("").len(), 200);
     });
     click(&mut rt, "open-conversations");
     advance(&mut rt, 0.4);
@@ -138,6 +200,12 @@ fn overview_windows_large_projects_and_finds_sessions_outside_the_sidebar_filter
         })
         .count();
     assert!((2..64).contains(&mounted), "{mounted} mounted");
+    fill(&mut rt, "overview-search", "Historical session 1998");
+    assert!(tile_shows(
+        &rt,
+        "conversation-overview",
+        "No matching active conversations"
+    ));
     fill(&mut rt, "overview-search", "Historical session 1999");
     key(&mut rt, Key::Enter, Mods::default());
     advance(&mut rt, 0.3);
@@ -153,8 +221,8 @@ fn overview_windows_large_projects_and_finds_sessions_outside_the_sidebar_filter
 fn overview_opens_the_scoped_vm_thread_and_preserves_its_draft() {
     let mut rt = design_runtime("", (800.0, 620.0));
     rt.update(|s, _| {
-        crate::remote::scene(s, "remote-machine");
-        s.live.as_mut().unwrap().panels.set_overlay(None);
+        crate::remote::scene(s, "remote-working");
+        live_mut(s).app.sessions[0].conversation.set_working(true);
     });
     advance(&mut rt, 0.3);
     fill(
@@ -175,7 +243,7 @@ fn overview_opens_the_scoped_vm_thread_and_preserves_its_draft() {
         .expect("scoped VM tile");
     let vm = target.key.unwrap();
     assert!(tile_shows(&rt, &vm, "dev-01"));
-    assert!(tile_shows(&rt, &vm, "Keep this VM draft"));
+    assert!(tile_shows(&rt, &vm, "Working on the VM"));
     click(&mut rt, "overview-session-0");
     assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
     overview_shortcut(&mut rt);
@@ -192,6 +260,19 @@ fn overview_opens_the_scoped_vm_thread_and_preserves_its_draft() {
             .as_deref(),
         Some("Keep this VM draft")
     );
+    overview_shortcut(&mut rt);
+    rt.update(|s, _| {
+        let c = live_mut(s)
+            .app
+            .remote
+            .saved
+            .checkouts
+            .get_mut("checkout-example")
+            .unwrap();
+        c.thread.turn = caelum_core::remote::Turn::Idle;
+    });
+    advance(&mut rt, 0.25);
+    assert!(rt.find(&vm).is_none());
 }
 
 #[test]

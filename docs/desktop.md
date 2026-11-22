@@ -42,10 +42,11 @@ create it, even before its first message. Select any of the VM’s chats to
 return to its transcript and draft.
 
 **⌘J** (**Ctrl+J** on Linux) or the tiled **Conversation overview** button in
-the toolbar shows conversations across all open projects, including VMs.
-Each tile shows a pending question or approval, activity, an unsent draft or the
-latest loaded message. Activity updates in place. Filter by title, project or
-branch, or click **needs input** to highlight the next outstanding request.
+the toolbar shows only active conversations across open projects, including VMs.
+A conversation appears while work is running or queued, or while a question or
+approval is waiting for you. Once it’s idle, its tile disappears; you can still
+find it and its draft in **Sessions**. Filter active conversations by title,
+project or branch, or click **needs input** to highlight the next request.
 Use the arrows and Return, or click a tile, to resume a conversation at its
 reading position. Escape or the same shortcut returns to the previous view.
 The sidebar filter and each session's draft stay independent.

@@ -1,6 +1,6 @@
 use super::*;
 use crate::live;
-use caelum_core::application::{Command, Event, Provider};
+use caelum_core::application::{Command, Event, FeedSession, Provider};
 use serde_json::json;
 
 fn fixture(size: (f32, f32), status: &str) -> Runtime<Workspace> {
@@ -22,6 +22,10 @@ fn tasks_show_named_progress_complete_in_place_and_copy_prompt_and_result() {
         let clipboard = rune::clipboard::memory();
         rt.use_clipboard(&clipboard);
         let key = "subagent-0-opencode-tool-explore";
+        assert_eq!(
+            live::live(&rt.state).app.overview_sessions(""),
+            [FeedSession::Local(0)]
+        );
         assert!(element(&rt, key).visible[3] > 0.0);
         assert_eq!(element(&rt, key).expanded, Some(true));
         assert_eq!(
@@ -52,6 +56,7 @@ fn tasks_show_named_progress_complete_in_place_and_copy_prompt_and_result() {
         assert_eq!(element(&rt, key).expanded, Some(false));
         assert!(rt.find("session-activity").is_none());
         assert!(rt.find("session-waiting-0").is_none());
+        assert!(live::live(&rt.state).app.overview_sessions("").is_empty());
         assert!(
             rt.elements()
                 .iter()
