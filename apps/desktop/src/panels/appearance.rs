@@ -135,9 +135,7 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
                 .key(format!("session-scope-{key}"))
                 .grow(1.0)
                 .on_press(move |s: &mut Workspace| {
-                    let l = live_mut(s);
-                    l.app.preferences.session_scope = scope;
-                    l.feed.project = None;
+                    live_mut(s).app.preferences.session_scope = scope;
                 }),
         );
     }

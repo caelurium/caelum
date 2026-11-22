@@ -17,7 +17,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
         .gap(4.0)
         .focus_group();
     for (project, checkout) in &app.services.checkouts {
-        if !app.feed_includes_project(project, l.feed.project.as_deref()) {
+        if !app.feed_includes_project(project, None) {
             continue;
         }
         for pr in &checkout.pull_requests {

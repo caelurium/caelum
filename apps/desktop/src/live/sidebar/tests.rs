@@ -115,10 +115,6 @@ fn pull_requests_refresh_on_scope_and_navigation_changes_but_not_search_or_idle_
         state.poll(&mut app, query, archived, &mut tx, false);
         assert!(app.commands().is_empty());
     }
-    state.project = Some("/first".into());
-    state.poll(&mut app, "", false, &mut tx, false);
-    assert_eq!(finish_refreshes(&mut app), ["/first"]);
-    state.project = None;
     app.preferences.session_scope = SessionScope::CurrentProject;
     state.poll(&mut app, "", false, &mut tx, false);
     assert_eq!(finish_refreshes(&mut app), ["/first"]);
@@ -131,13 +127,9 @@ fn pull_requests_refresh_on_scope_and_navigation_changes_but_not_search_or_idle_
     app.select(0);
     state.poll(&mut app, "", false, &mut tx, false);
     assert_eq!(finish_refreshes(&mut app), ["/first"]);
-    state.project = Some("/second".into());
-    state.poll(&mut app, "", false, &mut tx, false);
-    assert_eq!(finish_refreshes(&mut app), ["/second"]);
     app.close_project("/second");
     state.poll(&mut app, "", false, &mut tx, false);
-    assert!(state.project.is_none());
-    assert_eq!(finish_refreshes(&mut app), ["/first"]);
+    assert!(app.commands().is_empty());
 }
 
 fn finish_refreshes(app: &mut Workspace) -> Vec<String> {

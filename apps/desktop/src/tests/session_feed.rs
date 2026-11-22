@@ -290,10 +290,9 @@ fn feed_filters_and_scope_keep_session_identity_drafts_and_saved_preferences() {
             rt.state.live.as_ref().unwrap().drafts[0].text,
             "Keep café draft"
         );
-        click(&mut rt, "session-project-filter-trigger");
-        click(&mut rt, "option1");
+        assert!(rt.find("session-project-filter-trigger").is_none());
         assert!(rt.find("live-session-0").is_some());
-        assert!(rt.find("live-session-3").is_none());
+        assert!(rt.find("live-session-3").is_some());
         assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(3));
         assert_eq!(
             rt.state
@@ -376,21 +375,6 @@ fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_
         fill(&mut rt, "live-draft-0", "Preserve this café draft");
         assert!(rt.find(&rune).is_some());
         assert!(rt.find(&website).is_some());
-        click(&mut rt, "session-project-filter-trigger");
-        click(&mut rt, "option2");
-        assert!(rt.find(&rune).is_some());
-        assert!(rt.find(&website).is_none());
-        assert_eq!(rt.state.live.as_ref().unwrap().app.selected, Some(0));
-        assert_eq!(
-            rt.state
-                .live
-                .as_ref()
-                .unwrap()
-                .app
-                .active_project
-                .as_deref(),
-            Some("/projects/caelum")
-        );
         fill(&mut rt, "session-search", "no session matches");
         assert!(
             rt.find(&rune).is_some(),
@@ -407,10 +391,6 @@ fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_
             element(&rt, &rune).focused,
             "context menu returns to the URL-owned row"
         );
-        click(&mut rt, "session-project-filter-trigger");
-        click(&mut rt, "option3");
-        assert!(rt.find(&rune).is_none());
-        assert!(rt.find(&website).is_some());
         reveal(&mut rt, &website);
         click(&mut rt, &website);
         assert_eq!(
@@ -421,10 +401,6 @@ fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_
             rt.state.live.as_ref().unwrap().drafts[0].text,
             "Preserve this café draft"
         );
-        click(&mut rt, "session-project-filter-trigger");
-        click(&mut rt, "option0");
-        assert!(rt.find(&rune).is_some());
-        assert!(rt.find(&website).is_some());
         rt.update(|s, _| {
             s.live.as_mut().unwrap().app.preferences.session_scope = SessionScope::CurrentProject
         });
