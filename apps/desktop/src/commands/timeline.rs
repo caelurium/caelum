@@ -136,30 +136,34 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                                     .min_w(0.0)
                                     .gap(4.0)
                                     .child(
-                                        text(&excerpt)
-                                            .spans(highlights(&excerpt))
-                                            .font(kit.ty.ui)
-                                            .color(kit.c.text_base)
-                                            .truncate(),
+                                        row()
+                                            .w_full()
+                                            .center_y()
+                                            .gap(8.0)
+                                            .child(
+                                                text(&excerpt)
+                                                    .spans(highlights(&excerpt))
+                                                    .font(kit.ty.ui_medium)
+                                                    .color(kit.c.text_base)
+                                                    .truncate()
+                                                    .grow(1.0)
+                                                    .min_w(0.0),
+                                            )
+                                            .children(current.then(|| {
+                                                text("Reading here")
+                                                    .font(kit.ty.small)
+                                                    .color(kit.c.text_accent)
+                                                    .px(6.0)
+                                                    .py(1.0)
+                                                    .radius(4.0)
+                                                    .fill(kit.c.layer_02)
+                                            })),
                                     )
-                                    .child(
-                                        ui::caption(
-                                            if current {
-                                                "Reading here"
-                                            } else if detail.is_empty() {
-                                                "Prompt"
-                                            } else {
-                                                &detail
-                                            },
-                                            &kit,
-                                        )
-                                        .spans(if current {
-                                            Vec::new()
-                                        } else {
-                                            highlights(&detail)
-                                        })
-                                        .truncate(),
-                                    ),
+                                    .children((!detail.is_empty()).then(|| {
+                                        ui::caption(&detail, &kit)
+                                            .spans(highlights(&detail))
+                                            .truncate()
+                                    })),
                             ),
                     )
                     .role("button")
@@ -217,7 +221,10 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
     }
     let mut footer = row().w_full().center_y().justify_between().gap(8.0).child(
         ui::caption(
-            format!("{count} prompts · ↑↓ Navigate · ↵ Jump · Esc Close"),
+            format!(
+                "{count} {} · ↑↓ Navigate · ↵ Jump · Esc Close",
+                if count == 1 { "prompt" } else { "prompts" },
+            ),
             k,
         )
         .truncate()

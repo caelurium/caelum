@@ -31,7 +31,14 @@ fn row_key(boundary: &ForkBoundary) -> String {
 pub(crate) fn header(s: &Workspace) -> (&'static str, &'static str) {
     let l = live(s);
     let provider = l.app.selected.map(|i| l.app.sessions[i].scope.provider);
-    match (l.app.fork_picker().map(|p| p.action), provider) {
+    let picker = l.app.fork_picker();
+    if picker.is_some_and(|p| p.confirmation().is_some()) {
+        return (
+            "Confirm rewind",
+            "Review the checkpoint before removing later conversation history.",
+        );
+    }
+    match (picker.map(|p| p.action), provider) {
         (Some(HistoryAction::Edit), Some(Provider::Codex)) => (
             "Edit in a branch",
             "Codex 0.145+: branch before the prompt, edit its draft, then send. The original stays intact.",
@@ -102,18 +109,26 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     .join("\n");
                 let mut file_box = col()
                     .w_full()
-                    .gap(4.0)
+                    .gap(6.0)
                     .padding(10.0)
                     .radius(8.0)
                     .fill(k.c.layer_01)
                     .border(1.0, k.c.border_base)
+                    .child(ui::caption(
+                        format!(
+                            "Changed {} ({})",
+                            if paths.len() == 1 { "file" } else { "files" },
+                            paths.len()
+                        ),
+                        k,
+                    ))
                     .child(text(names).font(k.ty.mono).color(k.c.text_base).wrap());
                 if paths.len() > 12 {
                     file_box =
                         file_box.child(ui::caption(format!("…and {} more", paths.len() - 12), k));
                 }
                 body = body
-                    .child(ui::caption(description, k).wrap())
+                    .child(ui::caption(description, k).color(k.c.warning.fg).wrap())
                     .child(file_box);
                 actions = actions.child(
                     Button::new("Rewind and restore files")
@@ -199,15 +214,17 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     1 => "1 turn earlier".into(),
                     n => format!("{n} turns earlier"),
                 };
-                turn_row(label, &detail, i == active, &kit).on_press(move |s: &mut Workspace| {
-                    if live(s)
-                        .app
-                        .fork_picker()
-                        .is_some_and(|p| p.token() == owner)
-                    {
-                        live_mut(s).app.fork_at(&boundary)
-                    }
-                })
+                turn_row(label, &detail, *newer == 0, i == active, &kit).on_press(
+                    move |s: &mut Workspace| {
+                        if live(s)
+                            .app
+                            .fork_picker()
+                            .is_some_and(|p| p.token() == owner)
+                        {
+                            live_mut(s).app.fork_at(&boundary)
+                        }
+                    },
+                )
             },
         );
     let mut body = col().w_full().h_full().min_h(0.0).gap(8.0).child(
@@ -245,19 +262,23 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
     if let Some(error) = &picker.error {
         body = body.child(ui::caption(error, k).color(k.c.danger.fg).wrap());
     }
+    let count = points.len();
+    let turns = format!("{count} {}", if count == 1 { "turn" } else { "turns" });
     let status = if picker.creating() {
         if picker.action == HistoryAction::Rewind {
-            "Rewinding…"
+            "Rewinding…".into()
         } else {
-            "Creating branch…"
+            "Creating branch…".into()
         }
     } else if picker.loading() {
-        "Loading history…"
+        "Loading history…".into()
     } else {
         match picker.action {
-            HistoryAction::Fork => "↑↓ Choose a turn · ↵ Fork",
-            HistoryAction::Edit => "↑↓ Choose a prompt · ↵ Create editable branch",
-            HistoryAction::Rewind => "↑↓ Choose a prompt · ↵ Preview rewind",
+            HistoryAction::Fork => format!("{turns} · ↑↓ Choose a turn · ↵ Fork"),
+            HistoryAction::Edit => {
+                format!("{turns} · ↑↓ Choose a prompt · ↵ Create editable branch")
+            }
+            HistoryAction::Rewind => format!("{turns} · ↑↓ Choose a prompt · ↵ Preview rewind"),
         }
     };
     let mut footer = row()
@@ -327,7 +348,7 @@ pub fn fork_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-fn turn_row(title: &str, detail: &str, selected: bool, k: &Kit) -> El {
+fn turn_row(title: &str, detail: &str, latest: bool, selected: bool, k: &Kit) -> El {
     k.interactive(
         row()
             .w_full()
@@ -348,10 +369,27 @@ fn turn_row(title: &str, detail: &str, selected: bool, k: &Kit) -> El {
                     .min_w(0.0)
                     .gap(2.0)
                     .child(
-                        text(title)
-                            .font(k.ty.ui_medium)
-                            .color(k.c.text_base)
-                            .truncate(),
+                        row()
+                            .w_full()
+                            .center_y()
+                            .gap(8.0)
+                            .child(
+                                text(title)
+                                    .font(k.ty.ui_medium)
+                                    .color(k.c.text_base)
+                                    .truncate()
+                                    .grow(1.0)
+                                    .min_w(0.0),
+                            )
+                            .children(latest.then(|| {
+                                text("Latest")
+                                    .font(k.ty.small)
+                                    .color(k.c.text_accent)
+                                    .px(6.0)
+                                    .py(1.0)
+                                    .radius(4.0)
+                                    .fill(k.c.layer_02)
+                            })),
                     )
                     .child(ui::caption(detail, k).truncate()),
             )

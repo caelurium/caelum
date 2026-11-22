@@ -105,9 +105,11 @@ pub fn cancel(l: &mut crate::live::Live) {
 #[derive(Clone)]
 struct Choice {
     title: String,
+    args: &'static str,
     detail: String,
     value: String,
     project: String,
+    custom: bool,
 }
 
 pub fn editor(s: &Workspace) -> Option<&TextEdit> {
@@ -153,25 +155,32 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
             let mut choices: Vec<_> = caelum_core::application::commands::COMMANDS
                 .iter()
                 .filter(|(_, _, c)| c.available(session.scope.provider))
-                .map(|(n, d, _)| (n.to_string(), d.to_string()))
+                .map(|(n, d, c)| (n.to_string(), d.to_string(), command_args(*c), false))
                 .collect();
             if session.scope.provider == Provider::OpenCode
                 && let Some(commands) = l.app.provider_commands.get(&session.scope)
             {
                 for c in commands {
-                    if !choices.iter().any(|(n, _)| n == &c.name) {
-                        choices.push((c.name.clone(), c.description.clone().unwrap_or_default()));
+                    if !choices.iter().any(|(n, _, _, _)| n == &c.name) {
+                        choices.push((
+                            c.name.clone(),
+                            c.description.clone().unwrap_or_default(),
+                            "",
+                            true,
+                        ));
                     }
                 }
             }
             choices
                 .into_iter()
-                .filter(|(n, d)| format!("{n} {d}").to_lowercase().contains(&query))
-                .map(|(name, detail)| Choice {
+                .filter(|(n, d, _, _)| format!("{n} {d}").to_lowercase().contains(&query))
+                .map(|(name, detail, args, custom)| Choice {
                     title: format!("/{name}"),
+                    args,
                     value: name,
                     detail,
                     project: project.clone(),
+                    custom,
                 })
                 .collect()
         }
@@ -187,9 +196,11 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
                     .iter()
                     .map(|hit| Choice {
                         title: hit.path.clone(),
+                        args: "",
                         detail: "Attach file snapshot".into(),
                         value: hit.path.clone(),
                         project: project.clone(),
+                        custom: false,
                     })
                     .collect()
             })
@@ -215,9 +226,11 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
                 .into_iter()
                 .map(|(p, pr)| Choice {
                     title: format!("#{}", pr.number),
+                    args: "",
                     detail: pr.title.clone(),
                     value: pr.url.clone(),
                     project: p.clone(),
+                    custom: false,
                 })
                 .collect()
         }
@@ -507,8 +520,23 @@ fn panel(s: &Workspace, k: &Kit) -> El {
     }
     let mut options = col().w_full().gap(2.0);
     if items.is_empty() && !busy {
-        content = content
-            .child(ui::caption("No matches. Keep typing to refine your search.", k).padding(10.0));
+        let empty_title = match token.kind {
+            CompletionKind::Command => "No matching commands",
+            CompletionKind::File => "No matching files",
+            CompletionKind::PullRequest => "No matching pull requests",
+        };
+        content = content.child(
+            col()
+                .w_full()
+                .gap(2.0)
+                .px(8.0)
+                .py(10.0)
+                .child(text(empty_title).font(k.ty.ui_medium).color(k.c.text_base))
+                .child(ui::caption(
+                    "Try a shorter query or press Esc to dismiss.",
+                    k,
+                )),
+        );
     }
     for (i, item) in items.into_iter().enumerate() {
         let t = token.clone();
@@ -555,11 +583,22 @@ fn panel(s: &Workspace, k: &Kit) -> El {
         .key("completion-menu")
 }
 
+fn command_args(command: caelum_core::application::commands::LocalCommand) -> &'static str {
+    use caelum_core::application::commands::LocalCommand;
+    match command {
+        LocalCommand::Effort => "[level]",
+        LocalCommand::Rename => "[title]",
+        LocalCommand::Export => "[md|json]",
+        LocalCommand::SideQuestion => "[question]",
+        _ => "",
+    }
+}
+
 fn completion_row(item: &Choice, kind: CompletionKind, selected: bool, k: &Kit) -> El {
-    let glyph = match kind {
-        CompletionKind::Command => &ui::TERMINAL,
-        CompletionKind::File => &ui::FILE,
-        CompletionKind::PullRequest => &ui::BRANCH,
+    let leading = match kind {
+        CompletionKind::Command => None,
+        CompletionKind::File => Some(&ui::FILE),
+        CompletionKind::PullRequest => Some(&ui::BRANCH),
     };
     let icon_color = if selected {
         k.c.text_accent
@@ -573,19 +612,33 @@ fn completion_row(item: &Choice, kind: CompletionKind, selected: bool, k: &Kit) 
             .gap(10.0)
             .center_y()
             .child(
-                text(&item.title)
-                    .font(k.ty.mono)
-                    .color(if selected {
+                row()
+                    .min_w(136.0)
+                    .gap(5.0)
+                    .center_y()
+                    .child(text(&item.title).font(k.ty.mono).color(if selected {
                         k.c.text_accent
                     } else {
                         k.c.text_base
-                    })
-                    .min_w(96.0),
+                    }))
+                    .children(
+                        (!item.args.is_empty())
+                            .then(|| text(item.args).font(k.ty.mono).color(k.c.text_faint)),
+                    ),
             )
             .children(
                 (!item.detail.is_empty())
                     .then(|| ui::caption(&item.detail, k).truncate().grow(1.0).min_w(0.0)),
-            ),
+            )
+            .children(item.custom.then(|| {
+                text("Custom")
+                    .font(k.ty.small)
+                    .color(k.c.text_muted)
+                    .px(6.0)
+                    .py(2.0)
+                    .radius(4.0)
+                    .fill(k.c.layer_02)
+            })),
         CompletionKind::File => {
             let (parent, name) = item
                 .title
@@ -645,7 +698,7 @@ fn completion_row(item: &Choice, kind: CompletionKind, selected: bool, k: &Kit) 
             } else {
                 rune::Color::TRANSPARENT
             })
-            .child(icon(glyph, 13.0).color(icon_color).a11y_hidden())
+            .children(leading.map(|glyph| icon(glyph, 13.0).color(icon_color).a11y_hidden()))
             .child(body)
             .child(
                 text("↵")

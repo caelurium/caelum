@@ -177,13 +177,19 @@ pub(super) fn rename_view(s: &Workspace, k: &Kit) -> El {
         )
         .child(ui::divider(k))
         .child(
-            row().w_full().justify_end().child(
-                Button::new("Save title")
-                    .variant(ButtonVariant::Contrast)
-                    .disabled(form.title.text.trim().is_empty())
-                    .on_press_tx(submit)
-                    .build(k)
-                    .key("rename-save"),
-            ),
+            row()
+                .w_full()
+                .center_y()
+                .justify_between()
+                .gap(8.0)
+                .child(ui::caption("Enter to save · Esc to cancel", k))
+                .child(
+                    Button::new("Save title")
+                        .variant(ButtonVariant::Contrast)
+                        .disabled(form.title.text.trim().is_empty())
+                        .on_press_tx(submit)
+                        .build(k)
+                        .key("rename-save"),
+                ),
         )
 }

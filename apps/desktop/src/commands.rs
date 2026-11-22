@@ -524,8 +524,8 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                         .color(k.c.text_base)
                         .grow(1.0),
                 )
-                .child(ui::caption("Steps", k).w(54.0))
-                .child(ui::caption("Cost", k).w(60.0)),
+                .child(row().w(54.0).justify_end().child(ui::caption("Steps", k)))
+                .child(row().w(60.0).justify_end().child(ui::caption("Cost", k))),
         );
         for model in &stats.models {
             models = models.child(ui::divider(k)).child(
@@ -547,16 +547,18 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                             .child(ui::caption(&model.model.provider_id, k)),
                     )
                     .child(
-                        text(model.steps.to_string())
-                            .font(k.ty.mono)
-                            .color(k.c.text_muted)
-                            .w(54.0),
+                        row().w(54.0).justify_end().child(
+                            text(model.steps.to_string())
+                                .font(k.ty.mono)
+                                .color(k.c.text_muted),
+                        ),
                     )
                     .child(
-                        text(format!("${:.2}", model.cost))
-                            .font(k.ty.mono)
-                            .color(k.c.text_base)
-                            .w(60.0),
+                        row().w(60.0).justify_end().child(
+                            text(format!("${:.2}", model.cost))
+                                .font(k.ty.mono)
+                                .color(k.c.text_base),
+                        ),
                     ),
             );
         }

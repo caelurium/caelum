@@ -23,7 +23,24 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize) -> El {
         .checkouts
         .get(project)
         .and_then(|c| c.usage.get(&provider));
-    let mut body = ui::card(k).child(crate::activity::context(s, k, index, true));
+    let mut body = ui::card(k);
+    if l.app.sessions[index].conversation.used_tokens.is_some() {
+        body = body
+            .child(
+                row()
+                    .w_full()
+                    .center_y()
+                    .justify_between()
+                    .gap(8.0)
+                    .child(
+                        text("Current session")
+                            .font(k.ty.ui_medium)
+                            .color(k.c.text_base),
+                    )
+                    .child(crate::activity::context(s, k, index, true)),
+            )
+            .child(ui::divider(k));
+    }
     if let Some(value) = value {
         if provider == caelum_core::application::Provider::Antigravity {
             body = antigravity_usage_body(body, value, k);
@@ -84,7 +101,15 @@ fn usage_bucket(
 
 fn antigravity_usage_body(mut body: El, value: &serde_json::Value, k: &Kit) -> El {
     if let Some(tier) = value["tier"]["name"].as_str().filter(|s| !s.is_empty()) {
-        body = body.child(ui::caption(tier, k));
+        body = body.child(
+            row()
+                .w_full()
+                .center_y()
+                .justify_between()
+                .gap(8.0)
+                .child(ui::caption("Plan", k))
+                .child(text(tier).font(k.ty.ui_medium).color(k.c.text_base)),
+        );
     }
     let mut reported = false;
     for group in value["groups"].as_array().into_iter().flatten() {
@@ -139,10 +164,21 @@ fn antigravity_usage_body(mut body: El, value: &serde_json::Value, k: &Kit) -> E
 }
 
 fn opencode_usage_body(mut body: El, value: &serde_json::Value, k: &Kit) -> El {
-    body = body.child(ui::caption(
-        value["workspace"]["name"].as_str().unwrap_or("OpenCode Go"),
-        k,
-    ));
+    let workspace = value["workspace"]["name"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("OpenCode Go");
+    body = body
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .justify_between()
+                .gap(8.0)
+                .child(ui::caption("Workspace", k))
+                .child(text(workspace).font(k.ty.ui_medium).color(k.c.text_base)),
+        )
+        .child(ui::divider(k));
     let mut reported = false;
     for (name, title) in [
         ("rolling", "Rolling"),
