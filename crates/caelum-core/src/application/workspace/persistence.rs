@@ -57,12 +57,37 @@ impl Workspace {
             if (self.restored()
                 && matches!(
                     request.1,
-                    Command::Task(
-                        Task::ReviewCache { .. }
-                            | Task::Details { .. }
-                            | Task::ReviewFiles { .. }
-                            | Task::Feedback { .. }
-                    )
+                    Command::Open(_)
+                        | Command::Archive(..)
+                        | Command::DeleteSession(..)
+                        | Command::List(..)
+                        | Command::ListArchived(..)
+                        | Command::Choices(..)
+                        | Command::Details(..)
+                        | Command::Commands(..)
+                        | Command::Shells(..)
+                        | Command::Resume(..)
+                        | Command::History(..)
+                        | Command::HandoffChat(..)
+                        | Command::CodexControlHistory(..)
+                        | Command::Inbox(..)
+                        | Command::Task(
+                            Task::ReviewCache { .. }
+                                | Task::Details { .. }
+                                | Task::ReviewFiles { .. }
+                                | Task::Feedback { .. }
+                                | Task::Worktrees { .. }
+                                | Task::CreateWorktree { .. }
+                                | Task::RemoveWorktree { .. }
+                                | Task::RenameWorktree { .. }
+                                | Task::Discover { .. }
+                                | Task::Search { .. }
+                                | Task::Completions { .. }
+                                | Task::Stats { .. }
+                                | Task::Usage { .. }
+                                | Task::Image { .. }
+                                | Task::Reveal { .. }
+                        )
                 ))
                 || matches!(
                     request.1,
