@@ -261,14 +261,19 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
     let mut body = col().w_full().h_full().min_h(0.0).gap(12.0).child(
         row()
             .w_full()
+            .px(12.0)
+            .py(10.0)
             .gap(10.0)
             .center_y()
-            .child(icon(&ui::FOLDER, 20.0).color(k.c.icon_muted))
+            .radius(8.0)
+            .fill(k.c.layer_01)
+            .border(1.0, k.c.border_base)
+            .child(icon(&ui::FOLDER, 18.0).color(k.c.icon_muted))
             .child(
                 col()
                     .grow(1.0)
                     .min_w(0.0)
-                    .gap(3.0)
+                    .gap(2.0)
                     .child(text(parent).font(k.ty.ui_medium).color(k.c.text_base))
                     .child(ui::caption(project, k).truncate().help(project)),
             )
@@ -345,7 +350,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
         }
         line = line.child(
             ui::Button::new(if removing { "Removing…" } else { "Remove" })
-                .variant(ButtonVariant::GhostMuted)
+                .variant(ButtonVariant::Danger)
                 .disabled(removal(app, project, &tree.path).is_none())
                 .on_press({
                     let project = project.to_owned();
@@ -358,6 +363,7 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
                     }
                 })
                 .build(k)
+                .h(28.0)
                 .px(8.0)
                 .label(format!("Remove worktree {tree_name} from {parent}"))
                 .help(
@@ -438,7 +444,8 @@ pub fn manager(s: &Workspace, k: &Kit) -> El {
             .gap(8.0)
             .child(
                 ui::Button::new("Open project folder")
-                    .variant(ButtonVariant::GhostMuted)
+                    .icon(&ui::FOLDER)
+                    .variant(ButtonVariant::Outline)
                     .on_press({
                         let path = project.to_owned();
                         move |s: &mut Workspace| select(s, &path)
