@@ -30,41 +30,55 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
     }
     let kit = k.clone();
     let action_kit = k.clone();
+    let mode = (if review {
+        &live(s).panels.diff
+    } else {
+        &live(s).panels.change_diff
+    })
+    .mode();
+    let mode_toggle = ui::segmented_track(k)
+        .self_start()
+        .role("tablist")
+        .label("Diff layout")
+        .child(
+            ui::segment("Unified", mode == DiffMode::Unified, k)
+                .h(22.0)
+                .label("Unified diff")
+                .on_press(move |s: &mut Workspace| {
+                    let panels = &mut live_mut(s).panels;
+                    let diff = if review {
+                        &mut panels.diff
+                    } else {
+                        &mut panels.change_diff
+                    };
+                    diff.set_mode(DiffMode::Unified);
+                }),
+        )
+        .child(
+            ui::segment("Split", mode == DiffMode::Split, k)
+                .h(22.0)
+                .label("Split diff")
+                .on_press(move |s: &mut Workspace| {
+                    let panels = &mut live_mut(s).panels;
+                    let diff = if review {
+                        &mut panels.diff
+                    } else {
+                        &mut panels.change_diff
+                    };
+                    diff.set_mode(DiffMode::Split);
+                }),
+        );
     col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .child(
-            Button::new(
-                if (if review {
-                    &live(s).panels.diff
-                } else {
-                    &live(s).panels.change_diff
-                })
-                .mode()
-                    == DiffMode::Unified
-                {
-                    "Split diff"
-                } else {
-                    "Unified diff"
-                },
-            )
-            .variant(ButtonVariant::GhostMuted)
-            .on_press(move |s: &mut Workspace| {
-                let panels = &mut live_mut(s).panels;
-                let diff = if review {
-                    &mut panels.diff
-                } else {
-                    &mut panels.change_diff
-                };
-                diff.set_mode(if diff.mode() == DiffMode::Unified {
-                    DiffMode::Split
-                } else {
-                    DiffMode::Unified
-                });
-            })
-            .build(k)
-            .self_start(),
+            row()
+                .w_full()
+                .px(12.0)
+                .py(6.0)
+                .center_y()
+                .child(mode_toggle),
         )
         .child(
             DiffView::new(
@@ -241,21 +255,46 @@ pub(super) fn changes(s: &Workspace, k: &Kit) -> El {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or(project);
-    let mut content = col().w_full().grow(1.0).min_h(0.0).gap(8.0).child(
+    let git = live(s)
+        .app
+        .services
+        .checkouts
+        .get(project)
+        .and_then(|c| c.git.as_ref());
+    let branch_text = git.map(|g| g.branch.as_deref().unwrap_or("Detached / non-repository"));
+    let file_count = git.map(|g| {
+        format!(
+            "{} {}",
+            g.changes.len(),
+            if g.changes.len() == 1 {
+                "file"
+            } else {
+                "files"
+            }
+        )
+    });
+    let mut content = col().w_full().grow(1.0).min_h(0.0).gap(6.0).child(
         row()
             .w_full()
             .px(12.0)
             .pt(8.0)
             .center_y()
-            .gap(7.0)
-            .child(rune::icon(&ui::BRANCH, 16.0).color(k.c.icon_muted))
+            .gap(6.0)
+            .child(rune::icon(&ui::BRANCH, 14.0).color(k.c.icon_muted))
             .child(
                 text(name)
-                    .font(k.ty.ui)
+                    .font(k.ty.ui_medium)
                     .color(k.c.text_base)
-                    .grow(1.0)
                     .truncate(),
             )
+            .children(branch_text.map(|branch| {
+                ui::caption(format!("· {branch}"), k)
+                    .truncate()
+                    .min_w(0.0)
+                    .grow(1.0)
+            }))
+            .children(branch_text.is_none().then(|| rune::el().grow(1.0)))
+            .children(file_count.map(|count| ui::caption(count, k)))
             .child(
                 quiet_button(&ui::REFRESH, "Refresh changes")
                     .disabled(live(s).app.services.busy(&task))
@@ -264,41 +303,7 @@ pub(super) fn changes(s: &Workspace, k: &Kit) -> El {
                     .key("refresh-changes"),
             ),
     );
-    if let Some(git) = live(s)
-        .app
-        .services
-        .checkouts
-        .get(project)
-        .and_then(|c| c.git.as_ref())
-    {
-        content = content.child(
-            row()
-                .w_full()
-                .px(14.0)
-                .center_y()
-                .gap(6.0)
-                .child(rune::icon(&ui::BRANCH, 12.0).color(k.c.icon_muted))
-                .child(
-                    ui::caption(
-                        git.branch.as_deref().unwrap_or("Detached / non-repository"),
-                        k,
-                    )
-                    .truncate()
-                    .grow(1.0),
-                )
-                .child(ui::caption(
-                    format!(
-                        "{} {}",
-                        git.changes.len(),
-                        if git.changes.len() == 1 {
-                            "file"
-                        } else {
-                            "files"
-                        }
-                    ),
-                    k,
-                )),
-        );
+    if let Some(git) = git {
         let mut files = col().w_full().px(8.0).gap(2.0);
         for change in &git.changes {
             let project = project.clone();
