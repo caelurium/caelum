@@ -16,6 +16,37 @@ impl Workspace {
             })
     }
 
+    /// Open pull request on a branch attributed to this session, never borrowed
+    /// from another session sharing the same checkout.
+    pub fn session_pull_request(&self, session: &Session) -> Option<&GitHubPullRequest> {
+        let details = session.details.as_ref()?;
+        details
+            .branch
+            .iter()
+            .chain(details.branches.iter().rev())
+            .find_map(|branch| {
+                self.services
+                    .branch_pull_request(&session.scope.project, branch)
+            })
+    }
+
+    /// Deduplicated open pull requests across all open projects and linked checkouts.
+    pub fn open_pull_requests(&self) -> Vec<(&str, &GitHubPullRequest)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut result = Vec::new();
+        for (project, checkout) in &self.services.checkouts {
+            if !self.project_is_open(project) {
+                continue;
+            }
+            for pr in &checkout.pull_requests {
+                if seen.insert(pr.url.as_str()) {
+                    result.push((project.as_str(), pr));
+                }
+            }
+        }
+        result
+    }
+
     /// Restore the last overview/diff while GitHub refreshes current metadata.
     pub fn open_review(&mut self, project: String, url: String) {
         if self

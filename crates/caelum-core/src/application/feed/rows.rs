@@ -15,6 +15,9 @@ enum Feed<'a> {
         archived: bool,
     },
     Overview,
+    Dashboard {
+        archived: bool,
+    },
 }
 
 impl FeedSession {
@@ -66,12 +69,22 @@ impl Workspace {
         rows
     }
 
+    /// All non-forgotten conversations across open projects, ordered by recency.
+    pub fn dashboard_sessions(&self, query: &str, archived: bool) -> Vec<FeedSession> {
+        let mut rows = self.feed_rows(Feed::Dashboard { archived }, query);
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
     fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<(Reverse<Option<u64>>, FeedSession)> {
         let includes = |path: &str| match feed {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
-            Feed::Overview => self.project_is_open(path),
+            Feed::Overview | Feed::Dashboard { .. } => self.project_is_open(path),
         };
-        let archived = matches!(feed, Feed::Sidebar { archived: true, .. });
+        let archived = matches!(
+            feed,
+            Feed::Sidebar { archived: true, .. } | Feed::Dashboard { archived: true }
+        );
         let active_only = matches!(feed, Feed::Overview);
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
