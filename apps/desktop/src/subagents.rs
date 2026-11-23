@@ -28,10 +28,27 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         _ => "Finished",
     };
     let ink = match tool.outcome {
+        Outcome::Running => k.c.text_accent,
+        Outcome::Success => k.c.success.fg,
         Outcome::Failure => k.c.danger.fg,
         Outcome::Interrupted => k.c.warning.fg,
         _ => k.c.text_muted,
     };
+    let status_pill = row()
+        .center_y()
+        .gap(5.0)
+        .px(6.0)
+        .py(2.0)
+        .radius(5.0)
+        .fill(k.alpha(ink, 0.12))
+        .children((tool.outcome == Outcome::Running).then(|| {
+            rune::el()
+                .size(5.0, 5.0)
+                .radius(2.5)
+                .fill(ink)
+                .a11y_hidden()
+        }))
+        .child(text(state).font(k.ty.small).color(ink));
     let heading = k
         .interactive(
             row()
@@ -40,7 +57,13 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                 .gap(7.0)
                 .padding(10.0)
                 .radius(8.0)
-                .child(icon(&ui::AGENT, 15.0).color(k.c.icon_muted))
+                .child(
+                    icon(&ui::AGENT, 15.0).color(if tool.outcome == Outcome::Running {
+                        k.c.text_accent
+                    } else {
+                        k.c.icon_muted
+                    }),
+                )
                 .child(
                     text(&task.description)
                         .font(k.ty.ui_medium)
@@ -49,7 +72,7 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                         .min_w(0.0)
                         .grow(1.0),
                 )
-                .child(ui::caption(state, k).color(ink))
+                .child(status_pill)
                 .children((tool.outcome != Outcome::Running).then(|| ui::outcome(tool.outcome, k)))
                 .child(ui::disclosure(expanded, k)),
         )
@@ -83,7 +106,8 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
     let mut content = col()
         .w_full()
         .radius(9.0)
-        .border(1.0, k.c.border_muted)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
         .child(heading);
     if !tool.error.is_empty() {
         content = content.child(
@@ -96,11 +120,13 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
     if !expanded {
         return content;
     }
+    content = content.child(ui::divider(k));
     let mut footer = row()
         .w_full()
         .center_y()
         .gap(6.0)
         .px(10.0)
+        .pt(8.0)
         .child(ui::caption(format!("Subagent · {}", task.agent), k))
         .child(ui::caption(&tool.timing, k).grow(1.0));
     if let Some(child) = task.session_id.as_deref() {
@@ -110,7 +136,8 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
         let id = entry.id.clone();
         footer = footer.child(
             ui::Button::new("Open session")
-                .variant(ButtonVariant::GhostMuted)
+                .icon(&ui::EXTERNAL)
+                .variant(ButtonVariant::Outline)
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
                     if l.app.open_subagent(index, &id).is_some() {
@@ -120,6 +147,8 @@ pub fn view(s: &Workspace, k: &Kit, index: usize, entry: &Entry, task: &Subagent
                     }
                 })
                 .build(k)
+                .h(26.0)
+                .px(8.0)
                 .key(format!("subagent-open-{index}-{row_id}")),
         );
     }

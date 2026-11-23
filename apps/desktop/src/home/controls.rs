@@ -6,7 +6,7 @@ use crate::{
     ui,
 };
 use caelum_core::application::Provider;
-use rune::{El, FileDialogOptions, Tx, col, row};
+use rune::{El, FileDialogOptions, Tx, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit};
 
 pub(super) fn project(s: &Workspace, k: &Kit) -> El {
@@ -17,8 +17,9 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
         .map(|p| p.name.as_str())
         .unwrap_or("Choose a project");
     let expanded = l.home.menu == Menu::Projects || !l.app.home_project_available();
-    let heading = row()
+    let mut heading = row()
         .w_full()
+        .flex_wrap()
         .center_y()
         .gap(6.0)
         .child(
@@ -27,6 +28,8 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
                 .variant(ButtonVariant::GhostMuted)
                 .on_press(|s| toggle_menu(s, Menu::Projects))
                 .build(k)
+                .h(28.0)
+                .px(8.0)
                 .key("home-project")
                 .label("Project or worktree")
                 .help(project.unwrap_or("Choose where the new session will run")),
@@ -36,8 +39,47 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
                 .and_then(|p| l.app.services.checkouts.get(p))
                 .and_then(|c| c.git.as_ref())
                 .and_then(|g| g.branch.as_deref())
-                .map(|branch| ui::caption(branch, k).truncate()),
+                .map(|branch| {
+                    row()
+                        .center_y()
+                        .gap(4.0)
+                        .child(icon(&ui::BRANCH, 11.0).color(k.c.icon_muted).a11y_hidden())
+                        .child(
+                            text(branch)
+                                .font(k.ty.small)
+                                .color(k.c.text_muted)
+                                .truncate(),
+                        )
+                }),
         );
+    if !expanded && l.app.projects.len() > 1 {
+        let roots: Vec<_> = l
+            .app
+            .projects
+            .iter()
+            .filter(|p| l.app.group_path(&p.path) == p.path && Some(p.path.as_str()) != project)
+            .take(3)
+            .collect();
+        if !roots.is_empty() {
+            heading = heading.child(rune::el().grow(1.0));
+            for p in roots {
+                let target = p.path.clone();
+                heading = heading.child(
+                    ui::Button::new(&p.name)
+                        .variant(ButtonVariant::GhostMuted)
+                        .on_press(move |s: &mut Workspace| {
+                            let l = live_mut(s);
+                            l.app.home_select_project(target.clone());
+                            l.focus();
+                        })
+                        .build(k)
+                        .h(26.0)
+                        .px(8.0)
+                        .help(&p.path),
+                );
+            }
+        }
+    }
     let mut content = col().w_full().gap(6.0).child(heading);
     if expanded {
         let mut choices = col()

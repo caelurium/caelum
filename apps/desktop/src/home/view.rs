@@ -121,16 +121,34 @@ fn composer(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             true
         })
         .on_drop_files(|s: &mut Workspace, paths, _| attachments::drop_files(s, paths));
+    let rim =
+        k.c.border_strong
+            .mix(Color::WHITE, if k.dark { 0.12 } else { 0.35 });
     col()
         .key("home-composer")
         .role("form")
         .label("Start a new session")
         .w_full()
         .padding(14.0)
-        .gap(12.0)
+        .gap(10.0)
         .radius(16.0)
-        .fill(k.c.layer_02)
-        .border(1.0, k.c.border_strong)
+        .fill(k.alpha(k.c.layer_02, 0.94))
+        .gradient(
+            k.alpha(Color::WHITE, if k.dark { 0.035 } else { 0.4 }),
+            k.alpha(k.c.bg_deep, if k.dark { 0.04 } else { 0.12 }),
+        )
+        .border_gradient(1.0, rim, k.c.border_base)
+        .box_shadow(rune::Shadow {
+            y: 1.0,
+            color: k.alpha(Color::WHITE, if k.dark { 0.045 } else { 0.8 }),
+            inset: true,
+            ..Default::default()
+        })
+        .shadow(
+            6.0,
+            24.0,
+            k.alpha(Color::BLACK, if k.dark { 0.2 } else { 0.07 }),
+        )
         .child(attachments::view(s, k))
         .child(
             rune::auto_grow(input, 2, 8)
@@ -145,6 +163,7 @@ fn composer(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     }
                 }),
         )
+        .child(ui::divider(k).opacity(0.5))
         .child(
             row()
                 .w_full()

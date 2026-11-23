@@ -304,40 +304,19 @@ fn review_files_view(
                 let f = &r.files()[indices[i]];
                 let path = f.path.clone();
                 let count = r.threads.iter().filter(|t| t.path == path).count();
-                let detail = format!(
-                    "{} · +{} −{}{}{}",
-                    f.status,
-                    f.additions,
-                    f.deletions,
-                    if count > 0 {
-                        format!(" · {count} comments")
-                    } else {
-                        String::new()
-                    },
-                    if f.patch.is_none() {
-                        " · Patch unavailable"
-                    } else {
-                        ""
-                    }
-                );
+                let selected = live(s).panels.review_file.as_ref() == Some(&path);
                 let mut item = col().w_full().child(
-                    ui::choice(
-                        &path,
-                        &detail,
-                        live(s).panels.review_file.as_ref() == Some(&path),
-                        &kit,
-                    )
-                    .min_h(44.0)
-                    .on_press_tx(move |s: &mut Workspace, tx| {
-                        let p = &mut live_mut(s).panels;
-                        p.review_restore = None;
-                        p.review_file = Some(path.clone());
-                        if let Some(index) = p.diff.file_index(&path) {
-                            p.diff.scroll_to_file(index, tx);
-                        }
-                    })
-                    .h(48.0)
-                    .w_full(),
+                    review_file_row(f, count, selected, &kit)
+                        .on_press_tx(move |s: &mut Workspace, tx| {
+                            let p = &mut live_mut(s).panels;
+                            p.review_restore = None;
+                            p.review_file = Some(path.clone());
+                            if let Some(index) = p.diff.file_index(&path) {
+                                p.diff.scroll_to_file(index, tx);
+                            }
+                        })
+                        .h(48.0)
+                        .w_full(),
                 );
                 for thread in r
                     .threads
@@ -551,4 +530,73 @@ fn review_files_view(
         );
     }
     body
+}
+
+fn review_file_row(
+    file: &caelum_protocol::GitHubPullRequestFile,
+    comments: usize,
+    selected: bool,
+    k: &Kit,
+) -> El {
+    let detail = format!("{} · +{} −{}", file.status, file.additions, file.deletions);
+    let mut meta = row()
+        .w_full()
+        .center_y()
+        .gap(6.0)
+        .child(ui::caption(&file.status, k))
+        .children((file.additions > 0).then(|| {
+            text(format!("+{}", file.additions))
+                .font(k.ty.mono)
+                .color(k.c.success.fg)
+        }))
+        .children((file.deletions > 0).then(|| {
+            text(format!("−{}", file.deletions))
+                .font(k.ty.mono)
+                .color(k.c.danger.fg)
+        }));
+    if comments > 0 {
+        meta = meta.child(
+            text(format!("{comments}"))
+                .font(k.ty.small)
+                .color(k.c.text_accent)
+                .px(5.0)
+                .py(1.0)
+                .radius(4.0)
+                .fill(k.alpha(k.c.text_accent, 0.14)),
+        );
+    }
+    if file.patch.is_none() {
+        meta = meta.child(ui::caption("Binary", k));
+    }
+    k.interactive(
+        col()
+            .w_full()
+            .h_full()
+            .px(10.0)
+            .py(6.0)
+            .gap(2.0)
+            .justify_center()
+            .radius(6.0)
+            .fill(if selected {
+                k.c.hover
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .child(
+                text(&file.path)
+                    .font(k.ty.ui_medium)
+                    .color(if selected {
+                        k.c.text_accent
+                    } else {
+                        k.c.text_base
+                    })
+                    .truncate(),
+            )
+            .child(meta),
+    )
+    .role("button")
+    .label(&file.path)
+    .description(detail)
+    .focusable(true)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
 }

@@ -15,6 +15,7 @@ mod media;
 mod merge;
 mod models;
 mod notifications;
+mod palette;
 mod panels;
 mod questions;
 mod remote;

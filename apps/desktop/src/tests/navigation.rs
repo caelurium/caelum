@@ -243,3 +243,67 @@ fn session_hover_switch_profile() {
         }
     }
 }
+
+#[test]
+fn command_palette_opens_filters_executes_and_closes() {
+    use crate::panels::Screen;
+    let mut rt = live_runtime();
+    key(
+        &mut rt,
+        Key::Command('k'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.overlay(),
+        Some(Screen::Palette)
+    );
+    assert!(element(&rt, "palette-search").focused);
+
+    // Pressing Cmd+K again toggles the palette closed.
+    key(
+        &mut rt,
+        Key::Command('k'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(rt.state.live.as_ref().unwrap().panels.overlay(), None);
+
+    // Open again, filter for "Settings", and execute with Enter.
+    key(
+        &mut rt,
+        Key::Command('k'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    fill(&mut rt, "palette-search", "Settings");
+    key(&mut rt, Key::Enter, Mods::default());
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.overlay(),
+        Some(Screen::Settings)
+    );
+
+    // Escape closes Settings; Cmd+K opens palette again and Escape closes it.
+    key(&mut rt, Key::Escape, Mods::default());
+    assert_eq!(rt.state.live.as_ref().unwrap().panels.overlay(), None);
+    key(
+        &mut rt,
+        Key::Command('k'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.overlay(),
+        Some(Screen::Palette)
+    );
+    key(&mut rt, Key::Escape, Mods::default());
+    assert_eq!(rt.state.live.as_ref().unwrap().panels.overlay(), None);
+}

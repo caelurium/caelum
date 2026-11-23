@@ -14,12 +14,18 @@ use rune::{El, col, row, text};
 use rune_kit::{ButtonVariant, Kit, SelectAppearance, glyphs};
 
 fn status(title: &str, detail: &str, outcome: Outcome, k: &Kit) -> El {
+    let tint = match outcome {
+        Outcome::Failure => k.alpha(k.c.danger.fg, 0.055),
+        Outcome::Interrupted => k.alpha(k.c.warning.fg, 0.055),
+        _ => rune::Color::TRANSPARENT,
+    };
     row()
         .w_full()
         .gap(10.0)
         .px(12.0)
         .py(9.0)
         .center_y()
+        .fill(tint)
         .child(if outcome == Outcome::Running {
             rune::icon(&ui::CLOCK, 14.0).color(k.c.icon_muted)
         } else {
@@ -98,25 +104,37 @@ pub fn view(
         .child(ui::divider(k));
     let mut checks =
         status(summary.title, &summary.detail, summary.outcome, k).key("review-check-summary");
-    if details
+    if let Some(list) = details
         .status_check_rollup
         .as_ref()
-        .is_some_and(|checks| !checks.is_empty())
+        .filter(|checks| !checks.is_empty())
     {
-        checks = checks.child(
-            ui::Button::new(if open { "Hide" } else { "Details" })
-                .variant(ButtonVariant::GhostMuted)
-                .on_press(move |s: &mut Workspace| {
-                    let expanded = &mut live_mut(s).panels.expanded_checks;
-                    if !expanded.remove(&owner) {
-                        expanded.insert(owner.clone());
-                    }
-                })
-                .build(k)
-                .key("review-checks-toggle")
-                .label("Check details")
-                .expanded(open),
-        );
+        checks = checks
+            .child(
+                text(format!("{}", list.len()))
+                    .font(k.ty.mono)
+                    .color(k.c.text_muted)
+                    .px(6.0)
+                    .py(1.0)
+                    .radius(4.0)
+                    .fill(k.c.layer_02),
+            )
+            .child(
+                ui::Button::new(if open { "Hide" } else { "Details" })
+                    .variant(ButtonVariant::Outline)
+                    .on_press(move |s: &mut Workspace| {
+                        let expanded = &mut live_mut(s).panels.expanded_checks;
+                        if !expanded.remove(&owner) {
+                            expanded.insert(owner.clone());
+                        }
+                    })
+                    .build(k)
+                    .h(26.0)
+                    .px(8.0)
+                    .key("review-checks-toggle")
+                    .label("Check details")
+                    .expanded(open),
+            );
     }
     body = body.child(checks);
     if open {
