@@ -186,10 +186,10 @@ fn pull_request_button(pr: &GitHubPullRequest, project: &str, k: &Kit) -> El {
         row()
             .h(20.0)
             .px(4.0)
-            .gap(3.0)
+            .gap(4.0)
             .center_y()
             .radius(4.0)
-            .child(icon(&ui::PULL_REQUEST, 12.0).color(ink))
+            .child(icon(&ui::PULL_REQUEST, 16.0).color(ink))
             .child(text(number).font(k.ty.small_medium).color(ink)),
     )
     .role("button")
