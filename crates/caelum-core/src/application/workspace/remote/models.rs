@@ -1,11 +1,14 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
-    application::{Command, Provider},
-    remote::{Checkout, ModelCatalogue, Operation, Outcome, Thread},
+    application::Command,
+    remote::{Checkout, ModelCatalogue, Operation, Outcome, Thread, VmProvider},
 };
 
 fn reconcile_efforts(checkout: &mut Checkout, catalogue: &ModelCatalogue) {
     for thread in std::iter::once(&mut checkout.thread).chain(&mut checkout.other_threads) {
+        if !VmProvider::CHOICES.contains(&thread.provider) {
+            continue;
+        }
         let Some(level) = &thread.effort else {
             continue;
         };
@@ -53,7 +56,7 @@ impl Workspace {
         &mut self,
         id: &str,
         owner: &str,
-        provider: Provider,
+        provider: VmProvider,
         model: Option<&str>,
     ) -> bool {
         if model.is_some_and(|m| self.remote.models.find(provider, m).is_none()) {
@@ -75,7 +78,7 @@ impl Workspace {
         &mut self,
         id: &str,
         owner: &str,
-        provider: Provider,
+        provider: VmProvider,
         model: &str,
         effort: Option<&str>,
     ) -> bool {
@@ -97,7 +100,7 @@ impl Workspace {
         &mut self,
         id: &str,
         owner: &str,
-        provider: Provider,
+        provider: VmProvider,
     ) -> Option<&mut Thread> {
         if self.remote.saved.selected.as_deref() != Some(id) || !self.can_switch_vm_thread(id) {
             return None;

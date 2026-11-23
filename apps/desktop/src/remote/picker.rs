@@ -8,7 +8,7 @@ use crate::{
 };
 use caelum_core::{
     application::VmDestination,
-    remote::{Lifetime, Picker, Size, Source, native::SessionIntent, valid_branch},
+    remote::{Lifetime, Picker, Size, Source, VmProvider, native::SessionIntent, valid_branch},
 };
 use rune::{El, ScrollSpec, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
@@ -16,6 +16,7 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 #[derive(Default)]
 pub(super) struct Form {
     intent: SessionIntent,
+    provider: VmProvider,
     size: Size,
     lifetime: Lifetime,
     tab: Tab,
@@ -116,21 +117,26 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
     let existing = tabs && l.remote.form.tab == Tab::Existing;
     let mut pane = col().w_full().h_full().min_h(0.0).gap(8.0);
     if tabs {
+        let destinations = ui::segmented_track(k)
+            .self_start()
+            .role("tablist")
+            .label("VM destination")
+            .child(
+                ui::segment("Existing VM", existing, k)
+                    .key("handoff-existing-vm")
+                    .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::Existing),
+            )
+            .child(
+                ui::segment("New VM", !existing, k)
+                    .key("handoff-new-vm")
+                    .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::New),
+            );
         pane = pane.child(
-            ui::segmented_track(k)
-                .self_start()
-                .role("tablist")
-                .label("VM destination")
-                .child(
-                    ui::segment("Existing VM", existing, k)
-                        .key("handoff-existing-vm")
-                        .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::Existing),
-                )
-                .child(
-                    ui::segment("New VM", !existing, k)
-                        .key("handoff-new-vm")
-                        .on_press(|s: &mut Workspace| live_mut(s).remote.form.tab = Tab::New),
-                ),
+            row()
+                .center_y()
+                .gap(8.)
+                .child(destinations)
+                .children((existing && handoff).then(|| harness(l.remote.form.provider, k))),
         );
     }
     let mut settings = col()
@@ -168,13 +174,8 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
             .gap(8.0)
             .center_y()
             .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted))
-            .child(
-                ui::caption("Codex on VM", k)
-                    .truncate()
-                    .min_w(0.0)
-                    .grow(1.0)
-                    .help("You can choose a different model in the VM composer before sending."),
-            )
+            .child(harness(l.remote.form.provider, k))
+            .child(rune::el().grow(1.0))
             .child(
                 ui::Button::new("Create VM")
                     .variant(ButtonVariant::Contrast)
@@ -184,6 +185,23 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
                     .key("create-remote"),
             ),
     )
+}
+
+fn harness(selected: VmProvider, k: &Kit) -> El {
+    let mut choices = ui::segmented_track(k)
+        .self_start()
+        .role("radiogroup")
+        .label("VM harness");
+    for provider in VmProvider::CHOICES {
+        choices = choices.child(
+            ui::segment(provider.name(), selected == provider, k)
+                .role("radio")
+                .checked(selected == provider)
+                .key(format!("vm-harness-{}", provider.as_str()))
+                .on_press(move |s: &mut Workspace| live_mut(s).remote.form.provider = provider),
+        );
+    }
+    choices
 }
 
 fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
@@ -197,13 +215,20 @@ fn submit(s: &mut Workspace, owner: &Source, screen: Option<Screen>) {
     }
     let f = &l.remote.form;
     if handoff {
-        l.app.confirm_vm_handoff(VmDestination::Create {
-            size: f.size,
-            lifetime: f.lifetime,
-        });
+        l.app.confirm_vm_handoff(
+            VmDestination::Create {
+                size: f.size,
+                lifetime: f.lifetime,
+            },
+            f.provider,
+        );
         l.schedule();
-    } else if let Some(id) = l.app.create_remote(f.size, f.lifetime) {
-        super::checkout::session(s, &id, SessionIntent::New);
+    } else if let Some(id) = l.app.create_remote(f.size, f.lifetime, f.provider) {
+        if f.provider == VmProvider::Pi {
+            super::checkout::enter_new(s);
+        } else {
+            super::checkout::session(s, &id, SessionIntent::New);
+        }
     }
 }
 
@@ -295,7 +320,7 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
     let intent = l.remote.form.intent;
     let detail = if handoff || intent == SessionIntent::New {
         format!(
-            "Codex needs the VM checkout on {} with its published commit.",
+            "The VM checkout must be on {} with its published commit.",
             source.base
         )
     } else {
@@ -357,8 +382,10 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
             .on_press(move |s: &mut Workspace| {
                 let l = live_mut(s);
                 if handoff {
-                    l.app
-                        .confirm_vm_handoff(VmDestination::Existing(owner.clone()));
+                    l.app.confirm_vm_handoff(
+                        VmDestination::Existing(owner.clone()),
+                        l.remote.form.provider,
+                    );
                     l.schedule();
                 } else if let Some(id) = l.app.attach_remote(owner.clone(), intent) {
                     super::checkout::session(s, &id, intent);

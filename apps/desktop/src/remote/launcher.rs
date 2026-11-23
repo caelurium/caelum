@@ -1,6 +1,6 @@
 use crate::{Workspace, live::live, ui};
 use caelum_core::remote::Phase;
-use rune::{El, ScrollSpec, col};
+use rune::{El, ScrollSpec, col, row};
 use rune_kit::{Kit, ScrollBar};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -47,7 +47,7 @@ pub(crate) fn group(
         .virtual_rows(
             ids.len(),
             48.0,
-            move |_: &Workspace, i| format!("launch-vm-{}", keys[i]).into(),
+            move |_: &Workspace, i| format!("launch-vm-row-{}", keys[i]).into(),
             move |s: &Workspace, i| {
                 let app = &live(s).app;
                 let id = &ids[i];
@@ -61,11 +61,29 @@ pub(crate) fn group(
                     Some(caelum_core::remote::Job::Deleting(_))
                 );
                 let owner = id.clone();
-                ui::choice(&machine.name, &format!("Codex · {branch}"), false, &kit)
-                    .disabled(!ready)
-                    .focusable(ready)
-                    .label(format!("New Codex session on VM {}", machine.name))
-                    .on_press(move |s: &mut Workspace| super::new_session(s, &owner))
+                let pi = id.clone();
+                row()
+                    .w_full()
+                    .center_y()
+                    .gap(4.)
+                    .child(
+                        ui::choice(&machine.name, &format!("Codex · {branch}"), false, &kit)
+                            .grow(1.)
+                            .min_w(0.)
+                            .disabled(!ready)
+                            .focusable(ready)
+                            .label(format!("New Codex session on VM {}", machine.name))
+                            .on_press(move |s: &mut Workspace| super::new_session(s, &owner))
+                            .key(format!("launch-vm-{id}")),
+                    )
+                    .child(
+                        ui::Button::new("Pi")
+                            .disabled(!ready || !app.can_start_vm_session(id))
+                            .on_press(move |s: &mut Workspace| super::checkout::launch_pi(s, &pi))
+                            .build(&kit)
+                            .label(format!("New Pi session on VM {}", machine.name))
+                            .key(format!("launch-pi-{id}")),
+                    )
             },
         )
         .virtual_rows_version(version.finish());

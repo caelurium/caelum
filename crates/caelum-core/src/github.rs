@@ -19,10 +19,12 @@ pub(crate) mod cache;
 mod host;
 mod identity;
 mod review;
+mod vm_branch;
 pub use auto_merge::set_pull_request_auto_merge;
 pub use cache::CachedReview;
 use host::Gh;
 pub use review::{pull_request_feedback, pull_request_files};
+pub(crate) use vm_branch::create_vm_branch;
 
 /// Uses gh's existing authentication and repository/remote selection. Network
 /// lookups stay separate from local Git status and never open an auth prompt.

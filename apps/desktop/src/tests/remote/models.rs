@@ -21,9 +21,9 @@ fn catalogue() -> ModelLists {
     open.extend((0..70).map(|i| model(&format!("other:{i}"), "Other model")));
     open.push(model("route:b", "Example detailed"));
     [
-        (Provider::OpenCode, open.into()),
+        (VmProvider::Pi, open.into()),
         (
-            Provider::Codex,
+            VmProvider::Codex,
             [
                 ProviderModelChoice {
                     efforts: ["none", "low", "high", "xhigh"]
@@ -121,7 +121,7 @@ fn choosing_a_then_b_only_submits_the_last_model_on_the_first_send() {
             panic!("{cmds:?}")
         };
         assert_eq!(target.machine.id, "vm-example");
-        assert_eq!(prompt.provider, Provider::OpenCode);
+        assert_eq!(prompt.provider, VmProvider::Pi);
         assert_eq!(prompt.model.as_deref(), expected);
         assert!(prompt.effort.is_none());
         assert!(prompt.conversation.is_none());
@@ -152,8 +152,8 @@ fn a_late_catalogue_does_not_change_a_draft_and_parked_models_stay_with_their_th
     assert!(rt.find("vm-model-item-route:b").is_none());
     let app = &mut live_mut(&mut rt.state).app;
     assert!(matches!(app.remote.models, ModelCatalogue::Ready(_)));
-    assert!(!app.set_vm_model(VM, &owner, Provider::OpenCode, Some("route:b")));
-    assert!(!app.set_vm_model(VM, &owner, Provider::Codex, Some("route:b")));
+    assert!(!app.set_vm_model(VM, &owner, VmProvider::Pi, Some("route:b")));
+    assert!(!app.set_vm_model(VM, &owner, VmProvider::Codex, Some("route:b")));
     click(&mut rt, "vm-model-item-codex-only");
     click(&mut rt, "vm-effort-trigger");
     click(&mut rt, "option3");
@@ -167,8 +167,8 @@ fn a_late_catalogue_does_not_change_a_draft_and_parked_models_stay_with_their_th
     click(&mut rt, "new-vm-session");
     let app = &mut live_mut(&mut rt.state).app;
     assert!(app.remote.saved.checkouts[VM].thread.model.is_none());
-    assert!(!app.set_vm_model(VM, &owner, Provider::Codex, None));
-    assert!(!app.set_vm_effort(VM, &owner, Provider::Codex, "codex-only", None));
+    assert!(!app.set_vm_model(VM, &owner, VmProvider::Codex, None));
+    assert!(!app.set_vm_effort(VM, &owner, VmProvider::Codex, "codex-only", None));
     click(&mut rt, "vm-threads");
     click(&mut rt, &format!("vm-thread-{owner}"));
     let t = &live(&rt.state).app.remote.saved.checkouts[VM].thread;

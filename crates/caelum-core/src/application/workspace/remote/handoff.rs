@@ -1,9 +1,9 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
-    application::{Command, Provider, Reply, SessionKey},
+    application::{Command, Reply, SessionKey},
     remote::{
-        Chat, Connection, Continuation, Lifetime, Machine, Picker, PublishedBase, Size, Thread,
-        VmLink,
+        BranchPublication, Chat, Connection, Continuation, Lifetime, Machine, Picker,
+        PublishedBase, Size, Thread, VmLink, VmProvider,
     },
 };
 
@@ -48,6 +48,7 @@ pub struct VmHandoff {
     home_generation: Option<u64>,
     pub project: String,
     pub title: String,
+    provider: VmProvider,
     draft: String,
     pub phase: HandoffPhase,
 }
@@ -152,6 +153,7 @@ impl Workspace {
                 .then(|| self.home.generation()),
             project: project.clone(),
             title,
+            provider: VmProvider::Codex,
             draft,
             phase,
         });
@@ -214,6 +216,12 @@ impl Workspace {
         if machine.key.account != source.account {
             return Some("This VM belongs to another Boat account.");
         }
+        if matches!(
+            source.publish,
+            Some(BranchPublication::Named(_) | BranchPublication::Detached)
+        ) {
+            return Some("Create a new VM to publish this session branch from origin/main.");
+        }
         let (id, c) = self.registered_checkout(&machine.key)?;
         if !c.source.repository.eq_ignore_ascii_case(&source.repository) {
             Some("This VM has a different repository.")
@@ -224,12 +232,13 @@ impl Workspace {
 
     /// Re-read the worktree branch and its published tip immediately before
     /// admission. After admission, a provisioning retry only needs the saved plan.
-    pub fn confirm_vm_handoff(&mut self, destination: VmDestination) {
+    pub fn confirm_vm_handoff(&mut self, destination: VmDestination, provider: VmProvider) {
         let Some(h) = self.vm_handoff() else { return };
         let Some(Picker::Ready(source)) = &self.remote.picker else {
             return;
         };
-        if !matches!(h.phase, HandoffPhase::Ready(_))
+        if !VmProvider::CHOICES.contains(&provider)
+            || !matches!(h.phase, HandoffPhase::Ready(_))
             || source.project != h.project
             || source.published_tip.is_none()
         {
@@ -245,6 +254,7 @@ impl Workspace {
             )))),
         );
         let h = self.handoff.as_mut().unwrap();
+        h.provider = provider;
         let HandoffPhase::Ready(chat) = &mut h.phase else {
             unreachable!()
         };
@@ -296,13 +306,8 @@ impl Workspace {
         };
         h.phase = HandoffPhase::Ready(chat);
         if let Some(id) = self.finish_vm_handoff(destination) {
-            self.remote
-                .saved
-                .checkouts
-                .get_mut(&id)
-                .unwrap()
-                .thread
-                .awaiting_native = true;
+            let thread = &mut self.remote.saved.checkouts.get_mut(&id).unwrap().thread;
+            thread.awaiting_native = thread.provider == VmProvider::Codex;
             return true;
         }
         self.handoff.as_mut().unwrap().phase =
@@ -324,14 +329,17 @@ impl Workspace {
         {
             return None;
         }
-        let base = PublishedBase {
+        let mut base = PublishedBase {
             branch: source.base.clone(),
             tip: source.published_tip.clone()?,
         };
         let local = h.source().session();
         let id = match destination {
             VmDestination::Create { size, lifetime } => {
-                self.register_vm(source.clone(), &base.branch, size, lifetime)?
+                let id = self.register_vm(source.clone(), &base.branch, size, lifetime)?;
+                base.branch
+                    .clone_from(&self.remote.saved.checkouts[&id].source.base);
+                id
             }
             VmDestination::Existing(m) => {
                 if self.handoff_machine_blocker(&m).is_some()
@@ -355,7 +363,7 @@ impl Workspace {
         }
         let c = self.remote.saved.checkouts.get_mut(&id).unwrap();
         c.open_thread(Thread {
-            provider: Provider::Codex,
+            provider: h.provider,
             continued: Some(Continuation {
                 id: thread,
                 title: h.title,

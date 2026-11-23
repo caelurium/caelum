@@ -67,7 +67,7 @@ fn a_running_child_stays_in_the_preview_when_its_parent_turn_settles() {
 #[test]
 fn a_managed_card_follows_the_prompt_boundary_through_queue_tool_and_reply() {
     let run = Run {
-        provider: Provider::Codex,
+        provider: crate::remote::VmProvider::Codex,
         conversation: "chat".into(),
         prompt: "prompt-id".into(),
         id: "run".into(),

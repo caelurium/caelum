@@ -58,8 +58,13 @@ managed Git and native SSH. A new VM can fill a missing clone from its published
 base; attaching to an existing VM only verifies it. Caelum can create a dedicated environment and never
 adds a repository to an existing shared environment.
 
+For new machines an unpublished feature branch is created on GitHub at the
+observed `origin/main` commit; `main` and detached checkouts use a name derived
+from the saved creation token. GitHub receives a create-ref request, never a
+local commit or ref update. Retries verify the destination before allocation.
+
 On explicit Send, the managed Boat composer captures the thread’s provider (`codex`
-or `opencode`), optional Boat model ID and optional `reasoningEffort`.
+or `pi` for new conversations), optional Boat model ID and optional `reasoningEffort`.
 The pickers share the public SDK catalogue; only a concrete model’s advertised
 levels are selectable. Each default omits its request field. The public harness
 default does not identify the account’s configured model. Changing models
@@ -89,7 +94,7 @@ edits after review stay in the working directory. Push sends the reviewed
 commit to the verified GitHub origin without force. To bring it back to the
 laptop, fetch the branch in the local checkout.
 
-VM sessions use the same workspace, session slots, editors and sidebar as local
+Native Codex VM sessions use the same workspace, session slots, editors and sidebar as local
 sessions. The desktop resolves a saved checkout ID to its Boat account, machine,
 repository and verified Git root. It translates project ownership at the SSH
 boundary, leaving provider IDs and transcript content untouched. OpenSSH pins

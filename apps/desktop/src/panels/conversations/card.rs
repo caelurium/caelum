@@ -81,7 +81,7 @@ pub(super) fn tile(
                 session.title.as_str(),
                 session.scope.project.as_str(),
                 app.session_worktree(session),
-                session.scope.provider,
+                ui::provider_name(session.scope.provider),
                 local_note(s, *i),
                 !session.archiving() && !session.deleting(),
             )
@@ -94,7 +94,7 @@ pub(super) fn tile(
                 t.title(),
                 checkout.source.project.as_str(),
                 Some(checkout.title()),
-                t.provider,
+                t.provider.name(),
                 vm_note(t),
                 app.can_open_vm_thread(link),
             )
@@ -150,7 +150,7 @@ pub(super) fn tile(
                             .min_w(0.0)
                             .grow(1.0),
                     )
-                    .child(ui::caption(ui::provider_name(provider), k)),
+                    .child(ui::caption(provider, k)),
             )
             .child(
                 text(title)
@@ -180,8 +180,7 @@ pub(super) fn tile(
     .role("button")
     .label(title)
     .description(format!(
-        "{identity}, {}, {label}{}",
-        provider.name(),
+        "{identity}, {provider}, {label}{}",
         snippet.map_or_else(String::new, |v| format!(": {v}"))
     ))
     .disabled(!available)

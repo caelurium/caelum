@@ -48,7 +48,7 @@ use rune_kit::Kit;
 
 #[derive(Default)]
 pub(crate) struct State {
-    open_when_ready: Option<(String, caelum_core::remote::native::SessionIntent)>,
+    open_when_ready: Option<(String, checkout::Open)>,
     key: TextEdit,
     form: picker::Form,
     folders: create::Folders,

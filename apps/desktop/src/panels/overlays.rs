@@ -165,7 +165,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Settings => ("Settings", "", crate::settings::view(s, k, &mut menus)),
         Screen::CreateVm => (
             "Create VM",
-            "Start a Boat checkout from a published GitHub branch.",
+            "Choose a harness and review the branch for your Boat checkout.",
             crate::remote::create_view(s, k),
         ),
         Screen::RemotePicker => (
@@ -264,7 +264,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         }
         Screen::Launcher => (
             "New session",
-            "Choose a local checkout or run Codex on a VM.",
+            "Choose a local checkout or run Codex or Pi on a VM.",
             launcher(s, k),
         ),
         Screen::Palette => ("Command palette", "", crate::palette::view(s, k)),

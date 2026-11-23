@@ -1,5 +1,5 @@
 use super::{api, Boat};
-use crate::application::Provider;
+use crate::remote::VmProvider;
 use crate::remote::{harness::Harness, Outcome, Page, Prompt, Run, RunStatus, Target, TurnEnd};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use boat_sdk::agents::{
@@ -74,7 +74,7 @@ impl Boat {
     pub(in crate::remote) async fn recover(
         &self,
         target: &Target,
-        provider: Provider,
+        provider: VmProvider,
         conversation: Option<&str>,
         prompt: &str,
     ) -> Result<Run, String> {
@@ -157,7 +157,7 @@ impl Harness for Boat {
             Ok(w) => w,
             Err(e) => return Ok(Outcome::Rejected(e)),
         };
-        if let Err(error) = worktree.verify_base().await {
+        if let Err(error) = worktree.verify_base(true).await {
             return Ok(Outcome::Rejected(error));
         }
         let request = PromptRequest {
