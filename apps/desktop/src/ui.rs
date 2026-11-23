@@ -533,6 +533,11 @@ pub static BRANCH: Icon = Icon {
     view: 16.0,
     body: r#"<circle cx="4" cy="3" r="1.7" fill="none" stroke="currentColor"/><circle cx="4" cy="13" r="1.7" fill="none" stroke="currentColor"/><circle cx="12" cy="4" r="1.7" fill="none" stroke="currentColor"/><path d="M4 5v6m0-2c6 0 8-1 8-3" fill="none" stroke="currentColor" stroke-width="1.2"/>"#,
 };
+pub(crate) static PULL_REQUEST: Icon = Icon {
+    name: "pull-request",
+    view: 16.0,
+    body: r#"<g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="3.5" cy="3" r="1.6"/><circle cx="3.5" cy="13" r="1.6"/><circle cx="12.5" cy="13" r="1.6"/><path d="M3.5 5v6m9 0V6a2.5 2.5 0 0 0-2.5-2.5H8m2-2-2 2 2 2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+};
 pub static SETTINGS: Icon = Icon {
     name: "settings",
     view: 16.0,

@@ -1,6 +1,7 @@
 use super::live;
 use crate::{Workspace, quiet_button, ui};
 use caelum_core::application::presentation::ActivityKind;
+use caelum_protocol::GitHubPullRequest;
 use rune::{El, icon, row, text};
 use rune_kit::{Kit, glyphs};
 
@@ -120,6 +121,10 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             }),
         )
         .child(detail.font(k.ty.small).truncate().min_w(0.0).grow(1.0))
+        .children(app.session_pull_request(session).map(|pr| {
+            pull_request_button(pr, &session.scope.project, k)
+                .key(format!("session-pull-request-{index}"))
+        }))
         .child(
             quiet_button(&ui::MORE, "Session actions")
                 .on_press(move |s: &mut Workspace| super::live_mut(s).session_menu = Some(index))
@@ -165,4 +170,32 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
     .key(format!("live-session-{index}"))
     .on_press(move |s: &mut Workspace| super::select(s, index));
     crate::context::session(ui::selected_row(item, selected, k).mb(4.0), index)
+}
+
+fn pull_request_button(pr: &GitHubPullRequest, project: &str, k: &Kit) -> El {
+    let (kind, ink) = if pr.is_draft {
+        ("draft pull request", k.c.text_muted)
+    } else {
+        ("pull request", k.c.success.fg)
+    };
+    let number = format!("#{}", pr.number);
+    let label = format!("Open {kind} {number}: {}", pr.title);
+    let project = project.to_owned();
+    let url = pr.url.clone();
+    k.interactive(
+        row()
+            .h(20.0)
+            .px(4.0)
+            .gap(3.0)
+            .center_y()
+            .radius(4.0)
+            .child(icon(&ui::PULL_REQUEST, 12.0).color(ink))
+            .child(text(number).font(k.ty.small_medium).color(ink)),
+    )
+    .role("button")
+    .label(&label)
+    .help(label)
+    .focusable(true)
+    .focus_ring(1.0, 0.0, k.c.border_focus)
+    .on_press(move |s: &mut Workspace| crate::panels::open_review(s, project.clone(), url.clone()))
 }

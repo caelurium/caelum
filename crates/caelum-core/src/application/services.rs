@@ -530,7 +530,7 @@ pub struct Services {
 }
 
 impl Services {
-    pub(super) fn requested_changes(
+    pub(super) fn open_pull_request(
         &self,
         project: &str,
         branch: &str,
@@ -550,16 +550,13 @@ impl Services {
             .reviews
             .get(&(project.into(), found.url.clone()))
             .filter(|r| r.newer_than(found.request));
-        let pr = if let Some(review) = current {
+        if let Some(review) = current {
             let details = review.details()?;
-            if details.state != "OPEN" || details.head_ref_name != branch {
-                return None;
-            }
-            &details.pull_request
+            (details.state == "OPEN" && details.head_ref_name == branch)
+                .then_some(&details.pull_request)
         } else {
-            discovered
-        };
-        (pr.review_decision.as_deref() == Some("CHANGES_REQUESTED")).then_some(pr)
+            Some(discovered)
+        }
     }
 
     pub(super) fn pull_request_branches<'a>(

@@ -2,18 +2,33 @@ use super::{Session, Workspace};
 use caelum_protocol::GitHubPullRequest;
 
 impl Workspace {
-    /// Only surface feedback on branches attributed to this session, never on a
-    /// PR found just because another session or a stack ancestor shares its checkout.
+    /// The open PR for the session's recorded branch, falling back to its branch history.
+    pub fn session_pull_request(&self, session: &Session) -> Option<&GitHubPullRequest> {
+        self.find_session_pull_request(session, |_| true)
+    }
+
+    /// Surface feedback only on branches attributed to this session.
     pub fn requested_changes(&self, session: &Session) -> Option<&GitHubPullRequest> {
+        self.find_session_pull_request(session, |pr| {
+            pr.review_decision.as_deref() == Some("CHANGES_REQUESTED")
+        })
+    }
+
+    fn find_session_pull_request(
+        &self,
+        session: &Session,
+        matches: impl Fn(&GitHubPullRequest) -> bool,
+    ) -> Option<&GitHubPullRequest> {
         let details = session.details.as_ref()?;
         details
             .branch
             .iter()
             .chain(details.branches.iter().rev())
-            .find_map(|branch| {
+            .filter_map(|branch| {
                 self.services
-                    .requested_changes(&session.scope.project, branch)
+                    .open_pull_request(&session.scope.project, branch)
             })
+            .find(|pr| matches(pr))
     }
 
     /// Restore the last overview/diff while GitHub refreshes current metadata.
