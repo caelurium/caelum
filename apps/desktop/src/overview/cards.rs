@@ -1,4 +1,4 @@
-use super::LAPTOP;
+use super::{LAPTOP, usage};
 use crate::{
     Workspace,
     live::{live, live_mut},
@@ -16,6 +16,7 @@ pub(super) fn view(s: &Workspace, pane_width: f32, compact: bool, k: &Kit) -> El
     let height = if compact { 118.0 } else { 148.0 };
     let activity = section_card("Sessions", activity_card(s, compact, k), height, k);
     let machines = section_card("Machines", machines_card(s, compact, k), height, k);
+    let usage = section_card("Usage", usage::card(s, compact, k), height, k);
     if pane_width >= 520.0 {
         row()
             .key("overview-cards")
@@ -23,6 +24,7 @@ pub(super) fn view(s: &Workspace, pane_width: f32, compact: bool, k: &Kit) -> El
             .gap(if compact { 8.0 } else { 12.0 })
             .child(activity.grow(1.0).min_w(0.0))
             .child(machines.grow(1.0).min_w(0.0))
+            .child(usage.grow(1.0).min_w(0.0))
     } else {
         col()
             .key("overview-cards")
@@ -30,6 +32,7 @@ pub(super) fn view(s: &Workspace, pane_width: f32, compact: bool, k: &Kit) -> El
             .gap(8.0)
             .child(activity)
             .child(machines)
+            .child(usage)
     }
 }
 

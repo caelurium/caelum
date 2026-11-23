@@ -2,6 +2,7 @@
 mod cards;
 mod pull_requests;
 mod sessions;
+mod usage;
 mod view;
 mod worktrees;
 
@@ -13,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use caelum_core::application::{FeedSession, SessionBucket, Task};
+use caelum_core::application::{FeedSession, Provider, SessionBucket, Task};
 use rune::{Icon, Key, KeyEvent, TextEdit, Tx};
 
 use crate::{
@@ -56,6 +57,12 @@ pub(super) static PULL_REQUEST: Icon = Icon {
     name: "overview-pr",
     view: 16.0,
     body: r#"<circle cx="4.5" cy="4" r="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="4.5" cy="12" r="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="11.5" cy="12" r="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 5.6v4.8M9 4h1.3A1.2 1.2 0 0 1 11.5 5.2v5.2M9.8 2.5 8.2 4l1.6 1.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub(super) static RESET: Icon = Icon {
+    name: "overview-reset",
+    view: 16.0,
+    body: r#"<path d="M13 8a5 5 0 1 1-1.3-3.4M13 3.2v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +114,7 @@ pub struct State {
     pub(super) frame: RefCell<Frame>,
     wake_at: Option<u64>,
     host_poll_at: Option<Instant>,
+    usage_requested: bool,
 }
 
 impl Default for State {
@@ -123,6 +131,7 @@ impl Default for State {
             frame: RefCell::new(Frame::default()),
             wake_at: None,
             host_poll_at: None,
+            usage_requested: false,
         }
     }
 }
@@ -211,6 +220,7 @@ pub fn open(s: &mut Workspace, _tx: &mut Tx) {
     l.overview.cursor = None;
     l.overview.search.clear();
     l.overview.search.focused = true;
+    l.overview.usage_requested = false;
     l.panels.screen = Screen::Overview;
     l.panels.set_overlay(None);
     l.session_menu = None;
@@ -285,8 +295,46 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
             changed = true;
         }
         tx.wake_after(Duration::from_secs(5));
+        if !l.overview.usage_requested {
+            l.overview.usage_requested = true;
+            request_usage(l);
+        }
     }
     changed
+}
+
+fn request_usage(l: &mut Live) {
+    let Some(project) = l
+        .app
+        .active_project
+        .clone()
+        .or_else(|| l.app.projects.first().map(|p| p.path.clone()))
+    else {
+        return;
+    };
+    for provider in [Provider::Antigravity, Provider::OpenCode] {
+        let has_session = l
+            .app
+            .sessions
+            .iter()
+            .any(|s| !s.forgotten() && s.scope.provider == provider);
+        if !has_session && l.app.preferences.default_provider != provider {
+            continue;
+        }
+        let task = Task::Usage {
+            project: project.clone(),
+            provider,
+        };
+        let cached = l
+            .app
+            .services
+            .checkouts
+            .get(&project)
+            .is_some_and(|c| c.usage.contains_key(&provider));
+        if !cached && !l.app.services.busy(&task) {
+            l.app.task(task);
+        }
+    }
 }
 
 pub(super) fn refresh_all(s: &mut Workspace) {
@@ -298,6 +346,19 @@ pub(super) fn refresh_all(s: &mut Workspace) {
     if !l.fixture {
         l.app.task(Task::HostStats);
         l.overview.host_poll_at = Some(Instant::now());
+        if let Some(project) = l
+            .app
+            .active_project
+            .clone()
+            .or_else(|| l.app.projects.first().map(|p| p.path.clone()))
+        {
+            for provider in [Provider::Antigravity, Provider::OpenCode] {
+                l.app.task(Task::Usage {
+                    project: project.clone(),
+                    provider,
+                });
+            }
+        }
     }
 }
 

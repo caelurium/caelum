@@ -140,6 +140,7 @@ pub(super) fn close(s: &mut Workspace) {
     l.panels.set_overlay(None);
     match overlay {
         Some(Screen::Fork) => l.app.dismiss_fork(),
+        Some(Screen::Usage) => l.commands.usage_target = None,
         Some(Screen::VmHandoff | Screen::VmStats) => crate::remote::close_popup(l),
         _ => {}
     }
@@ -224,10 +225,8 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             crate::commands::view(s, k, screen, &mut menus),
         ),
         Screen::Usage => {
-            let antigravity = live(s).app.selected.is_some_and(|i| {
-                live(s).app.sessions[i].scope.provider
-                    == caelum_core::application::Provider::Antigravity
-            });
+            let antigravity = crate::commands::usage_provider(s)
+                == caelum_core::application::Provider::Antigravity;
             (
                 if antigravity {
                     "Antigravity usage"

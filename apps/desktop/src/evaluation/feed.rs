@@ -183,6 +183,52 @@ fn overview(l: &mut Live) {
         });
     }
     l.app.services.host = Some(host);
+    if let Some(checkout) = l.app.services.checkouts.get_mut("/projects/rune") {
+        checkout.usage.insert(
+            Provider::Antigravity,
+            json!({
+                "tier": {"name": "Google AI Pro"},
+                "groups": [
+                    {
+                        "name": "Gemini Models",
+                        "buckets": [
+                            {
+                                "name": "Weekly Limit Remaining",
+                                "window": "weekly",
+                                "remaining_fraction": 0.86,
+                                "description": "Refreshes in 5 days."
+                            },
+                            {
+                                "name": "Five Hour Limit Remaining",
+                                "window": "5h",
+                                "remaining_fraction": 0.47,
+                                "description": "Refreshes in 3 hours."
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Claude Models",
+                        "buckets": [{
+                            "name": "Five Hour Limit Remaining",
+                            "window": "5h",
+                            "remaining_fraction": 0.55,
+                            "description": "Refreshes in 2 hours."
+                        }]
+                    }
+                ]
+            }),
+        );
+        checkout.usage.insert(
+            Provider::OpenCode,
+            json!({
+                "workspace": {"name": "OpenCode Go"},
+                "go": {
+                    "rolling": {"percent": 24.0, "resetsAt": NOW + 3 * 3_600_000, "limited": false},
+                    "weekly": {"percent": 41.0, "resetsAt": NOW + 2 * 86_400_000, "limited": false}
+                }
+            }),
+        );
+    }
 }
 
 pub(super) fn sidebar_projects(l: &mut Live, project: &str) {

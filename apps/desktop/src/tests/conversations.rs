@@ -108,6 +108,7 @@ fn overview_groups_sessions_and_supports_keyboard_navigation_and_tabs() {
         assert_eq!(live(&rt.state).panels.screen, Screen::Overview);
         assert!(rt.find("overview-card-activity").is_some());
         assert!(rt.find("overview-card-machines").is_some());
+        assert!(rt.find("overview-card-usage").is_some());
         assert!(rt.find("overview-group-Waiting").is_some());
         assert!(rt.find("overview-group-Running").is_some());
         assert!(rt.find("overview-group-Settled").is_some());

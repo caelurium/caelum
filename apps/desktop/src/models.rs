@@ -5,6 +5,7 @@ mod catalog;
 mod tests;
 mod view;
 
+pub(crate) use brand::glyph_for as brand_glyph;
 pub use view::overlay;
 
 use crate::{
