@@ -28,10 +28,13 @@ follow the selected project and its worktrees. This preference survives restarts
 The project filter above the feed temporarily narrows its scope. **⌘K** focuses
 search, which matches titles, projects, providers, branches and worktrees within
 that scope; Escape clears it. Closed projects and archived sessions stay out of
-the active feed. Recent activity is saved, and streaming tokens or selecting a
-session do not change its recency. Pull requests below the feed follow the same
-project scope, including **All projects**, and refresh when the project filter
-changes. Switching projects or sessions refreshes that project's scoped PRs too.
+the active feed. Sessions with running or queued work, pending questions or
+approvals appear above idle sessions. Within each group, the most recently
+active session appears first. Recent activity is saved, and streaming tokens or
+selecting a session do not change its recency. Pull requests below the feed
+follow the same project scope, including **All projects**, and refresh when the
+project filter changes. Switching projects or sessions refreshes that project's
+scoped PRs too.
 Search text filters sessions only. Active session rows and branch searches follow
 the current Git branch of each session's checkout, including external switches.
 Archived rows use their recorded session branch.

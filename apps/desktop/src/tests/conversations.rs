@@ -331,7 +331,9 @@ fn request_shortcut_leads_to_the_actual_question_and_the_title_browses_prompts()
     advance(&mut rt, 0.3);
     assert_eq!(live(&rt.state).app.selected, Some(1));
     assert!(rt.find("question-submit-retry-choice").is_some());
+    reveal(&mut rt, "live-session-0");
     click(&mut rt, "live-session-0");
+    assert_eq!(live(&rt.state).app.selected, Some(0));
     let before = live(&rt.state).drafts[0].text.clone();
     click(&mut rt, "conversation-heading");
     assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::Timeline));
