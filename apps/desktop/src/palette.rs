@@ -159,11 +159,11 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
     ));
     entries.push(Entry::new(
         Section::Commands,
-        "Active conversations",
-        "Overview of running and recent conversations",
-        Some("⇧⌘O"),
+        "Overview",
+        "Dashboard of sessions, pull requests, worktrees, machines, and usage",
+        Some("⌘J"),
         None,
-        "overview switcher",
+        "overview active conversations switcher dashboard",
         Action::Overview,
     ));
     entries.push(Entry::new(
@@ -477,8 +477,8 @@ fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
     match action {
         Action::NewSession => live_mut(s).new_session(),
         Action::Launcher => panels::open_launcher(s),
-        Action::Home => panels::show(s, Screen::Home),
-        Action::Overview => panels::conversations::open(s, tx),
+        Action::Home => crate::home::open(s),
+        Action::Overview => crate::overview::open(s, tx),
         Action::Settings(page) => {
             live_mut(s).panels.settings_page = page;
             panels::show(s, Screen::Settings);

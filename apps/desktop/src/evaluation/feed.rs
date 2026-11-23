@@ -94,16 +94,20 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
             branch: Some(branch.into()),
             changes: vec![],
         });
+        let url = format!("https://github.com/example/{name}/pull/42");
         checkout
             .pull_requests
             .push(caelum_protocol::GitHubPullRequest {
                 number: 42,
                 title: title.into(),
-                url: format!("https://github.com/example/{name}/pull/42"),
+                url: url.clone(),
                 is_draft: false,
                 base_ref_name: "main".into(),
                 review_decision: None,
             });
+        l.app
+            .services
+            .record_discovered_pull_request(path, branch, url);
     }
     if name == "session-feed-current" {
         l.app.preferences.session_scope = SessionScope::CurrentProject;
@@ -118,7 +122,7 @@ pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
     l.sync_editors();
     if name == "conversation-overview" {
         overview(l);
-        crate::panels::conversations::open(state, &mut rune::Tx::default());
+        crate::overview::open(state, &mut rune::Tx::default());
     }
     true
 }

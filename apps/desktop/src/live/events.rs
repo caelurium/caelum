@@ -148,7 +148,7 @@ impl Live {
         let (index, session) = owners.next()?;
         if (self.app.selected == Some(index)
             && self.panels.screen != Screen::Home
-            && self.panels.overlay() != Some(Screen::ConversationOverview))
+            && self.panels.screen != Screen::Overview)
             || owners.next().is_some()
         {
             return None;
@@ -175,7 +175,7 @@ impl Live {
                         })
             })
             && crate::questions::active(self, index).is_none();
-        let preview = if self.panels.overview_shows_turn(index) {
+        let preview = if self.overview.shows_turn(index) {
             Preview::Overview(self.app.turn_preview(session))
         } else if peek {
             Preview::Child(peek_text(session))

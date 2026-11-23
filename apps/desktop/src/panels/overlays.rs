@@ -9,7 +9,6 @@ use super::{Panels, Screen};
 
 pub(super) enum Overlay {
     Standard(StandardOverlay),
-    Conversations(Box<super::conversations::State>),
     CreateWorktree(Box<crate::worktree::Form>),
     Palette(Box<crate::palette::State>),
     RemoveVm(Removal),
@@ -69,7 +68,6 @@ impl Overlay {
     fn screen(&self) -> Screen {
         match self {
             Self::Standard(screen) => screen.screen(),
-            Self::Conversations(_) => Screen::ConversationOverview,
             Self::CreateWorktree(_) => Screen::CreateWorktree,
             Self::Palette(_) => Screen::Palette,
             Self::RemoveVm(_) => Screen::RemoveVm,
@@ -152,10 +150,6 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     let Some(screen) = live(s).panels.overlay() else {
         return;
     };
-    if let Some(overview) = live(s).panels.conversations() {
-        layers.push(super::conversations::view(s, k, overview));
-        return;
-    }
     if matches!(screen, Screen::VmHandoff | Screen::VmStats) {
         crate::remote::popup(s, k, layers);
         return;
