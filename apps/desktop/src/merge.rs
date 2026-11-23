@@ -102,40 +102,47 @@ pub fn view(
         .border(1.0, k.c.border_base)
         .child(status(review, explanation, outcome, k).key("review-approval"))
         .child(ui::divider(k));
-    let mut checks =
-        status(summary.title, &summary.detail, summary.outcome, k).key("review-check-summary");
-    if let Some(list) = details
+    let checks = if let Some(list) = details
         .status_check_rollup
         .as_ref()
         .filter(|checks| !checks.is_empty())
     {
-        checks = checks
-            .child(
-                text(format!("{}", list.len()))
-                    .font(k.ty.mono)
-                    .color(k.c.text_muted)
-                    .px(6.0)
-                    .py(1.0)
-                    .radius(4.0)
-                    .fill(k.c.layer_02),
-            )
-            .child(
-                ui::Button::new(if open { "Hide" } else { "Details" })
-                    .variant(ButtonVariant::Outline)
-                    .on_press(move |s: &mut Workspace| {
-                        let expanded = &mut live_mut(s).panels.expanded_checks;
-                        if !expanded.remove(&owner) {
-                            expanded.insert(owner.clone());
-                        }
-                    })
-                    .build(k)
-                    .h(26.0)
-                    .px(8.0)
-                    .key("review-checks-toggle")
-                    .label("Check details")
-                    .expanded(open),
-            );
-    }
+        let count = list.len();
+        let count_label = if count == 1 {
+            "1 check".to_owned()
+        } else {
+            format!("{count} checks")
+        };
+        let summary_row = status(summary.title, &summary.detail, summary.outcome, k).child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    text(count_label)
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_muted),
+                )
+                .child(ui::disclosure(open, k)),
+        );
+        col().key("review-check-summary").w_full().child(
+            k.interactive(summary_row)
+                .key("review-checks-toggle")
+                .role("button")
+                .label("Check details")
+                .help(if open { "Hide checks" } else { "Show checks" })
+                .expanded(open)
+                .focusable(true)
+                .focus_ring(1.5, -1.5, k.c.border_focus)
+                .on_press(move |s: &mut Workspace| {
+                    let expanded = &mut live_mut(s).panels.expanded_checks;
+                    if !expanded.remove(&owner) {
+                        expanded.insert(owner.clone());
+                    }
+                }),
+        )
+    } else {
+        status(summary.title, &summary.detail, summary.outcome, k).key("review-check-summary")
+    };
     body = body.child(checks);
     if open {
         let mut reported: Vec<_> = details
