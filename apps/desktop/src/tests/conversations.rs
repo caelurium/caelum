@@ -106,6 +106,8 @@ fn overview_groups_sessions_and_supports_keyboard_navigation_and_tabs() {
     for size in [(800.0, 620.0), (1280.0, 1000.0)] {
         let mut rt = design_runtime("conversation-overview", size);
         assert_eq!(live(&rt.state).panels.screen, Screen::Overview);
+        assert!(rt.find("overview-card-activity").is_some());
+        assert!(rt.find("overview-card-machines").is_some());
         assert!(rt.find("overview-group-Waiting").is_some());
         assert!(rt.find("overview-group-Running").is_some());
         assert!(rt.find("overview-group-Settled").is_some());

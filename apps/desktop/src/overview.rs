@@ -1,4 +1,5 @@
-//! Workspace Overview dashboard: grouped sessions, pull requests and worktrees.
+//! Workspace Overview dashboard: summary cards, grouped sessions, pull requests and worktrees.
+mod cards;
 mod pull_requests;
 mod sessions;
 mod view;
@@ -9,10 +10,10 @@ pub use view::view;
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use caelum_core::application::{FeedSession, SessionBucket};
+use caelum_core::application::{FeedSession, SessionBucket, Task};
 use rune::{Icon, Key, KeyEvent, TextEdit, Tx};
 
 use crate::{
@@ -43,6 +44,12 @@ pub(super) static SETTLED: Icon = Icon {
     name: "overview-settled",
     view: 16.0,
     body: r#"<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="m5.5 8.1 1.7 1.7 3.3-3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub(super) static LAPTOP: Icon = Icon {
+    name: "overview-laptop",
+    view: 16.0,
+    body: r#"<rect x="3" y="3.5" width="10" height="7" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 12.5h13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
 };
 
 pub(super) static PULL_REQUEST: Icon = Icon {
@@ -99,6 +106,7 @@ pub struct State {
     pub(super) captured_bookmark: RefCell<Option<crate::live::Bookmark>>,
     pub(super) frame: RefCell<Frame>,
     wake_at: Option<u64>,
+    host_poll_at: Option<Instant>,
 }
 
 impl Default for State {
@@ -114,6 +122,7 @@ impl Default for State {
             captured_bookmark: RefCell::new(None),
             frame: RefCell::new(Frame::default()),
             wake_at: None,
+            host_poll_at: None,
         }
     }
 }
@@ -258,12 +267,24 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     }
     let shown = l.panels.screen == Screen::Overview && l.panels.overlay().is_none();
     if !shown {
+        l.overview.host_poll_at = None;
         l.overview.frame.get_mut().reset();
         return false;
     }
     let mut changed = false;
     if !l.fixture && !l.app.window_background {
         changed |= l.overview.tick(l.feed.displayed_at(), tx);
+        let now = Instant::now();
+        let should_poll_host = l
+            .overview
+            .host_poll_at
+            .is_none_or(|at| now.duration_since(at) >= Duration::from_secs(5));
+        if should_poll_host && !l.app.services.busy(&Task::HostStats) {
+            l.app.task(Task::HostStats);
+            l.overview.host_poll_at = Some(now);
+            changed = true;
+        }
+        tx.wake_after(Duration::from_secs(5));
     }
     changed
 }
@@ -274,6 +295,10 @@ pub(super) fn refresh_all(s: &mut Workspace) {
     l.app.refresh_feed_pull_requests(None);
     l.app.discover_open_sessions();
     l.app.refresh_open_sessions();
+    if !l.fixture {
+        l.app.task(Task::HostStats);
+        l.overview.host_poll_at = Some(Instant::now());
+    }
 }
 
 pub(super) fn row_key(id: &FeedSession) -> String {

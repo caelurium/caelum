@@ -167,6 +167,22 @@ fn overview(l: &mut Live) {
         text: "Compare the cold and incremental build times before the next release.".into(),
         options: Default::default(),
     });
+    let mut host =
+        caelum_core::host_stats::HostHistory::from_sample(caelum_core::host_stats::HostSample {
+            name: "MacBook Pro".into(),
+            used_gb: 27.0,
+            total_gb: 48.0,
+            cpu_percent: 22.0,
+        });
+    for cpu in [24.0, 18.0, 31.0, 29.0, 20.0, 25.0, 34.0, 28.0, 27.0] {
+        host.push(caelum_core::host_stats::HostSample {
+            name: "MacBook Pro".into(),
+            used_gb: 27.0,
+            total_gb: 48.0,
+            cpu_percent: cpu,
+        });
+    }
+    l.app.services.host = Some(host);
 }
 
 pub(super) fn sidebar_projects(l: &mut Live, project: &str) {

@@ -3,8 +3,8 @@ use rune::{El, Icon, ScrollSpec, TextStyle, col, el, icon, row, text};
 use rune_kit::{Kit, ScrollBar, glyphs};
 
 use super::{
-    RUNNING, SETTLED, Tab, WAITING, next_waiting, on_key, pull_requests, refresh_all, sessions,
-    worktrees,
+    RUNNING, SETTLED, Tab, WAITING, cards, next_waiting, on_key, pull_requests, refresh_all,
+    sessions, worktrees,
 };
 use crate::{
     Workspace,
@@ -106,6 +106,7 @@ pub fn view(s: &Workspace, k: &Kit, _layers: &mut Vec<El>) -> El {
                 .pb(if compact { 10.0 } else { 18.0 })
                 .gap(if compact { 12.0 } else { 18.0 })
                 .child(header)
+                .child(cards::view(s, pane_width, compact, k))
                 .child(tabs)
                 .child(
                     col()
