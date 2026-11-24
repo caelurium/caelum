@@ -12,6 +12,21 @@ fn label(value: &str, k: &Kit) -> El {
 }
 
 pub(super) fn checkout(k: &Kit, source: &Source) -> El {
+    if source.published_tip.is_none() {
+        return ui::caption("Could not verify a published branch or origin/main. Check Git access and reopen VM setup.", k).wrap();
+    }
+    if let Some(publication) = &source.publish {
+        let destination = match publication {
+            caelum_core::remote::BranchPublication::Named(name) => format!("origin/{name}"),
+            _ => "a new origin/caelum/<session-id> branch".into(),
+        };
+        return ui::caption(
+            format!("Create {destination} from origin/main, then start the VM."),
+            k,
+        )
+        .wrap()
+        .key("handoff-base");
+    }
     let tip = source.published_tip.as_deref().unwrap_or("");
     row()
         .w_full()

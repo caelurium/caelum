@@ -1,10 +1,51 @@
 use super::{Continuation, Target};
-use crate::application::Provider;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VmProvider {
+    #[default]
+    Codex,
+    Pi,
+    OpenCode,
+    Antigravity,
+}
+
+impl VmProvider {
+    pub const CHOICES: [Self; 2] = [Self::Codex, Self::Pi];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::Pi => "Pi",
+            Self::OpenCode => "OpenCode",
+            Self::Antigravity => "Antigravity",
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::Pi => "pi",
+            Self::OpenCode => "opencode",
+            Self::Antigravity => "antigravity",
+        }
+    }
+
+    pub(crate) fn native(self) -> Option<crate::application::Provider> {
+        use crate::application::Provider;
+        match self {
+            Self::Codex => Some(Provider::Codex),
+            Self::OpenCode => Some(Provider::OpenCode),
+            Self::Antigravity => Some(Provider::Antigravity),
+            Self::Pi => None,
+        }
+    }
+}
+
 // All managed VM conversations saved before provider selection used OpenCode.
-fn opencode() -> Provider {
-    Provider::OpenCode
+fn opencode() -> VmProvider {
+    VmProvider::OpenCode
 }
 
 /// API keys and native provider sessions never enter this record. The cursor is
@@ -19,7 +60,7 @@ pub struct Thread {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continued: Option<Continuation>,
     #[serde(default = "opencode")]
-    pub provider: Provider,
+    pub provider: VmProvider,
     /// Explicit Boat model ID; `None` delegates to this harness's Boat settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -42,7 +83,7 @@ impl Default for Thread {
             local_id: None,
             awaiting_native: false,
             continued: None,
-            provider: Provider::Codex,
+            provider: VmProvider::Codex,
             model: None,
             effort: None,
             last_activity: None,
@@ -82,7 +123,7 @@ impl Turn {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
     #[serde(default = "opencode")]
-    pub provider: Provider,
+    pub provider: VmProvider,
     pub conversation: String,
     pub prompt: String,
     pub id: String,
@@ -93,6 +134,8 @@ pub enum Speaker {
     You,
     Codex,
     OpenCode,
+    Pi,
+    Antigravity,
     Activity,
     ReasoningSummary,
     Tool(ToolState),
@@ -101,16 +144,20 @@ pub enum Speaker {
 
 impl Speaker {
     pub fn is_assistant(self) -> bool {
-        matches!(self, Self::Codex | Self::OpenCode)
+        matches!(
+            self,
+            Self::Codex | Self::OpenCode | Self::Pi | Self::Antigravity
+        )
     }
 }
 
-impl From<Provider> for Speaker {
-    fn from(provider: Provider) -> Self {
+impl From<VmProvider> for Speaker {
+    fn from(provider: VmProvider) -> Self {
         match provider {
-            Provider::Codex => Self::Codex,
-            Provider::OpenCode => Self::OpenCode,
-            Provider::Antigravity => Self::Codex,
+            VmProvider::Codex => Self::Codex,
+            VmProvider::OpenCode => Self::OpenCode,
+            VmProvider::Pi => Self::Pi,
+            VmProvider::Antigravity => Self::Antigravity,
         }
     }
 }
@@ -171,6 +218,10 @@ impl Line {
 
 impl Thread {
     pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
+
+    pub fn can_prompt_provider(&self) -> bool {
+        VmProvider::CHOICES.contains(&self.provider) || self.conversation.is_some()
+    }
 
     pub(crate) fn for_checkout() -> Self {
         Self {
@@ -345,7 +396,7 @@ pub struct Page {
 /// ID needs to be resolved by the worker.
 #[derive(Clone, Debug)]
 pub struct Prompt {
-    pub provider: Provider,
+    pub provider: VmProvider,
     pub model: Option<String>,
     pub effort: Option<String>,
     pub conversation: Option<String>,

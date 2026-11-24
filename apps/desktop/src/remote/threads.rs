@@ -116,7 +116,13 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                 .disabled(!app.can_start_vm_session(id))
                 .on_press(move |s: &mut Workspace| {
                     let l = live_mut(s);
-                    let provider = l.app.remote.saved.checkouts[&new].thread.provider;
+                    use caelum_core::remote::VmProvider;
+                    let current = l.app.remote.saved.checkouts[&new].thread.provider;
+                    let provider = if VmProvider::CHOICES.contains(&current) {
+                        current
+                    } else {
+                        VmProvider::Pi
+                    };
                     if l.app.new_vm_session(&new, provider) {
                         super::checkout::enter_new(s);
                     }

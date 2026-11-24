@@ -8,6 +8,7 @@ use crate::{
 
 fn source() -> Source {
     Source {
+        publish: None,
         published_tip: Some("a".repeat(40)),
         project: "/local/project".into(),
         repository: "example/project".into(),
@@ -18,7 +19,9 @@ fn source() -> Source {
 }
 fn created(app: &mut Workspace) -> (String, u64, Plan) {
     app.remote.picker = Some(Picker::Ready(source()));
-    let id = app.create_remote(Size::Small, Lifetime::HalfHour).unwrap();
+    let id = app
+        .create_remote(Size::Small, Lifetime::HalfHour, VmProvider::Codex)
+        .unwrap();
     let (req, Command::Remote(Operation::Create(_, plan))) = app.commands().pop().unwrap() else {
         panic!()
     };
@@ -71,7 +74,7 @@ fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_swi
     let c = app.remote.saved.checkouts.get_mut(&id).unwrap();
     c.thread.draft = "Réviser le plan".into();
     c.thread.last_activity = None; // A checkout restored from an older snapshot.
-    assert!(app.new_vm_session(&id, Provider::Codex));
+    assert!(app.new_vm_session(&id, VmProvider::Codex));
     let fresh = app.selected_feed_session().unwrap();
 
     app.preferences.session_scope = SessionScope::CurrentProject;
@@ -163,7 +166,7 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
     prepared(&mut app);
     let original = app.remote.saved.checkouts[&id].thread.clone();
     assert_eq!(original.draft, "Unsent");
-    assert_eq!(original.provider, Provider::Codex);
+    assert_eq!(original.provider, VmProvider::Codex);
     app.remote.picker = Some(Picker::Ready(Source {
         repository: "example/different".into(),
         ..source()
@@ -172,7 +175,7 @@ fn attaching_reopens_a_chat_but_the_launcher_starts_one_on_the_verified_checkout
     assert_eq!(attach(&mut app, SessionIntent::New), Some(id.clone()));
     assert!(app.open_vm_session(&id, SessionIntent::New).is_none());
     let cmds = app.commands();
-    let [(req, Command::Remote(Operation::MatchCheckout(project, target)))] = cmds.as_slice()
+    let [(req, Command::Remote(Operation::MatchCheckout(project, target, None)))] = cmds.as_slice()
     else {
         panic!("{cmds:?}")
     };
@@ -322,7 +325,6 @@ fn lost_create_reply_reuses_the_persisted_attempt_and_late_prepare_keeps_its_own
 
 #[test]
 fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
-    use crate::application::Provider;
     let mut app = Workspace::default();
     let (id, req, _) = created(&mut app);
     let finish =
@@ -332,7 +334,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
     finish(&mut app, req, prepared_vm(machine("vm-a"), "feat/new"));
     assert_eq!(
         app.remote.saved.checkouts[&id].thread.provider,
-        Provider::Codex
+        VmProvider::Codex
     );
     assert!(app.send_remote(&id, "Edit a file"));
     let saved_before_ack = app.snapshot();
@@ -341,7 +343,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         Command::Remote(Operation::Prompt(
             _,
             Prompt {
-                provider: Provider::Codex,
+                provider: VmProvider::Codex,
                 conversation: None,
                 model: None,
                 ..
@@ -352,7 +354,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         panic!()
     };
     let run = Run {
-        provider: Provider::Codex,
+        provider: VmProvider::Codex,
         conversation: "c".into(),
         id: "r".into(),
         prompt: "p".into(),
@@ -384,7 +386,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         let (req, _) = reopened.commands().pop().unwrap();
         finish(&mut reopened, req, prepared_vm(machine("vm-a"), "feat/new"));
         let mut work = reopened.commands();
-        assert!(!reopened.set_vm_provider(&id, &id, Provider::OpenCode));
+        assert!(!reopened.set_vm_provider(&id, &id, VmProvider::Pi));
         if known {
             let (req, Command::Remote(Operation::Follow(_, restored, cursor))) =
                 work.pop().unwrap()
@@ -410,8 +412,8 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
-            assert!(!reopened.set_vm_provider(&id, "stale-editor", Provider::OpenCode));
-            assert!(reopened.set_vm_provider(&id, &id, Provider::OpenCode));
+            assert!(!reopened.set_vm_provider(&id, "stale-editor", VmProvider::Pi));
+            assert!(reopened.set_vm_provider(&id, &id, VmProvider::Pi));
             let lines = &reopened.remote.saved.checkouts[&id].thread.lines;
             assert_eq!(lines.len(), 3);
             assert_eq!(lines[1].text, "Full reply");
@@ -419,14 +421,14 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
             assert_eq!(lines[2].speaker, Speaker::Outcome(TurnEnd::Finished));
             assert!(reopened.send_remote(&id, "Continue"));
             assert!(
-                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,p)))] if p.provider == Provider::OpenCode && p.conversation.as_deref()==Some("c") && p.model.is_none() && p.text=="Continue")
+                matches!(reopened.commands().as_slice(),[(_,Command::Remote(Operation::Prompt(_,p)))] if p.provider == VmProvider::Pi && p.conversation.as_deref()==Some("c") && p.model.is_none() && p.text=="Continue")
             );
         } else {
             assert!(work.is_empty());
             assert!(!reopened.send_remote(&id, "Edit a file"));
             reopened.recover_remote(&id, "p");
             assert!(
-                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Recover(_, Provider::Codex, None, p)))] if p=="p")
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Recover(_, VmProvider::Codex, None, p)))] if p=="p")
             );
         }
     }

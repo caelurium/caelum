@@ -272,7 +272,14 @@ pub(super) fn view(
     let provider = c.thread.provider.name();
     let input = text_input(&editors.draft, TextStyle::new(14.0, 400.0).lh(23.0))
         .label(format!("Message remote {provider}"))
-        .placeholder(format!("Message {provider} on this VM…"), k.c.text_muted)
+        .placeholder(
+            if c.thread.can_prompt_provider() {
+                format!("Message {provider} on this VM…")
+            } else {
+                "Choose Pi or Codex to start this VM conversation.".into()
+            },
+            k.c.text_muted,
+        )
         .help("Enter to send · Shift+Enter for a new line")
         .color(k.c.text_base)
         .selection_color(k.selection())
@@ -375,6 +382,7 @@ pub(super) fn view(
             .icon(&crate::SEND)
             .disabled(
                 c.thread.turn != Turn::Idle
+                    || !c.thread.can_prompt_provider()
                     || editors.draft.text.trim().is_empty()
                     || too_long
                     || l.app.remote.jobs.contains_key(id),

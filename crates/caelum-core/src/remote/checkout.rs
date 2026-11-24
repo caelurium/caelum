@@ -9,10 +9,37 @@ pub struct Source {
     pub account: String,
     pub repository: String,
     pub base: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish: Option<BranchPublication>,
     /// The published tip captured from the selected worktree before provisioning.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub published_tip: Option<String>,
     pub environment: Option<String>,
+}
+
+/// A new VM needs a cloneable ref before Boat allocates it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BranchPublication {
+    Named(String),
+    OnMain,
+    Detached,
+}
+
+impl BranchPublication {
+    pub(crate) fn destination(&self, token: &str) -> String {
+        match self {
+            Self::Named(name) => name.clone(),
+            Self::OnMain | Self::Detached => format!("caelum/{token}"),
+        }
+    }
+
+    pub(crate) fn local_branch(&self) -> Option<&str> {
+        match self {
+            Self::Named(name) => Some(name),
+            Self::OnMain => Some("main"),
+            Self::Detached => None,
+        }
+    }
 }
 
 impl Source {
@@ -134,7 +161,17 @@ impl Checkout {
                 .continued
                 .as_ref()
                 .filter(|_| self.thread.conversation.is_none())
-                .and_then(|c| c.base.clone()),
+                .and_then(|c| c.base.clone())
+                .or_else(|| match &self.phase {
+                    Phase::Prepare {
+                        new_branch: Some(branch),
+                        ..
+                    } if branch == &self.source.base => Some(PublishedBase {
+                        branch: branch.clone(),
+                        tip: self.source.published_tip.clone()?,
+                    }),
+                    _ => None,
+                }),
         })
     }
 }

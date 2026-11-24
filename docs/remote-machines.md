@@ -1,23 +1,26 @@
-# Run Codex on Boat
+# Run Codex or Pi on Boat
 
 A Boat VM has its own Git checkout and disk. Choose it as the destination for
-a normal Codex session. Your composer, transcript and session list stay in the
-same Caelum window; Codex, files and Git run on the VM.
-Configure Codex credentials in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
+a native Codex session or a Boat-managed Pi conversation. Both run on the VM.
+Configure credentials for the harness and model in [Boat → Agents & Proxying](https://boat.dev/dashboard?tab=agents).
 
 ## Create or attach a checkout
 
-1. Connect GitHub and Codex credentials in your
+1. Connect GitHub and agent credentials in your
    [Boat account](https://docs.boat.dev/integrated-agents/keys.md). In Caelum,
    open **Settings → Remote machines**, enter your Boat API key and click
    **Connect Boat**. The key is stored in Keychain or Linux Secret Service.
 2. Click **Create VM…** in **Settings → Remote machines** or **New session**.
    Use the current project, choose another, or open a project folder with a GitHub `origin`.
-3. **Session branch** shows the current branch of the selected checkout,
-   including a linked worktree. Publish it to `origin`, choose the [machine size](https://docs.boat.dev/machines.md)
+3. Choose **Codex** or **Pi**, the [machine size](https://docs.boat.dev/machines.md)
    and auto-stop, then click **Create VM**. Creation prepares the checkout;
    your first **Send** starts the conversation.
-   Caelum checks the published ref and Boat’s clone branch before allocating the VM.
+   Caelum uses an existing published feature branch. If the branch only exists
+   locally, Caelum creates the same branch name on GitHub at the published tip of
+   `origin/main`. From `main` or detached HEAD, it creates `caelum/<session-id>`
+   from that tip instead. Creating a branch uses your laptop’s authenticated
+   `gh` and requires permission to create refs on the repository.
+   Caelum verifies the ref before asking Boat to allocate the VM.
    It uses a matching single-repo
    environment or creates a dedicated one. Unpublished commits, staged changes
    and files on your laptop stay there.
@@ -49,12 +52,12 @@ it at its saved path so the same sessions and files are reopened.
 ## Open a VM session
 
 Click a VM in the sidebar to return to its session, or open **New session**
-(**⇧⌘N**) and pick the VM under the project. VM destinations use Codex regardless
-of the provider selected for local sessions. You can search
+(**⇧⌘N**) and pick the VM under the project. Click the machine name for native
+Codex or **Pi** for a managed conversation. You can search
 by machine name, repository or branch. **⌘N** in a VM session
 starts another draft on that checkout. Select any local or VM row in **Sessions**
 to switch back, even while another session streams.
-The normal session list, model and effort pickers, transcript, questions
+For native Codex, the normal session list, model and effort pickers, transcript, questions
 and approvals use Codex on the VM.
 **Files** and **Changes** read that checkout. Opening or switching
 sessions does not submit a message.
@@ -115,11 +118,10 @@ Click the **server icon** beside **Context** in a local Codex or OpenCode compos
 On **Home** it’s beside **Send**. The picker opens at the icon; on Home, choose the
 Home draft or a recent session. Finish any active local turn and queued prompts first.
 
-For a handoff, **Session branch** is the current branch of that session’s exact
-worktree (or Home’s chosen checkout). A new VM opens **that same branch** at
-its published commit on `origin`. The name is shown for reference; there’s
-nothing to enter. An existing VM must already be on that branch and contain the
-published commit.
+For a handoff, Caelum checks the session’s exact worktree (or Home’s chosen
+checkout). The dialog shows the published branch, or which branch **Create VM**
+will publish from `origin/main`. Opening the dialog never creates a ref. Attaching
+to an existing VM does not publish or switch its branch; it must already match.
 
 ![Handoff showing the session’s published commit and options for a new VM](design/previews/rune-dark-remote-handoff-new-small.png)
 
@@ -130,8 +132,8 @@ Your original session and draft stay on the laptop.
 If the VM already had a conversation, its row stays in **Sessions**.
 
 The first time you press **Send**, Caelum includes the local user and assistant
-messages as context for a new Codex session on the VM, even when the local chat
-used OpenCode. Setup shows how much chat
+messages as context for the selected VM harness, independent of the local
+provider. Setup shows how much chat
 will travel: up to the most recent 200 messages or 64 KiB of text. Tool output,
 reasoning, attachments and unpublished Git work stay local.
 
@@ -142,7 +144,7 @@ right-click the machine and select **Manage VM and Boat conversations…**.
 These conversations use [Boat’s integrated agent API](https://docs.boat.dev/platform-guide/agents.md)
 and keep their existing Boat conversation IDs and provider settings.
 
-**Before your first Send**, open **Boat default** beside **Codex** or **OpenCode**
+**Before your first Send**, open **Boat default** beside **Codex** or **Pi**
 in the VM composer. Search [Boat’s model catalogue](https://docs.boat.dev/integrated-agents/harnesses-and-models.md#the-model-catalog)
 and choose a model your Boat credentials support. You can change your choice
 while drafting. Only **Send** starts the
@@ -180,11 +182,11 @@ Only **Send** starts the new Boat conversation.
 ![A new session and an existing Boat conversation on the same machine in Sessions](design/previews/rune-light-vm-session-sidebar-small.png)
 
 To switch providers in an existing chat, finish the current turn, then choose
-**Codex** or **OpenCode** in the VM composer. The next **Send** uses that provider
+**Codex** or **Pi** in the VM composer. The next **Send** uses that provider
 in the same [Boat conversation](https://docs.boat.dev/integrated-agents/conversations.md#switch-harness-or-model-in-a-conversation).
 Your draft stays in the editor, and earlier replies keep their original provider labels.
 
-![Choosing Codex or OpenCode for the next message in a VM chat](design/previews/rune-light-remote-provider-small.png)
+![Choosing the harness for the next message in a VM chat](design/previews/rune-light-remote-provider-small.png)
 
 ### See what the agent is doing
 

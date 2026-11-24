@@ -89,7 +89,7 @@ pub(super) fn view(
         .items_center()
         .scroll(ScrollSpec { stick_bottom: true });
     let l = live(s);
-    if matches!(&l.remote.open_when_ready, Some((owner, caelum_core::remote::native::SessionIntent::New)) if owner == id)
+    if matches!(&l.remote.open_when_ready, Some((owner, super::checkout::Open::Native(caelum_core::remote::native::SessionIntent::New) | super::checkout::Open::Pi)) if owner == id)
     {
         return viewport;
     }
@@ -197,6 +197,8 @@ pub(super) fn view(
                             Entry::Line(l) => match l.speaker {
                                 Speaker::You => user(&l.text, &kit),
                                 Speaker::Codex => answer(l, "Codex"),
+                                Speaker::Pi => answer(l, "Pi"),
+                                Speaker::Antigravity => answer(l, "Antigravity"),
                                 Speaker::OpenCode => answer(l, "OpenCode"),
                                 Speaker::Tool(state) => activity::tool(
                                     s,

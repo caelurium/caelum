@@ -17,7 +17,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, link: &VmLink, position: usize, count
     let available = app.can_open_vm_thread(link);
     let title = t.title();
     let project = crate::checkouts::project_name(app, app.group_path(&c.source.project));
-    let provider = ui::provider_name(t.provider);
+    let provider = t.provider.name();
     let age = super::age(t.last_activity, l.feed.displayed_at()).0;
     let destination = c
         .branch()

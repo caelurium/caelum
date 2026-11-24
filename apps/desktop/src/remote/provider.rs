@@ -7,7 +7,7 @@ use crate::{
     panels::Screen,
     select::{Choice, Select},
 };
-use caelum_core::{application::Provider, remote::Thread};
+use caelum_core::{remote::Thread, remote::VmProvider};
 use rune::{El, TextEdit, row};
 use rune_kit::{Kit, Placement};
 
@@ -15,7 +15,7 @@ use rune_kit::{Kit, Placement};
 struct Owner {
     checkout: String,
     thread: String,
-    provider: Provider,
+    provider: VmProvider,
     model: Option<String>,
 }
 
@@ -44,7 +44,7 @@ pub(super) struct Menu {
 }
 
 enum Kind {
-    Provider,
+    VmProvider,
     Model(Box<TextEdit>),
     Effort,
 }
@@ -75,19 +75,24 @@ pub(super) fn controls(
         provider: thread.provider,
         model: thread.model.clone(),
     };
-    let open = matches!(&l.remote.menu, Some(Menu {owner: o, kind: Kind::Provider}) if o == &owner);
+    let open =
+        matches!(&l.remote.menu, Some(Menu {owner: o, kind: Kind::VmProvider}) if o == &owner);
     let toggle = owner.clone();
     let choose = owner.clone();
     let provider = Select::choices(
         "vm-provider",
-        Provider::ALL
+        VmProvider::CHOICES
             .into_iter()
             .map(|p| Choice::new(p.as_str(), p.name()))
             .collect(),
     )
     .label("VM provider")
     .menu_description("Applies to the next message in this chat.")
-    .current(Some(thread.provider.as_str()))
+    .current(Some(if VmProvider::CHOICES.contains(&thread.provider) {
+        thread.provider.as_str()
+    } else {
+        thread.provider.name()
+    }))
     .width(248.0)
     .placement(Placement::TopStart)
     .disabled(!owner.active(l))
@@ -97,16 +102,18 @@ pub(super) fn controls(
         if toggle.active(l) {
             l.remote.menu = (!open).then(|| Menu {
                 owner: toggle.clone(),
-                kind: Kind::Provider,
+                kind: Kind::VmProvider,
             });
         }
     })
     .on_close(close)
     .on_choose(move |s: &mut Workspace, value, _| {
         let l = live_mut(s);
-        if matches!(&l.remote.menu, Some(Menu {owner, kind: Kind::Provider}) if owner == &choose)
+        if matches!(&l.remote.menu, Some(Menu {owner, kind: Kind::VmProvider}) if owner == &choose)
             && choose.active(l)
-            && let Some(p) = Provider::ALL.into_iter().find(|p| p.as_str() == value)
+            && let Some(p) = VmProvider::CHOICES
+                .into_iter()
+                .find(|p| p.as_str() == value)
         {
             l.app.set_vm_provider(&choose.checkout, &choose.thread, p);
             l.remote.menu = None;

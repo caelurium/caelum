@@ -1,4 +1,4 @@
-use crate::application::Provider;
+use crate::remote::VmProvider;
 use boat_sdk::agents::{ProviderCatalogue, ProviderModel};
 use caelum_protocol::{ProviderChoice, ProviderModelChoice};
 use std::{
@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-pub type ModelLists = HashMap<Provider, Arc<[ProviderModelChoice]>>;
+pub type ModelLists = HashMap<VmProvider, Arc<[ProviderModelChoice]>>;
 
 const MAX_MODELS_PER_PROVIDER: usize = 512;
 const MAX_FIELD_BYTES: usize = 512;
@@ -31,14 +31,14 @@ pub enum ModelCatalogue {
 }
 
 impl ModelCatalogue {
-    pub fn find(&self, provider: Provider, id: &str) -> Option<&ProviderModelChoice> {
+    pub fn find(&self, provider: VmProvider, id: &str) -> Option<&ProviderModelChoice> {
         let Self::Ready(lists) = self else {
             return None;
         };
         lists.get(&provider)?.iter().find(|m| m.id == id)
     }
 
-    pub(crate) fn supports_effort(&self, provider: Provider, model: &str, level: &str) -> bool {
+    pub(crate) fn supports_effort(&self, provider: VmProvider, model: &str, level: &str) -> bool {
         self.find(provider, model)
             .is_some_and(|m| m.efforts.iter().any(|e| e.id == level))
     }
@@ -79,7 +79,7 @@ fn model_choice(m: ProviderModel) -> ProviderModelChoice {
 }
 
 pub(super) fn model_lists(mut catalogue: ProviderCatalogue) -> ModelLists {
-    Provider::ALL
+    VmProvider::CHOICES
         .into_iter()
         .filter_map(|provider| {
             let harness = catalogue.remove(provider.as_str())?;
