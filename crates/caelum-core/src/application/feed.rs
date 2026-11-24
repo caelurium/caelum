@@ -124,8 +124,13 @@ impl Workspace {
             )
             .map(|(index, _)| index)
             .collect();
-        indices
-            .sort_by_key(|&index| (std::cmp::Reverse(self.sessions[index].last_activity), index));
+        indices.sort_by_key(|&index| {
+            let session = &self.sessions[index];
+            (
+                std::cmp::Reverse((!archived && session.pinned, session.last_activity)),
+                index,
+            )
+        });
         indices
     }
 

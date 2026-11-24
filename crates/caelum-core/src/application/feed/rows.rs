@@ -20,7 +20,7 @@ enum Feed<'a> {
     },
 }
 
-type FeedRow = (Reverse<(bool, Option<u64>)>, FeedSession);
+type FeedRow = (Reverse<(bool, bool, Option<u64>)>, FeedSession);
 
 impl FeedSession {
     fn vm(checkout: &str, thread: &Thread) -> Self {
@@ -89,9 +89,10 @@ impl Workspace {
             .matching_local_sessions(&includes, &query, archived)
             .filter_map(|(i, s)| {
                 let active = !archived && self.overview_activity(s).is_some();
+                let pinned_order = !archived && s.pinned;
                 let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
                 (!active_only || active).then_some((
-                    Reverse((activity_order, s.last_activity)),
+                    Reverse((pinned_order, activity_order, s.last_activity)),
                     FeedSession::Local(i),
                 ))
             })
@@ -139,7 +140,7 @@ impl Workspace {
                         || t.provider.as_str().contains(&query)
                     {
                         rows.push((
-                            Reverse((activity_order, t.last_activity)),
+                            Reverse((false, activity_order, t.last_activity)),
                             FeedSession::vm(id, t),
                         ));
                     }

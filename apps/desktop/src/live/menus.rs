@@ -60,6 +60,29 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
         .w_full()
         .gap(4.0)
         .child(ui::popup_header(&session.title, None, None, k))
+        .children((!session.archived()).then(|| {
+            session_action_row(
+                if session.pinned {
+                    "Unpin session"
+                } else {
+                    "Pin session"
+                },
+                if session.pinned {
+                    "Return this session to normal ordering"
+                } else {
+                    "Keep this session at the top of Sessions"
+                },
+                &ui::PIN,
+                false,
+                false,
+                k,
+            )
+            .on_press(move |s: &mut Workspace| {
+                live_mut(s).app.toggle_pin(index);
+                close_session_menu(s);
+            })
+            .key("pin-session")
+        }))
         .child(
             session_action_row(
                 "Refresh session",

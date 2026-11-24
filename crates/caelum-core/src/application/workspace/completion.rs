@@ -330,6 +330,8 @@ impl Workspace {
                                 session.restore_archive(saved.archived, 0);
                                 session.reading = saved.reading;
                                 session.unread = saved.unread;
+                                session.pinned = saved.pinned;
+                                session.bookmarked_entries = saved.bookmarked_entries;
                                 session
                             })
                             .collect();

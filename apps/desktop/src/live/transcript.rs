@@ -332,6 +332,8 @@ pub(super) fn timeline_row(
             }
             EntryKind::Assistant => {
                 let id = entry.id.clone();
+                let bookmark_id = entry.id.clone();
+                let bookmarked = session.is_bookmarked(&entry.id);
                 item = item
                     .child(
                         row()
@@ -354,23 +356,51 @@ pub(super) fn timeline_row(
                                     ),
                             )
                             .child(
-                                quiet_button(&glyphs::COPY, "Copy response")
-                                    .on_press_tx(move |s: &mut Workspace, tx| {
-                                        if let Some(entry) = live_mut(s).app.sessions[index]
-                                            .conversation
-                                            .entries
-                                            .iter()
-                                            .find(|entry| entry.id == id)
-                                        {
-                                            tx.copy(
-                                                caelum_core::application::presentation::entry_text(
-                                                    entry,
-                                                ),
-                                            );
-                                        }
-                                    })
-                                    .build(k)
-                                    .key(format!("copy-response-{index}-{row_id}")),
+                                row()
+                                    .center_y()
+                                    .gap(2.0)
+                                    .child(
+                                        quiet_button(
+                                            &ui::BOOKMARK,
+                                            if bookmarked {
+                                                "Remove bookmark"
+                                            } else {
+                                                "Bookmark message"
+                                            },
+                                        )
+                                        .on_press(move |s: &mut Workspace| {
+                                            live_mut(s)
+                                                .app
+                                                .toggle_bookmark(index, bookmark_id.clone());
+                                        })
+                                        .build(k)
+                                        .color(if bookmarked {
+                                            k.c.text_accent
+                                        } else {
+                                            k.c.icon_muted
+                                        })
+                                        .key(format!("bookmark-response-{index}-{row_id}")),
+                                    )
+                                    .child(
+                                        quiet_button(&glyphs::COPY, "Copy response")
+                                            .on_press_tx(move |s: &mut Workspace, tx| {
+                                                if let Some(entry) = live_mut(s).app.sessions
+                                                    [index]
+                                                    .conversation
+                                                    .entries
+                                                    .iter()
+                                                    .find(|entry| entry.id == id)
+                                                {
+                                                    tx.copy(
+                                                        caelum_core::application::presentation::entry_text(
+                                                            entry,
+                                                        ),
+                                                    );
+                                                }
+                                            })
+                                            .build(k)
+                                            .key(format!("copy-response-{index}-{row_id}")),
+                                    ),
                             ),
                     )
                     .child(
@@ -454,6 +484,8 @@ pub(super) fn timeline_row(
                 && !entry.optimistic()
                 && session.previous_scope(entry).is_none())
             .then(|| entry.id.clone()),
+            matches!(entry.kind(), EntryKind::User | EntryKind::Assistant)
+                .then(|| entry.id.clone()),
         ));
     }
     if let Some(notice) = session.conversation.failure.notice() {

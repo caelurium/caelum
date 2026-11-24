@@ -291,6 +291,7 @@ pub fn message(
     index: usize,
     origin: String,
     user_entry: Option<String>,
+    bookmark_entry: Option<String>,
 ) -> El {
     el.focusable(true)
         .tab_index(-1)
@@ -310,6 +311,21 @@ pub fn message(
                         .icon(&ui::EDIT)
                         .enabled(live(s).app.selected == Some(index)),
                 );
+            let bookmark = bookmark_entry.clone();
+            if let Some(ref entry_id) = bookmark {
+                let bookmarked = live(s).app.sessions[index].is_bookmarked(entry_id);
+                menu = menu.item(
+                    Item::new(
+                        "bookmark",
+                        if bookmarked {
+                            "Remove bookmark"
+                        } else {
+                            "Bookmark message"
+                        },
+                    )
+                    .icon(&ui::BOOKMARK),
+                );
+            }
             let entry = user_entry.clone();
             let owner = live(s).app.sessions[index].key();
             if entry.is_some() {
@@ -319,6 +335,11 @@ pub fn message(
                     .item(Item::new("rewind", "Rewind before this prompt…"));
             }
             show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
+                "bookmark" => {
+                    if let Some(entry_id) = bookmark {
+                        live_mut(s).app.toggle_bookmark(index, entry_id);
+                    }
+                }
                 "edit" | "rewind" if live(s).app.sessions[index].key() == owner => {
                     use caelum_core::application::HistoryAction;
                     crate::commands::history(
@@ -533,10 +554,27 @@ pub fn session(el: El, index: usize) -> El {
     el.on_secondary_press(move |s: &mut Workspace, at, _| {
         let session = &live(s).app.sessions[index];
         let archived = session.archived();
+        let pinned = session.pinned;
         let title = session.title.clone();
         let owner = session.key();
         let id = session.remote_id.clone();
-        let mut menu = Menu::new()
+        let mut menu = Menu::new();
+        if !archived {
+            menu = menu
+                .item(
+                    Item::new(
+                        "pin",
+                        if pinned {
+                            "Unpin session"
+                        } else {
+                            "Pin session"
+                        },
+                    )
+                    .icon(&ui::PIN),
+                )
+                .separator();
+        }
+        menu = menu
             .item(Item::new("copy", "Copy session title").icon(&glyphs::COPY))
             .item(Item::new("id", "Copy session ID").enabled(id.is_some()))
             .item(Item::new("rename", "Rename session…").enabled(id.is_some()))
@@ -577,6 +615,9 @@ pub fn session(el: El, index: usize) -> El {
             format!("session-actions-{index}"),
             menu,
             move |s, pick, tx| match pick {
+                "pin" if !archived => {
+                    live_mut(s).app.toggle_pin(index);
+                }
                 "copy" => tx.copy(title.clone()),
                 "rename" if live(s).app.sessions[index].key() == owner => {
                     crate::commands::rename(s, index);

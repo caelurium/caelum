@@ -233,6 +233,12 @@ impl Workspace {
         self.has_question(session) || self.pending_approval(session, true).is_some()
     }
 
+    pub fn pending_approval_for(&self, index: usize) -> Option<&ApprovalPrompt> {
+        let session = self.sessions.get(index)?;
+        let active = session.working() || session.stopping() || !session.shells.is_empty();
+        self.pending_approval(session, active)
+    }
+
     pub(in crate::application) fn pending_approval(
         &self,
         session: &Session,
@@ -248,7 +254,7 @@ impl Workspace {
         })
     }
 
-    pub(in crate::application) fn has_question(&self, session: &Session) -> bool {
+    pub fn has_question(&self, session: &Session) -> bool {
         self.questions.iter().any(|p| {
             p.project_path == session.scope.project
                 && p.provider == session.scope.provider.as_str()
