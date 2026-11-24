@@ -200,6 +200,42 @@ pub struct GitHubPullRequestFeedback {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubCheckLogs {
+    pub run_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<u64>,
+    pub check_name: String,
+    pub excerpt: String,
+    pub truncated: bool,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionOrigin {
+    Subagent {
+        parent_remote_id: String,
+        entry_id: String,
+    },
+    PullRequestCheck {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_session_id: Option<String>,
+        project: String,
+        pr_url: String,
+        pr_number: u64,
+        head_oid: String,
+        check_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_id: Option<u64>,
+    },
+    Orchestration {
+        orchestration_id: String,
+        task_id: String,
+    },
+}
+
 /// GitHub exposes both Actions check runs and legacy commit statuses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "__typename")]

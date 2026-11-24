@@ -326,6 +326,7 @@ impl Workspace {
                                 session.restore_archive(saved.archived, 0);
                                 session.reading = saved.reading;
                                 session.unread = saved.unread;
+                                session.origin = saved.origin;
                                 session
                             })
                             .collect();

@@ -186,6 +186,8 @@ pub struct SavedSession {
     pub reading: f32,
     #[serde(default)]
     pub unread: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<caelum_protocol::SessionOrigin>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

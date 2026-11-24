@@ -389,6 +389,22 @@ impl Services {
                     url: url.clone(),
                 });
             }
+            (
+                Task::CheckLogs {
+                    project,
+                    url,
+                    head,
+                    check_name,
+                    ..
+                },
+                TaskReply::CheckLogs(logs),
+            ) => {
+                if let Some(review) = self.reviews.get_mut(&(project.clone(), url.clone())) {
+                    if review.head() == Some(head.as_str()) {
+                        review.check_logs.insert(check_name.clone(), logs);
+                    }
+                }
+            }
             _ => {}
         }
         if let Some(url) = merged_url {

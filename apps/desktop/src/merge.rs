@@ -159,8 +159,115 @@ pub fn view(
         });
         let mut list = col().w_full().pb(8.0);
         for (i, check) in reported.into_iter().enumerate() {
-            let url = check.url.map(str::to_owned);
-            list = list.child(
+            let check_url = check.url.map(str::to_owned);
+            let check_name = check.name.to_owned();
+            let failed = matches!(check.outcome, Outcome::Failure | Outcome::Interrupted);
+            let existing_child = failed
+                .then(|| {
+                    l.app
+                        .ci_fix_child_session(url, &details.head_ref_oid, &check_name)
+                })
+                .flatten();
+            let pending_worktree = failed && l.app.ci_fix_pending(url, &check_name);
+            let has_actions_logs = failed
+                && check_url
+                    .as_deref()
+                    .is_some_and(|u| caelum_core::github::parse_actions_run(u).is_some());
+            let loaded_logs = l
+                .app
+                .services
+                .reviews
+                .get(&(project.into(), url.into()))
+                .and_then(|r| r.check_logs.get(&check_name))
+                .cloned();
+            let log_task = has_actions_logs.then(|| Task::CheckLogs {
+                project: project.into(),
+                url: url.into(),
+                head: details.head_ref_oid.clone(),
+                check_name: check_name.clone(),
+                details_url: check_url.clone().unwrap_or_default(),
+            });
+            let loading_logs = log_task
+                .as_ref()
+                .is_some_and(|task| l.app.services.busy(task));
+            let fix_action = if let Some(child_index) = existing_child {
+                let child = &l.app.sessions[child_index];
+                let status_label = if l.app.needs_input(child) {
+                    "Fix · Needs input"
+                } else if child.working() {
+                    "Fix · Working"
+                } else {
+                    "Open fix session"
+                };
+                Some(
+                    ui::Button::new(status_label)
+                        .variant(ButtonVariant::Outline)
+                        .on_press(move |s: &mut Workspace| {
+                            let l = live_mut(s);
+                            l.app.select(child_index);
+                            l.sync_editors();
+                            l.panels.screen = crate::panels::Screen::Conversation;
+                            l.panels.set_overlay(None);
+                        })
+                        .build(k)
+                        .h(24.0)
+                        .px(8.0)
+                        .key(format!("check-open-fix-{i}")),
+                )
+            } else if failed {
+                let pr_project = project.to_owned();
+                let pr_url = url.to_owned();
+                let name = check_name.clone();
+                let details_link = check_url.clone();
+                Some(
+                    ui::Button::new(if pending_worktree {
+                        "Preparing worktree…"
+                    } else {
+                        "Fix in child session"
+                    })
+                    .variant(ButtonVariant::Outline)
+                    .disabled(pending_worktree)
+                    .on_press(move |s: &mut Workspace| {
+                        let l = live_mut(s);
+                        if l.app
+                            .fix_failing_check(
+                                pr_project.clone(),
+                                pr_url.clone(),
+                                name.clone(),
+                                details_link.clone(),
+                            )
+                            .is_some()
+                        {
+                            l.sync_editors();
+                            l.panels.screen = crate::panels::Screen::Conversation;
+                            l.panels.set_overlay(None);
+                        }
+                    })
+                    .build(k)
+                    .h(24.0)
+                    .px(8.0)
+                    .key(format!("check-fix-{i}")),
+                )
+            } else {
+                None
+            };
+            let log_action = log_task.map(|task| {
+                ui::Button::new(if loading_logs {
+                    "Loading…"
+                } else if loaded_logs.is_some() {
+                    "Refresh logs"
+                } else {
+                    "Logs"
+                })
+                .variant(ButtonVariant::GhostMuted)
+                .disabled(loading_logs)
+                .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
+                .build(k)
+                .h(24.0)
+                .px(8.0)
+                .key(format!("check-logs-{i}"))
+            });
+            let mut item = col().w_full().child(
                 k.interactive(
                     row()
                         .w_full()
@@ -182,6 +289,8 @@ pub fn view(
                                 .grow(1.0)
                                 .key(format!("check-name-{i}")),
                         )
+                        .children(log_action)
+                        .children(fix_action)
                         .child(if check.outcome == Outcome::Running {
                             ui::busy_text("Running", k.ty.small, k)
                                 .w(62.0)
@@ -205,20 +314,74 @@ pub fn view(
                         .child(
                             rune::icon(&ui::EXTERNAL, 12.0)
                                 .color(k.c.icon_muted)
-                                .opacity(if url.is_some() { 1.0 } else { 0.0 }),
+                                .opacity(if check_url.is_some() { 1.0 } else { 0.0 }),
                         ),
                 )
                 .key(format!("check-{i}"))
                 .role("link")
                 .label(check.name)
-                .focusable(url.is_some())
+                .focusable(check_url.is_some())
                 .focus_ring(1.0, 0.0, k.c.border_focus)
                 .on_press_tx(move |_: &mut Workspace, tx| {
-                    if let Some(url) = &url {
+                    if let Some(url) = &check_url {
                         let _ = tx.open_url(url);
                     }
                 }),
             );
+            if let Some(logs) = loaded_logs {
+                let copy_logs = logs.excerpt.clone();
+                item = item.child(
+                    col()
+                        .w_full()
+                        .px(12.0)
+                        .pb(8.0)
+                        .gap(4.0)
+                        .key(format!("check-log-preview-{i}"))
+                        .child(
+                            row()
+                                .w_full()
+                                .center_y()
+                                .child(
+                                    ui::caption(
+                                        if logs.truncated {
+                                            "Failure log (tail)"
+                                        } else {
+                                            "Failure log"
+                                        },
+                                        k,
+                                    )
+                                    .grow(1.0),
+                                )
+                                .child(
+                                    ui::Button::new("Copy logs")
+                                        .variant(ButtonVariant::GhostMuted)
+                                        .on_press_tx(move |_: &mut Workspace, tx| {
+                                            tx.copy(copy_logs.clone())
+                                        })
+                                        .build(k)
+                                        .h(22.0)
+                                        .px(6.0),
+                                ),
+                        )
+                        .child(
+                            col()
+                                .w_full()
+                                .max_h(180.0)
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(k.c.layer_02)
+                                .scroll(rune::ScrollSpec { stick_bottom: true })
+                                .child(
+                                    text(&logs.excerpt)
+                                        .font(k.ty.mono)
+                                        .color(k.c.text_base)
+                                        .selectable(true)
+                                        .wrap_anywhere(),
+                                ),
+                        ),
+                );
+            }
+            list = list.child(item);
         }
         body = body.child(list);
     }
