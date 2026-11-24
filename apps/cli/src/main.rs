@@ -541,8 +541,7 @@ fn handle_approvals(
         .into_iter()
         .filter(|request| request.project_path == project_path.to_string_lossy())
     {
-        let key = format!("{}:{}", request.provider, request.request_id);
-        if !handled.insert(key) {
+        if !handled.insert(request.attempt.clone()) {
             continue;
         }
         eprintln!("\n{}", request.summary);
@@ -554,10 +553,8 @@ fn handle_approvals(
         let mut answer = String::new();
         let allow = io::stdin().read_line(&mut answer)? > 0
             && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes");
-        broker.resolve(
-            &request.provider,
-            &request.project_path,
-            &request.request_id,
+        broker.resolve_prompt(
+            &request,
             if allow {
                 ApprovalDecision::AllowOnce
             } else {

@@ -178,6 +178,7 @@ pub fn close_session_menu(s: &mut Workspace) {
 }
 
 pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
+    super::approval_rules::overlay(s, k, layers);
     super::sidebar::overlays(s, k, layers);
     let l = live(s);
     if let Some(index) = l.app.last_archived() {

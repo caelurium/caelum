@@ -66,6 +66,10 @@ env_key = "CAELUM_TEST_KEY"
     git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "-m", "fixture")
     (project / "note.txt").write_text("VM edit\n")
     (project / "outside").symlink_to(home)
+    commands = project / ".caelum/commands"
+    commands.mkdir(parents=True)
+    (commands / "vm-note.md").write_text("From the VM: $1")
+    (commands / "outside-note.md").symlink_to(home / "endpoint.json")
     (binary / "gh").write_text('#!/bin/sh\n[ "$1 $2" = "pr list" ] && test -f ssh-smoke || exit 1\nprintf "[]" \n')
     (binary / "gh").chmod(0o700)
     (project / "ssh-smoke").touch()

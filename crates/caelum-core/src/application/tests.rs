@@ -1,3 +1,4 @@
+mod approval_rules;
 mod archive;
 mod checkouts;
 mod controls;
@@ -12,6 +13,7 @@ mod review;
 mod runtime;
 mod sessions;
 mod submission;
+mod templates;
 mod titles;
 mod updates;
 mod worktrees;

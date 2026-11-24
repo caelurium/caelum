@@ -139,6 +139,8 @@ fn overview_does_not_activate_idle_conversations_for_a_project_wide_approval() {
     let mut app = workspace();
     let other = app.new_session(app.sessions[0].scope.clone());
     app.approvals.push(caelum_protocol::ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         provider: "codex".into(),
         project_path: "/alpha".into(),
         session_id: None,

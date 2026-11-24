@@ -87,12 +87,14 @@ pub fn open(s: &mut Workspace) {
 pub fn changed(s: &mut Workspace, _: &mut Tx) {
     crate::latency::edit(live(s));
     let l = live_mut(s);
+    l.completion.active = 0;
     l.app.home.draft.text.clone_from(&l.home.editor.text);
     l.app.home.error = None;
 }
 
 pub fn send(s: &mut Workspace, tx: &mut Tx) {
     let l = live_mut(s);
+    crate::completion::sync_templates(l);
     if !crate::remote::native::ready(l) {
         return;
     }

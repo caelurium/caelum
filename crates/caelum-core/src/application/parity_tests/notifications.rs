@@ -42,6 +42,8 @@ fn notification_effects_keep_the_exact_requesting_session() {
     app.apply(Event::Questions(vec![question]));
     assert!(notifications(&mut app).is_empty());
     app.apply(Event::Approvals(vec![caelum_protocol::ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         provider: "codex".into(),
         project_path: "/project".into(),
         session_id: Some("session-0".into()),

@@ -153,6 +153,21 @@ async fn only_new_vm_setup_fills_a_missing_checkout_and_retry_uses_the_verified_
     };
     let second = home.join("other clone");
     clone_vm(&second, &upstream);
+    for (checkout, body) in [(&dest, "Selected $1"), (&second, "Other $1")] {
+        let dir = checkout.join(".caelum/commands");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("boat-example.md"), body).unwrap();
+    }
+    let definitions = boat.templates(&bound).await.unwrap();
+    assert_eq!(
+        definitions
+            .iter()
+            .find(|t| t.name == "boat-example")
+            .unwrap()
+            .render("VM")
+            .unwrap(),
+        "Selected VM"
+    );
     assert!(boat
         .prepare(&target, "main", None)
         .await

@@ -29,6 +29,17 @@ impl Access {
             _ => return None,
         };
         let reply = match task {
+            Task::Templates { .. } => {
+                let root = crate::remote::boat::checkout_quote(&self.root);
+                let script = format!(
+                    "cd -P {root} && test \"$PWD\" = {root} && {}",
+                    crate::templates::REMOTE_READ
+                );
+                self.io
+                    .block_on(self.run(&script, crate::templates::REMOTE_LIMIT, &[0]))
+                    .and_then(|data| crate::templates::from_remote(&data))
+                    .map(TaskReply::Templates)
+            }
             Task::File { path, .. } => self.io.block_on(self.file(path)).map(TaskReply::File),
             Task::Directory { path, offset, .. } => self
                 .io

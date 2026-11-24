@@ -1,3 +1,4 @@
+mod approval_policy;
 mod archive;
 mod completion;
 mod composer;
@@ -18,6 +19,7 @@ mod sessions;
 mod subagents;
 mod submission;
 mod tasks;
+mod templates;
 mod titles;
 
 pub use fork::FilePreview;
@@ -217,6 +219,8 @@ impl Session {
 }
 
 enum Pending {
+    ScopedApproval(approval_policy::Attempt),
+    Templates,
     PreviousHistory(usize, usize),
     Remote(remote::Lane),
     ConversationControl(usize, SessionKey, controls::Operation),
@@ -269,6 +273,8 @@ enum Pending {
 /// first-send creation; every pending request carries its original owner.
 #[derive(Default)]
 pub struct Workspace {
+    policy: approval_policy::State,
+    pub templates: crate::templates::Catalog,
     fork: Option<ForkPicker>,
     handoff: Option<VmHandoff>,
     pub home: Home,

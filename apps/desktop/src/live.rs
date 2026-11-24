@@ -1,6 +1,7 @@
 //! Rune adapter: editors and disclosure state stay here; application requests,
 //! provider activity and history reconciliation live in caelum-core.
 
+mod approval_rules;
 mod attention;
 mod composer;
 mod events;
@@ -77,6 +78,7 @@ pub struct Live {
     patch_inputs: patches::Inputs,
     menu: Option<(&'static str, usize)>,
     pub session_menu: Option<usize>,
+    pub(crate) approval_menu: Option<caelum_core::application::SessionKey>,
     delete_confirmation: Option<usize>,
     pub shell_panel: Option<crate::shells::Panel>,
     pub(crate) collapsed_shells: HashSet<usize>,
@@ -134,6 +136,7 @@ impl Live {
             patch_inputs: Default::default(),
             menu: None,
             session_menu: None,
+            approval_menu: None,
             delete_confirmation: None,
             shell_panel: None,
             collapsed_shells: Default::default(),
@@ -422,6 +425,7 @@ impl Live {
     }
 
     pub fn poll(&mut self, tx: &mut Tx) -> bool {
+        approval_rules::sync(self);
         self.app.conversation_hidden = self.panels.screen != crate::panels::Screen::Conversation
             || self.panels.overlay().is_some();
         let mut changed = self.media.poll();

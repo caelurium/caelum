@@ -1,6 +1,91 @@
 use super::*;
 
 #[test]
+fn template_badge_tab_and_arguments_use_the_editor_that_opened_the_menu() {
+    use crate::live::{live, live_mut};
+    use caelum_core::{
+        application::{Command, Event, Reply, Task, TaskReply},
+        remote::{Operation, Outcome},
+        templates::Template,
+    };
+    for (scene, field) in [
+        ("composer-empty", "live-draft-0"),
+        ("home", "home-draft"),
+        ("remote-model-draft", "remote-draft-checkout-example"),
+    ] {
+        let mut rt = design_runtime(scene, (800., 620.));
+        if scene == "remote-model-draft" {
+            crate::remote::scene(&mut rt.state, scene);
+            advance(&mut rt, 0.2);
+        }
+        fill(&mut rt, field, "/expl");
+        rt.update(|s, _| {
+            let app = &mut live_mut(s).app;
+            let template = Template::parse(
+                "explain".into(),
+                "---\ndescription: Explain a change\nargument_hint: <topic>\n---\nExplain $1"
+                    .into(),
+            )
+            .unwrap();
+            let (id, reply) = app
+                .commands()
+                .into_iter()
+                .find_map(|(id, c)| match c {
+                    Command::Task(Task::Templates { .. }) => Some((
+                        id,
+                        Reply::Task(TaskReply::Templates(vec![template.clone()])),
+                    )),
+                    Command::Remote(Operation::Templates(_)) => Some((
+                        id,
+                        Reply::Remote(Outcome::Templates(vec![template.clone()])),
+                    )),
+                    _ => None,
+                })
+                .unwrap();
+            app.apply(Event::Completed(id, Ok(reply)));
+        });
+        advance(&mut rt, 0.2);
+        assert_eq!(
+            element(&rt, "completion-0").label.as_deref(),
+            Some("/explain"),
+            "{scene}"
+        );
+        assert!(
+            rt.elements()
+                .iter()
+                .any(|e| e.text.as_deref() == Some("Template") && e.visible[3] > 0.),
+            "{scene}"
+        );
+        key(&mut rt, Key::Tab, Mods::default());
+        rt.paste("\"the change\"");
+        key(&mut rt, Key::Enter, Mods::default());
+        let l = live(&rt.state);
+        if scene == "remote-model-draft" {
+            assert_eq!(
+                l.app.remote.saved.checkouts["checkout-example"]
+                    .thread
+                    .lines
+                    .last()
+                    .unwrap()
+                    .text,
+                "Explain the change"
+            );
+        } else {
+            assert_eq!(
+                l.app.sessions[l.app.selected.unwrap()]
+                    .conversation
+                    .entries
+                    .last()
+                    .unwrap()
+                    .text,
+                "Explain the change",
+                "{scene}"
+            );
+        }
+    }
+}
+
+#[test]
 fn command_completions_overlay_background_output_without_moving_the_editor() {
     for size in [(800.0, 620.0), (1280.0, 1000.0)] {
         for scene in ["shells", "shells-many"] {
