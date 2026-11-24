@@ -186,6 +186,10 @@ pub struct SavedSession {
     pub reading: f32,
     #[serde(default)]
     pub unread: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bookmarked_entries: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

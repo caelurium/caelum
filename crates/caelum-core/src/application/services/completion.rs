@@ -34,7 +34,10 @@ impl Services {
                         .entry((task.project().into(), url.into()))
                         .or_default()
                         .error = Some(error);
-                } else if !matches!(task, Task::Shell { .. } | Task::HostStats) {
+                } else if !matches!(
+                    task,
+                    Task::Shell { .. } | Task::HostStats | Task::InstalledProviders
+                ) {
                     self.checkouts
                         .entry(task.project().into())
                         .or_default()
@@ -95,6 +98,9 @@ impl Services {
                 Some(history) => history.push(sample),
                 None => self.host = Some(crate::host_stats::HostHistory::from_sample(sample)),
             },
+            (Task::InstalledProviders, TaskReply::InstalledProviders(providers)) => {
+                self.installed_providers = Some(providers);
+            }
             (Task::Usage { provider, .. }, TaskReply::Usage(usage)) => {
                 checkout.usage.insert(*provider, usage);
             }

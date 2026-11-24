@@ -85,7 +85,11 @@ fn session_popover_roves_without_selecting_its_background_owner() {
     );
     key(&mut rt, Key::Down, Mods::default());
     advance(&mut rt, 0.1);
-    assert!(element(&rt, "archive-session").focused || element(&rt, "refresh-history").focused);
+    assert!(
+        element(&rt, "pin-session").focused
+            || element(&rt, "archive-session").focused
+            || element(&rt, "refresh-history").focused
+    );
     key(&mut rt, Key::Escape, Mods::default());
     advance(&mut rt, 0.2);
     assert!(element(&rt, "session-actions-1").focused);

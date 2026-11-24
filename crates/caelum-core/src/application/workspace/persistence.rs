@@ -92,7 +92,12 @@ impl Workspace {
                 || matches!(
                     request.1,
                     Command::Load(_)
-                        | Command::Task(Task::Updates | Task::Update(_) | Task::HostStats)
+                        | Command::Task(
+                            Task::Updates
+                                | Task::Update(_)
+                                | Task::HostStats
+                                | Task::InstalledProviders,
+                        )
                         | Command::Cancel(_)
                         | Command::Remote(crate::remote::Operation::Interrupt(..))
                         | Command::Task(
@@ -293,6 +298,8 @@ impl Workspace {
                     archived: s.archived(),
                     reading: s.reading,
                     unread: s.unread,
+                    pinned: s.pinned,
+                    bookmarked_entries: s.bookmarked_entries.clone(),
                 })
             })
             .collect();

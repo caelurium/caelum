@@ -177,7 +177,7 @@ fn composer(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                         .build(k)
                         .key("home-attach"),
                 )
-                .child(controls::provider(s, k, layers))
+                .children(controls::provider(s, k, layers))
                 .child(controls::model(s, k))
                 .children(controls::effort(s, k, layers))
                 .child(el().grow(1.0))
