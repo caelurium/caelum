@@ -673,6 +673,8 @@ fn live_navigation_restores_reading_position_and_approval_decisions_keep_their_o
     rt.update(|s, tx| {
         s.live.as_mut().unwrap().app.apply(Event::Approvals(vec![
             caelum_protocol::ApprovalPrompt {
+                attempt: "fixture".into(),
+                repeatable: None,
                 provider: "codex".into(),
                 project_path: "/project".into(),
                 session_id: Some("thread-1".into()),

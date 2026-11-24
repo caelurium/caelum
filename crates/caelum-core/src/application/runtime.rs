@@ -501,6 +501,9 @@ impl ProviderRuntime {
                     .map_err(|e| e.to_string())?;
                 return self.history_page(key, None).map(Reply::History);
             }
+            Command::RunOpenCodeCommand(key, prompt, options) => {
+                self.run_opencode_command(key, prompt, options)
+            }
             Command::Send(key, prompt, options) => match key.scope.provider {
                 Provider::Codex => self
                     .codex
@@ -517,29 +520,6 @@ impl ProviderRuntime {
                         self.opencode
                             .select_agent(&key.scope.project, &key.id, agent)
                             .map_err(|e| e.to_string())?;
-                    }
-                    let command_text = super::composer::command_text(prompt);
-                    if let Some(input) = command_text
-                        .strip_prefix('/')
-                        .filter(|_| !prompt.starts_with("//"))
-                    {
-                        let (name, text) =
-                            input.split_once(char::is_whitespace).unwrap_or((input, ""));
-                        return self
-                            .opencode
-                            .run_command(
-                                &key.scope.project,
-                                &key.id,
-                                &caelum_protocol::OpenCodeCommandInput {
-                                    name: name.into(),
-                                    text: text.into(),
-                                    files: super::composer::command_files(prompt),
-                                },
-                                options.model.as_deref(),
-                                options.effort.as_deref(),
-                            )
-                            .map(|()| Reply::Done)
-                            .map_err(|e| e.to_string());
                     }
                     self.opencode
                         .send_prompt_with_options(
@@ -580,12 +560,7 @@ impl ProviderRuntime {
             },
             Command::Approve(prompt, decision) => self
                 .approvals
-                .resolve(
-                    &prompt.provider,
-                    &prompt.project_path,
-                    &prompt.request_id,
-                    *decision,
-                )
+                .resolve_prompt(prompt, *decision)
                 .map_err(|e| e.to_string()),
             Command::Answer(prompt, answer) => self.questions.resolve(
                 &prompt.provider,

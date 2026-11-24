@@ -3,6 +3,13 @@ use crate::{application::Command, remote::*};
 use std::time::{Duration, Instant};
 
 impl Workspace {
+    pub fn send_remote_draft(&mut self, id: &str, text: &str) -> Result<bool, String> {
+        let expanded = self
+            .templates
+            .expand(&crate::templates::Target::Boat(id.into()), text)?;
+        Ok(self.send_remote(id, expanded.as_deref().unwrap_or(text)))
+    }
+
     pub fn send_remote(&mut self, id: &str, text: &str) -> bool {
         if self.publishing(id) {
             return false;
@@ -216,6 +223,7 @@ impl Workspace {
                     c.thread.turn = Turn::Idle;
                     c.thread
                         .append(Line::new(Speaker::Outcome(status), status.label()));
+                    self.templates_changed(crate::templates::Target::Boat(id.into()));
                     if self.remote.saved.selected.as_deref() == Some(id)
                         && self.remote.changes.contains_key(id)
                     {

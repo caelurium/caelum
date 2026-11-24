@@ -188,6 +188,8 @@ fn saving_errors_never_block_cancellation_or_permission_replies() {
     app.cancel(index);
     app.approve(
         caelum_protocol::ApprovalPrompt {
+            attempt: "fixture".into(),
+            repeatable: None,
             provider: "codex".into(),
             project_path: "/a".into(),
             session_id: Some("s".into()),

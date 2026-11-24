@@ -94,6 +94,7 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
 }
 
 fn composer(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
+    crate::completion::overlay(s, k, layers);
     let l = live(s);
     let position = l.home.position.clone();
     let mounted = l.home.mounted;

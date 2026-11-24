@@ -27,6 +27,24 @@ pub(super) fn checkout(desktop: &mut Desktop) {
         },
     );
     assert!(matches!(note,TaskReply::File(f) if f.content=="VM edit\n"));
+    let TaskReply::Templates(items) = task(
+        desktop,
+        Task::Templates {
+            project: project.clone(),
+        },
+    ) else {
+        panic!("expected VM templates");
+    };
+    assert_eq!(
+        items
+            .iter()
+            .find(|t| t.name == "vm-note")
+            .unwrap()
+            .render("hello")
+            .unwrap(),
+        "From the VM: hello"
+    );
+    assert!(!items.iter().any(|t| t.name == "outside-note"));
     assert!(desktop
         .try_request(Command::Task(Task::File {
             project: project.clone(),

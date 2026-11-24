@@ -114,6 +114,7 @@ pub enum Operation {
     Interrupt(Target, Run),
     Recover(Target, VmProvider, Option<String>, String),
     Git(Target, GitAction),
+    Templates(Target),
     Stats(MachineId),
 }
 
@@ -138,6 +139,7 @@ pub enum Outcome {
     ToolOutput(ToolOutput),
     Interrupted,
     Review(Review),
+    Templates(Vec<crate::templates::Template>),
     Stats(Sample),
 }
 

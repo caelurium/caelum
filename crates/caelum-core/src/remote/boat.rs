@@ -31,6 +31,18 @@ pub(super) struct Boat {
 }
 
 impl Boat {
+    pub(super) async fn templates(
+        &self,
+        target: &Target,
+    ) -> Result<Vec<crate::templates::Template>, String> {
+        let output = self
+            .worktree(target, None)
+            .await?
+            .command(crate::templates::REMOTE_READ)
+            .await?;
+        crate::templates::from_remote(output.as_bytes())
+    }
+
     pub(super) async fn delete(&self, key: &MachineId) -> Result<Outcome, String> {
         self.owns(key)?;
         let reply = self.client.delete_sandbox(&key.id).await.map_err(|e| {

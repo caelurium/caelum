@@ -23,6 +23,7 @@ pub(crate) use checkout::manage;
 pub(crate) use checkout::open_session_row;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
+pub(crate) use conversation::{draft_editor, draft_editor_mut, send as send_draft};
 pub(crate) use create::button as create_button;
 pub(crate) use create::height as create_height;
 pub(crate) use create::view as create_view;

@@ -1,6 +1,6 @@
 use super::{Pending, Session, Workspace};
 use crate::application::{Command, Provider, QueuedPrompt, SessionKey, Summary};
-use caelum_protocol::{ApprovalDecision, ApprovalPrompt, QuestionPrompt};
+use caelum_protocol::{ApprovalPrompt, QuestionPrompt};
 
 #[derive(Default)]
 pub(super) enum Submission {
@@ -31,9 +31,9 @@ pub(super) struct Attempt {
     pub(super) intent: Intent,
 }
 
-#[derive(Clone, Copy)]
 pub(super) enum Origin {
     Direct,
+    Template(String),
     Queue,
 }
 
@@ -96,6 +96,13 @@ impl Session {
     fn recover_prompt(&mut self, attempt: Attempt) {
         match attempt.origin {
             Origin::Direct => self.failed_prompt = Some(attempt.prompt.text),
+            Origin::Template(invocation) => {
+                let (_, attachments) = crate::application::split_context(&attempt.prompt.text);
+                self.failed_prompt = Some(crate::application::composer::with_context(
+                    &invocation,
+                    &attachments,
+                ));
+            }
             Origin::Queue => self.queue.insert(0, attempt.prompt),
         }
     }
@@ -116,6 +123,18 @@ impl Workspace {
     }
 
     pub fn send(&mut self, index: usize, prompt: String) -> bool {
+        let target = crate::templates::Target::Checkout(self.sessions[index].scope.project.clone());
+        let expanded = match self.templates.expand(&target, &prompt) {
+            Ok(value) => value,
+            Err(error) => {
+                self.sessions[index].error = Some(error);
+                return false;
+            }
+        };
+        let (prompt, origin) = match expanded {
+            Some(text) => (text, Origin::Template(prompt)),
+            None => (prompt, Origin::Direct),
+        };
         if prompt.trim().is_empty() && self.sessions[index].attachments.is_empty() {
             return false;
         }
@@ -127,7 +146,7 @@ impl Workspace {
         let native_command = prompt
             .trim()
             .strip_prefix('/')
-            .filter(|_| !prompt.trim().starts_with("//"));
+            .filter(|_| matches!(origin, Origin::Direct) && !prompt.trim().starts_with("//"));
         if let Some(command) = native_command {
             let name = command.split_whitespace().next().unwrap_or_default();
             if !self
@@ -148,13 +167,19 @@ impl Workspace {
                 return false;
             }
         }
+        let provider_command =
+            native_command.is_some() && session.scope.provider == Provider::OpenCode;
         let prompt = crate::application::composer::with_context(&prompt, &session.attachments);
         if let Some(key) = session.key().filter(|_| native_command.is_some()) {
             session.error = None;
             session.attachments.clear();
             session.draft.clear();
             session.options_dirty = false;
-            let command = Command::Send(key, prompt.clone(), session.options.clone());
+            let command = if provider_command {
+                Command::RunOpenCodeCommand(key, prompt.clone(), session.options.clone())
+            } else {
+                Command::Send(key, prompt.clone(), session.options.clone())
+            };
             let request = self.request(command, Pending::Control(index));
             self.sessions[index].native_command = Some(NativeCommand { request, prompt });
             return true;
@@ -183,6 +208,7 @@ impl Workspace {
         }
         if queued {
             session.queue.push(QueuedPrompt {
+                provider_command,
                 text: prompt,
                 options: session.options.clone(),
             });
@@ -190,7 +216,12 @@ impl Workspace {
             session.draft.clear();
             return true;
         }
-        let accepted = self.send_raw(index, prompt);
+        let prompt = QueuedPrompt {
+            text: prompt,
+            options: session.options.clone(),
+            provider_command,
+        };
+        let accepted = self.submit_prompt(index, prompt, origin);
         if accepted {
             self.sessions[index].attachments.clear();
             self.sessions[index].draft.clear();
@@ -263,6 +294,7 @@ impl Workspace {
 
     fn send_raw(&mut self, index: usize, text: String) -> bool {
         let prompt = QueuedPrompt {
+            provider_command: false,
             text,
             options: self.sessions[index].options.clone(),
         };
@@ -346,10 +378,15 @@ impl Workspace {
 
     fn admit_prompt_text(&mut self, index: usize, key: SessionKey, text: String, attempt: Attempt) {
         let revision = self.sessions[index].revision;
-        let request = self.request(
-            Command::Send(key.clone(), text, attempt.prompt.options.clone()),
-            Pending::Send(index),
-        );
+        let command = if attempt.prompt.provider_command
+            && key.scope.provider == Provider::OpenCode
+            && text == attempt.prompt.text
+        {
+            Command::RunOpenCodeCommand(key.clone(), text, attempt.prompt.options.clone())
+        } else {
+            Command::Send(key.clone(), text, attempt.prompt.options.clone())
+        };
+        let request = self.request(command, Pending::Send(index));
         self.sessions[index].submission = Submission::Admitting {
             request,
             key,
@@ -519,15 +556,6 @@ impl Workspace {
             session.error = Some(error);
             session.failed_prompt = Some(command.prompt);
         }
-    }
-
-    pub fn approve(&mut self, prompt: ApprovalPrompt, decision: ApprovalDecision) {
-        let owner = Pending::Request {
-            provider: prompt.provider.clone(),
-            project: prompt.project_path.clone(),
-            session: prompt.session_id.clone(),
-        };
-        self.request(Command::Approve(prompt, decision), owner);
     }
 
     pub fn answer(

@@ -271,6 +271,8 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
                 }
                 "retrying" => session.conversation.set_retrying(true),
                 "input" => l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+                    attempt: "fixture".into(),
+                    repeatable: None,
                     provider: "opencode".into(),
                     project_path: session.scope.project.clone(),
                     session_id: session.remote_id.clone(),

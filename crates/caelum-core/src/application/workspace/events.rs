@@ -10,7 +10,10 @@ impl Workspace {
                 self.services.updater.progress(id, progress);
             }
             Event::Branch(update) => self.branch_update(update),
-            Event::Checkout(project) => self.checkout_changed(&project),
+            Event::Checkout(project) => {
+                self.templates_changed(crate::templates::Target::Checkout(project.clone()));
+                self.checkout_changed(&project);
+            }
             Event::Completed(id, result) => {
                 self.remote.native_requests.remove(&id);
                 if let Some(pending) = self.pending.remove(&id) {
@@ -42,8 +45,10 @@ impl Workspace {
                 }
             }
             Event::Approvals(prompts) => {
+                self.apply_rules(&prompts);
                 if let Some(prompt) = prompts.iter().find(|p| {
                     self.preferences.input_needed
+                        && !self.scoped_approval_pending(p)
                         && !self.approvals.contains(p)
                         && self.preferences.should_notify(self.visible_request(
                             &p.provider,
