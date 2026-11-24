@@ -40,17 +40,25 @@ fn feedback_belongs_to_a_recorded_branch_of_the_exact_checkout() {
     assert_eq!(app.requested_changes(&app.sessions[owner]), Some(&pr));
     for i in [other, worktree] {
         assert!(app.requested_changes(&app.sessions[i]).is_none());
+        assert!(app.session_pull_request(&app.sessions[i]).is_none());
     }
 
     let current = GitHubPullRequest {
         number: 43,
         url: "https://github.com/example/repo/pull/43".into(),
-        ..pr
+        is_draft: true,
+        review_decision: None,
+        ..pr.clone()
     };
     discover_pull_request(&mut app, "/repo", "follow-up", &current);
-    assert_eq!(app.requested_changes(&app.sessions[owner]), Some(&current));
+    assert_eq!(
+        app.session_pull_request(&app.sessions[owner]),
+        Some(&current)
+    );
+    assert_eq!(app.requested_changes(&app.sessions[owner]), Some(&pr));
     app.sessions[owner].details = None;
     assert!(app.requested_changes(&app.sessions[owner]).is_none());
+    assert!(app.session_pull_request(&app.sessions[owner]).is_none());
 }
 
 #[test]
@@ -86,6 +94,10 @@ fn latest_live_decision_wins_even_when_details_arrive_after_rediscovery() {
         app.task(fetch.clone());
         let request = app.commands().pop().unwrap().0;
         complete(&mut app, request, state, decision);
+        assert_eq!(
+            app.session_pull_request(&app.sessions[owner]).is_some(),
+            state == "OPEN"
+        );
         assert_eq!(
             app.requested_changes(&app.sessions[owner]).is_some(),
             attention
