@@ -275,3 +275,89 @@ fn native_file_preview_attaches_an_immutable_snapshot_to_the_originating_draft()
     assert_eq!(live.app.sessions[0].attachments[0].content, "fn main() {}");
     assert!(live.app.sessions[1].attachments.is_empty());
 }
+
+#[test]
+fn open_link_opens_external_file_urls_in_files_inspector() {
+    use caelum_core::application::{Command, Event, Reply, Task, TaskReply};
+    let mut rt = live_runtime();
+    let external =
+        std::env::temp_dir().join(format!("caelum external plan {}.md", std::process::id()));
+    let expected = external.to_string_lossy().into_owned();
+    let encoded = expected.replace(' ', "%20");
+    rt.update(|s, tx| {
+        crate::panels::open_link(s, 0, &format!("file://{encoded}#L12-L20"), tx);
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.state.inspector.is_open());
+    let live = rt.state.live.as_mut().unwrap();
+    assert_eq!(live.panels.inspector, crate::panels::Screen::Files);
+    assert_eq!(
+        live.panels.pending_line,
+        Some(("/project".into(), expected.clone(), 12))
+    );
+    assert_eq!(
+        live.app.services.checkouts["/project"]
+            .selected_file
+            .as_deref(),
+        Some(expected.as_str())
+    );
+    let (file_req, _) = live
+        .app
+        .commands()
+        .into_iter()
+        .find(|(_, command)| {
+            matches!(command, Command::Task(Task::File { path, .. }) if path == &expected)
+        })
+        .expect("dispatches Task::File for external file URL");
+    rt.update(|s, _| {
+        s.live.as_mut().unwrap().app.apply(Event::Completed(
+            file_req,
+            Ok(Reply::Task(TaskReply::File(
+                caelum_protocol::ProjectFileContent {
+                    path: expected.clone(),
+                    content: "# Implementation Plan\n\nDetails\n".into(),
+                    size_bytes: 31,
+                    truncated: false,
+                },
+            ))),
+        ))
+    });
+    advance(&mut rt, 0.2);
+    assert!(
+        rt.elements().iter().any(|element| !element.exiting
+            && element.text.as_deref() == Some(external.file_name().unwrap().to_str().unwrap())),
+        "external file tab should show its filename"
+    );
+
+    rt.update(|s, tx| {
+        crate::panels::open_link(s, 0, &format!("file://localhost{encoded}#L12"), tx);
+    });
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.services.checkouts["/project"]
+            .selected_file
+            .as_deref(),
+        Some(expected.as_str())
+    );
+
+    rt.update(|s, tx| {
+        crate::panels::open_link(s, 0, "file:///project/src/main.rs#L5", tx);
+    });
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.services.checkouts["/project"]
+            .selected_file
+            .as_deref(),
+        Some("src/main.rs")
+    );
+
+    let traversal = format!("file://{}/../secret.md", std::env::temp_dir().display());
+    rt.update(|s, tx| {
+        crate::panels::open_link(s, 0, &traversal, tx);
+    });
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.services.checkouts["/project"]
+            .selected_file
+            .as_deref(),
+        Some("src/main.rs"),
+        "parent-dir traversal must be ignored"
+    );
+}
