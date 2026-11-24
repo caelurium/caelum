@@ -24,6 +24,15 @@ Source: https://github.com/anomalyco/models.dev (MIT license).
 
 Copyright (c) 2025 models.dev
 
+# GitHub Octicons
+
+The `git-pull-request-16` icon in `src/ui.rs` is from
+[Octicons](https://github.com/primer/octicons) (MIT license).
+
+Copyright (c) 2026 GitHub Inc.
+
+# MIT license (models.dev and Octicons)
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

@@ -2,6 +2,36 @@ use super::*;
 use caelum_core::application::SessionScope;
 
 #[test]
+fn sidebar_pr_opens_the_review_without_selecting_its_session() {
+    let mut rt = design_runtime("session-review-feedback", (800.0, 620.0));
+    click(&mut rt, "live-session-1");
+    assert!(rt.find("session-pull-request-1").is_none());
+    let button = element(&rt, "session-pull-request-0");
+    assert!(button.focusable);
+    assert_eq!(
+        button.label.as_deref(),
+        Some("Open pull request #95: Refine session navigation")
+    );
+    click(&mut rt, "session-pull-request-0");
+    let l = crate::live::live(&rt.state);
+    assert_eq!(l.app.selected, Some(1));
+    assert_eq!(l.panels.screen, crate::panels::Screen::Review);
+    assert_eq!(
+        l.panels.review,
+        Some((
+            "/projects/caelum".into(),
+            "https://github.com/example/caelum/pull/95".into()
+        ))
+    );
+    click(&mut rt, "live-session-0");
+    assert_eq!(
+        crate::live::live(&rt.state).panels.screen,
+        crate::panels::Screen::Conversation
+    );
+    assert_eq!(crate::live::live(&rt.state).app.selected, Some(0));
+}
+
+#[test]
 fn session_rows_refresh_cached_branch_labels_without_remounting_the_draft() {
     use caelum_core::application::{Command, Event, Provider, Reply, Task, TaskReply};
     use caelum_protocol::{GitRepositoryStatus, SessionDetails};
