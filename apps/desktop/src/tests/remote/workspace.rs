@@ -79,6 +79,33 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
 }
 
 #[test]
+fn vm_launcher_opens_pi_without_submitting_or_replacing_the_previous_chat() {
+    let mut rt = design_runtime("", (800., 620.));
+    let id = "checkout-example";
+    rt.update(|s, _| crate::remote::scene(s, "remote-machine"));
+    advance(&mut rt, 0.2);
+    key(&mut rt, Key::Escape, Mods::default());
+    fill(
+        &mut rt,
+        "remote-draft-checkout-example",
+        "Keep my old draft",
+    );
+    rt.update(|s, _| crate::panels::open_launcher(s));
+    advance(&mut rt, 0.2);
+    click(&mut rt, "launch-pi-checkout-example");
+    let l = live_mut(&mut rt.state);
+    assert_eq!(l.panels.screen, Screen::Remote);
+    let checkout = &l.app.remote.saved.checkouts[id];
+    assert_eq!(checkout.thread.provider, VmProvider::Pi);
+    assert!(checkout.thread.conversation.is_none());
+    assert_eq!(checkout.other_threads[0].draft, "Keep my old draft");
+    assert!(l.app.commands().iter().all(|(_, c)| !matches!(
+        c,
+        Command::Start(..) | Command::Send(..) | Command::Remote(Operation::Prompt(..))
+    )));
+}
+
+#[test]
 fn new_session_shortcuts_use_codex_on_the_vm_even_with_opencode_selected_for_local_sessions() {
     let mut rt = design_runtime("", (800., 620.));
     let id = "checkout-example";
@@ -115,7 +142,7 @@ fn new_session_shortcuts_use_codex_on_the_vm_even_with_opencode_selected_for_loc
     let c = &l.app.remote.saved.checkouts[id];
     assert_eq!(
         (c.thread.provider, c.thread.draft.as_str()),
-        (Provider::OpenCode, "Park this draft")
+        (VmProvider::OpenCode, "Park this draft")
     );
     fill(&mut rt, &format!("live-draft-{first}"), "Second draft");
     shortcut(&mut rt, false);
@@ -154,7 +181,7 @@ fn a_vm_launch_from_home_checks_its_chosen_worktree_and_keeps_the_boat_chat_park
     click(&mut rt, "launch-vm-checkout-example");
     assert!(rt.find("remote-setup-composer").is_some());
     let commands = live_mut(&mut rt.state).app.commands();
-    let check = commands.iter().find_map(|(r,c)| matches!(c, Command::Remote(Operation::MatchCheckout(p,t)) if p == tree && t.machine.id == "vm-example").then_some(*r)).unwrap();
+    let check = commands.iter().find_map(|(r,c)| matches!(c, Command::Remote(Operation::MatchCheckout(p,t,None)) if p == tree && t.machine.id == "vm-example").then_some(*r)).unwrap();
     rt.update(|s, _| {
         live_mut(s).apply(Event::Completed(
             check,
@@ -216,8 +243,8 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
     assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
     assert_eq!(c.thread.draft, "Keep my draft");
-    assert_eq!(c.thread.provider, Provider::OpenCode);
-    assert_eq!(c.other_threads[0].provider, Provider::Codex);
+    assert_eq!(c.thread.provider, VmProvider::OpenCode);
+    assert_eq!(c.other_threads[0].provider, VmProvider::Codex);
     assert_eq!(c.other_threads.len(), 1);
     click(&mut rt, "vm-threads");
     click(&mut rt, &format!("vm-thread-{fresh}"));
@@ -225,9 +252,9 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let app = &mut live_mut(&mut rt.state).app;
     let commands = app.commands();
     assert!(
-        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, p)))] if t.machine.id == "vm-example" && p.provider == Provider::Codex && p.conversation.is_none() && p.model.is_none() && p.text == "Independent task")
+        matches!(commands.as_slice(), [(_, Command::Remote(Operation::Prompt(t, p)))] if t.machine.id == "vm-example" && p.provider == VmProvider::Codex && p.conversation.is_none() && p.model.is_none() && p.text == "Independent task")
     );
-    assert!(!app.new_vm_session(id, Provider::Codex));
+    assert!(!app.new_vm_session(id, VmProvider::Codex));
     assert!(!app.switch_vm_thread(id, id));
 }
 

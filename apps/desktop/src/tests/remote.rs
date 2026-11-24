@@ -7,7 +7,7 @@ mod workspace;
 use super::*;
 use caelum_core::{
     application::{Command, Event, Provider, Reply},
-    remote::{Inventory, Operation, Outcome, Source},
+    remote::{Inventory, Operation, Outcome, Source, VmProvider},
 };
 
 #[test]
@@ -67,6 +67,7 @@ fn settings_create_vm_opens_the_form_and_only_provisions_on_submit() {
         l.apply(Event::Completed(
             id,
             Ok(Reply::Remote(Outcome::Source(Source {
+                publish: None,
                 published_tip: Some("a".repeat(40)),
                 account: "example-account".into(),
                 project,
@@ -171,6 +172,7 @@ fn changing_the_launch_project_opens_a_codex_vm_with_the_selected_branch() {
                     account: "example-account".into(),
                     repository: "example/project".into(),
                     base: "feature/launcher".into(),
+                    publish: None,
                     published_tip: Some("a".repeat(40)),
                     environment: None,
                 }))),
@@ -187,7 +189,7 @@ fn changing_the_launch_project_opens_a_codex_vm_with_the_selected_branch() {
     click(&mut rt, "create-remote");
     let app = &mut live_mut(&mut rt.state).app;
     let c = &app.remote.saved.checkouts[app.remote.saved.selected.as_ref().unwrap()];
-    assert_eq!(c.thread.provider, Provider::Codex);
+    assert_eq!(c.thread.provider, VmProvider::Codex);
     assert_eq!(c.branch(), Some("feature/launcher"));
     assert!(c.thread.conversation.is_none());
     let commands = app.commands();
@@ -294,7 +296,7 @@ fn remote_composer_and_workspace_menu_target_the_vm_when_the_local_checkout_was_
     click(&mut rt, "option0");
     let thread =
         &rt.state.live.as_ref().unwrap().app.remote.saved.checkouts["checkout-example"].thread;
-    assert_eq!(thread.provider, Provider::Codex);
+    assert_eq!(thread.provider, VmProvider::Codex);
     assert_eq!(thread.draft, "Review the remote branch");
     assert_eq!(
         thread.lines[1].speaker,
@@ -303,7 +305,7 @@ fn remote_composer_and_workspace_menu_target_the_vm_when_the_local_checkout_was_
     click(&mut rt, "remote-draft-checkout-example");
     key(&mut rt, Key::Enter, Mods::default());
     let app = &mut rt.state.live.as_mut().unwrap().app;
-    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,p)) if target.machine.id=="vm-example" && p.provider==Provider::Codex && p.conversation.as_deref()==Some("thread-example") && p.text=="Review the remote branch")));
+    assert!(app.commands().iter().any(|(_,op)|matches!(op,Command::Remote(Operation::Prompt(target,p)) if target.machine.id=="vm-example" && p.provider==VmProvider::Codex && p.conversation.as_deref()==Some("thread-example") && p.text=="Review the remote branch")));
     assert!(app.active_project.is_none());
     assert!(!element(&rt, "vm-provider-trigger").focusable);
     choose_workspace_action(&mut rt, "View remote changes");

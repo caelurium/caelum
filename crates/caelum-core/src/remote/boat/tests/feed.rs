@@ -1,6 +1,6 @@
 use super::{agent_target, fixture};
 use crate::{
-    application::Provider,
+    remote::VmProvider,
     remote::{harness::Harness, Run, RunStatus, Speaker, Thread, ToolState, TurnEnd},
 };
 use serde_json::json;
@@ -14,7 +14,7 @@ async fn a_response_can_gain_tools_at_the_same_event_id_before_the_turn_finishes
     let (server, boat) = fixture().await;
     let target = agent_target();
     let run = Run {
-        provider: Provider::Codex,
+        provider: VmProvider::Codex,
         conversation: "chat".into(),
         prompt: "p".into(),
         id: "run".into(),

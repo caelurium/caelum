@@ -47,13 +47,11 @@ impl Workspace {
             if c.thread.conversation.is_some() || c.thread.continued.is_none() {
                 return None;
             }
+            let provider = c.thread.provider.native()?;
             let previous = c.other_threads.pop().unwrap_or_default();
             let thread = std::mem::replace(&mut c.thread, previous);
             let h = thread.continued?;
-            let i = self.new_session_slot(Scope {
-                project,
-                provider: thread.provider,
-            });
+            let i = self.new_session_slot(Scope { project, provider });
             let s = &mut self.sessions[i];
             if thread.model.is_some() {
                 s.options.model = thread.model;

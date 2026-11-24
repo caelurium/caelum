@@ -1,5 +1,5 @@
 use super::Workspace;
-use crate::application::Provider;
+use crate::remote::VmProvider;
 use crate::remote::{Job, Machine, Phase, Thread, Turn};
 
 impl Workspace {
@@ -47,13 +47,16 @@ impl Workspace {
     }
 
     /// Opening a blank editor never submits a prompt or changes the VM branch.
-    pub fn new_vm_session(&mut self, id: &str, provider: Provider) -> bool {
-        if !self.can_start_vm_session(id) {
+    pub fn new_vm_session(&mut self, id: &str, provider: VmProvider) -> bool {
+        if !VmProvider::CHOICES.contains(&provider) || !self.can_start_vm_session(id) {
             return false;
         }
         let c = self.remote.saved.checkouts.get_mut(id).unwrap();
         if c.thread.is_blank() {
             c.thread.provider = provider;
+            if provider == VmProvider::Pi && c.thread.local_id.is_none() {
+                c.thread.local_id = Some(uuid::Uuid::new_v4().to_string());
+            }
             if c.thread.last_activity.is_none() {
                 c.thread.record_activity();
             }
@@ -74,8 +77,11 @@ impl Workspace {
     }
 
     /// The next Send uses this harness in the same Boat conversation.
-    pub fn set_vm_provider(&mut self, id: &str, owner: &str, provider: Provider) -> bool {
-        if self.remote.saved.selected.as_deref() != Some(id) || !self.can_switch_vm_thread(id) {
+    pub fn set_vm_provider(&mut self, id: &str, owner: &str, provider: VmProvider) -> bool {
+        if !VmProvider::CHOICES.contains(&provider)
+            || self.remote.saved.selected.as_deref() != Some(id)
+            || !self.can_switch_vm_thread(id)
+        {
             return false;
         }
         let thread = &mut self.remote.saved.checkouts.get_mut(id).unwrap().thread;

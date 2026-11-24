@@ -1,6 +1,6 @@
 use super::{agent_target, fixture};
 use crate::{
-    application::Provider,
+    remote::VmProvider,
     remote::{boat::events, Run, Speaker, Thread, ToolState},
 };
 use serde_json::{json, Value};
@@ -11,7 +11,7 @@ use wiremock::{
 
 fn run() -> Run {
     Run {
-        provider: Provider::Codex,
+        provider: VmProvider::Codex,
         conversation: "chat".into(),
         prompt: "p".into(),
         id: "r".into(),

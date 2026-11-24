@@ -1,5 +1,5 @@
 use super::{default_prompt, environment, fixture, sandbox};
-use crate::application::Provider;
+use crate::remote::VmProvider;
 use crate::remote::{
     harness::Harness, GitAction, Host, MachineId, Machines, Outcome, Plan, PublishedBase, Size,
     Source, Target,
@@ -234,6 +234,7 @@ async fn an_environment_write_denial_can_be_corrected_and_the_same_create_retrie
         .and(wiremock::matchers::body_partial_json(json!({"environment":name})))
         .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"create","status":"provisioning","sandbox":sandbox("provisioning")}))).expect(1).mount(&server).await;
     let source = Source {
+        publish: None,
         published_tip: None,
         project: "/local/project".into(),
         account: boat.account.clone(),
@@ -399,6 +400,7 @@ async fn runs_opencode_on_the_session_worktree_branch_and_publishes_only_the_rev
                 "promptRun":{"id":"r","promptId":"p","sandboxId":"vm-1","status":"queued","done":false},"status":"queued","provider":"opencode"}))
         }).expect(1).mount(&server).await;
     let source = Source {
+        publish: None,
         published_tip: Some(base.tip.clone()),
         project: worktree.to_string_lossy().into(),
         account: "user-1".into(),
@@ -451,7 +453,7 @@ async fn runs_opencode_on_the_session_worktree_branch_and_publishes_only_the_rev
     assert!(matches!(
         boat.send(
             &target,
-            &default_prompt(Provider::OpenCode, None, "Wrong branch")
+            &default_prompt(VmProvider::OpenCode, None, "Wrong branch")
         )
         .await
         .unwrap(),
@@ -478,7 +480,7 @@ async fn runs_opencode_on_the_session_worktree_branch_and_publishes_only_the_rev
     assert!(matches!(
         boat.send(
             &target,
-            &default_prompt(Provider::OpenCode, None, "Update the README")
+            &default_prompt(VmProvider::OpenCode, None, "Update the README")
         )
         .await
         .unwrap(),

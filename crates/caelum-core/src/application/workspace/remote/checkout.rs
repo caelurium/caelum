@@ -1,6 +1,6 @@
 use super::{Lane, Pending, Workspace};
 use crate::{
-    application::{Command, Provider, Reply},
+    application::{Command, Reply},
     remote::{native::SessionIntent, *},
 };
 use std::time::{Duration, Instant};
@@ -94,21 +94,29 @@ impl Workspace {
         });
     }
 
-    pub fn create_remote(&mut self, size: Size, lifetime: Lifetime) -> Option<String> {
+    pub fn create_remote(
+        &mut self,
+        size: Size,
+        lifetime: Lifetime,
+        provider: VmProvider,
+    ) -> Option<String> {
+        if !VmProvider::CHOICES.contains(&provider) {
+            return None;
+        }
         let Some(Picker::Ready(source)) = self.remote.picker.clone() else {
             return None;
         };
         source.published_tip.as_ref()?;
         let branch = source.base.clone();
         let id = self.register_vm(source, &branch, size, lifetime)?;
-        self.remote.saved.checkouts.get_mut(&id)?.thread.provider = Provider::Codex;
+        self.remote.saved.checkouts.get_mut(&id)?.thread.provider = provider;
         self.select_remote(&id);
         Some(id)
     }
 
     pub(super) fn register_vm(
         &mut self,
-        source: Source,
+        mut source: Source,
         branch: &str,
         size: Size,
         lifetime: Lifetime,
@@ -117,9 +125,15 @@ impl Workspace {
             return None;
         }
         let id = uuid::Uuid::new_v4().to_string();
+        let branch = if let Some(publication) = &source.publish {
+            source.base = publication.destination(&id);
+            source.base.clone()
+        } else {
+            branch.into()
+        };
         let plan = Plan {
             token: id.clone(),
-            branch: branch.into(),
+            branch,
             size,
             lifetime,
         };
@@ -172,14 +186,14 @@ impl Workspace {
             return Some(id);
         }
         if !existing {
-            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = Provider::Codex;
+            self.remote.saved.checkouts.get_mut(&id)?.thread.provider = VmProvider::Codex;
         }
         self.select_remote(&id);
         Some(id)
     }
 
     pub(super) fn register_machine(&mut self, machine: Machine) -> Option<String> {
-        let Some(Picker::Ready(source)) = self.remote.picker.clone() else {
+        let Some(Picker::Ready(mut source)) = self.remote.picker.clone() else {
             return None;
         };
         if machine.key.account != source.account {
@@ -195,6 +209,7 @@ impl Workspace {
             id.clone()
         } else {
             let id = uuid::Uuid::new_v4().to_string();
+            source.publish = None;
             self.remote.saved.checkouts.insert(
                 id.clone(),
                 Checkout {
@@ -263,7 +278,14 @@ impl Workspace {
             | Phase::Prepare {
                 new_branch: None, ..
             } if self.remote.branch_checks.contains_key(id) => {
-                Operation::MatchCheckout(self.remote.branch_checks[id].clone(), c.target().unwrap())
+                let project = &self.remote.branch_checks[id];
+                let publication = c
+                    .source
+                    .publish
+                    .clone()
+                    .filter(|_| project == &c.source.project)
+                    .map(|kind| (kind, c.source.base.clone()));
+                Operation::MatchCheckout(project.clone(), c.target().unwrap(), publication)
             }
             Phase::Prepare { new_branch, .. } => Operation::Prepare(
                 c.target().unwrap(),
@@ -304,7 +326,9 @@ impl Workspace {
             self.remote.monitor = Monitor::Off;
         }
         let lane = match &op {
-            Operation::MatchCheckout(project, _) => Lane::MatchCheckout(id.into(), project.clone()),
+            Operation::MatchCheckout(project, ..) => {
+                Lane::MatchCheckout(id.into(), project.clone())
+            }
             _ => Lane::Checkout(id.into()),
         };
         let request = self.request(Command::Remote(op), Pending::Remote(lane));

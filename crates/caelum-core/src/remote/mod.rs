@@ -17,11 +17,13 @@ pub use chat::Continuation;
 pub use chat::Message;
 pub(crate) use chat::RecentChat;
 pub(crate) use checkout::github_slug;
+pub use checkout::BranchPublication;
 pub use checkout::ProviderDefaults;
 pub use checkout::PublishedBase;
 pub use checkout::VmLink;
 pub use checkout::{valid_branch, Checkout, Job, Phase, Picker, Plan, Saved, Size, Source, Target};
 pub use git::{Changes, GitAction, Review, Revision};
+pub use harness::VmProvider;
 pub use harness::{Line, Page, Prompt, Run, RunStatus, Speaker, Thread, ToolState, Turn, TurnEnd};
 pub use lifetime::Lifetime;
 pub use models::ModelCatalogue;
@@ -34,7 +36,6 @@ pub use tools::ToolLoad;
 pub use tools::ToolOutput;
 pub use tools::ToolSource;
 
-use crate::application::Provider;
 use serde::{Deserialize, Serialize};
 use std::{fmt, sync::Arc};
 use zeroize::Zeroizing;
@@ -101,7 +102,7 @@ pub enum Operation {
     Disconnect,
     Discover(String),
     DiscoverHandoff(String),
-    MatchCheckout(String, Target),
+    MatchCheckout(String, Target, Option<(BranchPublication, String)>),
     Create(Source, Plan),
     Prepare(Target, String, Option<String>),
     Power(MachineId, bool),
@@ -111,7 +112,7 @@ pub enum Operation {
     Follow(Target, Run, Option<String>),
     InspectTool(MachineId, ToolSource),
     Interrupt(Target, Run),
-    Recover(Target, Provider, Option<String>, String),
+    Recover(Target, VmProvider, Option<String>, String),
     Git(Target, GitAction),
     Stats(MachineId),
 }

@@ -1,6 +1,6 @@
 use super::{checkout, conversation};
 use crate::{Workspace, live::live_mut, panels::Screen, settings::Page};
-use caelum_core::{application::Provider, remote::*};
+use caelum_core::remote::*;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub(crate) fn scene(s: &mut Workspace, name: &str) {
@@ -21,8 +21,14 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             "main"
         }
         .into(),
+        publish: match name {
+            "remote-create" => Some(BranchPublication::Named("feat/health".into())),
+            "remote-handoff" => Some(BranchPublication::OnMain),
+            _ => None,
+        },
         published_tip: Some("a".repeat(40)),
-        environment: (name != "remote-create").then(|| "project".into()),
+        environment: (!matches!(name, "remote-create" | "remote-handoff"))
+            .then(|| "project".into()),
     };
     let machine = Machine {
         key: MachineId {
@@ -99,7 +105,7 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         other_threads: vec![],
         thread: Thread {
             conversation: Some("thread-example".into()),
-            provider: Provider::OpenCode,
+            provider: VmProvider::OpenCode,
             last_activity: Some(l.feed.displayed_at() - 120_000),
             lines: vec![
                 Line::new(Speaker::You, "Add a health check and show me the changes."),
@@ -114,10 +120,9 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     match name {
         "remote-trace" => trace::setup(&mut c),
         "remote-model-draft" => {
-            use caelum_core::application::Provider;
             use caelum_protocol::{ProviderChoice, ProviderModelChoice};
             c.thread = Thread {
-                provider: Provider::OpenCode,
+                provider: VmProvider::Pi,
                 draft: "Review the changes on this branch.".into(),
                 ..Default::default()
             };
@@ -149,8 +154,8 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             };
             l.app.remote.models = ModelCatalogue::Ready(
                 [
-                    (Provider::OpenCode, models.into()),
-                    (Provider::Codex, [reasoner].into()),
+                    (VmProvider::Pi, models.into()),
+                    (VmProvider::Codex, [reasoner].into()),
                 ]
                 .into(),
             );

@@ -43,7 +43,7 @@ fn send(
         panic!("{cmds:?}")
     };
     assert_eq!(t.machine.id, "vm-example");
-    assert_eq!(p.provider, Provider::Codex);
+    assert_eq!(p.provider, VmProvider::Codex);
     assert_eq!(p.model.as_deref(), Some("codex-only"));
     assert_eq!(p.effort.as_deref(), effort);
     assert_eq!(p.conversation.as_deref(), conversation);
@@ -65,7 +65,7 @@ fn editing_effort_before_and_between_turns_only_applies_on_send() {
     assert!(!live_mut(&mut rt.state).app.set_vm_effort(
         VM,
         &owner,
-        Provider::Codex,
+        VmProvider::Codex,
         "codex-only",
         Some("low")
     ));
@@ -73,7 +73,7 @@ fn editing_effort_before_and_between_turns_only_applies_on_send() {
         &mut rt,
         req,
         Ok(Outcome::Accepted(Run {
-            provider: Provider::Codex,
+            provider: VmProvider::Codex,
             conversation: "new-chat".into(),
             id: "r".into(),
             prompt: "p".into(),
@@ -117,8 +117,8 @@ fn incompatible_choices_reset_and_a_saved_effort_can_be_cleared_offline() {
     assert!(rt.find("vm-effort-trigger").is_none());
     let app = &mut live_mut(&mut rt.state).app;
     assert!(app.remote.saved.checkouts[VM].thread.effort.is_none());
-    assert!(!app.set_vm_effort(VM, &owner, Provider::Codex, "codex-only", Some("high")));
-    assert!(!app.set_vm_effort(VM, &owner, Provider::Codex, "codex-basic", Some("high")));
+    assert!(!app.set_vm_effort(VM, &owner, VmProvider::Codex, "codex-only", Some("high")));
+    assert!(!app.set_vm_effort(VM, &owner, VmProvider::Codex, "codex-basic", Some("high")));
     click(&mut rt, "vm-model-trigger");
     click(&mut rt, "vm-model-item-codex-only");
     choose_level(&mut rt, "High");
@@ -154,7 +154,7 @@ fn a_catalogue_refresh_retires_only_levels_boat_removed() {
     choose_level(&mut rt, "Low");
 
     let mut revised = catalogue();
-    let models = std::sync::Arc::make_mut(revised.get_mut(&Provider::Codex).unwrap());
+    let models = std::sync::Arc::make_mut(revised.get_mut(&VmProvider::Codex).unwrap());
     models[0].efforts.retain(|e| e.id != "xhigh");
     live_mut(&mut rt.state).app.refresh_vm_models();
     let req = requested(&mut rt);

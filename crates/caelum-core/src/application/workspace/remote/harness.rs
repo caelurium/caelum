@@ -12,6 +12,7 @@ impl Workspace {
         };
         if text.trim().is_empty()
             || c.thread.awaiting_native
+            || !c.thread.can_prompt_provider()
             || text.len() > Thread::MAX_MESSAGE_BYTES
             || !matches!(c.phase, Phase::Ready { .. })
             || self.remote.jobs.contains_key(id)
