@@ -73,8 +73,10 @@ impl TitleState {
 impl Workspace {
     pub(super) fn refresh_title(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if session.scope.provider != Provider::OpenCode
-            || session.title_state.turns() < TURN_INTERVAL
+        if !matches!(
+            session.scope.provider,
+            Provider::OpenCode | Provider::Antigravity
+        ) || session.title_state.turns() < TURN_INTERVAL
             || session.archived()
             || session.archiving()
             || session.forgotten()

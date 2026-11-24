@@ -516,3 +516,102 @@ fn asks_questions_through_broker_and_reads_usage_limits() {
 
     provider.shutdown();
 }
+
+#[test]
+fn regenerates_title_checks_ownership_persists_and_streams_session_info_update() {
+    let fixture = Fixture::new();
+    let metadata_path = fixture.root.join("antigravity-sessions.json");
+    let processes = Arc::new(ProcessRegistry::default());
+    let approvals = ApprovalBroker::default();
+    let provider = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes.clone(),
+        approvals.clone(),
+        QuestionBroker::default(),
+    );
+    provider.open_metadata(metadata_path.clone()).unwrap();
+    let events = provider.subscribe();
+
+    assert!(provider.regenerate_title(&fixture.project, "").is_err());
+    assert!(provider
+        .regenerate_title(&fixture.project, "acp-foreign")
+        .is_err());
+    let log_path = fixture.root.join("title-requests.jsonl");
+    assert!(!log_path.exists());
+
+    let started = provider
+        .start_session_with_options(&fixture.project, None, None, None)
+        .unwrap();
+    let session_id = started.session.id;
+
+    provider
+        .send_prompt_with_options(
+            &fixture.project,
+            &session_id,
+            "Investigate dynamic Antigravity titles",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    for _ in 0..50 {
+        let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.method == "antigravity/turnCompleted" {
+            break;
+        }
+    }
+
+    provider
+        .regenerate_title(&fixture.project, &session_id)
+        .unwrap();
+
+    let mut saw_rename = false;
+    for _ in 0..20 {
+        let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.method == "session_info_update" {
+            assert_eq!(
+                event.project_path,
+                fixture.project.canonicalize().unwrap().to_string_lossy()
+            );
+            assert_eq!(event.session_id.as_deref(), Some(session_id.as_str()));
+            assert_eq!(event.params["title"], "Regenerated Antigravity Title");
+            saw_rename = true;
+            break;
+        }
+    }
+    assert!(saw_rename, "expected session_info_update event");
+
+    let request: serde_json::Value =
+        serde_json::from_str(fs::read_to_string(&log_path).unwrap().trim()).unwrap();
+    let prompt = request["prompt"].as_str().unwrap();
+    assert!(prompt.contains("User: Investigate dynamic Antigravity titles"));
+    assert!(prompt.contains("Assistant: echo:"));
+
+    let listed = provider.list_sessions(&fixture.project).unwrap();
+    assert_eq!(listed.sessions.len(), 1);
+    assert_eq!(listed.sessions[0].title, "Regenerated Antigravity Title");
+
+    let (resumed, _) = provider
+        .resume_session(&fixture.project, &session_id)
+        .unwrap();
+    assert_eq!(resumed.session.title, "Regenerated Antigravity Title");
+
+    fs::write(fixture.root.join("title-error"), "").unwrap();
+    assert!(provider
+        .regenerate_title(&fixture.project, &session_id)
+        .is_err());
+    provider.shutdown();
+
+    let reopened = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes,
+        approvals,
+        QuestionBroker::default(),
+    );
+    reopened.open_metadata(metadata_path).unwrap();
+    let (resumed, _) = reopened
+        .resume_session(&fixture.project, &session_id)
+        .unwrap();
+    assert_eq!(resumed.session.title, "Regenerated Antigravity Title");
+    reopened.shutdown();
+}

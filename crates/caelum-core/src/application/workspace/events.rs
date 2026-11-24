@@ -341,7 +341,16 @@ impl Workspace {
                         .unwrap_or_else(crate::application::presentation::now),
                 );
             }
-            if provider == Provider::OpenCode && method == "session.execution.succeeded" {
+            let turn_succeeded = (provider == Provider::OpenCode
+                && method == "session.execution.succeeded")
+                || (provider == Provider::Antigravity
+                    && method == "antigravity/turnCompleted"
+                    && data["error"].is_null()
+                    && !matches!(
+                        data["stopReason"].as_str(),
+                        Some("cancelled" | "error" | "disconnected")
+                    ));
+            if turn_succeeded {
                 session.title_state.completed_turn();
                 titles_completed.push(index);
             }

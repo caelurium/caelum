@@ -35,6 +35,22 @@ if "--print" in sys.argv and "/usage" in sys.argv:
     }))
     sys.exit(0)
 
+if "--print" in sys.argv:
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(root_dir, "title-error")):
+        sys.stderr.write("title model unavailable\n")
+        sys.exit(1)
+    idx = sys.argv.index("--print")
+    prompt = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else ""
+    with open(os.path.join(root_dir, "title-requests.jsonl"), "a", encoding="utf-8") as f:
+        f.write(json.dumps({"prompt": prompt, "cwd": os.getcwd(), "args": sys.argv[1:]}) + "\n")
+    print(json.dumps({
+        "conversation_id": "title-gen",
+        "status": "SUCCESS",
+        "response": "\"Regenerated Antigravity Title.\"\n",
+    }))
+    sys.exit(0)
+
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake-agy-state.json")
 
 
