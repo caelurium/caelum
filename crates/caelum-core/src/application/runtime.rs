@@ -89,6 +89,17 @@ impl ProviderRuntime {
         Ok(())
     }
 
+    pub fn installed_providers(&self) -> Vec<Provider> {
+        Provider::ALL
+            .into_iter()
+            .filter(|provider| match provider {
+                Provider::Codex => self.codex.is_installed(),
+                Provider::OpenCode => self.opencode.is_installed(),
+                Provider::Antigravity => self.antigravity.is_installed(),
+            })
+            .collect()
+    }
+
     pub fn shutdown(&self) {
         if let Some(vm) = &self.vm {
             vm.live.store(false, Ordering::Release);
