@@ -298,6 +298,8 @@ impl Workspace {
                     archived: s.archived(),
                     reading: s.reading,
                     unread: s.unread,
+                    pinned: s.pinned,
+                    bookmarked_entries: s.bookmarked_entries.clone(),
                 })
             })
             .collect();

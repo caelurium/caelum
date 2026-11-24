@@ -588,6 +588,16 @@ pub static BACK: Icon = Icon {
     view: 16.0,
     body: r#"<path d="m10 3-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
+pub static PIN: Icon = Icon {
+    name: "pin",
+    view: 16.0,
+    body: r#"<path d="M9.5 2.5 13.5 6.5 12 8l-1.5-.5L8 10l.5 2-1.2 1.2L5.5 11.4 2.5 14l2.6-3-1.8-1.8L4.5 8l2 .5L9 6 8.5 4.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+pub static BOOKMARK: Icon = Icon {
+    name: "bookmark",
+    view: 16.0,
+    body: r#"<path d="M4 2.5h8v11L8 10.7 4 13.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>"#,
+};
 
 pub fn provider_name(provider: caelum_core::application::Provider) -> &'static str {
     provider.name()
