@@ -41,4 +41,8 @@ impl<State: Send + 'static> BlockingActor<State> {
             .ok()?;
         result.blocking_recv().ok()
     }
+
+    pub(crate) fn try_post(&self, job: impl FnOnce(&mut State) + Send + 'static) -> bool {
+        self.0.try_send(Box::new(job)).is_ok()
+    }
 }

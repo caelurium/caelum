@@ -217,8 +217,9 @@ Type **/** to discover local and provider commands. `/new`, `/sessions`, `/model
 `/files`, `/changes` and `/settings` open native workflows. `/models` opens the
 searchable model picker for the current session. `/variants` or bare `/effort`
 opens the selected model’s effort choices; `/effort xhigh` selects an effort
-directly, and `/effort default` restores the model default. OpenCode also supports
-`/usage`, `/stats`, provider-discovered commands and `/btw question` (`/ask` is an alias).
+directly, and `/effort default` restores the model default. Codex, OpenCode and
+Antigravity support `/stats` and `/btw question` (`/ask` is an alias).
+`/usage` shows subscription allowances for OpenCode and Antigravity.
 `/sessions` searches the current project's Codex or OpenCode history, including archived
 sessions; choose a result to load that conversation.
 
@@ -257,12 +258,26 @@ user prompt offers edit and rewind at that prompt. Completion and errors belong
 to the original session even if you switch conversations. See the
 [Codex](codex.md) and [OpenCode](opencode.md) provider notes for version limits.
 
-Side questions have a separate editor, context, retry and answer-copy actions;
-they preserve the main draft and do not add a conversation turn. Timeline groups
+Side questions preserve the main draft, attachments and history. Codex uses a
+disposable read-only thread; Antigravity uses a sandboxed plan-mode session in
+a temporary project and profile. Both receive at most 12 recent user/assistant
+excerpts plus the question and its own attachments. Escape closes the question.
+OpenCode uses its existing session-context generation API. Timeline groups
 prompts by date, shows excerpts and highlights search matches. Use ↑/↓ and Enter to
-jump back to a prompt; loading older history preserves its identity. Statistics
-presents summary cards, an activity chart, token breakdown and model costs, with
-date-range and project filters.
+jump back to a prompt; loading older history preserves its identity.
+
+Use `/stats` or **Statistics** in the command palette to filter by date, project
+and provider, including Boat. OpenCode server history takes precedence over
+locally observed OpenCode turns. Other providers and offline OpenCode use
+completed turns observed by Caelum. Observed time is summed turn duration;
+concurrent turns can overlap. Native and managed VM turns belong to their Boat
+checkout. Activity dates are UTC.
+
+Turn measurements live in `usage-v1.sqlite3` beside `branches.sqlite3`, with no
+prompts or replies. When a provider omits token usage, Caelum approximates one
+token per four visible message bytes. Costs use reported USD when available,
+otherwise a known model’s standard API rates; they are not subscription charges.
+Unpriced turns are marked and excluded from cost totals.
 
 ## Files, changes and worktrees
 

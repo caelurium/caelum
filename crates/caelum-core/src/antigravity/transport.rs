@@ -269,6 +269,17 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                         let _ = sender.send(result);
                     }
                     Some(PendingCall::Prompt { session_id }) => {
+                        if let Some(usage) = result.as_ref().ok().and_then(|r| r.get("usage")) {
+                            publish_event(
+                                &subscribers,
+                                AntigravityEvent {
+                                    project_path: project.clone(),
+                                    session_id: Some(session_id.clone()),
+                                    method: "antigravity/turnUsage".into(),
+                                    params: json!({"usage":usage}),
+                                },
+                            );
+                        }
                         let effect = lock(&progress).on_prompt_replied(&session_id, result);
                         dispatch_progress_effect(&project, effect, &subscribers, &progress);
                     }
@@ -636,5 +647,28 @@ fn id_to_key(id: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
         other => other.to_string(),
+    }
+}
+
+impl super::AntigravityProvider {
+    pub(crate) fn side_command(
+        &self,
+        path: &str,
+        id: &str,
+    ) -> Result<std::process::Command, String> {
+        let project = crate::projects::Project::open(path).map_err(|e| e.to_string())?;
+        let c = self.connection(&project).map_err(|e| e.to_string())?;
+        self.verify_session_owned(&c, &project, id)
+            .map_err(|e| e.to_string())?;
+        let exe = self.executable().map_err(|e| e.to_string())?;
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.args([
+            "acp",
+            "--stdio",
+            "--sandbox",
+            "--include-default-customizations=false",
+        ])
+        .env("PATH", crate::executable::path(&exe));
+        Ok(cmd)
     }
 }

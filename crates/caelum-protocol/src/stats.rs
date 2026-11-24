@@ -1,5 +1,25 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StatsProvider {
+    Codex,
+    OpenCode,
+    Antigravity,
+    Boat,
+}
+
+impl StatsProvider {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::OpenCode => "OpenCode",
+            Self::Antigravity => "Antigravity",
+            Self::Boat => "Boat",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenCodeStatsFilter {
@@ -9,6 +29,7 @@ pub struct OpenCodeStatsFilter {
     pub to: Option<u64>,
     pub project: Option<String>,
     pub timezone: Option<String>,
+    pub provider: Option<StatsProvider>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,19 +39,19 @@ pub struct OpenCodeStatsProject {
     pub canonical: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatsRange {
     pub from: f64,
     pub to: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatsCacheTokens {
     pub read: f64,
     pub write: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatsTokens {
     pub input: f64,
     pub output: f64,
@@ -53,6 +74,8 @@ pub struct StatsModelUsage {
     pub steps: u64,
     pub tokens: StatsTokens,
     pub cost: f64,
+    #[serde(default)]
+    pub unpriced: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +84,7 @@ pub struct StatsActivity {
     pub steps: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenCodeStats {
     pub range: StatsRange,
@@ -75,4 +98,14 @@ pub struct OpenCodeStats {
     pub streak: u64,
     pub activity: Vec<StatsActivity>,
     pub models: Vec<StatsModelUsage>,
+    #[serde(default)]
+    pub duration_ms: u64,
+    #[serde(default)]
+    pub estimated_turns: u64,
+    #[serde(default)]
+    pub unpriced: u64,
+    #[serde(default)]
+    pub recorded_only: bool,
+    #[serde(default)]
+    pub dropped: u64,
 }

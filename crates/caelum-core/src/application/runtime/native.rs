@@ -27,12 +27,15 @@ impl Runtime {
     ) -> Self {
         let backend = ProviderRuntime::default();
         let path = target.store_path(&parent_store);
-        Self::with_executor(
+        let usage = backend.usage.clone();
+        let mut runtime = Self::with_executor(
             Arc::new(move |cmd| match cmd {
-                Command::Load(store @ Store(p)) if p == &path => target
-                    .with_live_profile(&parent_store, || {
+                Command::Load(store @ Store(p)) if p == &path => {
+                    target.with_live_profile(&parent_store, || {
+                        backend.usage.open(&parent_store);
                         store.load().map(|s| Reply::Snapshot(s.map(Box::new)))
-                    }),
+                    })
+                }
                 Command::Save(store @ Store(p), snapshot) if p == &path => target
                     .with_live_profile(&parent_store, || {
                         store.save(snapshot).map(|()| Reply::Done)
@@ -41,9 +44,19 @@ impl Runtime {
                 | Command::Task(Task::Updates | Task::HostStats | Task::InstalledProviders) => {
                     backend.execute(cmd)
                 }
+                Command::Task(Task::Stats { filter, .. }) => {
+                    target.with_live_profile(&parent_store, || {
+                        let (stats, projects) = backend.usage.stats(None, filter)?;
+                        Ok(Reply::Task(crate::application::TaskReply::Stats(
+                            stats, projects,
+                        )))
+                    })
+                }
                 _ => Err("A VM workspace operation cannot run on the laptop.".into()),
             }),
             Arc::new(wake),
-        )
+        );
+        runtime.usage = usage;
+        runtime
     }
 }

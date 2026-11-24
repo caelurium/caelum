@@ -6,6 +6,19 @@ impl Workspace {
     pub fn apply(&mut self, event: Event) {
         let _trace = crate::diagnostics::event(&event).map(|mark| mark.span());
         match event {
+            Event::SideAnswer(key, generation, text) => {
+                if let Some(s) = self.sessions.iter_mut().find(|s| {
+                    s.generating
+                        && !s.forgotten()
+                        && s.side_generation == generation
+                        && s.scope == key.scope
+                        && s.remote_id.as_ref() == Some(&key.id)
+                }) {
+                    if let Some((_, answer)) = &mut s.side_question {
+                        *answer = text;
+                    }
+                }
+            }
             Event::UpdateProgress(id, progress) => {
                 self.services.updater.progress(id, progress);
             }
@@ -218,6 +231,7 @@ impl Workspace {
         let mut completed = Vec::new();
         let mut shells_completed = Vec::new();
         let mut titles_completed = Vec::new();
+        let mut records = Vec::new();
         for (index, session) in self.sessions.iter_mut().enumerate() {
             if session.forgotten()
                 || session.scope.project != path
@@ -226,6 +240,8 @@ impl Workspace {
                 continue;
             }
             if disconnected {
+                session.usage = Default::default();
+                session.side_cancel = None;
                 let first_disconnect = !session.disconnected;
                 let recover =
                     first_disconnect && (session.working() || self.selected == Some(index));
@@ -340,6 +356,28 @@ impl Workspace {
                 );
             }
             session.conversation.apply(provider, method, data);
+            let model = match method {
+                "turn/started" | "antigravity/turnStarted" | "session.execution.started" => session
+                    .pending_prompt()
+                    .and_then(|p| p.options.model.clone())
+                    .or_else(|| session.options.model.clone())
+                    .or_else(|| {
+                        self.choices
+                            .get(&session.scope)
+                            .and_then(|c| c.default_model.clone())
+                    }),
+                _ => None,
+            };
+            if let Some(row) = session.usage.event(
+                &session.scope,
+                id.unwrap(),
+                model.as_deref(),
+                method,
+                data,
+                &session.conversation,
+            ) {
+                records.push(row);
+            }
             if was_working != session.working() {
                 session.record_activity(
                     data["_created"]
@@ -405,6 +443,9 @@ impl Workspace {
                 session.title = title.into();
                 session.title_state.note_live_rename(self.next_request);
             }
+        }
+        for row in records {
+            self.record_usage(row);
         }
         for index in completed {
             if self.preferences.should_notify(

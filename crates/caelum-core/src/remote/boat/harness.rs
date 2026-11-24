@@ -253,6 +253,7 @@ impl Harness for Boat {
         }
         let more = events.page_info.as_ref().is_some_and(|p| p.has_more);
         let next = checkpoint(&events, run, cursor, more, status.prompt_run.done)?;
+        let model = status.prompt_run.model;
         let status = match (
             status.prompt_run.done,
             more,
@@ -269,6 +270,7 @@ impl Harness for Boat {
             _ => RunStatus::Running,
         };
         Ok(Page {
+            model,
             lines: super::events::lines(events.events, run, target.root.as_deref(), cursor),
             cursor: next,
             more,
