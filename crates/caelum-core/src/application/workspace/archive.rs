@@ -187,6 +187,7 @@ impl Workspace {
             return;
         }
         let selected = self.selected == Some(index);
+        self.dismiss_side_question(index);
         let session = &mut self.sessions[index];
         session.archive_status = Status::Forgotten;
         session.cancel_history_read();

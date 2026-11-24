@@ -85,12 +85,14 @@ pub struct Session {
     pub side_attachments: Vec<Attachment>,
     pub side_error: Option<String>,
     pub side_generation: u64,
+    side_cancel: Option<tokio::sync::watch::Sender<()>>,
     pub side_completion_caret: Option<usize>,
     pub generating: bool,
     pub disconnected: bool,
     options_dirty: bool,
     revision: u64,
     seen_events: std::collections::VecDeque<String>,
+    usage: crate::telemetry::Tracking,
 }
 
 impl Session {
@@ -133,12 +135,14 @@ impl Session {
             side_attachments: Vec::new(),
             side_error: None,
             side_generation: 0,
+            side_cancel: None,
             side_completion_caret: None,
             generating: false,
             disconnected: false,
             options_dirty: false,
             revision: 0,
             seen_events: Default::default(),
+            usage: Default::default(),
         }
     }
 
@@ -303,6 +307,12 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    fn record_usage(&mut self, row: crate::telemetry::Record) {
+        self.next_request += 1;
+        self.outgoing
+            .push((self.next_request, Command::RecordUsage(row)));
+    }
+
     fn request(&mut self, mut command: Command, pending: Pending) -> u64 {
         if matches!(command, Command::Notify(..)) && self.preferences.sound_volume > 0 {
             self.request(

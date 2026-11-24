@@ -204,6 +204,17 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
             Action::Changes,
         ));
     }
+    if (active_session.is_some() && provider_available) || l.app.remote.saved.selected.is_some() {
+        entries.push(Entry::new(
+            Section::Commands,
+            "Statistics",
+            "Inspect token usage, cost, and activity history",
+            None,
+            None,
+            "tokens cost metrics stats",
+            Action::Stats,
+        ));
+    }
     if active_session.is_some() && provider_available {
         entries.push(Entry::new(
             Section::Commands,
@@ -261,27 +272,16 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
                 Action::Usage,
             ));
         }
-        if provider == Some(Provider::OpenCode) {
+        if has_remote_session {
             entries.push(Entry::new(
                 Section::Commands,
-                "Statistics",
-                "Inspect token usage, cost, and activity history",
+                "Side question",
+                "Ask a quick side question without altering the main thread",
                 None,
                 None,
-                "tokens cost metrics stats",
-                Action::Stats,
+                "btw ask aside",
+                Action::SideQuestion,
             ));
-            if has_remote_session {
-                entries.push(Entry::new(
-                    Section::Commands,
-                    "Side question",
-                    "Ask a quick side question without altering the main thread",
-                    None,
-                    None,
-                    "btw ask aside",
-                    Action::SideQuestion,
-                ));
-            }
         }
     }
     entries.push(Entry::new(
@@ -514,15 +514,7 @@ fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
                 });
             }
         }
-        Action::Stats => {
-            if let Some(index) = live(s).app.selected {
-                let l = live_mut(s);
-                l.commands.owner = Some(index);
-                l.commands.stats_anchor = caelum_core::application::presentation::now();
-                l.panels.set_overlay(Some(Screen::Stats));
-                crate::commands::refresh_stats(s);
-            }
-        }
+        Action::Stats => crate::commands::open_stats(s),
         Action::ProviderSessions => {
             if let Some(index) = live(s).app.selected {
                 let l = live_mut(s);

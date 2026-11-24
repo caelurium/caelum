@@ -56,7 +56,7 @@ pub(super) fn register_from_update(
                 project_path: context.project_path.clone(),
                 session_id: Some(context.session_id.clone()),
                 method: "antigravity/turnStarted".into(),
-                params: json!({ "sessionId": context.session_id }),
+                params: json!({ "sessionId": context.session_id, "turnId":uuid::Uuid::new_v4().to_string(), "_created":crate::application::presentation::now() }),
             },
         );
         if let Err(error) = transport::send_prompt_parts(

@@ -92,6 +92,7 @@ fn page(rt: &mut Runtime<Workspace>, lines: Vec<Line>, status: RunStatus) {
             lines,
             cursor: Some("more".into()),
             more: false,
+            model: None,
             status,
         })),
     );

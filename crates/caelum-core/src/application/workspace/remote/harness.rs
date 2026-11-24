@@ -200,6 +200,12 @@ impl Workspace {
                 }
                 c.thread.cursor = page.cursor;
                 if let RunStatus::Ended(status) = page.status {
+                    let usage = crate::telemetry::boat(
+                        id,
+                        &c.thread,
+                        page.model,
+                        crate::application::presentation::now(),
+                    );
                     c.thread.record_activity();
                     for line in c
                         .thread
@@ -220,6 +226,9 @@ impl Workspace {
                         && self.remote.changes.contains_key(id)
                     {
                         self.review_remote(id);
+                    }
+                    if let Some(row) = usage {
+                        self.record_usage(row);
                     }
                 } else {
                     if !matches!(c.thread.turn, Turn::Stopping(_)) {

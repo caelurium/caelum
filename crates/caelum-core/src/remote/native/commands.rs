@@ -23,6 +23,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         | Command::History(k, _)
         | Command::CodexControlHistory(k, _)
         | Command::Send(k, ..)
+        | Command::SideTurn(k, ..)
         | Command::Cancel(k)
             if k.scope.provider == Provider::Codex =>
         {

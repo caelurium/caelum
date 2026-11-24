@@ -386,6 +386,7 @@ pub enum RunStatus {
 
 #[derive(Debug)]
 pub struct Page {
+    pub model: Option<String>,
     pub lines: Vec<Line>,
     pub cursor: Option<String>,
     pub more: bool,

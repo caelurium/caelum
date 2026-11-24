@@ -272,7 +272,9 @@ impl Live {
             self.panels.set_overlay(None);
             self.panels.archived = false;
             self.models = Default::default();
-            self.commands.side_owner = None;
+            if let Some(owner) = self.commands.side_owner.take() {
+                self.app.dismiss_side_question(owner);
+            }
         }
     }
 

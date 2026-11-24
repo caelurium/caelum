@@ -379,16 +379,13 @@ impl Task {
                 }
                 _ => reply!(runtime.opencode.usage_limits(project), Usage),
             },
-            Self::Stats { project, filter } => Ok(TaskReply::Stats(
-                runtime
-                    .opencode
-                    .session_stats(project, filter)
-                    .map_err(|e| e.to_string())?,
-                runtime
-                    .opencode
-                    .stats_projects(project)
-                    .map_err(|e| e.to_string())?,
-            )),
+            Self::Stats { project, filter } => {
+                let server = crate::remote::native::checkout_id(project)
+                    .is_none()
+                    .then_some((&runtime.opencode, project.as_str()));
+                let (stats, projects) = runtime.usage.stats(server, filter)?;
+                Ok(TaskReply::Stats(stats, projects))
+            }
             Self::AttachPullRequest { project, url } => {
                 reply!(
                     github::pull_request_details(project, url).map(Box::new),
