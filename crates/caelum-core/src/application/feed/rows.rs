@@ -20,6 +20,8 @@ enum Feed<'a> {
     },
 }
 
+type FeedRow = (Reverse<(bool, Option<u64>)>, FeedSession);
+
 impl FeedSession {
     fn vm(checkout: &str, thread: &Thread) -> Self {
         Self::Vm(VmLink {
@@ -46,7 +48,7 @@ impl Workspace {
         Some(FeedSession::vm(checkout, &c.thread))
     }
 
-    /// Local sessions and saved VM editors share one scoped, activity-ordered list.
+    /// Active conversations come first across local and VM sessions, newest activity first within each group.
     pub fn sidebar_sessions(
         &self,
         project: Option<&str>,
@@ -60,13 +62,9 @@ impl Workspace {
 
     /// Conversations with live work or a pending request, in stable identity order across open projects.
     pub fn overview_sessions(&self, query: &str) -> Vec<FeedSession> {
-        let mut rows: Vec<_> = self
-            .feed_rows(Feed::Overview, query)
-            .into_iter()
-            .map(|(_, row)| row)
-            .collect();
-        rows.sort_unstable();
-        rows
+        let mut rows = self.feed_rows(Feed::Overview, query);
+        rows.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
+        rows.into_iter().map(|(_, row)| row).collect()
     }
 
     /// All non-forgotten conversations across open projects, ordered by recency.
@@ -76,7 +74,7 @@ impl Workspace {
         rows.into_iter().map(|(_, row)| row).collect()
     }
 
-    fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<(Reverse<Option<u64>>, FeedSession)> {
+    fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<FeedRow> {
         let includes = |path: &str| match feed {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
             Feed::Overview | Feed::Dashboard { .. } => self.project_is_open(path),
@@ -89,8 +87,14 @@ impl Workspace {
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
             .matching_local_sessions(&includes, &query, archived)
-            .filter(|(_, s)| !active_only || self.overview_activity(s).is_some())
-            .map(|(i, s)| (Reverse(s.last_activity), FeedSession::Local(i)))
+            .filter_map(|(i, s)| {
+                let active = !archived && self.overview_activity(s).is_some();
+                let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
+                (!active_only || active).then_some((
+                    Reverse((activity_order, s.last_activity)),
+                    FeedSession::Local(i),
+                ))
+            })
             .collect();
         if !archived {
             for (id, c) in &self.remote.saved.checkouts {
@@ -115,7 +119,9 @@ impl Workspace {
                     .contains(&query)
                 };
                 for t in c.threads() {
-                    if active_only && t.turn == Turn::Idle {
+                    let active = t.turn != Turn::Idle;
+                    let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
+                    if active_only && !active {
                         continue;
                     }
                     if t.is_blank()
@@ -132,7 +138,10 @@ impl Workspace {
                         || t.title().to_lowercase().contains(&query)
                         || t.provider.as_str().contains(&query)
                     {
-                        rows.push((Reverse(t.last_activity), FeedSession::vm(id, t)));
+                        rows.push((
+                            Reverse((activity_order, t.last_activity)),
+                            FeedSession::vm(id, t),
+                        ));
                     }
                 }
             }

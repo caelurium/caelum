@@ -302,15 +302,22 @@ fn overview_opens_the_scoped_vm_thread_and_preserves_its_draft() {
 }
 
 #[test]
-fn request_shortcut_leads_to_the_actual_question_and_the_title_browses_prompts() {
+fn request_shortcut_leads_to_the_actual_input_and_the_title_browses_prompts() {
     let mut rt = design_runtime("conversation-overview", (1280., 1000.));
     click(&mut rt, "overview-requests");
     key(&mut rt, Key::Enter, Mods::default());
     advance(&mut rt, 0.3);
     let selected = live(&rt.state).app.selected.unwrap();
     assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
-    assert!(selected == 1 || selected == 4, "selected {selected}");
+    match selected {
+        1 => assert!(rt.find("question-submit-retry-choice").is_some()),
+        4 => assert!(rt.find("allow-once-preview-site").is_some()),
+        _ => panic!("selected {selected} instead of a session needing input"),
+    }
+    reveal(&mut rt, "live-session-0");
     click(&mut rt, "live-session-0");
+    assert_eq!(live(&rt.state).app.selected, Some(0));
+    assert_eq!(live(&rt.state).app.selected, Some(0));
     let before = live(&rt.state).drafts[0].text.clone();
     click(&mut rt, "conversation-heading");
     assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::Timeline));

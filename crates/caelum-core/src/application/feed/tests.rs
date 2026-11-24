@@ -47,6 +47,34 @@ fn scope_filters_include_linked_checkouts_but_exclude_closed_archived_and_forgot
 }
 
 #[test]
+fn sidebar_ranks_active_sessions_before_newer_idle_sessions_within_the_current_scope() {
+    let mut app = workspace();
+    app.select(2);
+    app.sessions[2].draft = "Keep this draft".into();
+    app.sessions[0].conversation.set_working(true);
+    app.apply(Event::Questions(vec![caelum_protocol::QuestionPrompt {
+        provider: "codex".into(),
+        project_path: "/beta".into(),
+        session_id: "shared-id".into(),
+        request_id: "choice".into(),
+        title: "Which branch?".into(),
+        fields: vec![],
+    }]));
+    let rows = |app: &Workspace| app.sidebar_sessions(None, "session", false);
+    assert_eq!(rows(&app), [1, 0, 2].map(FeedSession::Local));
+
+    app.preferences.session_scope = SessionScope::CurrentProject;
+    assert_eq!(rows(&app), [0, 2].map(FeedSession::Local));
+    app.preferences.session_scope = SessionScope::AllProjects;
+    app.sessions[0].last_activity = app.sessions[1].last_activity;
+    assert_eq!(rows(&app), [0, 1, 2].map(FeedSession::Local));
+    app.sessions[0].conversation.set_working(false);
+    assert_eq!(rows(&app), [1, 2, 0].map(FeedSession::Local));
+    app.apply(Event::Questions(vec![]));
+    assert_eq!(rows(&app), [2, 0, 1].map(FeedSession::Local));
+}
+
+#[test]
 fn overview_order_and_membership_are_independent_of_recency_and_sidebar_scope() {
     let mut app = workspace();
     let all = [

@@ -144,6 +144,7 @@ fn waiting_sessions_remain_visible_until_their_last_background_command_finishes(
                 let l = s.live.as_mut().unwrap();
                 l.app.preferences.theme = if dark { "dark" } else { "light" }.into();
                 l.app.preferences.theme_family = family.into();
+                l.app.sessions[1].last_activity = Some(l.feed.displayed_at());
                 l.apply(shell_event(
                     "session.shell.started",
                     "ses_fixture",
@@ -158,6 +159,9 @@ fn waiting_sessions_remain_visible_until_their_last_background_command_finishes(
                 Some("Waiting for background commands")
             );
             assert_eq!(status.role, "status");
+            assert!(
+                element(&rt, "live-session-0").rect[1] < element(&rt, "live-session-1").rect[1]
+            );
             assert!(
                 status
                     .rect
@@ -203,6 +207,9 @@ fn waiting_sessions_remain_visible_until_their_last_background_command_finishes(
             });
             advance(&mut rt, 0.3);
             assert!(rt.find("session-waiting-0").is_none());
+            assert!(
+                element(&rt, "live-session-1").rect[1] < element(&rt, "live-session-0").rect[1]
+            );
             let l = rt.state.live.as_ref().unwrap();
             assert!(l.app.sessions[0].shells.is_empty());
             assert_eq!(l.app.selected, Some(1));
