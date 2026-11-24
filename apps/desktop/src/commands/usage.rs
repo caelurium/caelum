@@ -7,9 +7,15 @@ use caelum_core::application::Task;
 use rune::{El, col, row, text};
 use rune_kit::{ButtonVariant, Kit};
 
-pub(super) fn view(s: &Workspace, k: &Kit, index: usize) -> El {
+pub(super) fn view(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let scope = &l.app.sessions[index].scope;
+    let (scope, session_index) = if let Some(scope) = &l.commands.usage_target {
+        (scope, None)
+    } else if let Some(index) = l.commands.owner.filter(|&i| i < l.app.sessions.len()) {
+        (&l.app.sessions[index].scope, Some(index))
+    } else {
+        return col();
+    };
     let project = &scope.project;
     let provider = scope.provider;
     let task = Task::Usage {
@@ -24,7 +30,9 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize) -> El {
         .get(project)
         .and_then(|c| c.usage.get(&provider));
     let mut body = col().w_full().gap(12.0);
-    if l.app.sessions[index].conversation.used_tokens.is_some() {
+    if let Some(index) = session_index
+        && l.app.sessions[index].conversation.used_tokens.is_some()
+    {
         body = body.child(
             ui::card(k).child(
                 row()

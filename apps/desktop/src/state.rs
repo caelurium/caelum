@@ -151,6 +151,9 @@ impl Workspace {
             if live.panels.screen == crate::panels::Screen::Home {
                 return "Home";
             }
+            if live.panels.screen == crate::panels::Screen::Overview {
+                return "Overview";
+            }
             if live.panels.screen == crate::panels::Screen::Remote {
                 return live
                     .app

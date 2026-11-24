@@ -15,7 +15,12 @@ enum Feed<'a> {
         archived: bool,
     },
     Overview,
+    Dashboard {
+        archived: bool,
+    },
 }
+
+type FeedRow = (Reverse<(bool, Option<u64>)>, FeedSession);
 
 impl FeedSession {
     fn vm(checkout: &str, thread: &Thread) -> Self {
@@ -50,28 +55,45 @@ impl Workspace {
         query: &str,
         archived: bool,
     ) -> Vec<FeedSession> {
-        self.feed_rows(Feed::Sidebar { project, archived }, query)
+        let mut rows = self.feed_rows(Feed::Sidebar { project, archived }, query);
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
     }
 
     /// Conversations with live work or a pending request, in stable identity order across open projects.
     pub fn overview_sessions(&self, query: &str) -> Vec<FeedSession> {
-        self.feed_rows(Feed::Overview, query)
+        let mut rows = self.feed_rows(Feed::Overview, query);
+        rows.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
+        rows.into_iter().map(|(_, row)| row).collect()
     }
 
-    fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<FeedSession> {
+    /// All non-forgotten conversations across open projects, ordered by recency.
+    pub fn dashboard_sessions(&self, query: &str, archived: bool) -> Vec<FeedSession> {
+        let mut rows = self.feed_rows(Feed::Dashboard { archived }, query);
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
+    fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<FeedRow> {
         let includes = |path: &str| match feed {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
-            Feed::Overview => self.project_is_open(path),
+            Feed::Overview | Feed::Dashboard { .. } => self.project_is_open(path),
         };
-        let archived = matches!(feed, Feed::Sidebar { archived: true, .. });
+        let archived = matches!(
+            feed,
+            Feed::Sidebar { archived: true, .. } | Feed::Dashboard { archived: true }
+        );
         let active_only = matches!(feed, Feed::Overview);
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
             .matching_local_sessions(&includes, &query, archived)
             .filter_map(|(i, s)| {
                 let active = !archived && self.overview_activity(s).is_some();
-                (!active_only || active)
-                    .then_some((Reverse((active, s.last_activity)), FeedSession::Local(i)))
+                let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
+                (!active_only || active).then_some((
+                    Reverse((activity_order, s.last_activity)),
+                    FeedSession::Local(i),
+                ))
             })
             .collect();
         if !archived {
@@ -98,6 +120,7 @@ impl Workspace {
                 };
                 for t in c.threads() {
                     let active = t.turn != Turn::Idle;
+                    let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
                     if active_only && !active {
                         continue;
                     }
@@ -115,15 +138,14 @@ impl Workspace {
                         || t.title().to_lowercase().contains(&query)
                         || t.provider.as_str().contains(&query)
                     {
-                        rows.push((Reverse((active, t.last_activity)), FeedSession::vm(id, t)));
+                        rows.push((
+                            Reverse((activity_order, t.last_activity)),
+                            FeedSession::vm(id, t),
+                        ));
                     }
                 }
             }
         }
-        match feed {
-            Feed::Sidebar { .. } => rows.sort_unstable(),
-            Feed::Overview => rows.sort_unstable_by(|(_, a), (_, b)| a.cmp(b)),
-        }
-        rows.into_iter().map(|(_, row)| row).collect()
+        rows
     }
 }

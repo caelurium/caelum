@@ -5,7 +5,18 @@ use serde::{Deserialize, Serialize};
 mod active;
 mod rows;
 pub use active::OverviewActivity;
+pub use active::SessionBucket;
 pub use rows::FeedSession;
+
+const DAY_MS: u64 = 86_400_000;
+
+/// Daily session activity over the past 14 days, with trend vs the preceding 14 days.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityHistogram {
+    pub days: [u32; 14],
+    pub total: u32,
+    pub delta_percent: Option<i32>,
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +209,47 @@ impl Workspace {
             .and_then(|trees| trees.worktrees.iter().find(|t| t.project.path == *path))
             .and_then(|tree| tree.label.as_deref())
             .or_else(|| path.rsplit('/').next())
+    }
+
+    /// 14-day activity counts across open projects (oldest day first, today last).
+    pub fn activity_histogram(&self, now_ms: u64) -> ActivityHistogram {
+        let mut days = [0u32; 14];
+        let mut prior = 0u32;
+        let record = |at: Option<u64>, days: &mut [u32; 14], prior: &mut u32| {
+            let Some(at) = at else {
+                return;
+            };
+            let age_days = now_ms.saturating_sub(at) / DAY_MS;
+            if age_days < 14 {
+                days[13 - age_days as usize] += 1;
+            } else if age_days < 28 {
+                *prior += 1;
+            }
+        };
+        for session in &self.sessions {
+            if !session.forgotten() && self.project_is_open(&session.scope.project) {
+                record(session.last_activity, &mut days, &mut prior);
+            }
+        }
+        for checkout in self.remote.saved.checkouts.values() {
+            if !self.project_is_open(&checkout.source.project) {
+                continue;
+            }
+            for thread in checkout.threads() {
+                record(thread.last_activity, &mut days, &mut prior);
+            }
+        }
+        let total: u32 = days.iter().sum();
+        let delta_percent = if prior >= 5 {
+            Some(((total as i64 - prior as i64) * 100 / prior as i64) as i32)
+        } else {
+            None
+        };
+        ActivityHistogram {
+            days,
+            total,
+            delta_percent,
+        }
     }
 }
 

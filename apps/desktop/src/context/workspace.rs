@@ -21,9 +21,6 @@ pub(crate) fn button(s: &Workspace, k: &Kit) -> El {
 
 pub(crate) fn workspace(s: &mut Workspace, at: PointerPress, tx: &mut Tx) {
     let Some(l) = &s.live else { return };
-    if l.panels.overlay() == Some(panels::Screen::ConversationOverview) {
-        return;
-    }
     let origin = l.focus_key.clone().unwrap_or_else(|| TRIGGER.into());
     let selected = tx
         .text_selection()

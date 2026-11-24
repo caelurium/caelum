@@ -22,8 +22,10 @@ pub use composer::{
 };
 pub use conversation::{Conversation, Entry, EntryKind};
 pub use export::ExportFormat;
+pub use feed::ActivityHistogram;
 pub use feed::FeedSession;
 pub use feed::OverviewActivity;
+pub use feed::SessionBucket;
 pub use feed::SessionScope;
 pub use inbox::{Inbox, InboxPrompt, SavedInboxPrompt};
 pub use notifications::Notification;

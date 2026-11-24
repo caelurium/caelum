@@ -92,7 +92,7 @@ impl Workspace {
                 || matches!(
                     request.1,
                     Command::Load(_)
-                        | Command::Task(Task::Updates | Task::Update(_))
+                        | Command::Task(Task::Updates | Task::Update(_) | Task::HostStats)
                         | Command::Cancel(_)
                         | Command::Remote(crate::remote::Operation::Interrupt(..))
                         | Command::Task(
