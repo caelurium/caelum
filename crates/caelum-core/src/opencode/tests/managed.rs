@@ -115,6 +115,7 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
         to: Some(1793577600000),
         project: Some("project_fake".into()),
         timezone: Some("Europe/London".into()),
+        provider: None,
     };
     let result = provider.session_stats(&project_path, &filter).unwrap();
     assert_eq!(result.sessions, 2);

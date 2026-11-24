@@ -4,6 +4,9 @@ for node_bin in "$HOME"/.nvm/versions/node/*/bin; do
     [ -d "$node_bin" ] && PATH="$node_bin:$PATH"
 done
 export PATH
+if [ "${1:-}" = "--side" ]; then
+    exec codex app-server --listen stdio://
+fi
 port=${CAELUM_CODEX_PORT:-}
 case "$port" in ''|*[!0-9]*) [ -z "$port" ] || { echo "Invalid Codex port." >&2; exit 1; };; esac
 if ! command -v codex >/dev/null 2>&1; then

@@ -452,3 +452,62 @@ fn native_question_forms_send_scoped_values_and_keep_invalid_answers_editable() 
         matches!(rt.state.live.as_mut().unwrap().app.commands().as_slice(), [(_, Command::Answer(prompt, Some(answer)))] if prompt.session_id == "thread" && answer["branch"] == "feature")
     );
 }
+
+#[test]
+fn codex_side_questions_and_stats_provider_filters_dispatch_expected_commands() {
+    use caelum_core::application::{Command, Task};
+    use caelum_protocol::StatsProvider;
+
+    let mut rt = live_runtime();
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        l.app.sessions[0].remote_id = Some("codex-thread".into());
+    });
+    fill(&mut rt, "live-draft-0", "Main Codex draft");
+    fill(&mut rt, "live-draft-0", "/btw What does this module do?");
+    key(&mut rt, Key::Enter, Mods::default());
+    assert!(rt.find("side-question").is_some());
+    assert!(
+        rt.state
+            .live
+            .as_mut()
+            .unwrap()
+            .app
+            .commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::SideTurn(..)))
+    );
+    key(&mut rt, Key::Escape, Mods::default());
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().drafts[0].text,
+        "Main Codex draft"
+    );
+
+    fill(&mut rt, "live-draft-0", "/stats");
+    key(&mut rt, Key::Enter, Mods::default());
+    advance(&mut rt, 0.25);
+    let _ = rt.state.live.as_mut().unwrap().app.commands();
+    click(&mut rt, "stats-provider-Codex");
+    assert!(
+        rt.state
+            .live
+            .as_mut()
+            .unwrap()
+            .app
+            .commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::Task(Task::Stats { filter, .. }) if filter.provider == Some(StatsProvider::Codex)))
+    );
+    click(&mut rt, "stats-provider-Boat");
+    assert!(
+        rt.state
+            .live
+            .as_mut()
+            .unwrap()
+            .app
+            .commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::Task(Task::Stats { filter, .. }) if filter.provider == Some(StatsProvider::Boat)))
+    );
+}

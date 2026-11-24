@@ -93,6 +93,9 @@ impl Workspace {
                 || matches!(
                     request.1,
                     Command::Load(_)
+                        | Command::RecordUsage(_)
+                        | Command::SideTurn(..)
+                        | Command::Generate(..)
                         | Command::Task(
                             Task::Updates
                                 | Task::Update(_)
