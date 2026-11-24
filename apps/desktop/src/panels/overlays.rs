@@ -284,7 +284,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         ),
         Screen::CreateWorktree => (500.0, 330.0),
         Screen::CreateVm | Screen::RemotePicker => (556.0, crate::remote::create_height(s)),
-        Screen::Timeline => (580.0, 344.0),
+        Screen::Timeline => (620.0, 480.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),
         Screen::VmThreads => {
             let saved = &live(s).app.remote.saved;
