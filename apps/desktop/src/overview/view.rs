@@ -3,8 +3,8 @@ use rune::{El, Icon, ScrollSpec, TextStyle, col, el, icon, row, text};
 use rune_kit::{Kit, ScrollBar, glyphs};
 
 use super::{
-    RUNNING, SETTLED, Tab, WAITING, cards, next_waiting, on_key, pull_requests, refresh_all,
-    sessions, worktrees,
+    SETTLED, Tab, WAITING, cards, next_waiting, on_key, pull_requests, refresh_all,
+    running_spinner, sessions, worktrees,
 };
 use crate::{
     Workspace,
@@ -65,19 +65,21 @@ pub fn view(s: &Workspace, k: &Kit, _layers: &mut Vec<El>) -> El {
                     k,
                 ))
                 .child(status_badge(
-                    &RUNNING,
+                    running_spinner(
+                        13.0,
+                        if running > 0 {
+                            k.c.text_accent
+                        } else {
+                            k.c.text_muted
+                        },
+                        running > 0,
+                    ),
                     format!("{running} running"),
-                    if running > 0 {
-                        k.c.text_accent
-                    } else {
-                        k.c.text_muted
-                    },
                     k,
                 ))
                 .child(status_badge(
-                    &SETTLED,
+                    icon(&SETTLED, 13.0).color(k.c.success.fg).a11y_hidden(),
                     format!("{settled} settled"),
-                    k.c.success.fg,
                     k,
                 )),
         );
@@ -150,12 +152,12 @@ fn status_counter(
     .on_press_tx(next_waiting)
 }
 
-fn status_badge(glyph: &'static Icon, label: String, tone: rune::Color, k: &Kit) -> El {
+fn status_badge(lead: El, label: String, k: &Kit) -> El {
     row()
         .center_y()
         .gap(5.0)
         .h(26.0)
-        .child(icon(glyph, 13.0).color(tone).a11y_hidden())
+        .child(lead)
         .child(text(label).font(k.ty.small_medium).color(k.c.text_muted))
 }
 

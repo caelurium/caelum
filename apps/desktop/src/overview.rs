@@ -15,7 +15,7 @@ use std::{
 };
 
 use caelum_core::application::{FeedSession, Provider, SessionBucket, Task};
-use rune::{Icon, Key, KeyEvent, TextEdit, Tx};
+use rune::{Color, El, Icon, Key, KeyEvent, LoopSpec, TextEdit, Tx, el, icon};
 
 use crate::{
     Workspace,
@@ -35,11 +35,43 @@ pub(super) static WAITING: Icon = Icon {
     body: r#"<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.1" r="0.8" fill="currentColor"/>"#,
 };
 
-pub(super) static RUNNING: Icon = Icon {
-    name: "overview-running",
+static SPINNER_RING: Icon = Icon {
+    name: "overview-spinner-ring",
     view: 16.0,
-    body: r#"<path d="M8 2.2v2.4M8 11.4v2.4M2.2 8h2.4M11.4 8h2.4M3.9 3.9l1.7 1.7M10.4 10.4l1.7 1.7M12.1 3.9l-1.7 1.7M5.6 10.4l-1.7 1.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
+    body: r#"<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>"#,
 };
+
+static SPINNER_ARC: Icon = Icon {
+    name: "overview-spinner-arc",
+    view: 16.0,
+    body: r#"<path d="M8 2A6 6 0 0 1 13.258 10.89" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
+};
+
+pub(super) fn running_spinner(size: f32, tone: Color, animated: bool) -> El {
+    let arc = icon(&SPINNER_ARC, size)
+        .key(if animated {
+            "overview-spinner-arc"
+        } else {
+            "overview-spinner-arc-idle"
+        })
+        .absolute(0.0, 0.0)
+        .color(tone);
+    let arc = if animated {
+        arc.looping(LoopSpec::rotation(0.9))
+    } else {
+        arc
+    };
+    el().size(size, size)
+        .a11y_hidden()
+        .child(
+            icon(&SPINNER_RING, size)
+                .key("overview-spinner-ring")
+                .absolute(0.0, 0.0)
+                .color(tone)
+                .opacity(0.22),
+        )
+        .child(arc)
+}
 
 pub(super) static SETTLED: Icon = Icon {
     name: "overview-settled",

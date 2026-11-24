@@ -8,10 +8,10 @@ use caelum_core::{
     remote::Turn,
 };
 use caelum_protocol::GitHubPullRequest;
-use rune::{Color, El, Icon, TextStyle, col, el, icon, row, text};
+use rune::{Color, El, TextStyle, col, el, icon, row, text};
 use rune_kit::{Kit, glyphs};
 
-use super::{PULL_REQUEST, RUNNING, SETTLED, WAITING, choose, row_key};
+use super::{PULL_REQUEST, SETTLED, WAITING, choose, row_key, running_spinner};
 use crate::{
     Workspace, checkouts,
     live::{Live, live, live_mut},
@@ -151,17 +151,25 @@ pub(super) fn view(s: &Workspace, compact: bool, k: &Kit) -> El {
         .virtual_rows_version(flat.as_ref())
 }
 
-fn group_meta(bucket: SessionBucket, k: &Kit) -> (&'static str, &'static Icon, Color) {
+fn group_meta(bucket: SessionBucket, k: &Kit) -> (&'static str, Color) {
     match bucket {
-        SessionBucket::Waiting => ("Waiting for you", &WAITING, k.c.warning.fg),
-        SessionBucket::Running => ("Running", &RUNNING, k.c.text_accent),
-        SessionBucket::Settled => ("Settled", &SETTLED, k.c.success.fg),
+        SessionBucket::Waiting => ("Waiting for you", k.c.warning.fg),
+        SessionBucket::Running => ("Running", k.c.text_accent),
+        SessionBucket::Settled => ("Settled", k.c.success.fg),
+    }
+}
+
+fn bucket_icon(bucket: SessionBucket, size: f32, tone: Color) -> El {
+    match bucket {
+        SessionBucket::Waiting => icon(&WAITING, size).color(tone).a11y_hidden(),
+        SessionBucket::Running => running_spinner(size, tone, true),
+        SessionBucket::Settled => icon(&SETTLED, size).color(tone).a11y_hidden(),
     }
 }
 
 fn group_header(s: &Workspace, bucket: SessionBucket, count: usize, k: &Kit) -> El {
     let collapsed = live(s).overview.is_collapsed(bucket);
-    let (title, glyph, tone) = group_meta(bucket, k);
+    let (title, tone) = group_meta(bucket, k);
     let chevron = if collapsed {
         &glyphs::CARET_RIGHT
     } else {
@@ -179,7 +187,7 @@ fn group_header(s: &Workspace, bucket: SessionBucket, count: usize, k: &Kit) -> 
                 .fill(k.c.layer_01)
                 .border(1.0, k.alpha(k.c.border_base, 0.7))
                 .child(icon(chevron, 11.0).color(k.c.icon_muted).a11y_hidden())
-                .child(icon(glyph, 13.0).color(tone).a11y_hidden())
+                .child(bucket_icon(bucket, 13.0, tone))
                 .child(text(title).font(k.ty.ui_medium).color(k.c.text_base))
                 .child(
                     text(count.to_string())
@@ -332,7 +340,7 @@ fn session_row(
 ) -> El {
     let l = live(s);
     let app = &l.app;
-    let (_, glyph, tone) = group_meta(bucket, k);
+    let (_, tone) = group_meta(bucket, k);
     let (title, meta, provider, age, excerpt_line, pr_badge, available, local_index) = match id {
         FeedSession::Local(index) => {
             let session = &app.sessions[*index];
@@ -402,7 +410,7 @@ fn session_row(
         .w_full()
         .center_y()
         .gap(8.0)
-        .child(icon(glyph, 13.0).color(tone).a11y_hidden())
+        .child(bucket_icon(bucket, 13.0, tone))
         .child(
             row()
                 .grow(1.0)
