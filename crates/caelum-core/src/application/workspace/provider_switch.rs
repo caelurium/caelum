@@ -147,6 +147,37 @@ fn context(s: &Session) -> Chat {
 }
 
 impl Workspace {
+    pub fn available_providers(&self, project: Option<&str>) -> Vec<Provider> {
+        let project_providers = Provider::for_project(project);
+        if project
+            .and_then(crate::remote::native::checkout_id)
+            .is_some()
+        {
+            return project_providers.to_vec();
+        }
+        match &self.services.installed_providers {
+            Some(installed) => project_providers
+                .iter()
+                .copied()
+                .filter(|provider| installed.contains(provider))
+                .collect(),
+            None => project_providers.to_vec(),
+        }
+    }
+
+    pub fn selectable_providers(&self, project: Option<&str>) -> Vec<Provider> {
+        let available = self.available_providers(project);
+        if available.is_empty() {
+            Provider::for_project(project).to_vec()
+        } else {
+            available
+        }
+    }
+
+    pub fn set_installed_providers(&mut self, providers: Vec<Provider>) {
+        self.services.installed_providers = Some(providers);
+    }
+
     pub fn can_switch_provider(&self, index: usize) -> bool {
         let Some(s) = self.sessions.get(index) else {
             return false;
@@ -161,7 +192,10 @@ impl Workspace {
             _ => false,
         });
         self.selected == Some(index)
-            && Provider::for_project(Some(&s.scope.project)).len() > 1
+            && self
+                .available_providers(Some(&s.scope.project))
+                .iter()
+                .any(|&provider| provider != s.scope.provider)
             && s.can_send()
             && !s.commanding()
             && !s.control_busy()
@@ -180,7 +214,12 @@ impl Workspace {
     }
 
     pub fn switch_provider(&mut self, index: usize, provider: Provider) -> bool {
-        if !self.can_switch_provider(index) || self.sessions[index].scope.provider == provider {
+        if !self.can_switch_provider(index)
+            || self.sessions[index].scope.provider == provider
+            || !self
+                .available_providers(Some(&self.sessions[index].scope.project))
+                .contains(&provider)
+        {
             return false;
         }
         let scope = Scope {

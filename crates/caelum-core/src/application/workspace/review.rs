@@ -41,6 +41,28 @@ impl Workspace {
             })
     }
 
+    pub(super) fn discover_session_pull_requests(&mut self, index: usize) {
+        let Some(session) = self.sessions.get(index) else {
+            return;
+        };
+        let Some(details) = &session.details else {
+            return;
+        };
+        let project = session.scope.project.clone();
+        let branches: std::collections::BTreeSet<_> = details
+            .branch
+            .iter()
+            .chain(details.branches.iter())
+            .cloned()
+            .collect();
+        for branch in branches {
+            self.task(crate::application::Task::Discover {
+                project: project.clone(),
+                branch,
+            });
+        }
+    }
+
     /// Deduplicated open pull requests across all open projects and linked checkouts.
     pub fn open_pull_requests(&self) -> Vec<(&str, &GitHubPullRequest)> {
         let mut seen = std::collections::HashSet::new();

@@ -327,3 +327,56 @@ fn fix_failing_check_creates_isolated_worktree_only_when_turn_is_running() {
     );
     assert_eq!(app.origin_parent_session(child), Some(parent));
 }
+
+#[test]
+fn completing_a_turn_rediscovers_pull_requests_on_recorded_branches() {
+    use crate::application::{Command, Event, Reply, Task, TaskReply};
+
+    let mut app = workspace();
+    let index = session(&mut app, "/repository", Provider::Codex, "feature");
+    app.sessions[index].remote_id = Some("thread-1".into());
+    app.sessions[index].conversation.set_working(true);
+    let _ = app.commands();
+
+    app.apply(Event::Codex(caelum_protocol::CodexEvent {
+        project_path: "/repository".into(),
+        method: "turn/completed".into(),
+        params: serde_json::json!({
+            "threadId": "thread-1",
+            "turn": { "id": "turn-1", "status": "completed" }
+        }),
+        request_id: None,
+    }));
+
+    let discover = app
+        .commands()
+        .into_iter()
+        .find_map(|(id, cmd)| match cmd {
+            Command::Task(Task::Discover { project, branch })
+                if project == "/repository" && branch == "feature" =>
+            {
+                Some(id)
+            }
+            _ => None,
+        })
+        .expect("turn completion should re-discover PRs for the session's branch");
+
+    let pr = caelum_protocol::GitHubPullRequest {
+        number: 42,
+        title: "Feature".into(),
+        url: URL.into(),
+        is_draft: false,
+        base_ref_name: "main".into(),
+        review_decision: None,
+    };
+    app.apply(Event::Completed(
+        discover,
+        Ok(Reply::Task(TaskReply::Discovered(Some(pr)))),
+    ));
+
+    assert_eq!(
+        app.session_pull_request(&app.sessions[index])
+            .map(|pr| pr.number),
+        Some(42)
+    );
+}

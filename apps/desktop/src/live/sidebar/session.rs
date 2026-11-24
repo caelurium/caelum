@@ -155,6 +155,23 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
                 .group_opacity(0.0, 1.0),
         );
     }
+    let mark = if session.pinned && status.is_empty() {
+        Some(icon(&ui::PIN, 10.0).color(k.c.text_accent).a11y_hidden())
+    } else if !status.is_empty() {
+        Some(
+            row()
+                .center_y()
+                .gap(4.0)
+                .children(
+                    session
+                        .pinned
+                        .then(|| icon(&ui::PIN, 10.0).color(k.c.text_accent).a11y_hidden()),
+                )
+                .child(mark.a11y_hidden()),
+        )
+    } else {
+        None
+    };
     let item = super::row::Card {
         badge: l.feed.badges.view(app, &session.scope.project, k),
         project,
@@ -162,7 +179,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
         provider,
         age: &age,
         ink,
-        mark: (!status.is_empty()).then_some(mark.a11y_hidden()),
+        mark,
     }
     .build(k, bottom, selected, position, count)
     .description(format!("{project}, {branch}, {provider}, {status}, {age}"))

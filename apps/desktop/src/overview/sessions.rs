@@ -5,13 +5,13 @@ use caelum_core::{
         FeedSession, OverviewActivity, SessionBucket,
         presentation::{TurnPreview, excerpt},
     },
-    remote::Turn,
+    remote::{Job, Turn},
 };
-use caelum_protocol::GitHubPullRequest;
-use rune::{Color, El, Icon, TextStyle, col, el, icon, row, text};
+use caelum_protocol::{ApprovalDecision, ApprovalPrompt, GitHubPullRequest};
+use rune::{Color, El, TextStyle, col, el, icon, row, text};
 use rune_kit::{Kit, glyphs};
 
-use super::{PULL_REQUEST, RUNNING, SETTLED, WAITING, choose, row_key};
+use super::{PULL_REQUEST, SETTLED, WAITING, choose, row_key, running_spinner};
 use crate::{
     Workspace, checkouts,
     live::{Live, live, live_mut},
@@ -151,17 +151,25 @@ pub(super) fn view(s: &Workspace, compact: bool, k: &Kit) -> El {
         .virtual_rows_version(flat.as_ref())
 }
 
-fn group_meta(bucket: SessionBucket, k: &Kit) -> (&'static str, &'static Icon, Color) {
+fn group_meta(bucket: SessionBucket, k: &Kit) -> (&'static str, Color) {
     match bucket {
-        SessionBucket::Waiting => ("Waiting for you", &WAITING, k.c.warning.fg),
-        SessionBucket::Running => ("Running", &RUNNING, k.c.text_accent),
-        SessionBucket::Settled => ("Settled", &SETTLED, k.c.success.fg),
+        SessionBucket::Waiting => ("Waiting for you", k.c.warning.fg),
+        SessionBucket::Running => ("Running", k.c.text_accent),
+        SessionBucket::Settled => ("Settled", k.c.success.fg),
+    }
+}
+
+fn bucket_icon(bucket: SessionBucket, size: f32, tone: Color) -> El {
+    match bucket {
+        SessionBucket::Waiting => icon(&WAITING, size).color(tone).a11y_hidden(),
+        SessionBucket::Running => running_spinner(size, tone, true),
+        SessionBucket::Settled => icon(&SETTLED, size).color(tone).a11y_hidden(),
     }
 }
 
 fn group_header(s: &Workspace, bucket: SessionBucket, count: usize, k: &Kit) -> El {
     let collapsed = live(s).overview.is_collapsed(bucket);
-    let (title, glyph, tone) = group_meta(bucket, k);
+    let (title, tone) = group_meta(bucket, k);
     let chevron = if collapsed {
         &glyphs::CARET_RIGHT
     } else {
@@ -179,7 +187,7 @@ fn group_header(s: &Workspace, bucket: SessionBucket, count: usize, k: &Kit) -> 
                 .fill(k.c.layer_01)
                 .border(1.0, k.alpha(k.c.border_base, 0.7))
                 .child(icon(chevron, 11.0).color(k.c.icon_muted).a11y_hidden())
-                .child(icon(glyph, 13.0).color(tone).a11y_hidden())
+                .child(bucket_icon(bucket, 13.0, tone))
                 .child(text(title).font(k.ty.ui_medium).color(k.c.text_base))
                 .child(
                     text(count.to_string())
@@ -322,6 +330,71 @@ fn pr_pill(project: String, pr: &GitHubPullRequest, k: &Kit) -> El {
     })
 }
 
+fn action_pill(
+    label: &str,
+    help: impl Into<String>,
+    tone: Color,
+    key: String,
+    disabled: bool,
+    on_press: impl Fn(&mut Workspace) + 'static,
+    k: &Kit,
+) -> El {
+    k.interactive(
+        row()
+            .center_y()
+            .h(22.0)
+            .px(8.0)
+            .radius(6.0)
+            .fill(k.alpha(tone, 0.12))
+            .border(1.0, k.alpha(tone, 0.32))
+            .child(text(label).font(k.ty.small_medium).color(tone)),
+    )
+    .key(key)
+    .role("button")
+    .label(label)
+    .help(help.into())
+    .disabled(disabled)
+    .focusable(!disabled)
+    .focus_ring(1.0, 0.0, k.c.border_focus)
+    .opacity(if disabled { 0.5 } else { 1.0 })
+    .on_press(on_press)
+}
+
+fn approval_actions(index: usize, prompt: ApprovalPrompt, k: &Kit) -> El {
+    let summary = excerpt(&prompt.summary);
+    let allow = prompt.clone();
+    let deny = prompt;
+    row()
+        .center_y()
+        .gap(5.0)
+        .child(action_pill(
+            "Allow once",
+            format!("Allow once: {summary}"),
+            k.c.success.fg,
+            format!("overview-approve-{index}"),
+            false,
+            move |s: &mut Workspace| {
+                live_mut(s)
+                    .app
+                    .approve(allow.clone(), ApprovalDecision::AllowOnce);
+            },
+            k,
+        ))
+        .child(action_pill(
+            "Deny",
+            format!("Deny: {summary}"),
+            k.c.danger.fg,
+            format!("overview-deny-{index}"),
+            false,
+            move |s: &mut Workspace| {
+                live_mut(s)
+                    .app
+                    .approve(deny.clone(), ApprovalDecision::Deny);
+            },
+            k,
+        ))
+}
+
 fn session_row(
     s: &Workspace,
     id: &FeedSession,
@@ -332,8 +405,19 @@ fn session_row(
 ) -> El {
     let l = live(s);
     let app = &l.app;
-    let (_, glyph, tone) = group_meta(bucket, k);
-    let (title, meta, provider, age, excerpt_line, pr_badge, available, local_index) = match id {
+    let (_, tone) = group_meta(bucket, k);
+    let (
+        title,
+        meta,
+        provider,
+        age,
+        excerpt_line,
+        pr_badge,
+        available,
+        local_index,
+        pinned,
+        inline_action,
+    ) = match id {
         FeedSession::Local(index) => {
             let session = &app.sessions[*index];
             let project = checkouts::project_name(app, app.group_path(&session.scope.project));
@@ -353,6 +437,43 @@ fn session_row(
             } else {
                 None
             };
+            let quick = if let Some(prompt) = app.pending_approval_for(*index) {
+                Some(approval_actions(*index, prompt.clone(), k))
+            } else if app.has_question(session) {
+                let target = id.clone();
+                Some(
+                    k.interactive(
+                        row()
+                            .center_y()
+                            .h(22.0)
+                            .px(8.0)
+                            .radius(6.0)
+                            .fill(k.alpha(k.c.warning.fg, 0.12))
+                            .border(1.0, k.alpha(k.c.warning.fg, 0.32))
+                            .child(text("Answer").font(k.ty.small_medium).color(k.c.warning.fg)),
+                    )
+                    .key(format!("overview-answer-{index}"))
+                    .role("button")
+                    .label("Answer question")
+                    .help("Open session to answer the pending question")
+                    .focusable(true)
+                    .focus_ring(1.0, 0.0, k.c.border_focus)
+                    .on_press_tx(move |s: &mut Workspace, tx| choose(s, &target, tx)),
+                )
+            } else if session.working() && !session.stopping() {
+                let idx = *index;
+                Some(action_pill(
+                    "Stop",
+                    "Interrupt active turn",
+                    k.c.text_muted,
+                    format!("overview-stop-{idx}"),
+                    false,
+                    move |s: &mut Workspace| live_mut(s).app.cancel(idx),
+                    k,
+                ))
+            } else {
+                None
+            };
             (
                 session.title.clone(),
                 meta,
@@ -362,6 +483,8 @@ fn session_row(
                 pr,
                 !session.archiving() && !session.deleting(),
                 Some(*index),
+                session.pinned,
+                quick,
             )
         }
         FeedSession::Vm(link) => {
@@ -385,6 +508,41 @@ fn session_row(
             } else {
                 None
             };
+            let stopped = checkout
+                .machine()
+                .is_some_and(|m| matches!(m.state.as_str(), "archived" | "stopped"));
+            let checkout_id = link.checkout.clone();
+            let quick = if stopped {
+                let busy = matches!(
+                    app.remote.jobs.get(&checkout_id),
+                    Some(Job::Busy(_) | Job::Wait(_) | Job::Deleting(_))
+                );
+                let owner = checkout_id.clone();
+                Some(action_pill(
+                    "Resume",
+                    format!("Resume VM {}", checkout.title()),
+                    k.c.text_accent,
+                    format!("overview-resume-{checkout_id}"),
+                    busy,
+                    move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true),
+                    k,
+                ))
+            } else if thread.turn.run().is_some() {
+                let stopping = app.remote.interrupts.contains_key(&checkout_id)
+                    || matches!(thread.turn, Turn::Stopping(_));
+                let owner = checkout_id.clone();
+                Some(action_pill(
+                    if stopping { "Stopping…" } else { "Stop" },
+                    format!("Interrupt turn on VM {}", checkout.title()),
+                    k.c.text_muted,
+                    format!("overview-stop-vm-{checkout_id}"),
+                    stopping,
+                    move |s: &mut Workspace| live_mut(s).app.interrupt_remote(&owner),
+                    k,
+                ))
+            } else {
+                None
+            };
             (
                 thread.title().to_owned(),
                 meta,
@@ -394,6 +552,8 @@ fn session_row(
                 None,
                 app.can_open_vm_thread(link),
                 None,
+                false,
+                quick,
             )
         }
     };
@@ -402,7 +562,8 @@ fn session_row(
         .w_full()
         .center_y()
         .gap(8.0)
-        .child(icon(glyph, 13.0).color(tone).a11y_hidden())
+        .child(bucket_icon(bucket, 13.0, tone))
+        .children(pinned.then(|| icon(&ui::PIN, 11.0).color(k.c.text_accent).a11y_hidden()))
         .child(
             row()
                 .grow(1.0)
@@ -426,6 +587,7 @@ fn session_row(
                         .min_w(0.0),
                 ),
         )
+        .children(inline_action)
         .children(pr_badge.map(|(project, pr)| pr_pill(project, pr, k)))
         .children((!compact).then(|| {
             text(provider)

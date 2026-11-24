@@ -78,6 +78,8 @@ pub struct Session {
     pub reading: f32,
     pub unread: bool,
     pub origin: Option<caelum_protocol::SessionOrigin>,
+    pub pinned: bool,
+    pub bookmarked_entries: Vec<String>,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
     shell_revision: u64,
     pub details: Option<caelum_protocol::SessionDetails>,
@@ -127,6 +129,8 @@ impl Session {
             reading: -1.0,
             unread: false,
             origin: None,
+            pinned: false,
+            bookmarked_entries: Vec::new(),
             shells: Vec::new(),
             shell_revision: 0,
             details: None,
@@ -153,6 +157,10 @@ impl Session {
 
     pub fn working(&self) -> bool {
         self.submitting() || self.conversation.working()
+    }
+
+    pub fn is_bookmarked(&self, entry_id: &str) -> bool {
+        self.bookmarked_entries.iter().any(|id| id == entry_id)
     }
 
     fn record_activity(&mut self, at: u64) {

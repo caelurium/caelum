@@ -16,10 +16,23 @@ use serde_json::{json, Value};
 use super::{
     lock,
     progress::{ProgressEffect, SessionProgressTracker, REACTIVE_SETTLE_DELAY},
-    protocol, questions, AcpConnection, AntigravityError, EventSubscribers, PendingCall,
-    PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
+    protocol, questions, AcpConnection, AntigravityError, AntigravityProvider, EventSubscribers,
+    PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
 };
 use crate::{approvals::ApprovalBroker, processes::ProcessRegistry, questions::QuestionBroker};
+
+impl AntigravityProvider {
+    /// Whether the Antigravity CLI executable is available on this machine.
+    pub fn is_installed(&self) -> bool {
+        self.executable().is_ok_and(|path| {
+            crate::executable::executable(&path)
+                || (path.components().count() == 1
+                    && path
+                        .to_str()
+                        .is_some_and(|name| crate::executable::find(name).is_some()))
+        })
+    }
+}
 
 impl AcpConnection {
     pub(super) fn request(&self, method: &str, params: Value) -> Result<Value, AntigravityError> {

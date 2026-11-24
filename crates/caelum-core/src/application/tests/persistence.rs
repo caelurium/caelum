@@ -243,3 +243,60 @@ fn archive_delete_and_worktree_removal_do_not_wait_for_in_flight_saves() {
 
     app.apply(Event::Completed(save, Ok(Reply::Done)));
 }
+
+#[test]
+fn pinned_sessions_and_bookmarks_persist_and_order_above_unpinned() {
+    let mut app = Workspace::default();
+    app.projects.push(caelum_protocol::ProjectInfo {
+        name: "a".into(),
+        path: "/a".into(),
+    });
+    let older = started(&mut app, scope(Provider::Codex, "/a"), "s-old");
+    app.sessions[older].last_activity = Some(100);
+    let newer = started(&mut app, scope(Provider::Codex, "/a"), "s-new");
+    app.sessions[newer].last_activity = Some(200);
+
+    assert_eq!(
+        app.sidebar_sessions(None, "", false),
+        vec![
+            crate::application::FeedSession::Local(newer),
+            crate::application::FeedSession::Local(older),
+        ]
+    );
+
+    assert!(app.toggle_pin(older));
+    assert_eq!(
+        app.sidebar_sessions(None, "", false),
+        vec![
+            crate::application::FeedSession::Local(older),
+            crate::application::FeedSession::Local(newer),
+        ]
+    );
+
+    assert!(app.toggle_bookmark(older, "msg-1".into()));
+    assert!(app.sessions[older].is_bookmarked("msg-1"));
+    assert!(app.toggle_bookmark(older, "msg-2".into()));
+    assert!(!app.toggle_bookmark(older, "msg-1".into()));
+    assert!(!app.sessions[older].is_bookmarked("msg-1"));
+    assert!(app.sessions[older].is_bookmarked("msg-2"));
+
+    let snapshot = app.snapshot();
+    let json = serde_json::to_string(&snapshot).unwrap();
+    let decoded: crate::application::Snapshot = serde_json::from_str(&json).unwrap();
+    assert!(decoded.sessions[older].pinned);
+    assert_eq!(
+        decoded.sessions[older].bookmarked_entries,
+        vec!["msg-2".to_owned()]
+    );
+
+    let mut restored = Workspace::default();
+    restored.enable_store("/unused-in-reducer-test".into());
+    let (load, _) = restored.commands().pop().unwrap();
+    restored.apply(Event::Completed(
+        load,
+        Ok(Reply::Snapshot(Some(Box::new(decoded)))),
+    ));
+    assert!(restored.sessions[older].pinned);
+    assert!(restored.sessions[older].is_bookmarked("msg-2"));
+    assert!(!restored.sessions[newer].pinned);
+}

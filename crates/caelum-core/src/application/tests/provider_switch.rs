@@ -185,3 +185,45 @@ fn switching_back_keeps_both_providers_turns_and_their_row_identity() {
         |c| matches!(c, Command::Send(key, text, _) if key.id == "third" && text.contains("The timeout test.") && text.contains("The retry fixed it.") && text.ends_with("Summarize")),
     );
 }
+
+#[test]
+fn uninstalled_providers_cannot_be_switched_to() {
+    let mut app = Workspace::default();
+    let (i, _) = previous(&mut app);
+
+    app.task(Task::InstalledProviders);
+    let probe = request(&mut app, |c| {
+        matches!(c, Command::Task(Task::InstalledProviders))
+    });
+    app.apply(Event::Completed(
+        probe,
+        Ok(Reply::Task(TaskReply::InstalledProviders(vec![
+            Provider::OpenCode,
+            Provider::Antigravity,
+        ]))),
+    ));
+
+    assert_eq!(
+        app.available_providers(Some("/project")),
+        vec![Provider::OpenCode, Provider::Antigravity]
+    );
+    assert!(app.can_switch_provider(i));
+    assert!(!app.switch_provider(i, Provider::Codex));
+    assert_eq!(app.sessions[i].scope.provider, Provider::OpenCode);
+    assert!(app.switch_provider(i, Provider::Antigravity));
+    assert_eq!(app.sessions[i].scope.provider, Provider::Antigravity);
+    assert_eq!(app.home_provider(), Provider::OpenCode);
+    assert_eq!(app.default_provider_for(None), Provider::OpenCode);
+
+    // Only the current provider installed: switching is disabled.
+    app.set_installed_providers(vec![Provider::Antigravity]);
+    assert!(!app.can_switch_provider(i));
+    assert!(!app.switch_provider(i, Provider::OpenCode));
+
+    // Current session's provider is not installed, but another is: allow switching away.
+    app.set_installed_providers(vec![Provider::OpenCode]);
+    assert!(app.can_switch_provider(i));
+    assert!(app.switch_provider(i, Provider::OpenCode));
+    assert!(!app.can_switch_provider(i));
+    assert!(!app.switch_provider(i, Provider::Antigravity));
+}
