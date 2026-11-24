@@ -120,6 +120,14 @@ impl OpenCodeProvider {
         }
     }
 
+    /// Whether the OpenCode CLI executable is available on this machine.
+    pub fn is_installed(&self) -> bool {
+        match self.inner.executable.as_deref() {
+            Some(path) => crate::executable::executable(path),
+            None => find_opencode_executable().is_ok(),
+        }
+    }
+
     /// Subscribe to session, tool, permission, and server lifecycle events.
     pub fn subscribe(&self) -> Receiver<OpenCodeEvent> {
         let (sender, receiver) = mpsc::channel();

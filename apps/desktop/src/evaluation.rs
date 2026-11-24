@@ -371,28 +371,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             | "stats-empty"
     ) {
         scenes::command_overlay(l, name);
-        if name == "timeline" {
-            let session = &mut l.app.sessions[0];
-            session.conversation = Default::default();
-            let prompts = [
-                "Restore the continuous PR workspace",
-                "Keep drafts independent when switching sessions",
-                "Make the model picker open above the composer",
-                "Review the patch and explain the tradeoffs",
-                "Run the workspace checks and address the failures",
-                "Polish keyboard focus and compact layouts",
-            ];
-            let turns: Vec<_> = (0..48).map(|n| json!({"id":format!("turn-{n}"),"createdAt":caelum_core::application::presentation::now().saturating_sub((48-n) * 3_600_000),"status":"completed","items":[
-                {"id":format!("prompt-{n}"),"type":"userMessage","content":[{"text":format!("{}\nPlease preserve reading position and check the populated, empty and loading states.", prompts[n as usize % prompts.len()])}]},
-                {"id":format!("answer-{n}"),"type":"agentMessage","text":"The changes keep session ownership intact. Ready for review."}]})).collect();
-            session.conversation.history(Provider::Codex, &turns, false);
-            l.current_prompt = Some("codex-prompt-0".into());
-            l.commands.timeline_selected = l.current_prompt.clone();
-            l.commands.timeline_current = l.current_prompt.clone();
-        }
-        if name == "timeline-empty" {
-            l.app.sessions[0].conversation = Default::default();
-        }
+        scenes::apply_timeline(l, name);
         scenes::apply_usage(&mut l.app, project, name);
         if matches!(name, "stats" | "stats-empty") {
             let tokens = json!({"input":420000,"output":120000,"reasoning":80000,"cache":{"read":920000,"write":12000}});

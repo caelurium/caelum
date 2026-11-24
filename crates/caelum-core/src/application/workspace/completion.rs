@@ -1,5 +1,5 @@
 use super::{Pending, Session, Workspace};
-use crate::application::{Attachment, Command, Provider, Reply, Scope, Task, TaskReply};
+use crate::application::{Attachment, Command, Provider, Reply, Scope, TaskReply};
 
 impl Workspace {
     pub(super) fn complete(
@@ -243,14 +243,8 @@ impl Workspace {
             }
             (Pending::Notify, Reply::Done) => {}
             (Pending::Details(index), Reply::Details(details)) => {
-                let project = self.sessions[index].scope.project.clone();
-                for branch in &details.branches {
-                    self.task(Task::Discover {
-                        project: project.clone(),
-                        branch: branch.clone(),
-                    });
-                }
                 self.sessions[index].details = Some(details);
+                self.discover_session_pull_requests(index);
             }
             (Pending::Load, Reply::Snapshot(snapshot)) => {
                 if !self.store_loaded(request, Ok(snapshot.as_deref())) {

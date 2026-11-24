@@ -25,11 +25,12 @@ pub enum Page {
 }
 
 fn settings_provider(s: &Workspace) -> Provider {
-    let l = live(s);
-    let project = settings_project(s);
-    let available = Provider::for_project(project.as_deref());
-    if available.contains(&l.panels.settings_provider) {
-        l.panels.settings_provider
+    let available = live(s)
+        .app
+        .selectable_providers(settings_project(s).as_deref());
+    let current = live(s).panels.settings_provider;
+    if available.contains(&current) {
+        current
     } else {
         available[0]
     }
@@ -255,7 +256,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let app = &live(s).app;
     let project = settings_project(s);
     let provider = settings_provider(s);
-    let available = Provider::for_project(project.as_deref());
+    let available = app.selectable_providers(project.as_deref());
     let destination = project.as_deref().and_then(|p| app.native_checkout(p));
     let detail = destination.map(|c| {
         format!(
@@ -272,7 +273,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     ));
     if available.len() > 1 {
         let mut defaults = ui::segmented_track(k);
-        for &p in available {
+        for &p in &available {
             let destination = project.clone();
             defaults = defaults.child(
                 ui::segment(
@@ -299,7 +300,7 @@ fn providers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .child(ui::divider(k));
     }
     let mut tabs = ui::segmented_track(k);
-    for &p in available {
+    for &p in &available {
         tabs = tabs.child(
             ui::segment(ui::provider_name(p), p == provider, k)
                 .on_press(move |s: &mut Workspace| {

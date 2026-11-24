@@ -35,6 +35,8 @@ pub enum Task {
     Update(crate::updates::Job),
     #[serde(skip)]
     HostStats,
+    #[serde(skip)]
+    InstalledProviders,
     Image {
         project: String,
         source: String,
@@ -157,6 +159,8 @@ pub enum TaskReply {
     Update(crate::updates::Reply),
     #[serde(skip)]
     HostStats(crate::host_stats::HostSample),
+    #[serde(skip)]
+    InstalledProviders(Vec<super::Provider>),
     Image(String),
     Usage(serde_json::Value),
     Stats(OpenCodeStats, Vec<OpenCodeStatsProject>),
@@ -206,7 +210,11 @@ macro_rules! project_field {
             | Task::Merge { project, .. }
             | Task::SetAutoMerge { project, .. }
             | Task::UpdateBranch { project, .. } => Some(project),
-            Task::ImportSettings { .. } | Task::Updates | Task::Update(_) | Task::HostStats => None,
+            Task::ImportSettings { .. }
+            | Task::Updates
+            | Task::Update(_)
+            | Task::HostStats
+            | Task::InstalledProviders => None,
         }
     };
 }
@@ -243,6 +251,7 @@ impl Task {
             Self::Updates => "updates".into(),
             Self::Update(job) => format!("update-installation:{}", job.id),
             Self::HostStats => "host-stats".into(),
+            Self::InstalledProviders => "installed-providers".into(),
             Self::Reveal { path, .. } => format!("reveal:{path}"),
             Self::EncodeImage { .. } => "encode-image".into(),
             Self::Image { source, .. } => format!("image:{source}"),
@@ -293,10 +302,25 @@ impl Task {
                 Shell
             ),
             Self::Reveal { project, path } => {
-                let project = crate::projects::Project::open(project).map_err(|e| e.to_string())?;
-                let path = project
-                    .resolve_scoped_path(path)
-                    .map_err(|e| e.to_string())?;
+                let path = if std::path::Path::new(path).is_absolute() {
+                    if crate::remote::native::checkout_id(project).is_some() {
+                        return Err("External paths are unavailable for remote checkouts".into());
+                    }
+                    let target = std::path::PathBuf::from(path);
+                    if target
+                        .components()
+                        .any(|component| matches!(component, std::path::Component::ParentDir))
+                    {
+                        return Err("Invalid path".into());
+                    }
+                    target
+                } else {
+                    let project =
+                        crate::projects::Project::open(project).map_err(|e| e.to_string())?;
+                    project
+                        .resolve_scoped_path(path)
+                        .map_err(|e| e.to_string())?
+                };
                 let status = std::process::Command::new(if cfg!(target_os = "macos") {
                     "open"
                 } else {
@@ -346,6 +370,9 @@ impl Task {
             ),
             Self::Update(job) => runtime.updates.execute(job).map(TaskReply::Update),
             Self::HostStats => crate::host_stats::sample().map(TaskReply::HostStats),
+            Self::InstalledProviders => {
+                Ok(TaskReply::InstalledProviders(runtime.installed_providers()))
+            }
             Self::Usage { project, provider } => match provider {
                 super::Provider::Antigravity => {
                     reply!(runtime.antigravity.usage_limits(project), Usage)
@@ -380,7 +407,16 @@ impl Task {
                 files::list_directory(project, path, *offset, 200),
                 Directory
             ),
-            Self::File { project, path } => reply!(files::read_text_file(project, path), File),
+            Self::File { project, path } => {
+                if std::path::Path::new(path).is_absolute() {
+                    if crate::remote::native::checkout_id(project).is_some() {
+                        return Err("External paths are unavailable for remote checkouts".into());
+                    }
+                    reply!(files::read_external_text_file(path), File)
+                } else {
+                    reply!(files::read_text_file(project, path), File)
+                }
+            }
             Self::Search {
                 project,
                 query,
@@ -530,6 +566,7 @@ pub struct Services {
     pub update: Option<UpdateCheck>,
     pub updater: crate::updates::State,
     pub host: Option<crate::host_stats::HostHistory>,
+    pub installed_providers: Option<Vec<super::Provider>>,
     pub checkouts: BTreeMap<String, Checkout>,
     pub reviews: BTreeMap<(String, String), Review>,
     discovered: HashMap<(String, String), Option<Discovered>>,

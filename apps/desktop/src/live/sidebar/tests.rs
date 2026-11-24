@@ -132,6 +132,37 @@ fn pull_requests_refresh_on_scope_and_navigation_changes_but_not_search_or_idle_
     assert!(app.commands().is_empty());
 }
 
+#[test]
+fn pull_requests_refresh_when_projects_restore_after_initial_poll() {
+    let mut app = Workspace::default();
+    let mut state = State::default();
+    let mut tx = rune::Tx::default();
+
+    // First poll happens before snapshot restore populates app.projects.
+    state.poll(&mut app, "", false, &mut tx, false);
+    assert!(app.commands().is_empty());
+
+    for path in ["/first", "/second"] {
+        app.projects.push(caelum_protocol::ProjectInfo {
+            path: path.into(),
+            name: path.into(),
+        });
+        app.services.checkouts.entry(path.into()).or_default().git =
+            Some(caelum_protocol::GitRepositoryStatus {
+                project_path: path.into(),
+                repository_root: Some(path.into()),
+                branch: Some("feature".into()),
+                changes: vec![],
+            });
+    }
+    state.poll(&mut app, "", false, &mut tx, false);
+    assert_eq!(finish_refreshes(&mut app), ["/first", "/second"]);
+
+    // Subsequent idle polls do not re-trigger refreshes.
+    state.poll(&mut app, "", false, &mut tx, false);
+    assert!(app.commands().is_empty());
+}
+
 fn finish_refreshes(app: &mut Workspace) -> Vec<String> {
     let mut projects = Vec::new();
     for (request, command) in app.commands() {
