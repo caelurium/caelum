@@ -217,11 +217,36 @@ fn overview_moves_background_sessions_between_running_and_settled_live() {
     advance(&mut rt, 0.25);
     assert!(rt.find("overview-group-Running").is_some());
     assert!(tile_shows(&rt, "overview-session-3", "Running"));
+    let spinning_arcs = |rt: &Runtime<Workspace>| {
+        rt.elements()
+            .into_iter()
+            .filter(|e| {
+                !e.exiting
+                    && e.key.as_deref() == Some("overview-spinner-arc")
+                    && e.loop_phase.is_some()
+            })
+            .collect::<Vec<_>>()
+    };
+    let active = spinning_arcs(&rt);
+    assert!(
+        active
+            .iter()
+            .any(|e| e.path.contains("overview-group-Running")),
+        "running section header should show an active spinner"
+    );
+    assert!(
+        active.iter().any(|e| e.path.contains("overview-session-3")),
+        "running session row should show an active spinner"
+    );
     rt.update(|s, _| assert!(live_mut(s).apply_events([event("turn/completed")])));
     advance(&mut rt, 0.25);
     assert!(rt.find("overview-group-Running").is_none());
     assert!(rt.find("overview-group-Settled").is_some());
     assert!(rt.find("overview-session-3").is_some());
+    assert!(
+        spinning_arcs(&rt).is_empty(),
+        "idle overview should not keep spinners animating"
+    );
 }
 
 #[test]
