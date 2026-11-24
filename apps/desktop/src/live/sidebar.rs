@@ -288,22 +288,14 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                 .center_y()
                 .radius(6.0)
                 .fill(if overview_selected {
-                    k.c.layer_02
+                    k.c.hover
                 } else {
                     rune::Color::TRANSPARENT
                 })
-                .border(
-                    1.0,
-                    if overview_selected {
-                        k.c.border_base
-                    } else {
-                        rune::Color::TRANSPARENT
-                    },
-                )
                 .child(
                     icon(&crate::overview::NAV_ICON, 13.0)
                         .color(if overview_selected {
-                            k.c.text_base
+                            k.c.text_accent
                         } else {
                             k.c.icon_muted
                         })
@@ -317,7 +309,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                             k.ty.ui
                         })
                         .color(if overview_selected {
-                            k.c.text_base
+                            k.c.text_accent
                         } else {
                             k.c.text_muted
                         })
