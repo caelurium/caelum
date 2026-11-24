@@ -84,6 +84,21 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
     let archive_disabled = archive_disabled(live, index);
     content = content.child(
         session_action_row(
+            "Split right",
+            "Open this session side-by-side in a split pane",
+            &rune_kit::shell::INSPECTOR,
+            false,
+            false,
+            k,
+        )
+        .on_press(move |s: &mut Workspace| {
+            crate::split::open_session(s, index);
+            close_session_menu(s);
+        })
+        .key("split-session"),
+    );
+    content = content.child(
+        session_action_row(
             if session.archived() {
                 "Restore session"
             } else {

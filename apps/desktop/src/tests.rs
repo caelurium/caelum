@@ -18,6 +18,7 @@ mod questions;
 mod redraw;
 mod remote;
 mod review;
+mod runner_split;
 mod session_feed;
 mod sessions;
 mod settings;

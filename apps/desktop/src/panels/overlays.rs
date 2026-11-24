@@ -46,6 +46,7 @@ standard_overlays!(
     Launcher,
     RemotePicker,
     Rename,
+    Runner,
     Session,
     Sessions,
     Settings,
@@ -200,6 +201,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Background commands",
             "Live output from this session.",
             crate::shells::panel(s, k),
+        ),
+        Screen::Runner => (
+            "Run checkout command",
+            "Run a command in this checkout and attach its output to your prompt.",
+            crate::runner::panel(s, k),
         ),
         Screen::Timeline => (
             "Timeline",

@@ -53,6 +53,7 @@ pub enum Screen {
     Worktrees,
     CreateWorktree,
     Shells,
+    Runner,
     Review,
     Remote,
     CreateVm,

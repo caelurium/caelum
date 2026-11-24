@@ -19,6 +19,7 @@ pub mod processes;
 pub mod projects;
 pub mod questions;
 pub mod remote;
+pub mod runner;
 pub mod session_branches;
 pub mod updates;
 pub mod worktrees;

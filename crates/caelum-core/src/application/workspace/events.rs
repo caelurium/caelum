@@ -9,6 +9,9 @@ impl Workspace {
             Event::UpdateProgress(id, progress) => {
                 self.services.updater.progress(id, progress);
             }
+            Event::Runner(event) => {
+                self.runner.apply(event);
+            }
             Event::Branch(update) => self.branch_update(update),
             Event::Checkout(project) => self.checkout_changed(&project),
             Event::Completed(id, result) => {

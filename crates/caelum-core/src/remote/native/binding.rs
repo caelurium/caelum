@@ -64,6 +64,8 @@ impl Binding {
                 | crate::remote::Operation::MatchCheckout(p, ..),
             ) => Some(p),
             Command::Remote(_)
+            | Command::RunCommand { .. }
+            | Command::StopCommand { .. }
             | Command::Notify(_)
             | Command::Sound(_)
             | Command::Load(_)
@@ -110,7 +112,10 @@ impl Binding {
             Event::Codex(e) => self.bind(&mut e.project_path).ok()?,
             Event::Approvals(items) => items.retain_mut(|p| self.bind(&mut p.project_path).is_ok()),
             Event::Questions(items) => items.retain_mut(|p| self.bind(&mut p.project_path).is_ok()),
-            Event::OpenCode(_) | Event::Antigravity(_) | Event::UpdateProgress(..) => return None,
+            Event::OpenCode(_)
+            | Event::Antigravity(_)
+            | Event::UpdateProgress(..)
+            | Event::Runner(_) => return None,
         }
         Some(event)
     }

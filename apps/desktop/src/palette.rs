@@ -1,13 +1,16 @@
 //! Global command palette (`⌘K`) for jumping to sessions, projects, worktrees, settings, and actions.
+mod execute;
+
+use execute::execute;
+
 use crate::{
     Workspace,
     context::EditMenu,
     live::{live, live_mut},
-    panels::{self, Screen},
     settings::Page as SettingsPage,
     ui,
 };
-use caelum_core::application::{HistoryAction, Provider, Task};
+use caelum_core::application::Provider;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text};
 use rune_kit::{Kit, ScrollBar};
 
@@ -61,6 +64,9 @@ enum Action {
     ToggleInspector,
     Files,
     Changes,
+    Runner,
+    SplitRight,
+    CloseSplit,
     OpenProject,
     ChooseModel,
     Timeline,
@@ -86,6 +92,24 @@ struct Entry {
 }
 
 impl Entry {
+    fn cmd(
+        title: &'static str,
+        detail: &'static str,
+        shortcut: Option<&'static str>,
+        keywords: &'static str,
+        action: Action,
+    ) -> Self {
+        Self::new(
+            Section::Commands,
+            title,
+            detail,
+            shortcut,
+            None,
+            keywords,
+            action,
+        )
+    }
+
     fn new(
         section: Section,
         title: impl Into<String>,
@@ -148,60 +172,79 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         "start checkout vm worktree",
         Action::Launcher,
     ));
-    entries.push(Entry::new(
-        Section::Commands,
-        "Home",
-        "Open the home composer and project overview",
-        None,
-        None,
-        "start dashboard",
-        Action::Home,
-    ));
-    entries.push(Entry::new(
-        Section::Commands,
-        "Overview",
-        "Dashboard of sessions, pull requests, worktrees, machines, and usage",
-        Some("⌘J"),
-        None,
-        "overview active conversations switcher dashboard",
-        Action::Overview,
-    ));
-    entries.push(Entry::new(
-        Section::Commands,
-        "Open project…",
-        "Add a local Git repository or folder to Caelum",
-        Some("⌘O"),
-        None,
-        "folder repository add",
-        Action::OpenProject,
-    ));
+    entries.extend([
+        Entry::cmd(
+            "Home",
+            "Open the home composer and project overview",
+            None,
+            "start dashboard",
+            Action::Home,
+        ),
+        Entry::cmd(
+            "Overview",
+            "Dashboard of sessions, pull requests, worktrees, machines, and usage",
+            Some("⌘J"),
+            "overview active conversations switcher dashboard",
+            Action::Overview,
+        ),
+        Entry::cmd(
+            "Open project…",
+            "Add a local Git repository or folder to Caelum",
+            Some("⌘O"),
+            "folder repository add",
+            Action::OpenProject,
+        ),
+    ]);
     if has_project {
-        entries.push(Entry::new(
-            Section::Commands,
-            "Manage worktrees",
-            "Create, rename, or remove Caelum worktrees",
-            None,
-            None,
-            "git branch checkout",
-            Action::Worktrees,
+        entries.extend([
+            Entry::cmd(
+                "Manage worktrees",
+                "Create, rename, or remove Caelum worktrees",
+                None,
+                "git branch checkout",
+                Action::Worktrees,
+            ),
+            Entry::cmd(
+                "Project files",
+                "Browse and search files in the current project",
+                Some("⌘P"),
+                "explorer tree search",
+                Action::Files,
+            ),
+            Entry::cmd(
+                "Git changes",
+                "Inspect modified files and diffs in the inspector",
+                None,
+                "diff status review",
+                Action::Changes,
+            ),
+        ]);
+        if crate::runner::active_project(s).is_some() {
+            entries.push(Entry::cmd(
+                "Run checkout command",
+                "Run a shell command in this checkout and attach output",
+                None,
+                "shell terminal test build runner",
+                Action::Runner,
+            ));
+        }
+    }
+    if l.app.selected.is_some() {
+        entries.push(Entry::cmd(
+            "Split right",
+            "View a session or PR review side-by-side",
+            Some("⌥⌘→"),
+            "split pane two columns",
+            Action::SplitRight,
         ));
-        entries.push(Entry::new(
-            Section::Commands,
-            "Project files",
-            "Browse and search files in the current project",
-            Some("⌘P"),
+    }
+    if l.split.is_open() {
+        entries.push(Entry::cmd(
+            "Close split pane",
+            "Return to single-pane layout",
             None,
-            "explorer tree search",
-            Action::Files,
-        ));
-        entries.push(Entry::new(
-            Section::Commands,
-            "Git changes",
-            "Inspect modified files and diffs in the inspector",
-            None,
-            None,
-            "diff status review",
-            Action::Changes,
+            "unsplit single pane",
+            Action::CloseSplit,
         ));
     }
     if active_session.is_some() && provider_available {
@@ -470,100 +513,6 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         (rank, entry.section as usize)
     });
     entries
-}
-
-fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
-    live_mut(s).panels.set_overlay(None);
-    match action {
-        Action::NewSession => live_mut(s).new_session(),
-        Action::Launcher => panels::open_launcher(s),
-        Action::Home => crate::home::open(s),
-        Action::Overview => crate::overview::open(s, tx),
-        Action::Settings(page) => {
-            live_mut(s).panels.settings_page = page;
-            panels::show(s, Screen::Settings);
-        }
-        Action::Worktrees => panels::show(s, Screen::Worktrees),
-        Action::ToggleSidebar => {
-            s.sidebar.toggle();
-            live_mut(s).focus();
-        }
-        Action::ToggleInspector => {
-            s.inspector.toggle();
-            live_mut(s).focus();
-        }
-        Action::Files => panels::show(s, Screen::Files),
-        Action::Changes => panels::show(s, Screen::Changes),
-        Action::OpenProject => crate::live::open_project(s, tx),
-        Action::ChooseModel => crate::models::open(s, None),
-        Action::Timeline => {
-            if let Some(index) = live(s).app.selected {
-                live_mut(s).commands.owner = Some(index);
-                crate::commands::open_timeline(s);
-            }
-        }
-        Action::Usage => {
-            if let Some(index) = live(s).app.selected {
-                let l = live_mut(s);
-                l.commands.owner = Some(index);
-                l.panels.set_overlay(Some(Screen::Usage));
-                let scope = l.app.sessions[index].scope.clone();
-                l.app.task(Task::Usage {
-                    project: scope.project,
-                    provider: scope.provider,
-                });
-            }
-        }
-        Action::Stats => {
-            if let Some(index) = live(s).app.selected {
-                let l = live_mut(s);
-                l.commands.owner = Some(index);
-                l.commands.stats_anchor = caelum_core::application::presentation::now();
-                l.panels.set_overlay(Some(Screen::Stats));
-                crate::commands::refresh_stats(s);
-            }
-        }
-        Action::ProviderSessions => {
-            if let Some(index) = live(s).app.selected {
-                let l = live_mut(s);
-                let scope = l.app.sessions[index].scope.clone();
-                l.commands.owner = Some(index);
-                l.commands.sessions_search.clear();
-                l.commands.sessions_selected = None;
-                l.commands.sessions_search.focused = true;
-                l.panels.set_overlay(Some(Screen::Sessions));
-                l.app.discover_sessions(scope);
-            }
-        }
-        Action::Fork => {
-            if let Some(index) = live(s).app.selected {
-                crate::commands::history(s, index, HistoryAction::Fork, None);
-            }
-        }
-        Action::Rename => {
-            if let Some(index) = live(s).app.selected {
-                crate::commands::rename(s, index);
-            }
-        }
-        Action::SideQuestion => {
-            if let Some(index) = live(s).app.selected
-                && live(s).app.sessions[index].remote_id.is_some()
-            {
-                let l = live_mut(s);
-                l.app.dismiss_side_question(index);
-                l.commands.side_owner = Some(index);
-                l.commands.side_editor = TextEdit::new("");
-                l.commands.side_editor.focused = true;
-                l.drafts[index].focused = false;
-            }
-        }
-        Action::SelectSession(index) => {
-            crate::live::select_session(s, index);
-            live_mut(s).focus();
-        }
-        Action::SelectProject(path) => crate::checkouts::select_project(s, &path),
-        Action::SelectWorktree(path) => crate::checkouts::select(s, &path),
-    }
 }
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {

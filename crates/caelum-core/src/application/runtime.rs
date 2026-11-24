@@ -46,6 +46,7 @@ pub struct ProviderRuntime {
     pub branches: crate::session_branches::SessionBranches,
     pub(super) review_cache: Arc<Mutex<Option<crate::github::cache::Cache>>>,
     pub(super) updates: crate::updates::Backend,
+    pub(super) runner: crate::runner::Backend,
 }
 
 impl Default for ProviderRuntime {
@@ -58,7 +59,8 @@ impl Default for ProviderRuntime {
             vm: None,
             codex: CodexProvider::new(p.clone(), a.clone(), q.clone()),
             opencode: OpenCodeProvider::new(p.clone(), a.clone(), q.clone()),
-            antigravity: AntigravityProvider::new(p, a, q),
+            antigravity: AntigravityProvider::new(p.clone(), a, q),
+            runner: crate::runner::Backend::new(p),
             processes,
             remote: Arc::default(),
             approvals,
@@ -106,6 +108,7 @@ impl ProviderRuntime {
         }
         self.remote.shutdown();
         self.updates.shutdown();
+        self.runner.shutdown();
         self.approvals.shutdown();
 
         self.processes.shutdown();
@@ -121,6 +124,15 @@ impl ProviderRuntime {
             }
         }
         let result = match command {
+            Command::RunCommand {
+                project,
+                run_id,
+                command,
+            } => self.runner.start(project, *run_id, command),
+            Command::StopCommand { project, run_id } => {
+                self.runner.stop(project, *run_id);
+                Ok(())
+            }
             Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
                 return self
@@ -634,6 +646,9 @@ impl Runtime {
         if local {
             providers
                 .updates
+                .observe(runtime.sender.clone(), runtime.wake.clone());
+            providers
+                .runner
                 .observe(runtime.sender.clone(), runtime.wake.clone());
         }
         let branches = providers.branches.clone();

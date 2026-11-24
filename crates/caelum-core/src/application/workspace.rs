@@ -277,6 +277,7 @@ pub struct Workspace {
     pub error: Option<String>,
     pub opening: bool,
     pub services: Services,
+    pub runner: crate::runner::WorkspaceRunner,
     pub preferences: Preferences,
     notifications: notifications::State,
     pub provider_commands: HashMap<Scope, Vec<caelum_protocol::OpenCodeCommandInfo>>,
@@ -303,6 +304,65 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    pub fn run_checkout_command(&mut self, project: String, command: String) -> Option<u64> {
+        let (run_id, command) = self.runner.start(&project, command)?;
+        self.next_request += 1;
+        let id = self.next_request;
+        self.outgoing.push((
+            id,
+            Command::RunCommand {
+                project,
+                run_id,
+                command,
+            },
+        ));
+        Some(run_id)
+    }
+
+    pub fn stop_checkout_command(&mut self, project: &str) -> bool {
+        let Some(run_id) = self.runner.running_id(project) else {
+            return false;
+        };
+        self.next_request += 1;
+        let id = self.next_request;
+        self.outgoing.push((
+            id,
+            Command::StopCommand {
+                project: project.to_owned(),
+                run_id,
+            },
+        ));
+        true
+    }
+
+    pub fn attach_runner_output(&mut self, session_index: usize, project: &str) -> bool {
+        let Some(run) = self.runner.get(project) else {
+            return false;
+        };
+        let Some(command) = run.state.command() else {
+            return false;
+        };
+        let Some((output, truncated)) = run.state.output() else {
+            return false;
+        };
+        let Some(session) = self.sessions.get_mut(session_index) else {
+            return false;
+        };
+        let status = match &run.state {
+            crate::runner::RunState::Running { .. } => "running".to_owned(),
+            crate::runner::RunState::Exited { code: Some(c), .. } => format!("exit {c}"),
+            crate::runner::RunState::Exited { code: None, .. } => "exited".to_owned(),
+            crate::runner::RunState::Cancelled { .. } => "stopped".to_owned(),
+            _ => String::new(),
+        };
+        let label = format!("Command output: {command}");
+        let body = format!("$ {command} ({status})\n\n{output}");
+        session
+            .attachments
+            .push(super::Attachment::new(label, body, None, truncated));
+        true
+    }
+
     fn request(&mut self, mut command: Command, pending: Pending) -> u64 {
         if matches!(command, Command::Notify(..)) && self.preferences.sound_volume > 0 {
             self.request(

@@ -31,6 +31,7 @@ impl Mailboxes {
         let queue = if matches!(
             command,
             Command::Cancel(_)
+                | Command::StopCommand { .. }
                 | Command::Remote(crate::remote::Operation::Interrupt(..))
                 | Command::Task(Task::Shell { stop: true, .. })
                 | Command::Approve(..)

@@ -57,7 +57,20 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                     .key("review-number")
             }))
             .children(details.map(|details| state(details, k)))
-            .child(rune::el().grow(1.0));
+            .child(rune::el().grow(1.0))
+            .child(
+                quiet_button(&rune_kit::shell::INSPECTOR, "Split right")
+                    .on_press({
+                        let project = project.clone();
+                        let url = url.clone();
+                        move |s: &mut Workspace| {
+                            crate::split::open_review(s, project.clone(), url.clone());
+                            live_mut(s).panels.screen = Screen::Conversation;
+                        }
+                    })
+                    .build(k)
+                    .key("review-split-right"),
+            );
         let link = url.clone();
         let project = project.clone();
         let url = url.clone();
