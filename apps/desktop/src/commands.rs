@@ -24,7 +24,7 @@ use crate::{
     panels::Screen,
     quiet_button, theme, ui,
 };
-use caelum_core::application::Task;
+use caelum_core::application::{Provider, Scope, Task};
 use caelum_protocol::OpenCodeStatsFilter;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{ButtonVariant, Kit, Markdown, ScrollBar, glyphs};
@@ -33,6 +33,7 @@ pub struct State {
     rename: Option<controls::RenameForm>,
     fork_selected: Option<caelum_core::application::ForkBoundary>,
     pub owner: Option<usize>,
+    pub usage_target: Option<Scope>,
     pub search: TextEdit,
     pub stats_project: Option<String>,
     pub stats_days: Option<u64>,
@@ -52,6 +53,7 @@ impl Default for State {
             rename: None,
             fork_selected: None,
             owner: None,
+            usage_target: None,
             search: TextEdit::new(""),
             stats_project: None,
             stats_days: None,
@@ -258,7 +260,36 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
     )
 }
 
+pub(crate) fn open_usage(s: &mut Workspace, scope: Scope) {
+    let l = live_mut(s);
+    l.commands.usage_target = Some(scope.clone());
+    l.panels.set_overlay(Some(Screen::Usage));
+    let task = Task::Usage {
+        project: scope.project,
+        provider: scope.provider,
+    };
+    if !l.fixture && !l.app.services.busy(&task) {
+        l.app.task(task);
+    }
+}
+
+pub(crate) fn usage_provider(s: &Workspace) -> Provider {
+    let l = live(s);
+    if let Some(scope) = &l.commands.usage_target {
+        return scope.provider;
+    }
+    l.commands
+        .owner
+        .or(l.app.selected)
+        .and_then(|i| l.app.sessions.get(i))
+        .map(|session| session.scope.provider)
+        .unwrap_or(Provider::OpenCode)
+}
+
 pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El {
+    if screen == Screen::Usage {
+        return usage::view(s, k);
+    }
     let Some(index) = live(s).commands.owner else {
         return col();
     };
@@ -267,7 +298,6 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
         Screen::Fork => fork::view(s, k),
         Screen::Timeline => timeline(s, k, index),
         Screen::Sessions => sessions(s, k, index),
-        Screen::Usage => usage::view(s, k, index),
         Screen::Stats => stats(s, k, index, layers),
         _ => col(),
     }

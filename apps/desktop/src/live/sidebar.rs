@@ -1,15 +1,16 @@
 //! Session-first navigation. Feed controls and timers belong to this feature.
 mod badge;
 mod projects;
-mod requests;
 mod row;
 mod session;
 mod vm;
 
 use std::rc::Rc;
 
-use caelum_core::application::{FeedSession, SessionScope, Workspace as Application};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text_input};
+use caelum_core::application::{
+    FeedSession, SessionBucket, SessionScope, Workspace as Application,
+};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text, text_input};
 use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
 
 use super::{live, live_mut};
@@ -64,6 +65,10 @@ impl State {
         self.badges.ink(app, path, k)
     }
 
+    pub(crate) fn project_badge(&self, app: &Application, path: &str, k: &Kit) -> El {
+        self.badges.view(app, path, k)
+    }
+
     pub fn displayed_at(&self) -> u64 {
         self.recency.displayed_at()
     }
@@ -113,7 +118,6 @@ impl State {
         if self.request_scope.as_ref() != Some(&request_scope) {
             app.refresh_feed_pull_requests(None);
             self.request_scope = Some(request_scope);
-            tx.scroll_to_y("requests-scroll", 0.0);
         } else if self.selected != selected
             && let Some(path) = app.active_project.clone()
             && app.feed_includes_project(&path, None)
@@ -241,6 +245,77 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                 false
             })
     };
+    let waiting = l
+        .app
+        .dashboard_sessions("", false)
+        .iter()
+        .filter(|id| l.app.session_bucket(id) == SessionBucket::Waiting)
+        .count();
+    let overview_selected = l.panels.screen == crate::panels::Screen::Overview;
+    let overview_nav = k
+        .interactive(
+            row()
+                .w_full()
+                .h(30.0)
+                .px(10.0)
+                .gap(8.0)
+                .center_y()
+                .radius(6.0)
+                .fill(if overview_selected {
+                    k.c.layer_02
+                } else {
+                    rune::Color::TRANSPARENT
+                })
+                .border(
+                    1.0,
+                    if overview_selected {
+                        k.c.border_base
+                    } else {
+                        rune::Color::TRANSPARENT
+                    },
+                )
+                .child(
+                    icon(&crate::overview::NAV_ICON, 13.0)
+                        .color(if overview_selected {
+                            k.c.text_base
+                        } else {
+                            k.c.icon_muted
+                        })
+                        .a11y_hidden(),
+                )
+                .child(
+                    text("Overview")
+                        .font(if overview_selected {
+                            k.ty.ui_medium
+                        } else {
+                            k.ty.ui
+                        })
+                        .color(if overview_selected {
+                            k.c.text_base
+                        } else {
+                            k.c.text_muted
+                        })
+                        .grow(1.0)
+                        .min_w(0.0),
+                )
+                .children((waiting > 0).then(|| {
+                    text(waiting.to_string())
+                        .font(rune::TextStyle::new(10.5, 600.0))
+                        .color(k.c.warning.fg)
+                        .px(6.0)
+                        .py(1.0)
+                        .radius(9.0)
+                        .fill(k.alpha(k.c.warning.fg, 0.14))
+                })),
+        )
+        .role("tab")
+        .label("Overview")
+        .help(ui::shortcut("Overview · ⌘J"))
+        .focusable(true)
+        .focus_selected(overview_selected)
+        .focus_ring(1.5, 0.0, k.c.border_focus)
+        .on_press(crate::overview::open_from_nav)
+        .key("nav-overview");
     col()
         .w_full()
         .h_full()
@@ -254,6 +329,7 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                 .key("nav-home")
                 .label("Home"),
         )
+        .child(overview_nav)
         .child(projects::view(s, k))
         .child(ui::divider(k))
         .child(
@@ -356,7 +432,6 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                 .child(sessions)
                 .scroll_bar(k),
         )
-        .child(requests::view(s, k))
 }
 
 pub(super) fn overlays(_s: &Workspace, _k: &Kit, _layers: &mut Vec<El>) {}

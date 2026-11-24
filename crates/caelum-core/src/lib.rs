@@ -12,6 +12,7 @@ mod executable;
 pub mod files;
 pub mod git;
 pub mod github;
+pub mod host_stats;
 mod images;
 pub mod opencode;
 pub mod processes;

@@ -15,6 +15,7 @@ mod media;
 mod merge;
 mod models;
 mod notifications;
+mod overview;
 mod palette;
 mod panels;
 mod questions;
@@ -444,6 +445,32 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         remote::screen(s, &k, padding, cx.is_reduced_motion(), &mut layers)
     } else if home::is_home(s) {
         home::view(s, &k, cx.is_reduced_motion(), &mut layers)
+    } else if overview::is_overview(s) {
+        let mut pane = col()
+            .w_full()
+            .h_full()
+            .min_h(0.0)
+            .child(rune::el().w_full().h(1.0).fill(pane_border));
+        if overview::needs_bookmark(s) {
+            pane = pane
+                .child(transcript(
+                    s,
+                    &k,
+                    cx.is_reduced_motion(),
+                    padding,
+                    &mut layers,
+                ))
+                .child(composer(s, &k, padding, width > 760.0, &mut layers))
+                .child(
+                    col()
+                        .pin(Some(0.0), Some(1.0), Some(0.0), Some(0.0))
+                        .fill(k.c.bg_base)
+                        .child(overview::view(s, &k, &mut layers)),
+                );
+        } else {
+            pane = pane.child(overview::view(s, &k, &mut layers));
+        }
+        pane
     } else {
         col()
             .w_full()
@@ -462,7 +489,10 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let main = if s.live.as_ref().is_some_and(|live| {
         matches!(
             live.panels.screen,
-            panels::Screen::Home | panels::Screen::Review | panels::Screen::Remote
+            panels::Screen::Home
+                | panels::Screen::Overview
+                | panels::Screen::Review
+                | panels::Screen::Remote
         )
     }) {
         main
@@ -488,11 +518,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let toolbar = Toolbar::new()
         .leading(live::heading(s, &k))
         .trailing(if s.live.is_some() {
-            row()
-                .center_y()
-                .gap(4.0)
-                .child(panels::conversations::trigger(&k))
-                .child(context::workspace_button(s, &k))
+            context::workspace_button(s, &k)
         } else {
             quiet_button(
                 &shell::INSPECTOR,
@@ -583,6 +609,7 @@ fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if s.live.is_some()
         && (home::on_key(s, ev, tx)
+            || overview::on_key(s, ev, tx)
             || questions::on_key(s, ev, tx)
             || live::sidebar_key(s, ev, tx)
             || completion::on_key(s, ev, tx)

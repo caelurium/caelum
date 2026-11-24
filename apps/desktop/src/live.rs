@@ -44,6 +44,7 @@ pub struct Live {
     pub completion: crate::completion::Menu,
     pub composer: crate::composer::State,
     pub home: crate::home::State,
+    pub overview: crate::overview::State,
     pub remote: crate::remote::State,
     pub commands: crate::commands::State,
     pub models: crate::models::Picker,
@@ -99,6 +100,7 @@ impl Live {
             completion: Default::default(),
             composer: Default::default(),
             home: Default::default(),
+            overview: Default::default(),
             remote: Default::default(),
             commands: Default::default(),
             models: Default::default(),
@@ -179,6 +181,10 @@ impl Live {
             self.home.editor.focused = true;
             return;
         }
+        if self.panels.screen == crate::panels::Screen::Overview {
+            self.overview.search.focused = true;
+            return;
+        }
         if crate::questions::focus(self) {
             return;
         }
@@ -247,7 +253,10 @@ impl Live {
         self.session_menu = None;
         self.menu = None;
         if (selected != self.app.selected || review)
-            && self.panels.screen != crate::panels::Screen::Home
+            && !matches!(
+                self.panels.screen,
+                crate::panels::Screen::Home | crate::panels::Screen::Overview
+            )
         {
             self.panels.screen = crate::panels::Screen::Conversation;
             self.panels.set_overlay(None);
@@ -314,13 +323,15 @@ impl Live {
                 self.commands.side_editor.set_caret(caret);
             }
         }
-        if self.panels.screen != crate::panels::Screen::Home
-            && (self.app.selected != selected
-                || (was_archived
-                    && self
-                        .app
-                        .selected
-                        .is_some_and(|i| !self.app.sessions[i].archived())))
+        if !matches!(
+            self.panels.screen,
+            crate::panels::Screen::Home | crate::panels::Screen::Overview
+        ) && (self.app.selected != selected
+            || (was_archived
+                && self
+                    .app
+                    .selected
+                    .is_some_and(|i| !self.app.sessions[i].archived())))
         {
             if matches!(
                 self.panels.overlay(),
@@ -411,9 +422,7 @@ impl Live {
             tx,
             !self.fixture,
         );
-        if !self.fixture && !self.app.window_background {
-            changed |= self.panels.tick_overview(self.feed.displayed_at(), tx);
-        }
+        changed |= crate::overview::sync(self, tx);
         if let Some(panel) = &mut self.shell_panel {
             panel.sync(&self.app);
         }
@@ -637,6 +646,8 @@ impl Live {
                 self.enter_transcript(index, tx);
             }
             changed = true;
+        } else {
+            changed |= self.settle_reading(tx);
         }
         self.last_screen = self.panels.screen;
         if crate::remote::native::ready(self)
