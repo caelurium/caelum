@@ -190,6 +190,7 @@ impl Workspace {
         if let Some(owner) = self.sessions[index].key() {
             self.revoke_approval_rules(&owner, None);
         }
+        self.dismiss_side_question(index);
         let session = &mut self.sessions[index];
         session.archive_status = Status::Forgotten;
         session.cancel_history_read();

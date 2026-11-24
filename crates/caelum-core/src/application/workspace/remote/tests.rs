@@ -366,6 +366,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
         &mut app,
         req,
         Outcome::Page(Page {
+            model: None,
             cursor: Some("after".into()),
             lines: vec![Line {
                 key: None,
@@ -400,6 +401,7 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                 &mut reopened,
                 req,
                 Outcome::Page(Page {
+                    model: Some("gpt-5-codex".into()),
                     cursor: Some("end".into()),
                     lines: vec![Line {
                         key: None,
@@ -413,6 +415,10 @@ fn reopening_reattaches_to_the_saved_run_without_reposting_the_prompt() {
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
+            assert!(matches!(
+                reopened.commands().as_slice(),
+                [(_, Command::RecordUsage(_))]
+            ));
             assert!(!reopened.set_vm_provider(&id, "stale-editor", VmProvider::Pi));
             assert!(reopened.set_vm_provider(&id, &id, VmProvider::Pi));
             let lines = &reopened.remote.saved.checkouts[&id].thread.lines;

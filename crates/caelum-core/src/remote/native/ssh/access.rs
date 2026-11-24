@@ -58,6 +58,18 @@ pub(crate) struct Access {
 }
 
 impl Access {
+    pub(crate) fn side_codex(&self, root: &str) -> Result<std::process::Command, String> {
+        if root != self.root || !self.live.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("The side question belongs to a disconnected VM checkout.".into());
+        }
+        let mut cmd = self.channel(&[]).into_std();
+        let root = quote(root);
+        cmd.arg(format!(
+            "cd -P {root} && test \"$PWD\" = {root} && exec sh -c {} caelum-vm --side",
+            quote(include_str!("codex.sh"))
+        ));
+        Ok(cmd)
+    }
     pub(crate) fn new(socket: PathBuf, host: String, root: String) -> Self {
         let (shutdown, _) = tokio::sync::watch::channel(false);
         let live = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));

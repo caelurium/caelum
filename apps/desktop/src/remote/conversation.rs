@@ -118,6 +118,22 @@ pub(crate) fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
     if l.app.remote.saved.checkouts[&id].thread.editor_key(&id) != owner {
         return;
     }
+    if l.remote.editors.get(owner).unwrap().draft.text.trim() == "/stats" {
+        let editors = l.remote.editors.get_mut(owner).unwrap();
+        editors.draft.clear();
+        editors.template_error = None;
+        l.app
+            .remote
+            .saved
+            .checkouts
+            .get_mut(&id)
+            .unwrap()
+            .thread
+            .draft
+            .clear();
+        crate::commands::open_stats(s);
+        return;
+    }
     let editors = l.remote.editors.get_mut(owner).unwrap();
     match l.app.send_remote_draft(&id, &editors.draft.text) {
         Ok(true) => {

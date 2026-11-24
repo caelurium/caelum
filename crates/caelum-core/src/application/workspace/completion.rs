@@ -160,6 +160,7 @@ impl Workspace {
                     Pending::Generate(index, _, generation) => {
                         if self.sessions[index].side_generation == generation {
                             self.sessions[index].generating = false;
+                            self.sessions[index].side_cancel = None;
                             self.sessions[index].side_error = Some(error);
                         }
                     }
@@ -248,6 +249,7 @@ impl Workspace {
             (Pending::Generate(index, prompt, generation), Reply::Generated(text)) => {
                 if self.sessions[index].side_generation == generation {
                     self.sessions[index].generating = false;
+                    self.sessions[index].side_cancel = None;
                     self.sessions[index].side_question = Some((prompt, text));
                 }
             }

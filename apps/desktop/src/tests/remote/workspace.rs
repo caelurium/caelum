@@ -299,6 +299,7 @@ fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion()
                     cursor: Some("next".into()),
                     lines,
                     more: false,
+                    model: None,
                     status: phase,
                 }))),
             ));
@@ -331,6 +332,7 @@ fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion()
                 lines: vec![],
                 cursor: cursor.clone(),
                 more: false,
+                model: None,
                 status: RunStatus::Running,
             }))),
         ));
@@ -358,6 +360,7 @@ fn composer_tracks_the_exact_run_through_queue_tool_stream_stop_and_completion()
                 lines: vec![],
                 cursor: None,
                 more: false,
+                model: None,
                 status: RunStatus::Ended(TurnEnd::Interrupted),
             }))),
         ));

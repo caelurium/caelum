@@ -448,6 +448,8 @@ fn overview_inline_approval_and_stop_act_without_leaving_overview() {
         let scope = l.app.sessions[0].scope.clone();
         l.app.sessions[0].remote_id = Some("ses-approve".into());
         l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+            attempt: "fixture".into(),
+            repeatable: None,
             provider: scope.provider.as_str().into(),
             project_path: scope.project,
             session_id: Some("ses-approve".into()),
