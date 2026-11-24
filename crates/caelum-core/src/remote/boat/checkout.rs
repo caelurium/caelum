@@ -64,11 +64,11 @@ impl Boat {
         let git = crate::git::GitClient::new();
         let repository = git.github_origin(project)?;
         let (published_result, environments_result) =
-            tokio::join!(git.handoff_base(project), self.client.environments(None),);
-        let published = match published_result {
-            Ok(base) => Some(base),
+            tokio::join!(git.vm_base(project), self.client.environments(None),);
+        let (published, publish) = match published_result {
+            Ok((base, publish)) => (Some(base), publish),
             Err(error) if handoff => return Err(error),
-            Err(_) => None,
+            Err(_) => (None, None),
         };
         let branch = published
             .as_ref()
@@ -80,7 +80,9 @@ impl Boat {
         let environment = environments
             .into_iter()
             .find(|e| {
-                if branch.is_empty() {
+                if let Some(ref publication) = publish {
+                    matches!(publication, crate::remote::BranchPublication::Named(name) if clones(e, &repository, name))
+                } else if branch.is_empty() {
                     selected_repo(e, &repository).is_some()
                 } else {
                     clones(e, &repository, &branch)
@@ -92,6 +94,7 @@ impl Boat {
             account: self.account.clone(),
             repository,
             base: branch,
+            publish,
             published_tip: published.map(|base| base.tip),
             environment,
         })
@@ -317,7 +320,7 @@ impl Boat {
         {
             return Err(format!("The session uses {}, but the VM checkout is on {}. Choose a matching VM or create one.", base.branch, if current.is_empty() {"detached HEAD"} else {current}));
         }
-        worktree.verify_base().await?;
+        worktree.verify_base(false).await?;
         if branch.is_some() && !valid_branch(current) {
             return Err("Select a named branch on the remote checkout".into());
         }

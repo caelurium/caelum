@@ -2,7 +2,7 @@ use super::*;
 mod checkout;
 mod feed;
 mod transcript;
-use crate::application::Provider;
+use crate::remote::VmProvider;
 use crate::remote::{Prompt, Size};
 use serde_json::{json, Value};
 use wiremock::{
@@ -59,12 +59,12 @@ async fn lists_every_page_without_exposing_sandbox_secrets() {
 #[test]
 fn new_vm_threads_default_to_codex_while_legacy_snapshots_keep_opencode() {
     let thread = crate::remote::Thread::default();
-    assert_eq!(thread.provider, Provider::Codex);
+    assert_eq!(thread.provider, VmProvider::Codex);
 
     let mut legacy = serde_json::to_value(thread).unwrap();
     legacy.as_object_mut().unwrap().remove("provider");
     let legacy: crate::remote::Thread = serde_json::from_value(legacy).unwrap();
-    assert_eq!(legacy.provider, Provider::OpenCode);
+    assert_eq!(legacy.provider, VmProvider::OpenCode);
 }
 
 fn sandbox(state: &str) -> serde_json::Value {
@@ -165,6 +165,7 @@ async fn create_retry_reuses_body_and_idempotency_key_without_changing_shared_en
     let (server, boat) = fixture().await;
     environment(&server).await;
     let source = Source {
+        publish: None,
         published_tip: None,
         project: "/local/project".into(),
         account: boat.account.clone(),
@@ -204,6 +205,7 @@ async fn a_prepared_environment_reports_create_scope_and_plan_denials_at_the_vm_
         account: boat.account.clone(),
         repository: "example/project".into(),
         base: "main".into(),
+        publish: None,
         published_tip: None,
         environment: Some("project-env".into()),
     };
@@ -264,7 +266,7 @@ fn agent_target() -> Target {
     }
 }
 
-fn default_prompt(provider: Provider, conversation: Option<&str>, text: &str) -> Prompt {
+fn default_prompt(provider: VmProvider, conversation: Option<&str>, text: &str) -> Prompt {
     Prompt {
         provider,
         model: None,
@@ -301,7 +303,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
         (
             json!({"conversationId":"c","model":"example:vendor/next"}),
             "Continue",
-            "opencode",
+            "pi",
             "p2",
             "r2",
         ),
@@ -321,7 +323,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
             &Prompt {
                 model: Some("boat-model-b".into()),
                 effort: Some("high".into()),
-                ..default_prompt(Provider::Codex, None, "Start")
+                ..default_prompt(VmProvider::Codex, None, "Start")
             },
         )
         .await
@@ -377,7 +379,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
                 model: Some("boat-model-b".into()),
                 effort: Some("none".into()),
                 ..default_prompt(
-                    Provider::Codex,
+                    VmProvider::Codex,
                     Some(&first.conversation),
                     "Quick follow-up",
                 )
@@ -394,7 +396,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
             &target,
             &Prompt {
                 model: Some("example:vendor/next".into()),
-                ..default_prompt(Provider::OpenCode, Some(&changed.conversation), "Continue")
+                ..default_prompt(VmProvider::Pi, Some(&changed.conversation), "Continue")
             },
         )
         .await
@@ -402,7 +404,7 @@ async fn switching_harnesses_uses_the_exact_machine_conversation_cursor_and_term
     else {
         panic!()
     };
-    assert_eq!(next.provider, Provider::OpenCode);
+    assert_eq!(next.provider, VmProvider::Pi);
     assert_eq!(next.conversation, first.conversation);
     assert_ne!(next.id, first.id);
     Mock::given(method("POST"))
@@ -432,7 +434,10 @@ async fn a_mismatched_receipt_is_uncertain_and_recovery_checks_the_latest_harnes
         .respond_with(ResponseTemplate::new(202).set_body_json(json!({"ok":true,"type":"queued","id":"vm-1","promptId":"p","conversationId":"c","promptRun":run("p"),"status":"queued","provider":"opencode"})))
         .expect(1).mount(&server).await;
     assert!(boat
-        .send(&target, &default_prompt(Provider::Codex, Some("c"), "Next"))
+        .send(
+            &target,
+            &default_prompt(VmProvider::Codex, Some("c"), "Next")
+        )
         .await
         .is_err());
 
@@ -455,22 +460,22 @@ async fn a_mismatched_receipt_is_uncertain_and_recovery_checks_the_latest_harnes
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok":true,"type":"events","id":"vm-1","events":[{"type":"prompt","conversationId":"c","taskId":"p"}]})))
         .expect(2).mount(&server).await;
     assert!(boat
-        .recover(&target, Provider::OpenCode, Some("c"), "p")
+        .recover(&target, VmProvider::OpenCode, Some("c"), "p")
         .await
         .is_err());
     assert!(boat
-        .recover(&target, Provider::Codex, Some("c"), "older")
+        .recover(&target, VmProvider::Codex, Some("c"), "older")
         .await
         .is_err());
     assert!(boat
-        .recover(&target, Provider::Codex, None, "p")
+        .recover(&target, VmProvider::Codex, None, "p")
         .await
         .is_err());
     let found = boat
-        .recover(&target, Provider::Codex, Some("c"), "p")
+        .recover(&target, VmProvider::Codex, Some("c"), "p")
         .await
         .unwrap();
-    assert_eq!(found.provider, Provider::Codex);
+    assert_eq!(found.provider, VmProvider::Codex);
     assert_eq!(
         (found.conversation.as_str(), found.id.as_str()),
         ("c", "run-p")

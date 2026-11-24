@@ -9,6 +9,12 @@ use rune::{El, Tx};
 use rune_kit::Kit;
 use std::time::Instant;
 
+#[derive(Clone, Copy)]
+pub(super) enum Open {
+    Native(SessionIntent),
+    Pi,
+}
+
 /// Home's chosen worktree can differ from the conversation behind it.
 pub(super) fn launch_source(l: &Live) -> Option<&str> {
     let project = match l.panels.screen {
@@ -104,7 +110,33 @@ pub(super) fn session(s: &mut Workspace, id: &str, intent: SessionIntent) {
         live_mut(s).app.select_remote(id);
     }
     show(s, true);
-    live_mut(s).remote.open_when_ready = Some((id.into(), intent));
+    live_mut(s).remote.open_when_ready = Some((id.into(), Open::Native(intent)));
+}
+
+pub(super) fn launch_pi(s: &mut Workspace, id: &str) {
+    let l = live_mut(s);
+    if !l.app.can_start_vm_session(id) {
+        return;
+    }
+    let current = if l.panels.screen == Screen::Remote {
+        l.app.remote.saved.selected.as_deref()
+    } else if l.panels.screen == Screen::Home {
+        None
+    } else {
+        super::native::selected(l)
+    };
+    if current != Some(id) {
+        let source = &l.app.remote.saved.checkouts[id].source.project;
+        let project = launch_source_for(l, source).to_owned();
+        l.app.check_vm_destination(id, project);
+        l.remote.open_when_ready = Some((id.into(), Open::Pi));
+        show(s, true);
+    } else if l
+        .app
+        .new_vm_session(id, caelum_core::remote::VmProvider::Pi)
+    {
+        enter_new(s);
+    }
 }
 
 pub(crate) fn manage(s: &mut Workspace, id: &str) {
@@ -131,10 +163,11 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         {
             l.app.select_remote(&id);
             l.panels.screen = Screen::Remote;
-            if l.app.remote.saved.checkouts[&id].thread.is_blank()
-                || l.app.remote.saved.checkouts[&id].thread.awaiting_native
+            let thread = &l.app.remote.saved.checkouts[&id].thread;
+            if (thread.is_blank() && thread.provider == caelum_core::remote::VmProvider::Codex)
+                || thread.awaiting_native
             {
-                l.remote.open_when_ready = Some((id, SessionIntent::Reopen));
+                l.remote.open_when_ready = Some((id, Open::Native(SessionIntent::Reopen)));
             }
             changed = true;
         }
@@ -149,9 +182,21 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
             l.remote.open_when_ready = None;
         } else if l.panels.overlay().is_none()
             && !l.app.remote.jobs.contains_key(&id)
-            && super::native::open(l, &id, intent)
+            && match intent {
+                Open::Native(intent) => super::native::open(l, &id, intent),
+                Open::Pi => {
+                    l.app.can_open_vm_session(&id)
+                        && l.app
+                            .new_vm_session(&id, caelum_core::remote::VmProvider::Pi)
+                }
+            }
         {
             l.remote.open_when_ready = None;
+            if matches!(intent, Open::Pi) {
+                l.reveal_new_session();
+                super::conversation::sync_editor(l);
+                super::conversation::focus(l);
+            }
             changed = true;
         }
     }

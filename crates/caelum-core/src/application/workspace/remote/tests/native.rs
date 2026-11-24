@@ -318,7 +318,7 @@ fn saved_opencode_handoff_keeps_its_owner_settings_and_draft_during_codex_discov
     });
     checkout.thread = Thread {
         awaiting_native: true,
-        provider: Provider::OpenCode,
+        provider: VmProvider::OpenCode,
         model: Some("earlier/model".into()),
         draft: "unsent".into(),
         continued: Some(Continuation {

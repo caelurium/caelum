@@ -106,19 +106,27 @@ impl Worktree<'_> {
         Ok(result.stdout)
     }
 
-    pub(super) async fn verify_base(&self) -> Result<(), String> {
+    pub(super) async fn verify_base(&self, require_branch: bool) -> Result<(), String> {
         if let Some(base) = &self.target.required_base {
             if !base.valid() {
                 return Err("Invalid session base branch.".into());
             }
             let answer = self
                 .command(&format!(
-                    "if git merge-base --is-ancestor {} HEAD; then echo yes; else echo no; fi",
+                    "if {}git merge-base --is-ancestor {} HEAD; then echo yes; else echo no; fi",
+                    if require_branch {
+                        format!(
+                            "test \"$(git branch --show-current)\" = {} && ",
+                            quote(&base.branch)
+                        )
+                    } else {
+                        String::new()
+                    },
                     quote(&base.tip)
                 ))
                 .await?;
             if answer.trim() != "yes" {
-                return Err(format!("This VM checkout does not include the published tip of {}. Update its branch or choose a new VM.", base.branch));
+                return Err(format!("This VM checkout does not match the published base of {}. Update its branch or choose a new VM.", base.branch));
             }
         }
         Ok(())

@@ -58,6 +58,7 @@ fn prepare(rt: &mut Runtime<Workspace>, expected_project: &str, read_chat: bool)
                     assert_eq!(project, expected_project);
                     discovered = true;
                     Reply::Remote(Outcome::Source(Source {
+                        publish: None,
                         published_tip: Some("b".repeat(40)),
                         project,
                         account: "example".into(),
@@ -174,6 +175,7 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
             .iter()
             .all(|(_, c)| !matches!(c, Command::Remote(Operation::Prompt(..))))
     );
+    reveal(&mut rt, "live-session-0");
     click(&mut rt, "live-session-0");
     click(&mut rt, "continue-on-vm");
     assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::VmStats));
@@ -377,6 +379,7 @@ fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_on
         Some("feature/session")
     );
     assert!(element(&rt, "create-remote").focusable);
+    click(&mut rt, "vm-harness-pi");
     reveal(&mut rt, "vm-lifetime-24 h");
     click(&mut rt, "vm-lifetime-24 h");
     reveal(&mut rt, "create-remote");
@@ -389,6 +392,8 @@ fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_on
     assert!(matches!(&c.phase, caelum_core::remote::Phase::Create(p)
             if p.branch == "feature/session" && p.lifetime == caelum_core::remote::Lifetime::Day));
     assert_eq!(c.thread.draft, "My Home idea");
+    assert_eq!(c.thread.provider, VmProvider::Pi);
+    assert!(!c.thread.awaiting_native);
     assert!(
         c.thread
             .continued

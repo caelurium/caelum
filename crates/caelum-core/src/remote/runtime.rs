@@ -144,7 +144,7 @@ impl Backend {
                 .discover(project, true)
                 .await
                 .map(Outcome::Source),
-            Operation::MatchCheckout(project, target) => {
+            Operation::MatchCheckout(project, target, publication) => {
                 let git = crate::git::GitClient::new();
                 if !git
                     .github_origin(project)?
@@ -152,8 +152,10 @@ impl Backend {
                 {
                     return Err("The VM checkout has a different GitHub origin.".into());
                 }
-                let (base, boat) =
-                    tokio::try_join!(git.handoff_base(project), Self::connected(connection))?;
+                let (base, boat) = tokio::try_join!(
+                    git.destination_base(project, publication.as_ref()),
+                    Self::connected(connection)
+                )?;
                 let mut target = target.clone();
                 target.required_base = Some(base.clone());
                 boat.prepare(&target, &base.branch, None).await
@@ -164,25 +166,21 @@ impl Backend {
                 .await
                 .map(Outcome::Lifetime),
             Operation::Create(source, plan) => {
-                if let Some(tip) = &source.published_tip {
-                    let git = crate::git::GitClient::new();
-                    let actual = git.handoff_base(&source.project).await?;
-                    if actual.branch != source.base
-                        || actual.tip != *tip
-                        || !git
-                            .github_origin(&source.project)?
-                            .eq_ignore_ascii_case(&source.repository)
-                    {
-                        return Err(
-                            "The checkout or its published branch changed. Reopen VM setup.".into(),
-                        );
-                    }
+                let boat = Self::connected(connection).await?;
+                if boat.account != source.account {
+                    return Err("Connect the Boat account selected for this checkout".into());
                 }
-                Self::connected(connection)
-                    .await?
-                    .create(source, plan)
-                    .await
-                    .map(Outcome::Machine)
+                if source.publish.is_some()
+                    && (source.base != plan.branch || uuid::Uuid::parse_str(&plan.token).is_err())
+                {
+                    return Err("Invalid branch publication plan. Reopen VM setup.".into());
+                }
+                if source.published_tip.is_some() || source.publish.is_some() {
+                    crate::git::GitClient::new()
+                        .ensure_vm_branch(source, &plan.token, crate::github::create_vm_branch)
+                        .await?;
+                }
+                boat.create(source, plan).await.map(Outcome::Machine)
             }
             Operation::Prepare(target, base, branch) => {
                 Self::connected(connection)

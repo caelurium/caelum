@@ -388,7 +388,7 @@ fn session_row(
             (
                 thread.title().to_owned(),
                 meta,
-                ui::provider_name(thread.provider),
+                thread.provider.name(),
                 format_age(thread.last_activity, l.feed.displayed_at()),
                 detail,
                 None,

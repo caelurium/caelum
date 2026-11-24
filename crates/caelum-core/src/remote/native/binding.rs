@@ -61,7 +61,7 @@ impl Binding {
             Command::Remote(
                 crate::remote::Operation::Discover(p)
                 | crate::remote::Operation::DiscoverHandoff(p)
-                | crate::remote::Operation::MatchCheckout(p, _),
+                | crate::remote::Operation::MatchCheckout(p, ..),
             ) => Some(p),
             Command::Remote(_)
             | Command::Notify(_)

@@ -8,7 +8,7 @@ use caelum_core::{
 
 pub(super) fn setup(c: &mut Checkout) {
     c.pinned_stats = false;
-    c.thread.provider = caelum_core::application::Provider::Codex;
+    c.thread.provider = caelum_core::remote::VmProvider::Codex;
     c.thread.lines = vec![
         Line::new(Speaker::You, "Run the health check tests."),
         Line {

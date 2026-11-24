@@ -5,6 +5,7 @@ use caelum_protocol::ProjectInfo;
 fn source() -> Source {
     Source {
         base: "feature/local".into(),
+        publish: None,
         published_tip: Some("a".repeat(40)),
         ..super::source()
     }
@@ -74,7 +75,7 @@ fn inline_handoff_checks_the_published_base_then_sends_bounded_context_on_first_
     let local = local(&mut app);
     let req = reading(&mut app, local);
     ready(&mut app, req);
-    app.confirm_vm_handoff(VmDestination::Existing(machine("vm")));
+    app.confirm_vm_handoff(VmDestination::Existing(machine("vm")), VmProvider::Codex);
     let (req, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(
         req,
@@ -194,7 +195,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
-            provider: Provider::Codex,
+            provider: VmProvider::Codex,
             conversation: "c".into(),
             prompt: "p".into(),
             id: "r".into(),
@@ -297,7 +298,7 @@ fn confirming_checks_the_exact_worktree_again_and_a_late_or_changed_branch_canno
     let request = reading(&mut app, i);
     ready(&mut app, request);
     let confirm = |app: &mut Workspace| {
-        app.confirm_vm_handoff(new_vm());
+        app.confirm_vm_handoff(new_vm(), VmProvider::Codex);
         let cmds = app.commands();
         let [(req, Command::Remote(Operation::DiscoverHandoff(p)))] = cmds.as_slice() else {
             panic!("{cmds:?}")
@@ -371,7 +372,7 @@ fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touc
     app.select(i);
     app.remote.jobs.clear();
     let run = Run {
-        provider: Provider::OpenCode,
+        provider: VmProvider::OpenCode,
         conversation: "conv".into(),
         prompt: "prompt".into(),
         id: "run".into(),
@@ -443,7 +444,7 @@ fn late_history_and_source_changes_cannot_provision_or_replace_a_newer_attempt()
 }
 
 #[test]
-fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_after_ack() {
+fn pi_handoff_publishes_from_main_and_survives_restore_without_replaying_chat_after_ack() {
     let mut app = Workspace::default();
     let i = local(&mut app);
     app.sessions[i].scope.provider = Provider::Codex;
@@ -452,7 +453,21 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     let req = reading(&mut app, i);
     ready(&mut app, req);
     app.sessions[i].draft = "New laptop draft".into();
-    let id = app.finish_vm_handoff(new_vm()).unwrap();
+    let unpublished = Source {
+        base: "main".into(),
+        publish: Some(BranchPublication::Named("feature/local".into())),
+        ..source()
+    };
+    app.remote.picker = Some(Picker::Ready(unpublished.clone()));
+    app.confirm_vm_handoff(new_vm(), VmProvider::Pi);
+    let (check, _) = app.commands().pop().unwrap();
+    app.apply(Event::Completed(
+        check,
+        Ok(Reply::Remote(Outcome::Source(unpublished))),
+    ));
+    assert!(app.enter_confirmed_vm());
+    let id = app.remote.saved.selected.clone().unwrap();
+    assert!(!app.remote.saved.checkouts[&id].thread.awaiting_native);
     assert_eq!(app.sessions[i].draft, "New laptop draft");
     assert_eq!(app.sessions[i].attachments.len(), 1);
     let creates = app.commands();
@@ -498,7 +513,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
     let editor = thread.editor_key(&id).to_owned();
     reopened.remote.models = ModelCatalogue::Ready(
         [(
-            Provider::Codex,
+            VmProvider::Pi,
             [caelum_protocol::ProviderModelChoice {
                 id: "remote-model".into(),
                 name: "Remote model".into(),
@@ -514,8 +529,8 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
         )]
         .into(),
     );
-    assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, Some("remote-model")));
-    assert!(reopened.set_vm_effort(&id, &editor, Provider::Codex, "remote-model", Some("high")));
+    assert!(reopened.set_vm_model(&id, &editor, VmProvider::Pi, Some("remote-model")));
+    assert!(reopened.set_vm_effort(&id, &editor, VmProvider::Pi, "remote-model", Some("high")));
     assert!(reopened.commands().is_empty());
     for reject in [true, false] {
         assert!(reopened.send_remote(&id, "Edited next step"));
@@ -525,7 +540,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
             panic!()
         };
         assert_eq!(target.machine.id, "vm");
-        assert_eq!(turn.provider, Provider::Codex);
+        assert_eq!(turn.provider, VmProvider::Pi);
         assert_eq!(turn.model.as_deref(), Some("remote-model"));
         assert_eq!(turn.effort.as_deref(), Some("high"));
         assert!(turn.conversation.is_none());
@@ -569,7 +584,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
             );
             assert!(!reopened.send_remote(&id, "duplicate"));
             reopened.recover_remote(&id, "p");
-            let (req, Command::Remote(Operation::Recover(_, Provider::Codex, None, _))) =
+            let (req, Command::Remote(Operation::Recover(_, VmProvider::Pi, None, _))) =
                 reopened.commands().pop().unwrap()
             else {
                 panic!()
@@ -578,7 +593,7 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                 &mut reopened,
                 req,
                 Outcome::Accepted(Run {
-                    provider: Provider::Codex,
+                    provider: VmProvider::Pi,
                     conversation: "boat-thread".into(),
                     id: "r".into(),
                     prompt: "p".into(),
@@ -595,10 +610,10 @@ fn handoff_first_send_survives_rejection_and_restore_without_replaying_chat_afte
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
-            assert!(reopened.set_vm_model(&id, &editor, Provider::Codex, None));
+            assert!(reopened.set_vm_model(&id, &editor, VmProvider::Pi, None));
             assert!(reopened.send_remote(&id, "Again"));
             assert!(
-                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, p)))] if p.provider == Provider::Codex && p.model.is_none() && p.effort.is_none() && p.conversation.as_deref() == Some("boat-thread") && p.text == "Again")
+                matches!(reopened.commands().as_slice(), [(_, Command::Remote(Operation::Prompt(_, p)))] if p.provider == VmProvider::Pi && p.model.is_none() && p.effort.is_none() && p.conversation.as_deref() == Some("boat-thread") && p.text == "Again")
             );
         }
     }
@@ -664,7 +679,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
         Command::Remote(Operation::Prompt(
             _,
             Prompt {
-                provider: Provider::Codex,
+                provider: VmProvider::Codex,
                 conversation: None,
                 model: None,
                 effort: None,
@@ -683,7 +698,7 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     app.apply(Event::Completed(
         req,
         Ok(Reply::Remote(Outcome::Accepted(Run {
-            provider: Provider::Codex,
+            provider: VmProvider::Codex,
             conversation: "original".into(),
             prompt: "old-prompt".into(),
             id: "old-run".into(),
