@@ -394,6 +394,70 @@ pub(super) fn command_overlay(l: &mut crate::live::Live, name: &str) {
     }));
 }
 
+pub(super) fn apply_timeline(l: &mut crate::live::Live, name: &str) {
+    use caelum_core::application::Provider;
+    use serde_json::json;
+
+    if name == "timeline" {
+        let session = &mut l.app.sessions[0];
+        session.conversation = Default::default();
+        let prompts = [
+            "Restore the continuous PR workspace",
+            "Keep drafts independent when switching sessions",
+            "Make the model picker open above the composer",
+            "Review the patch and explain the tradeoffs",
+            "Run the workspace checks and address the failures",
+            "Polish keyboard focus and compact layouts",
+        ];
+        let turns: Vec<_> = (0..48)
+            .map(|n| {
+                let mut items = vec![json!({
+                    "id": format!("prompt-{n}"),
+                    "type": "userMessage",
+                    "content": [{"text": format!(
+                        "{}\nPlease preserve reading position and check the populated, empty and loading states.",
+                        prompts[n as usize % prompts.len()]
+                    )}]
+                })];
+                if n % 2 == 0 {
+                    items.push(json!({
+                        "id": format!("tool-{n}-a"),
+                        "type": "commandExecution",
+                        "command": "cargo test -p caelum-desktop",
+                        "status": "completed"
+                    }));
+                }
+                if n % 3 == 0 {
+                    items.push(json!({
+                        "id": format!("tool-{n}-b"),
+                        "type": "fileChange",
+                        "changes": [{"path": "apps/desktop/src/commands/timeline.rs"}],
+                        "status": "completed"
+                    }));
+                }
+                items.push(json!({
+                    "id": format!("answer-{n}"),
+                    "type": "agentMessage",
+                    "text": "The changes keep session ownership intact. Ready for review."
+                }));
+                json!({
+                    "id": format!("turn-{n}"),
+                    "createdAt": caelum_core::application::presentation::now()
+                        .saturating_sub((48 - n) * 3_600_000),
+                    "status": "completed",
+                    "items": items
+                })
+            })
+            .collect();
+        session.conversation.history(Provider::Codex, &turns, false);
+        l.current_prompt = Some("codex-prompt-0".into());
+        l.commands.timeline_selected = l.current_prompt.clone();
+        l.commands.timeline_current = l.current_prompt.clone();
+    } else if name == "timeline-empty" {
+        l.app.sessions[0].conversation = Default::default();
+    }
+}
+
 pub(super) fn composer_queue(session: &mut caelum_core::application::Session, name: &str) {
     if matches!(name, "composer-queued" | "composer-queue-error") {
         session.conversation.set_working(name == "composer-queued");
