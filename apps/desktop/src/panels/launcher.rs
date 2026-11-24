@@ -10,39 +10,58 @@ use super::{Screen, scroll};
 
 pub fn open_launcher(s: &mut Workspace) {
     let l = live_mut(s);
-    l.panels.launch_provider = l
+    l.refresh_installed_providers();
+    let preferred = l
         .app
         .selected
         .map(|i| &l.app.sessions[i].scope)
         .filter(|scope| caelum_core::remote::native::checkout_id(&scope.project).is_none())
         .map(|scope| scope.provider)
-        .unwrap_or(l.app.preferences.default_provider);
+        .unwrap_or_else(|| l.app.default_provider_for(None));
+    let available = l.app.available_providers(None);
+    l.panels.launch_provider = if available.is_empty() || available.contains(&preferred) {
+        preferred
+    } else {
+        available[0]
+    };
     l.panels.set_overlay(Some(Screen::Launcher));
     l.commands.search.clear();
     l.commands.search.focused = true;
 }
 
+fn resolved_launch_provider(l: &crate::live::Live) -> caelum_core::application::Provider {
+    let available = l.app.available_providers(None);
+    if available.is_empty() || available.contains(&l.panels.launch_provider) {
+        l.panels.launch_provider
+    } else {
+        available[0]
+    }
+}
+
 pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
     let mut body = col().w_full().h_full().min_h(0.0).gap(12.0);
-    let mut provider_tabs = ui::segmented_track(k);
-    for provider in caelum_core::application::Provider::ALL {
-        provider_tabs = provider_tabs.child(
-            ui::segment(
-                ui::provider_name(provider),
-                l.panels.launch_provider == provider,
-                k,
-            )
-            .on_press(move |s: &mut Workspace| live_mut(s).panels.launch_provider = provider)
-            .key(format!("launch-provider-{}", provider.as_str())),
-        );
+    let available = l.app.available_providers(None);
+    let launch_provider = resolved_launch_provider(l);
+    if available.len() > 1 {
+        let mut provider_tabs = ui::segmented_track(k);
+        for provider in available {
+            provider_tabs = provider_tabs.child(
+                ui::segment(ui::provider_name(provider), launch_provider == provider, k)
+                    .on_press(move |s: &mut Workspace| {
+                        live_mut(s).panels.launch_provider = provider
+                    })
+                    .key(format!("launch-provider-{}", provider.as_str())),
+            );
+        }
+        let providers = row()
+            .center_y()
+            .gap(10.0)
+            .child(ui::caption("Local sessions", k))
+            .child(provider_tabs);
+        body = body.child(providers);
     }
-    let providers = row()
-        .center_y()
-        .gap(10.0)
-        .child(ui::caption("Local sessions", k))
-        .child(provider_tabs);
-    body = body.child(providers).child(
+    body = body.child(
         ui::field(
             &l.commands.search,
             "Find session destination",
@@ -122,7 +141,7 @@ pub(super) fn launcher(s: &Workspace, k: &Kit) -> El {
                                 crate::worktree::open(
                                     s,
                                     tree_project.clone(),
-                                    live(s).panels.launch_provider,
+                                    resolved_launch_provider(live(s)),
                                 )
                             })
                             .build(k)
@@ -207,9 +226,10 @@ fn launch(s: &mut Workspace, path: &str) {
     if !l.app.select_checkout(path) {
         return;
     }
+    let provider = resolved_launch_provider(l);
     l.app.project_draft(caelum_core::application::Scope {
         project: path.into(),
-        provider: l.panels.launch_provider,
+        provider,
     });
     l.sync_editors();
     l.panels.set_overlay(None);

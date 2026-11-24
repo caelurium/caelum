@@ -226,6 +226,14 @@ impl CodexProvider {
         }
     }
 
+    /// Whether the Codex CLI executable is available on this machine.
+    pub fn is_installed(&self) -> bool {
+        match self.inner.executable.as_deref() {
+            Some(path) => crate::executable::executable(path),
+            None => find_codex_executable().is_ok(),
+        }
+    }
+
     /// Subscribe to Codex thread, turn, item, and process events.
     pub fn subscribe(&self) -> Receiver<CodexEvent> {
         let (sender, receiver) = mpsc::channel();

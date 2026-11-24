@@ -111,6 +111,67 @@ fn switching_in_a_conversation_keeps_the_mounted_transcript_and_draft() {
 }
 
 #[test]
+fn provider_switcher_hides_uninstalled_providers_and_hides_itself_when_only_one_is_installed() {
+    use caelum_core::application::Provider;
+
+    let mut rt = design_runtime("composer-options", (1280.0, 1000.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        l.app.sessions[0].scope.provider = Provider::OpenCode;
+        l.app
+            .set_installed_providers(vec![Provider::OpenCode, Provider::Antigravity]);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "provider-trigger");
+    assert_eq!(element(&rt, "option0").label.as_deref(), Some("OpenCode"));
+    assert_eq!(
+        element(&rt, "option1").label.as_deref(),
+        Some("Antigravity")
+    );
+    assert!(rt.find("option2").is_none());
+    click(&mut rt, "option1");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[0]
+            .scope
+            .provider,
+        Provider::Antigravity
+    );
+
+    // Only the current provider is installed -> hide the switcher.
+    rt.update(|s, _| {
+        s.live
+            .as_mut()
+            .unwrap()
+            .app
+            .set_installed_providers(vec![Provider::Antigravity]);
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.find("provider-trigger").is_none());
+
+    // Current provider is not installed, but OpenCode is -> allow switching away.
+    rt.update(|s, _| {
+        s.live
+            .as_mut()
+            .unwrap()
+            .app
+            .set_installed_providers(vec![Provider::OpenCode]);
+    });
+    advance(&mut rt, 0.2);
+    assert!(element(&rt, "provider-trigger").focusable);
+    click(&mut rt, "provider-trigger");
+    assert_eq!(element(&rt, "option0").label.as_deref(), Some("OpenCode"));
+    assert!(rt.find("option1").is_none());
+    click(&mut rt, "option0");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[0]
+            .scope
+            .provider,
+        Provider::OpenCode
+    );
+    assert!(rt.find("provider-trigger").is_none());
+}
+
+#[test]
 fn composer_submission_matches_enter_and_stop_keeps_the_next_draft() {
     use caelum_core::application::{Attachment, Command, Provider};
     for provider in Provider::ALL {
