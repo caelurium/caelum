@@ -25,6 +25,37 @@ impl Workspace {
         self.refresh(index);
     }
 
+    pub fn toggle_pin(&mut self, index: usize) -> bool {
+        let Some(session) = self.sessions.get_mut(index) else {
+            return false;
+        };
+        if session.forgotten() || session.archived() {
+            return false;
+        }
+        session.pinned = !session.pinned;
+        session.pinned
+    }
+
+    pub fn toggle_bookmark(&mut self, index: usize, entry_id: String) -> bool {
+        let Some(session) = self.sessions.get_mut(index) else {
+            return false;
+        };
+        if session.forgotten() || entry_id.is_empty() {
+            return false;
+        }
+        if let Some(pos) = session
+            .bookmarked_entries
+            .iter()
+            .position(|id| id == &entry_id)
+        {
+            session.bookmarked_entries.remove(pos);
+            false
+        } else {
+            session.bookmarked_entries.push(entry_id);
+            true
+        }
+    }
+
     /// Refresh both active and archived provider sessions for a picker.
     pub fn discover_sessions(&mut self, scope: Scope) {
         if !scope.provider_available() {
