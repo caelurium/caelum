@@ -390,12 +390,12 @@ fn thousands_of_sessions_mount_only_a_window_and_keyboard_reaches_later_rows() {
         rt.state.live.as_ref().unwrap().app.selected,
         Some(order[35])
     );
-    assert!(element(&rt, &format!("live-session-{}", order[35])).visible[3] > 80.0);
+    assert!(element(&rt, &format!("live-session-{}", order[35])).visible[3] > 72.0);
     eprintln!("2,006 sessions at 800×620: {mounted} mounted rows; keyboard reached row 36");
 }
 
 #[test]
-fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_focus() {
+fn pull_request_rows_in_overview_keep_repository_identity_and_focus() {
     let rune_url = "https://github.com/example/rune/pull/42";
     let website_url = "https://github.com/example/website/pull/42";
     let rune = crate::code_view::source_key(rune_url, "pull-request");
@@ -403,15 +403,12 @@ fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_
     for size in [(800.0, 620.0), (1280.0, 1000.0)] {
         let mut rt = design_runtime("session-feed", size);
         fill(&mut rt, "live-draft-0", "Preserve this café draft");
+        click(&mut rt, "nav-overview");
+        advance(&mut rt, 0.2);
+        click(&mut rt, "overview-tab-prs");
+        advance(&mut rt, 0.2);
         assert!(rt.find(&rune).is_some());
         assert!(rt.find(&website).is_some());
-        fill(&mut rt, "session-search", "no session matches");
-        assert!(
-            rt.find(&rune).is_some(),
-            "session search must not hide scoped pull requests"
-        );
-        key(&mut rt, Key::Escape, Mods::default());
-        advance(&mut rt, 0.2);
         reveal(&mut rt, &rune);
         assert!(rt.accessibility_action(&rune, rune::accesskit::Action::Focus, None));
         secondary(&mut rt, &rune);
@@ -431,11 +428,5 @@ fn pull_request_rows_follow_the_session_filter_and_keep_repository_identity_and_
             rt.state.live.as_ref().unwrap().drafts[0].text,
             "Preserve this café draft"
         );
-        rt.update(|s, _| {
-            s.live.as_mut().unwrap().app.preferences.session_scope = SessionScope::CurrentProject
-        });
-        advance(&mut rt, 0.2);
-        assert!(rt.find(&rune).is_none());
-        assert!(rt.find(&website).is_none());
     }
 }

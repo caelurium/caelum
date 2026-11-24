@@ -34,7 +34,7 @@ impl Services {
                         .entry((task.project().into(), url.into()))
                         .or_default()
                         .error = Some(error);
-                } else if !matches!(task, Task::Shell { .. }) {
+                } else if !matches!(task, Task::Shell { .. } | Task::HostStats) {
                     self.checkouts
                         .entry(task.project().into())
                         .or_default()
@@ -91,6 +91,10 @@ impl Services {
                 self.images.insert((project.clone(), source.clone()), data);
             }
             (Task::Updates, TaskReply::Updates(update)) => self.update = Some(update),
+            (Task::HostStats, TaskReply::HostStats(sample)) => match &mut self.host {
+                Some(history) => history.push(sample),
+                None => self.host = Some(crate::host_stats::HostHistory::from_sample(sample)),
+            },
             (Task::Usage { provider, .. }, TaskReply::Usage(usage)) => {
                 checkout.usage.insert(*provider, usage);
             }

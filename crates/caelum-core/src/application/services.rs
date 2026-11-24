@@ -33,6 +33,8 @@ pub enum Task {
     Updates,
     #[serde(skip)]
     Update(crate::updates::Job),
+    #[serde(skip)]
+    HostStats,
     Image {
         project: String,
         source: String,
@@ -153,6 +155,8 @@ pub enum TaskReply {
     Updates(UpdateCheck),
     #[serde(skip)]
     Update(crate::updates::Reply),
+    #[serde(skip)]
+    HostStats(crate::host_stats::HostSample),
     Image(String),
     Usage(serde_json::Value),
     Stats(OpenCodeStats, Vec<OpenCodeStatsProject>),
@@ -202,7 +206,7 @@ macro_rules! project_field {
             | Task::Merge { project, .. }
             | Task::SetAutoMerge { project, .. }
             | Task::UpdateBranch { project, .. } => Some(project),
-            Task::ImportSettings { .. } | Task::Updates | Task::Update(_) => None,
+            Task::ImportSettings { .. } | Task::Updates | Task::Update(_) | Task::HostStats => None,
         }
     };
 }
@@ -238,10 +242,11 @@ impl Task {
             } => format!("shell:{session}:{id}:{stop}"),
             Self::Updates => "updates".into(),
             Self::Update(job) => format!("update-installation:{}", job.id),
+            Self::HostStats => "host-stats".into(),
             Self::Reveal { path, .. } => format!("reveal:{path}"),
             Self::EncodeImage { .. } => "encode-image".into(),
             Self::Image { source, .. } => format!("image:{source}"),
-            Self::Usage { .. } => "usage".into(),
+            Self::Usage { provider, .. } => format!("usage:{}", provider.as_str()),
             Self::Stats { .. } => "stats".into(),
             Self::AttachPullRequest { url, .. } => format!("attach-pr:{url}"),
             Self::Completions { .. } => "completions".into(),
@@ -340,6 +345,7 @@ impl Task {
                 Updates
             ),
             Self::Update(job) => runtime.updates.execute(job).map(TaskReply::Update),
+            Self::HostStats => crate::host_stats::sample().map(TaskReply::HostStats),
             Self::Usage { project, provider } => match provider {
                 super::Provider::Antigravity => {
                     reply!(runtime.antigravity.usage_limits(project), Usage)
@@ -523,6 +529,7 @@ pub struct Services {
     requests: HashMap<String, requests::Slot>,
     pub update: Option<UpdateCheck>,
     pub updater: crate::updates::State,
+    pub host: Option<crate::host_stats::HostHistory>,
     pub checkouts: BTreeMap<String, Checkout>,
     pub reviews: BTreeMap<(String, String), Review>,
     discovered: HashMap<(String, String), Option<Discovered>>,
@@ -530,7 +537,22 @@ pub struct Services {
 }
 
 impl Services {
-    pub(super) fn open_pull_request(
+    pub fn record_discovered_pull_request(
+        &mut self,
+        project: impl Into<String>,
+        branch: impl Into<String>,
+        url: impl Into<String>,
+    ) {
+        self.discovered.insert(
+            (project.into(), branch.into()),
+            Some(Discovered {
+                url: url.into(),
+                request: 0,
+            }),
+        );
+    }
+
+    pub(super) fn branch_pull_request(
         &self,
         project: &str,
         branch: &str,
@@ -552,11 +574,22 @@ impl Services {
             .filter(|r| r.newer_than(found.request));
         if let Some(review) = current {
             let details = review.details()?;
-            (details.state == "OPEN" && details.head_ref_name == branch)
-                .then_some(&details.pull_request)
+            if details.state != "OPEN" || details.head_ref_name != branch {
+                return None;
+            }
+            Some(&details.pull_request)
         } else {
             Some(discovered)
         }
+    }
+
+    pub(super) fn requested_changes(
+        &self,
+        project: &str,
+        branch: &str,
+    ) -> Option<&GitHubPullRequest> {
+        let pr = self.branch_pull_request(project, branch)?;
+        (pr.review_decision.as_deref() == Some("CHANGES_REQUESTED")).then_some(pr)
     }
 
     pub(super) fn pull_request_branches<'a>(

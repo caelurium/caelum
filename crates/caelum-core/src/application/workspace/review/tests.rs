@@ -151,3 +151,45 @@ fn unavailable_sessions_and_missing_review_metadata_do_not_redirect_navigation()
         assert_eq!(app.selected, Some(other));
     }
 }
+
+#[test]
+fn session_pull_request_stays_strictly_attributed_to_recorded_session_branches() {
+    let mut app = workspace();
+    let active = session(&mut app, "/repository", Provider::Codex, "feature");
+    let older = session(&mut app, "/repository", Provider::Codex, "old-branch");
+    let unrecorded = app.new_session(Scope {
+        project: "/repository".into(),
+        provider: Provider::Codex,
+    });
+    let checkout = app
+        .services
+        .checkouts
+        .entry("/repository".into())
+        .or_default();
+    checkout.git = Some(GitRepositoryStatus {
+        project_path: "/repository".into(),
+        repository_root: Some("/repository".into()),
+        branch: Some("feature".into()),
+        changes: vec![],
+    });
+    checkout
+        .pull_requests
+        .push(caelum_protocol::GitHubPullRequest {
+            number: 42,
+            title: "Feature".into(),
+            url: URL.into(),
+            is_draft: false,
+            base_ref_name: "main".into(),
+            review_decision: None,
+        });
+    app.services
+        .record_discovered_pull_request("/repository", "feature", URL);
+
+    assert_eq!(
+        app.session_pull_request(&app.sessions[active])
+            .map(|pr| pr.number),
+        Some(42)
+    );
+    assert_eq!(app.session_pull_request(&app.sessions[older]), None);
+    assert_eq!(app.session_pull_request(&app.sessions[unrecorded]), None);
+}

@@ -37,7 +37,9 @@ impl Runtime {
                     .with_live_profile(&parent_store, || {
                         store.save(snapshot).map(|()| Reply::Done)
                     }),
-                Command::Sound(_) | Command::Task(Task::Updates) => backend.execute(cmd),
+                Command::Sound(_) | Command::Task(Task::Updates | Task::HostStats) => {
+                    backend.execute(cmd)
+                }
                 _ => Err("A VM workspace operation cannot run on the laptop.".into()),
             }),
             Arc::new(wake),

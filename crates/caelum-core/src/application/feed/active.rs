@@ -1,4 +1,13 @@
-use crate::application::{subagents, Provider, Session, Workspace};
+use crate::application::{subagents, FeedSession, Provider, Session, Workspace};
+use crate::remote::Turn;
+
+/// High-level lifecycle grouping for conversations in the Overview screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SessionBucket {
+    Waiting,
+    Running,
+    Settled,
+}
 
 /// The live work or pending request that keeps a local or native VM conversation in the overview.
 pub enum OverviewActivity<'a> {
@@ -11,6 +20,43 @@ pub enum OverviewActivity<'a> {
 }
 
 impl Workspace {
+    /// Classify a feed session into Waiting (needs user action), Running, or Settled.
+    pub fn session_bucket(&self, id: &FeedSession) -> SessionBucket {
+        match id {
+            FeedSession::Local(index) => {
+                let Some(session) = self.sessions.get(*index) else {
+                    return SessionBucket::Settled;
+                };
+                match self.overview_activity(session) {
+                    Some(OverviewActivity::Question | OverviewActivity::Approval(_)) => {
+                        SessionBucket::Waiting
+                    }
+                    Some(
+                        OverviewActivity::Agent
+                        | OverviewActivity::Command
+                        | OverviewActivity::SideQuestion
+                        | OverviewActivity::Queued(_),
+                    ) => SessionBucket::Running,
+                    None => {
+                        if self.requested_changes(session).is_some()
+                            || (session.queue_paused && !session.queue.is_empty())
+                            || session.error.is_some()
+                            || session.conversation.failure.notice().is_some()
+                        {
+                            SessionBucket::Waiting
+                        } else {
+                            SessionBucket::Settled
+                        }
+                    }
+                }
+            }
+            FeedSession::Vm(link) => match link.resolve(&self.remote.saved) {
+                Some((_, thread)) if thread.turn != Turn::Idle => SessionBucket::Running,
+                _ => SessionBucket::Settled,
+            },
+        }
+    }
+
     /// A project-wide approval can interrupt active work, but does not activate idle sessions.
     pub fn overview_activity<'a>(&'a self, session: &'a Session) -> Option<OverviewActivity<'a>> {
         if self.has_question(session) {

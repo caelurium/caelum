@@ -67,6 +67,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
         LocalCommand::Settings => panels::show(s, Screen::Settings),
         LocalCommand::Timeline => super::open_timeline(s),
         LocalCommand::Usage => {
+            l.commands.usage_target = None;
             l.panels.set_overlay(Some(Screen::Usage));
             let scope = l.app.sessions[index].scope.clone();
             l.app.task(Task::Usage {

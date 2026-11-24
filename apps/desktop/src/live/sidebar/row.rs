@@ -2,7 +2,7 @@ use caelum_core::application::FeedSession;
 use rune::{Color, El, col, row, text};
 use rune_kit::Kit;
 
-pub(super) const HEIGHT: f32 = 88.0;
+pub(super) const HEIGHT: f32 = 84.0;
 
 pub(super) fn key(session: &FeedSession) -> String {
     match session {
