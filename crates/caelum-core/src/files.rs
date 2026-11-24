@@ -280,23 +280,48 @@ pub fn read_text_file(
 ) -> Result<ProjectFileContent, FileBrowserError> {
     let project = Project::open(project_path)?;
     let path = resolve_project_path(&project, relative_path, false)?;
-    let metadata = fs::metadata(&path).map_err(|source| FileBrowserError::ReadFile {
-        path: path.clone(),
+    read_bounded_text_file(&path, relative_path)
+}
+
+/// Read a bounded text preview for an absolute local path outside the project root.
+pub fn read_external_text_file(
+    path: impl AsRef<Path>,
+) -> Result<ProjectFileContent, FileBrowserError> {
+    let path = path.as_ref();
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(FileBrowserError::InvalidPath(
+            path.to_string_lossy().into_owned(),
+        ));
+    }
+    let display = path.to_string_lossy().into_owned();
+    read_bounded_text_file(path, &display)
+}
+
+fn read_bounded_text_file(
+    path: &Path,
+    display_path: &str,
+) -> Result<ProjectFileContent, FileBrowserError> {
+    let metadata = fs::metadata(path).map_err(|source| FileBrowserError::ReadFile {
+        path: path.to_path_buf(),
         source,
     })?;
     if !metadata.is_file() {
-        return Err(FileBrowserError::NotFile(relative_path.to_owned()));
+        return Err(FileBrowserError::NotFile(display_path.to_owned()));
     }
 
-    let file = File::open(&path).map_err(|source| FileBrowserError::ReadFile {
-        path: path.clone(),
+    let file = File::open(path).map_err(|source| FileBrowserError::ReadFile {
+        path: path.to_path_buf(),
         source,
     })?;
     let mut bytes = Vec::with_capacity(MAX_TEXT_FILE_BYTES + 1);
     let mut limited = file.take((MAX_TEXT_FILE_BYTES + 1) as u64);
-    read_preview(&mut limited, &path, &mut bytes)?;
+    read_preview(&mut limited, path, &mut bytes)?;
 
-    text_preview(relative_path, metadata.len(), bytes)
+    text_preview(display_path, metadata.len(), bytes)
 }
 pub(crate) fn text_preview(
     relative_path: &str,
@@ -737,6 +762,27 @@ mod tests {
         assert!(matches!(
             list_directory(&project, "missing", 0, 10),
             Err(FileBrowserError::Project(ProjectError::Resolve { .. }))
+        ));
+    }
+
+    #[test]
+    fn reads_external_text_files_and_rejects_relative_or_parent_paths() {
+        let directory = TestDirectory::new("external-file");
+        let plan = directory.0.join("implementation_plan.md");
+        fs::write(&plan, "# Plan\n\nStep 1\n").unwrap();
+
+        let content = read_external_text_file(&plan).unwrap();
+        assert_eq!(content.path, plan.to_string_lossy());
+        assert_eq!(content.content, "# Plan\n\nStep 1\n");
+        assert!(!content.truncated);
+
+        assert!(matches!(
+            read_external_text_file("relative/plan.md"),
+            Err(FileBrowserError::InvalidPath(_))
+        ));
+        assert!(matches!(
+            read_external_text_file(directory.0.join("../implementation_plan.md")),
+            Err(FileBrowserError::InvalidPath(_))
         ));
     }
 
