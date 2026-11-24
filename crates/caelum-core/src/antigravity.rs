@@ -22,6 +22,7 @@ pub(crate) mod protocol;
 mod questions;
 #[cfg(all(test, unix))]
 mod tests;
+mod titles;
 pub(crate) mod tools;
 mod transport;
 
@@ -75,7 +76,9 @@ struct AcpConnection {
     tier: Arc<Mutex<Option<Value>>>,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
+    session_titles: Arc<Mutex<HashMap<String, String>>>,
     session_changes: Mutex<HashMap<String, LineChanges>>,
+    transcripts: Arc<Mutex<titles::TranscriptStore>>,
 }
 
 #[derive(Clone, Default)]
@@ -98,6 +101,8 @@ struct ReaderContext {
     replays: ReplayBuffers,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
+    session_titles: Arc<Mutex<HashMap<String, String>>>,
+    transcripts: Arc<Mutex<titles::TranscriptStore>>,
 }
 
 impl AntigravityProvider {
@@ -177,6 +182,7 @@ impl AntigravityProvider {
         let working = lock(&connection.progress).working_sessions();
         let options = lock(&connection.session_options).clone();
         let metadata = lock(&self.inner.metadata);
+        let mut titles_cache = lock(&connection.session_titles);
         let sessions = protocol::parse_session_list(&result, project.path(), &working, &options)
             .into_iter()
             .filter(|s| {
@@ -184,6 +190,9 @@ impl AntigravityProvider {
                     && metadata.is_archived(project.path(), &s.id) == archived
             })
             .map(|mut s| {
+                if !s.title.is_empty() {
+                    titles_cache.insert(s.id.clone(), s.title.clone());
+                }
                 if let Some(title) = metadata.title(project.path(), &s.id) {
                     s.title = title;
                 }
@@ -386,8 +395,10 @@ impl AntigravityProvider {
         } else {
             lock(&connection.session_changes).remove(session_id);
         }
+        lock(&connection.transcripts).record_history(session_id, &page.data);
         let title = lock(&self.inner.metadata)
             .title(project.path(), session_id)
+            .or_else(|| lock(&connection.session_titles).get(session_id).cloned())
             .or_else(|| {
                 page.data
                     .iter()
@@ -503,30 +514,15 @@ impl AntigravityProvider {
         let _ = connection.request("session/close", json!({ "sessionId": session_id }));
         lock(&connection.loaded_sessions).remove(session_id);
         lock(&connection.session_options).remove(session_id);
+        lock(&connection.session_titles).remove(session_id);
         lock(&connection.session_changes).remove(session_id);
+        lock(&connection.transcripts).remove(session_id);
         self.inner.questions.clear(
             PROVIDER_NAME,
             &project.path().to_string_lossy(),
             Some(session_id),
         );
         lock(&self.inner.metadata).mark_deleted(project.path(), session_id)
-    }
-
-    pub fn rename(
-        &self,
-        project_path: impl AsRef<Path>,
-        session_id: &str,
-        title: &str,
-    ) -> Result<(), AntigravityError> {
-        if session_id.trim().is_empty() {
-            return Err(AntigravityError::Protocol(
-                "Antigravity session ID cannot be empty".into(),
-            ));
-        }
-        let project = Project::open(project_path)?;
-        let connection = self.connection(&project)?;
-        self.verify_session_owned(&connection, &project, session_id)?;
-        lock(&self.inner.metadata).set_title(project.path(), session_id, title)
     }
 
     fn verify_session_owned(
@@ -590,6 +586,7 @@ impl AntigravityProvider {
         lock(&connection.session_options).insert(session_id.to_owned(), opts);
 
         let blocks = protocol::prompt_blocks(prompt);
+        lock(&connection.transcripts).record_user_prompt(session_id, prompt);
         self.inner.questions.clear(
             PROVIDER_NAME,
             &project.path().to_string_lossy(),

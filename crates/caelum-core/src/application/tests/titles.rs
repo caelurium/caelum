@@ -451,3 +451,125 @@ fn manual_titles_are_owned_provider_writes_persisted_across_late_reads_events_an
         assert_eq!(restored.sessions[other].title, "Original title");
     }
 }
+
+fn antigravity_event(
+    project: &str,
+    session: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> Event {
+    Event::Antigravity(caelum_protocol::AntigravityEvent {
+        project_path: project.into(),
+        session_id: Some(session.into()),
+        method: method.into(),
+        params,
+    })
+}
+
+fn antigravity_succeeded(app: &mut Workspace, index: usize) {
+    let key = app.sessions[index].key().unwrap();
+    app.apply(antigravity_event(
+        &key.scope.project,
+        &key.id,
+        "antigravity/turnCompleted",
+        json!({ "stopReason": "end_turn" }),
+    ));
+}
+
+#[test]
+fn antigravity_titles_regenerate_every_three_successful_turns_and_apply_live_renames() {
+    let mut app = Workspace::default();
+    let index = connected(&mut app, Provider::Antigravity, "/a", "acp-1");
+
+    for turn in 1..=6 {
+        app.apply(antigravity_event(
+            "/a",
+            "acp-1",
+            "antigravity/turnStarted",
+            json!({}),
+        ));
+        antigravity_succeeded(&mut app, index);
+        let pending = requests(&mut app);
+        if turn % 3 != 0 {
+            assert!(pending.is_empty());
+            continue;
+        }
+        assert_eq!(pending.len(), 1);
+        let (request, key) = &pending[0];
+        assert_eq!(key, &app.sessions[index].key().unwrap());
+        let title = format!("Antigravity title {turn}");
+        app.apply(antigravity_event(
+            "/a",
+            "acp-1",
+            "session_info_update",
+            json!({ "title": title }),
+        ));
+        app.apply(Event::Completed(*request, Ok(Reply::Done)));
+        assert_eq!(app.sessions[index].title, title);
+        assert_eq!(app.snapshot().sessions[index].title, title);
+        assert!(requests(&mut app).is_empty());
+    }
+}
+
+#[test]
+fn antigravity_failed_cancelled_and_disconnected_turns_do_not_count_toward_title_cadence() {
+    let mut app = Workspace::default();
+    let index = connected(&mut app, Provider::Antigravity, "/a", "acp-1");
+
+    antigravity_succeeded(&mut app, index);
+    app.apply(antigravity_event(
+        "/a",
+        "acp-1",
+        "antigravity/turnCompleted",
+        json!({ "stopReason": "error", "error": "boom" }),
+    ));
+    app.apply(antigravity_event(
+        "/a",
+        "acp-1",
+        "antigravity/turnCompleted",
+        json!({ "stopReason": "cancelled" }),
+    ));
+    app.apply(antigravity_event(
+        "/a",
+        "acp-1",
+        "antigravity/turnCompleted",
+        json!({ "stopReason": "disconnected", "error": "closed" }),
+    ));
+    assert!(requests(&mut app).is_empty());
+
+    antigravity_succeeded(&mut app, index);
+    assert!(requests(&mut app).is_empty());
+
+    antigravity_succeeded(&mut app, index);
+    let pending = requests(&mut app);
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].1, app.sessions[index].key().unwrap());
+}
+
+#[test]
+fn antigravity_manual_rename_disables_automatic_title_regeneration() {
+    let mut app = Workspace::default();
+    let index = connected(&mut app, Provider::Antigravity, "/a", "acp-1");
+    let owner = app.sessions[index].key().unwrap();
+
+    assert!(app.rename_session(index, &owner, "Pinned Antigravity Title"));
+    let save = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Rename(..)))
+        .unwrap()
+        .0;
+    app.apply(Event::Completed(save, Ok(Reply::Done)));
+
+    app.apply(antigravity_event(
+        "/a",
+        "acp-1",
+        "session_info_update",
+        json!({ "title": "Automatic overwrite" }),
+    ));
+    for _ in 0..6 {
+        antigravity_succeeded(&mut app, index);
+    }
+    assert!(requests(&mut app).is_empty());
+    assert_eq!(app.sessions[index].title, "Pinned Antigravity Title");
+}

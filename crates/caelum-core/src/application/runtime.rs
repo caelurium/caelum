@@ -133,10 +133,19 @@ impl ProviderRuntime {
                     .map(Reply::Generated)
                     .map_err(|e| e.to_string())
             }
-            Command::RegenerateTitle(key) => self
-                .opencode
-                .regenerate_title(&key.scope.project, &key.id)
-                .map_err(|e| e.to_string()),
+            Command::RegenerateTitle(key) => match key.scope.provider {
+                Provider::OpenCode => self
+                    .opencode
+                    .regenerate_title(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
+                Provider::Antigravity => self
+                    .antigravity
+                    .regenerate_title(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
+                Provider::Codex => {
+                    Err("Codex does not support regenerating session titles.".into())
+                }
+            },
             Command::Rename(key, title) => match key.scope.provider {
                 Provider::Codex => self
                     .codex

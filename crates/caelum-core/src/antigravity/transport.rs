@@ -149,6 +149,8 @@ pub(super) fn spawn_connection(
     let replays = Arc::new(Mutex::new(HashMap::new()));
     let commands = Arc::new(Mutex::new(Vec::new()));
     let session_options = Arc::new(Mutex::new(HashMap::new()));
+    let session_titles = Arc::new(Mutex::new(HashMap::new()));
+    let transcripts = Arc::new(Mutex::new(super::titles::TranscriptStore::default()));
 
     let connection = Arc::new(AcpConnection {
         process_id,
@@ -163,7 +165,9 @@ pub(super) fn spawn_connection(
         tier: Arc::new(Mutex::new(None)),
         commands: commands.clone(),
         session_options: session_options.clone(),
+        session_titles: session_titles.clone(),
         session_changes: Mutex::new(HashMap::new()),
+        transcripts: transcripts.clone(),
     });
 
     spawn_reader(
@@ -181,6 +185,8 @@ pub(super) fn spawn_connection(
             replays,
             commands,
             session_options,
+            session_titles,
+            transcripts,
         },
     );
 
@@ -214,6 +220,8 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
             replays,
             commands,
             session_options,
+            session_titles,
+            transcripts,
         } = context;
         let project = project_path.to_string_lossy().into_owned();
         let reader = BufReader::new(stdout);
@@ -286,6 +294,8 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                         &replays,
                         &commands,
                         &session_options,
+                        &session_titles,
+                        &transcripts,
                     );
                 }
             }
@@ -349,6 +359,8 @@ fn handle_session_update(
     replays: &super::ReplayBuffers,
     commands: &Arc<Mutex<Vec<caelum_protocol::OpenCodeCommandInfo>>>,
     session_options: &Arc<Mutex<HashMap<String, super::SessionOptionState>>>,
+    session_titles: &Arc<Mutex<HashMap<String, String>>>,
+    transcripts: &Arc<Mutex<super::titles::TranscriptStore>>,
 ) {
     let session_id = params["sessionId"].as_str().map(str::to_owned);
     let update = &params["update"];
@@ -370,11 +382,32 @@ fn handle_session_update(
         }
     }
 
+    if kind == "session_info_update" {
+        if let (Some(sid), Some(title)) = (
+            session_id.as_deref(),
+            update["title"]
+                .as_str()
+                .map(str::trim)
+                .filter(|t| !t.is_empty()),
+        ) {
+            lock(session_titles).insert(sid.to_owned(), title.to_owned());
+        }
+    }
+
     if let Some(sid) = session_id.as_deref() {
         let mut buffers = lock(replays);
         if let Some(buffer) = buffers.get_mut(sid) {
             buffer.push(update.clone());
             return;
+        }
+    }
+
+    if matches!(kind, "user_message_chunk" | "agent_message_chunk") {
+        if let Some(sid) = session_id.as_deref() {
+            let text = protocol::chunk_text(update);
+            if !text.is_empty() {
+                lock(transcripts).record_chunk(sid, kind == "user_message_chunk", &text);
+            }
         }
     }
 
