@@ -53,6 +53,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
             | Task::Merge { .. }
             | Task::SetAutoMerge { .. }
             | Task::UpdateBranch { .. }
+            | Task::WriteReview { .. }
             | Task::Worktrees { .. }),
         ) => t.project(),
         _ => return false,

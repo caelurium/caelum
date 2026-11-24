@@ -13,6 +13,19 @@ pub(super) trait Gh {
     fn output(&self, cmd: Command, timeout: Duration) -> Result<Vec<u8>, GitHubError> {
         checked_output(cmd, timeout).map(|o| o.stdout)
     }
+    fn json_input(
+        &self,
+        mut cmd: Command,
+        input: &serde_json::Value,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, GitHubError> {
+        use std::io::Seek;
+        let mut file = tempfile::tempfile()?;
+        serde_json::to_writer(&mut file, input)?;
+        file.rewind()?;
+        cmd.stdin(file);
+        self.output(cmd, timeout)
+    }
 }
 impl Gh for Path {
     fn program(&self) -> &Path {
@@ -32,7 +45,16 @@ impl Gh for Access {
         Project::for_provider(path, Some(self))
     }
     fn output(&self, cmd: Command, timeout: Duration) -> Result<Vec<u8>, GitHubError> {
-        self.gh(cmd.get_args(), timeout)
+        self.gh(cmd.get_args(), timeout, None)
+            .map_err(GitHubError::Command)
+    }
+    fn json_input(
+        &self,
+        cmd: Command,
+        input: &serde_json::Value,
+        timeout: Duration,
+    ) -> Result<Vec<u8>, GitHubError> {
+        self.gh(cmd.get_args(), timeout, Some(&serde_json::to_vec(input)?))
             .map_err(GitHubError::Command)
     }
 }
@@ -115,6 +137,14 @@ impl Access {
             } => {
                 auto_merge::set_auto_merge(self, root, url, head, *method).map(TaskReply::AutoMerge)
             }
+            Task::WriteReview {
+                url,
+                head,
+                base,
+                action,
+                ..
+            } => review::write::run(self, root, url, head, base, action)
+                .map(TaskReply::ReviewWritten),
             _ => return Err("Unsupported VM checkout operation.".into()),
         }
         .map_err(|e| e.to_string())

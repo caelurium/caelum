@@ -1,3 +1,5 @@
+pub(super) mod write;
+
 use super::*;
 use caelum_protocol::{
     GitHubFeedbackKind, GitHubPullRequestFeedback, GitHubPullRequestFile, GitHubPullRequestFiles,
@@ -69,11 +71,7 @@ pub(super) fn files(
     ))?)?;
     let after = api(&endpoint)?;
     check_target(executable, project.path(), &after, url, head_oid, true)?;
-    if after.pointer("/base/sha").and_then(Value::as_str) != Some(base_oid) {
-        return Err(GitHubError::Command(
-            "The pull request base changed. Refresh the pull request and try again.".into(),
-        ));
-    }
+    check_base(&after["base"]["sha"], base_oid)?;
     Ok(GitHubPullRequestFiles {
         base_oid: base_oid.to_owned(),
         next_page: (files.len() == PAGE_SIZE && page < 100).then_some(page + 1),
@@ -119,7 +117,7 @@ pub(super) fn feedback(
     let selection = match kind {
         GitHubFeedbackKind::Discussion | GitHubFeedbackKind::Replies => format!("comments(first: {PAGE_SIZE}, after: $cursor) {{ nodes {{ {COMMENT_FIELDS} }} {PAGE_INFO} }}"),
         GitHubFeedbackKind::Reviews => format!("reviews(first: {PAGE_SIZE}, after: $cursor) {{ nodes {{ {COMMENT_FIELDS} state }} {PAGE_INFO} }}"),
-        GitHubFeedbackKind::Threads => format!("reviewThreads(first: {PAGE_SIZE}, after: $cursor) {{ nodes {{ id path line startLine originalLine diffSide isResolved isOutdated context: comments(first: 1) {{ nodes {{ diffHunk }} }} comments(first: {PAGE_SIZE}) {{ nodes {{ {COMMENT_FIELDS} }} {PAGE_INFO} }} }} {PAGE_INFO} }}"),
+        GitHubFeedbackKind::Threads => format!("reviewThreads(first: {PAGE_SIZE}, after: $cursor) {{ nodes {{ id path line startLine originalLine diffSide isResolved isOutdated viewerCanReply viewerCanResolve viewerCanUnresolve context: comments(first: 1) {{ nodes {{ diffHunk }} }} comments(first: {PAGE_SIZE}) {{ nodes {{ {COMMENT_FIELDS} }} {PAGE_INFO} }} }} {PAGE_INFO} }}"),
     };
     let mut command = github_command(executable, project.path());
     command.args([
@@ -257,6 +255,15 @@ fn check_target(
     {
         return Err(GitHubError::Command(
             "The pull request head changed. Refresh the pull request and try again.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn check_base(value: &Value, base: &str) -> Result<(), GitHubError> {
+    if value.as_str() != Some(base) {
+        return Err(GitHubError::Command(
+            "The pull request base changed. Refresh the pull request and try again.".into(),
         ));
     }
     Ok(())

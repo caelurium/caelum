@@ -21,6 +21,23 @@ impl Workspace {
         }) {
             return;
         }
+        if let Task::WriteReview {
+            project,
+            url,
+            head,
+            base,
+            action,
+        } = &task
+        {
+            if !self
+                .services
+                .reviews
+                .get(&(project.clone(), url.clone()))
+                .is_some_and(|r| r.admits_write(head, base, action))
+            {
+                return;
+            }
+        }
         if let Task::SetAutoMerge {
             project,
             url,

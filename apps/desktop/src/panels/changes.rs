@@ -10,6 +10,7 @@ use crate::ui::Button;
 use crate::{Workspace, quiet_button, ui};
 
 use super::feedback::thread_view;
+use super::review::{Owner, comment_on_line};
 use super::{label, scroll};
 
 pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
@@ -81,22 +82,22 @@ pub(super) fn diff_view(s: &Workspace, k: &Kit, review: bool) -> El {
                 .child(mode_toggle),
         )
         .child(
-            DiffView::new(
-                move |s: &Workspace| {
-                    if review {
-                        &live(s).panels.diff
-                    } else {
-                        &live(s).panels.change_diff
-                    }
-                },
-                move |s: &mut Workspace| {
-                    if review {
-                        &mut s.live.as_mut().unwrap().panels.diff
-                    } else {
-                        &mut s.live.as_mut().unwrap().panels.change_diff
-                    }
-                },
-            )
+            (if review {
+                let view = DiffView::new(
+                    |s: &Workspace| &live(s).panels.diff,
+                    |s| &mut live_mut(s).panels.diff,
+                );
+                if let Some(owner) = Owner::current(live(s)).filter(|o| !o.busy(live(s))) {
+                    view.on_comment(move |s, lines, _| comment_on_line(s, &owner, lines))
+                } else {
+                    view
+                }
+            } else {
+                DiffView::new(
+                    |s: &Workspace| &live(s).panels.change_diff,
+                    |s| &mut live_mut(s).panels.change_diff,
+                )
+            })
             .key(if review { "diff" } else { "changes-diff" })
             .header_actions(move |s, i| {
                 let l = live(s);
