@@ -133,6 +133,12 @@ impl Workspace {
     }
 
     pub(super) fn branch_update(&mut self, update: caelum_protocol::SessionBranchUpdate) {
+        let branches: std::collections::BTreeSet<_> = update
+            .branch
+            .iter()
+            .chain(update.branches.iter())
+            .cloned()
+            .collect();
         if let Some(session) = self.sessions.iter_mut().find(|s| {
             s.scope.project == update.project_path
                 && s.scope.provider.as_str() == update.provider
@@ -140,12 +146,12 @@ impl Workspace {
         }) {
             session.details = Some(caelum_protocol::SessionDetails {
                 branch: update.branch,
-                branches: update.branches.clone(),
+                branches: update.branches,
                 branch_is_current: false,
                 changes: None,
             });
         }
-        for branch in update.branches {
+        for branch in branches {
             self.task(Task::Discover {
                 project: update.project_path.clone(),
                 branch,
@@ -418,6 +424,7 @@ impl Workspace {
                 );
             }
             self.refresh(index);
+            self.discover_session_pull_requests(index);
         }
         for index in titles_completed {
             self.refresh_title(index);
