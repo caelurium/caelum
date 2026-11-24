@@ -25,7 +25,7 @@ interactions = {
     "remote-handoff-new": ("remote-handoff", [{"t": 0.25, "key": "handoff-new-vm"}]),
     "question-invalid": ("questions", [{"t": 0.25, "key": "question-fixture-target-0"}, {"t": 0.5, "key": "question-submit-fixture"}]),
     "question-pending": ("questions", [{"t": 0.25, "key": "question-submit-fixture"}]),
-    "conversation-overview-idle": ("session-feed", [{"t": 0.25, "key": "open-conversations"}]),
+    "conversation-overview-idle": ("session-feed", [{"t": 0.25, "key": "nav-overview"}]),
     "session-feed-search": ("session-feed", [{"t": 0.25, "key": "session-search"}, {"t": 0.4, "paste": "focus"}]),
     "composer-focus": ("", [{"t": 0.25, "key": "live-draft-0"}]),
     "check-details": ("merge-ready", [{"t": 0.25, "key": "review-checks-toggle"}]),

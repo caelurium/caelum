@@ -124,6 +124,10 @@ impl Brand {
     }
 }
 
+pub(crate) fn glyph_for(name: &str) -> Option<&'static Icon> {
+    Brand::model("", name, name).map(Brand::glyph)
+}
+
 pub(super) fn logo(brand: Option<Brand>, name: &str, size: f32, k: &Kit) -> El {
     if let Some(brand) = brand {
         icon(brand.glyph(), size).color(k.c.text_base).a11y_hidden()

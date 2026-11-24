@@ -1,7 +1,6 @@
 //! Native workspace views; all reads, mutations and response ownership are in core.
 mod appearance;
 mod changes;
-pub(crate) mod conversations;
 mod feedback;
 mod files;
 mod launcher;
@@ -21,6 +20,7 @@ pub use launcher::open_launcher;
 pub use overlays::overlays;
 pub use queue::composer_context;
 pub use queue::queue_summary;
+pub(crate) use queue::queued_preview;
 pub use review::open_review;
 use review::review;
 
@@ -45,9 +45,9 @@ use std::{
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Screen {
     Home,
+    Overview,
     #[default]
     Conversation,
-    ConversationOverview,
     Files,
     Changes,
     Worktrees,
@@ -615,9 +615,6 @@ pub(crate) fn find_files(s: &mut Workspace, content: bool) {
 }
 
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if live(s).panels.overlay() == Some(Screen::ConversationOverview) {
-        return conversations::key(s, ev, tx);
-    }
     if live(s).panels.overlay() == Some(Screen::Palette) {
         if ev.key == Key::Escape || ev.is_command('k') {
             overlays::close(s);
@@ -652,9 +649,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             .any(|c| ev.is_command(*c))
             || ev.key == Key::Escape;
     }
-    if conversations::shortcut(ev) {
-        conversations::open(s, tx);
-    } else if ev.is_command('f')
+    if ev.is_command('f')
         && !ev.mods.shift
         && s.inspector.is_open()
         && live(s).panels.inspector == Screen::Files

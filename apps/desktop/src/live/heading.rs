@@ -91,7 +91,7 @@ pub(crate) fn heading(s: &Workspace, k: &Kit) -> El {
                 .as_ref()
                 .and_then(|id| l.app.remote.saved.checkouts.get(id))
                 .and_then(|c| c.source.repository.rsplit('/').next()),
-            Screen::Home => None,
+            Screen::Home | Screen::Overview => None,
             _ => l
                 .app
                 .active_project

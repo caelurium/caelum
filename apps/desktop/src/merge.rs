@@ -102,40 +102,47 @@ pub fn view(
         .border(1.0, k.c.border_base)
         .child(status(review, explanation, outcome, k).key("review-approval"))
         .child(ui::divider(k));
-    let mut checks =
-        status(summary.title, &summary.detail, summary.outcome, k).key("review-check-summary");
-    if let Some(list) = details
+    let checks = if let Some(list) = details
         .status_check_rollup
         .as_ref()
         .filter(|checks| !checks.is_empty())
     {
-        checks = checks
-            .child(
-                text(format!("{}", list.len()))
-                    .font(k.ty.mono)
-                    .color(k.c.text_muted)
-                    .px(6.0)
-                    .py(1.0)
-                    .radius(4.0)
-                    .fill(k.c.layer_02),
-            )
-            .child(
-                ui::Button::new(if open { "Hide" } else { "Details" })
-                    .variant(ButtonVariant::Outline)
-                    .on_press(move |s: &mut Workspace| {
-                        let expanded = &mut live_mut(s).panels.expanded_checks;
-                        if !expanded.remove(&owner) {
-                            expanded.insert(owner.clone());
-                        }
-                    })
-                    .build(k)
-                    .h(26.0)
-                    .px(8.0)
-                    .key("review-checks-toggle")
-                    .label("Check details")
-                    .expanded(open),
-            );
-    }
+        let count = list.len();
+        let count_label = if count == 1 {
+            "1 check".to_owned()
+        } else {
+            format!("{count} checks")
+        };
+        let summary_row = status(summary.title, &summary.detail, summary.outcome, k).child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    text(count_label)
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_muted),
+                )
+                .child(ui::disclosure(open, k)),
+        );
+        col().key("review-check-summary").w_full().child(
+            k.interactive(summary_row)
+                .key("review-checks-toggle")
+                .role("button")
+                .label("Check details")
+                .help(if open { "Hide checks" } else { "Show checks" })
+                .expanded(open)
+                .focusable(true)
+                .focus_ring(1.5, -1.5, k.c.border_focus)
+                .on_press(move |s: &mut Workspace| {
+                    let expanded = &mut live_mut(s).panels.expanded_checks;
+                    if !expanded.remove(&owner) {
+                        expanded.insert(owner.clone());
+                    }
+                }),
+        )
+    } else {
+        status(summary.title, &summary.detail, summary.outcome, k).key("review-check-summary")
+    };
     body = body.child(checks);
     if open {
         let mut reported: Vec<_> = details
@@ -251,10 +258,27 @@ pub fn view(
         method,
     };
     let busy = l.app.services.busy(&task);
+    let ready = readiness.can_merge;
     let green = rune::color::hex(if k.dark { "#238636" } else { "#1f883d" }).unwrap();
     let mut merge_kit = k.clone();
-    merge_kit.c.bg_accent = green;
-    merge_kit.c.icon_muted = rune::Color::WHITE;
+    if ready {
+        merge_kit.c.bg_accent = green;
+        merge_kit.c.submit_fg = rune::Color::WHITE;
+        merge_kit.c.icon_muted = rune::Color::WHITE;
+    } else {
+        merge_kit.c.icon_muted = k.c.icon_base;
+    }
+    let selector_fill = if ready {
+        if l.panels.merge_menu {
+            k.alpha(rune::Color::WHITE, 0.14)
+        } else {
+            rune::Color::TRANSPARENT
+        }
+    } else if l.panels.merge_menu {
+        k.c.hover
+    } else {
+        rune::Color::TRANSPARENT
+    };
     let names: Vec<_> = methods.iter().map(|m| m.0).collect();
     let selector = Select::new("merge-method", &names)
         .current(Some(name))
@@ -275,7 +299,7 @@ pub fn view(
         .build(&merge_kit, layers)
         .h(34.0)
         .radius(0.0)
-        .fill(green)
+        .fill(selector_fill)
         .border(0.0, rune::Color::TRANSPARENT);
     let auto_merge = Task::SetAutoMerge {
         project: project.into(),
@@ -288,39 +312,52 @@ pub fn view(
     } else {
         "Enable auto-merge"
     };
+    let merge_action = ui::Button::new(if busy { "Working…" } else { name })
+        .variant(if ready {
+            ButtonVariant::Contrast
+        } else {
+            ButtonVariant::Neutral
+        })
+        .disabled(busy || !ready)
+        .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
+        .build(&merge_kit)
+        .key("merge-pull-request")
+        .h(34.0)
+        .radius(0.0)
+        .border(0.0, rune::Color::TRANSPARENT);
+    let mut split = row()
+        .key("merge-controls")
+        .h(34.0)
+        .radius(8.0)
+        .clip_rounded(8.0)
+        .fill(if ready { green } else { k.c.layer_02 })
+        .child(merge_action)
+        .child(rune::el().w(1.0).h_full().fill(if ready {
+            k.alpha(rune::Color::WHITE, 0.25)
+        } else {
+            k.c.border_strong
+        }))
+        .child(selector);
+    if !ready {
+        split = split.border(1.0, k.c.border_strong);
+    }
     let mut controls = col().w_full().px(12.0).py(10.0).gap(8.0).child(
-        row().w_full().flex_wrap().gap(8.0).center_y().child(
-            row()
-                .key("merge-controls")
-                .h(34.0)
-                .radius(6.0)
-                .clip_rounded(6.0)
-                .fill(green)
-                .child(
-                    ui::Button::new(if busy { "Working…" } else { name })
-                        .variant(ButtonVariant::Contrast)
-                        .disabled(busy || !readiness.can_merge)
-                        .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
-                        .build(&merge_kit)
-                        .key("merge-pull-request")
-                        .h(34.0)
-                        .radius(0.0),
-                )
-                .child(
-                    rune::el()
-                        .w(1.0)
-                        .h_full()
-                        .fill(k.alpha(rune::Color::WHITE, 0.25)),
-                )
-                .child(selector),
-        ).child(
+        row()
+            .w_full()
+            .flex_wrap()
+            .gap(8.0)
+            .center_y()
+            .child(split)
+            .child(
             ui::Button::new(if busy { "Working…" } else { auto_label })
                 .disabled(busy)
                 .on_press(move |s: &mut Workspace| live_mut(s).app.task(auto_merge.clone()))
                 .build(k)
                 .key("set-auto-merge")
                 .label(auto_label)
-                .help("Auto-merge uses the selected merge method once GitHub's requirements are met.")
+                .help(
+                    "Auto-merge uses the selected merge method once GitHub's requirements are met.",
+                )
                 .h(34.0),
         ),
     );

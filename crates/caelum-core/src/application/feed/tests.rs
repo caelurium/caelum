@@ -491,3 +491,51 @@ fn pull_request_refreshes_include_linked_checkouts_coalesce_and_keep_late_result
         .all(|(_, command)| matches!(command, Command::Task(task) if task.project() != "/beta")));
     assert!(!app.feed_includes_project("/beta", None));
 }
+
+#[test]
+fn dashboard_buckets_and_activity_histogram_reflect_session_lifecycle() {
+    let mut app = workspace();
+    let now = 2_000_000_000_000;
+    app.sessions[0].last_activity = Some(now - 60_000);
+    app.sessions[1].last_activity = Some(now - 2 * 86_400_000);
+    app.sessions[2].last_activity = Some(now - 16 * 86_400_000);
+    app.sessions[0].conversation.set_working(true);
+    app.questions.push(caelum_protocol::QuestionPrompt {
+        provider: "codex".into(),
+        project_path: "/beta".into(),
+        session_id: "shared-id".into(),
+        request_id: "q-1".into(),
+        title: "Question".into(),
+        fields: vec![],
+    });
+    assert_eq!(
+        app.session_bucket(&FeedSession::Local(0)),
+        SessionBucket::Running
+    );
+    assert_eq!(
+        app.session_bucket(&FeedSession::Local(1)),
+        SessionBucket::Waiting
+    );
+    assert_eq!(
+        app.session_bucket(&FeedSession::Local(2)),
+        SessionBucket::Settled
+    );
+    assert_eq!(
+        app.dashboard_sessions("", false),
+        [0, 1, 2].map(FeedSession::Local)
+    );
+    let hist = app.activity_histogram(now);
+    assert_eq!(hist.total, 2);
+    assert_eq!(hist.days[13], 1);
+    assert_eq!(hist.days[11], 1);
+    assert_eq!(hist.delta_percent, None);
+    for _ in 0..4 {
+        let i = app.new_session(Scope {
+            project: "/alpha".into(),
+            provider: Provider::Codex,
+        });
+        app.sessions[i].last_activity = Some(now - 16 * 86_400_000);
+    }
+    let hist = app.activity_histogram(now);
+    assert_eq!(hist.delta_percent, Some(-60));
+}
