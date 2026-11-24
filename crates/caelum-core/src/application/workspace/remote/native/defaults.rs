@@ -14,13 +14,21 @@ impl Workspace {
         if project.and_then(checkout_id).is_some() {
             Provider::Codex
         } else {
-            self.preferences.default_provider
+            let available = self.available_providers(project);
+            if available.is_empty() || available.contains(&self.preferences.default_provider) {
+                self.preferences.default_provider
+            } else {
+                available[0]
+            }
         }
     }
 
     pub fn set_default_provider_for(&mut self, project: Option<&str>, provider: Provider) {
         if project.and_then(checkout_id).is_none() {
-            self.preferences.default_provider = provider;
+            let available = self.available_providers(project);
+            if available.is_empty() || available.contains(&provider) {
+                self.preferences.default_provider = provider;
+            }
         }
     }
 

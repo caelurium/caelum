@@ -737,7 +737,7 @@ impl AntigravityProvider {
         Ok(connection)
     }
 
-    fn executable(&self) -> Result<PathBuf, AntigravityError> {
+    pub(super) fn executable(&self) -> Result<PathBuf, AntigravityError> {
         if let Some(path) = &self.inner.executable {
             return Ok(path.clone());
         }

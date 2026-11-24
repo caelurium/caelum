@@ -35,6 +35,14 @@ use rune::{FileDialogOptions, TextEdit, Tx, Waker};
 
 use crate::Workspace;
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum ProviderProbe {
+    #[default]
+    Frame,
+    Pending,
+    Requested,
+}
+
 pub struct Live {
     pub(crate) native: crate::remote::native::Connections,
     pub latency: crate::latency::State,
@@ -51,6 +59,7 @@ pub struct Live {
     pub notifications: crate::notifications::State,
     pub media: crate::media::State,
     pub updates: crate::updates::Lifecycle,
+    provider_probe: Cell<ProviderProbe>,
     pub app: Application,
     pub drafts: Vec<TextEdit>,
     pub panels: crate::panels::Panels,
@@ -107,6 +116,7 @@ impl Live {
             notifications: Default::default(),
             media: Default::default(),
             updates: Default::default(),
+            provider_probe: Cell::new(ProviderProbe::Frame),
             app,
             drafts: Vec::new(),
             panels: Default::default(),
@@ -502,6 +512,11 @@ impl Live {
             }
         }
         if self.runtime.is_some() {
+            if self.provider_probe.get() == ProviderProbe::Pending {
+                self.provider_probe.set(ProviderProbe::Requested);
+                self.app
+                    .task(caelum_core::application::Task::InstalledProviders);
+            }
             changed |= crate::notifications::dispatch(self);
             let connected = crate::remote::native::ready(self);
             self.feed.discover(&mut self.app);
@@ -663,6 +678,13 @@ impl Live {
         changed
     }
 
+    pub(crate) fn refresh_installed_providers(&mut self) {
+        if self.runtime.is_some() {
+            self.app
+                .task(caelum_core::application::Task::InstalledProviders);
+        }
+    }
+
     pub(crate) fn schedule(&self) {
         if let Some(wake) = &self.wake {
             wake();
@@ -724,6 +746,15 @@ pub fn presented_focus(rt: &rune::Runtime<Workspace>) -> Option<Option<String>> 
 pub fn frame_drawn(rt: &rune::Runtime<Workspace>) {
     crate::latency::drawn(rt);
     crate::updates::drawn(rt);
+    if let Some(live) = &rt.state.live
+        && !live.fixture
+        && !live.evaluation
+        && live.provider_probe.get() == ProviderProbe::Frame
+        && let Some(handle) = &rt.state.handle
+    {
+        live.provider_probe.set(ProviderProbe::Pending);
+        handle.update(|_, _| {});
+    }
     if let Some(focused) = presented_focus(rt)
         && let Some(handle) = &rt.state.handle
     {

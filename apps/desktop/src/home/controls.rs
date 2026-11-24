@@ -5,7 +5,6 @@ use crate::{
     select::{Choice, Select},
     ui,
 };
-use caelum_core::application::Provider;
 use rune::{El, FileDialogOptions, Tx, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit};
 
@@ -185,29 +184,45 @@ pub(super) fn open_project(s: &mut Workspace, tx: &mut Tx) {
     );
 }
 
-pub(super) fn provider(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
+pub(super) fn provider(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> Option<El> {
     let l = live(s);
-    Select::choices(
-        "home-provider",
-        Provider::ALL
-            .into_iter()
-            .map(|p| Choice::new(p.as_str(), ui::provider_name(p)))
-            .collect(),
+    let providers = l
+        .app
+        .available_providers(l.app.home.draft.project.as_deref());
+    let current = l.app.home_provider();
+    if !providers.iter().any(|&p| p != current) {
+        return None;
+    }
+    Some(
+        Select::choices(
+            "home-provider",
+            providers
+                .iter()
+                .map(|p| Choice::new(p.as_str(), ui::provider_name(*p)))
+                .collect(),
+        )
+        .label("Provider")
+        .display(ui::provider_name(current))
+        .current(Some(current.as_str()))
+        .open(l.home.menu == Menu::Provider)
+        .on_toggle(|s| {
+            toggle_menu(s, Menu::Provider);
+            let l = live_mut(s);
+            if l.home.menu == Menu::Provider {
+                l.refresh_installed_providers();
+            }
+        })
+        .on_close(close_menu)
+        .on_choose(move |s: &mut Workspace, value, _| {
+            let l = live_mut(s);
+            if let Some(&provider) = providers.iter().find(|p| p.as_str() == value) {
+                l.app.home_set_provider(provider);
+            }
+            l.home.menu = Menu::Closed;
+            l.focus();
+        })
+        .build(k, layers),
     )
-    .label("Provider")
-    .current(Some(l.app.home_provider().as_str()))
-    .open(l.home.menu == Menu::Provider)
-    .on_toggle(|s| toggle_menu(s, Menu::Provider))
-    .on_close(close_menu)
-    .on_choose(|s: &mut Workspace, value, _| {
-        let l = live_mut(s);
-        if let Some(provider) = Provider::ALL.into_iter().find(|p| p.as_str() == value) {
-            l.app.home_set_provider(provider);
-        }
-        l.home.menu = Menu::Closed;
-        l.focus();
-    })
-    .build(k, layers)
 }
 
 pub(super) fn model(s: &Workspace, k: &Kit) -> El {
