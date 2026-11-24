@@ -41,6 +41,7 @@ pub struct State {
     visible: Vec<FeedSession>,
     query: Option<(Option<String>, String, bool)>,
     request_scope: Option<(SessionScope, Option<String>)>,
+    refreshed_projects: std::collections::HashSet<String>,
     selected: Option<FeedSession>,
 }
 
@@ -55,6 +56,7 @@ impl Default for State {
             visible: Vec::new(),
             query: None,
             request_scope: None,
+            refreshed_projects: Default::default(),
             selected: None,
         }
     }
@@ -114,15 +116,39 @@ impl State {
         let mut changed = self.badges.sync(app);
         let project = app.feed_project(None).map(str::to_owned);
         let selected = app.selected_feed_session();
+        self.refreshed_projects
+            .retain(|path| app.feed_includes_project(path, None));
         let request_scope = (app.preferences.session_scope, project.clone());
         if self.request_scope.as_ref() != Some(&request_scope) {
             app.refresh_feed_pull_requests(None);
             self.request_scope = Some(request_scope);
-        } else if self.selected != selected
-            && let Some(path) = app.active_project.clone()
-            && app.feed_includes_project(&path, None)
-        {
-            app.refresh_feed_pull_requests(Some(&path));
+            self.refreshed_projects = app
+                .projects
+                .iter()
+                .filter(|p| app.feed_includes_project(&p.path, None))
+                .map(|p| p.path.clone())
+                .collect();
+        } else {
+            let added: Vec<_> = app
+                .projects
+                .iter()
+                .filter(|p| {
+                    app.feed_includes_project(&p.path, None)
+                        && !self.refreshed_projects.contains(&p.path)
+                })
+                .map(|p| p.path.clone())
+                .collect();
+            if !added.is_empty() {
+                for path in added {
+                    app.refresh_feed_pull_requests(Some(&path));
+                    self.refreshed_projects.insert(path);
+                }
+            } else if self.selected != selected
+                && let Some(path) = app.active_project.clone()
+                && app.feed_includes_project(&path, None)
+            {
+                app.refresh_feed_pull_requests(Some(&path));
+            }
         }
         let query = (project, query.to_owned(), archived);
         if self.query.as_ref() != Some(&query) {
