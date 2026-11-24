@@ -6,7 +6,7 @@ use crate::{
     ui::{self, Button},
 };
 use caelum_core::application::EntryKind;
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, row, text};
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit};
 
 pub(crate) fn open(s: &mut Workspace) {
@@ -14,32 +14,58 @@ pub(crate) fn open(s: &mut Workspace) {
     let Some(index) = l.app.selected else { return };
     l.commands.owner = Some(index);
     l.commands.search.clear();
+    l.commands.timeline_bookmarked_only = false;
     l.commands.timeline_selected = l.current_prompt.clone();
     l.commands.timeline_current = l.current_prompt.clone();
     l.panels.set_overlay(Some(Screen::Timeline));
     l.commands.search.focused = true;
 }
 
-pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
-    let l = live(s);
-    let session = &l.app.sessions[index];
-    let query = l.commands.search.text.to_lowercase();
-    let matches: Vec<_> = session
+fn matching_entries(
+    session: &caelum_core::application::Session,
+    query: &str,
+    bookmarked_only: bool,
+) -> Vec<(usize, usize)> {
+    session
         .conversation
         .entries
         .iter()
         .enumerate()
         .filter(|(_, e)| {
-            e.kind() == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
+            caelum_core::application::presentation::entry_visible(e)
+                && if bookmarked_only {
+                    matches!(e.kind(), EntryKind::User | EntryKind::Assistant)
+                        && session.is_bookmarked(&e.id)
+                } else {
+                    e.kind() == EntryKind::User
+                }
         })
         .enumerate()
         .filter(|(_, (_, e))| {
             caelum_core::application::presentation::entry_text(e)
                 .to_lowercase()
-                .contains(&query)
+                .contains(query)
         })
         .map(|(ordinal, (i, _))| (ordinal + 1, i))
-        .collect();
+        .collect()
+}
+
+pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
+    let l = live(s);
+    let session = &l.app.sessions[index];
+    let query = l.commands.search.text.to_lowercase();
+    let bookmarked_only = l.commands.timeline_bookmarked_only;
+    let bookmarked_count = session
+        .conversation
+        .entries
+        .iter()
+        .filter(|e| {
+            matches!(e.kind(), EntryKind::User | EntryKind::Assistant)
+                && caelum_core::application::presentation::entry_visible(e)
+                && session.is_bookmarked(&e.id)
+        })
+        .count();
+    let matches = matching_entries(session, &query, bookmarked_only);
     let kit = k.clone();
     let ids = matches.clone();
     let count = matches.len();
@@ -149,6 +175,26 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                                                     .grow(1.0)
                                                     .min_w(0.0),
                                             )
+                                            .children((entry.kind() == EntryKind::Assistant).then(
+                                                || {
+                                                    text("Reply")
+                                                        .font(kit.ty.small)
+                                                        .color(kit.c.text_muted)
+                                                        .px(6.0)
+                                                        .py(1.0)
+                                                        .radius(4.0)
+                                                        .fill(kit.c.layer_02)
+                                                },
+                                            ))
+                                            .children(
+                                                live(s).app.sessions[index]
+                                                    .is_bookmarked(&id)
+                                                    .then(|| {
+                                                        icon(&ui::BOOKMARK, 11.0)
+                                                            .color(kit.c.text_accent)
+                                                            .a11y_hidden()
+                                                    }),
+                                            )
                                             .children(current.then(|| {
                                                 text("Reading here")
                                                     .font(kit.ty.small)
@@ -181,6 +227,51 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                 )
             },
         );
+    let filter_bar = row()
+        .w_full()
+        .center_y()
+        .gap(6.0)
+        .child(
+            Button::new("All prompts")
+                .variant(if !bookmarked_only {
+                    ButtonVariant::Outline
+                } else {
+                    ButtonVariant::GhostMuted
+                })
+                .on_press_tx(|s: &mut Workspace, tx| {
+                    let l = live_mut(s);
+                    l.commands.timeline_bookmarked_only = false;
+                    l.commands.timeline_selected = None;
+                    tx.scroll_to_y("timeline-scroll", 0.0);
+                })
+                .build(k)
+                .h(26.0)
+                .px(9.0)
+                .key("timeline-filter-all"),
+        )
+        .child(
+            Button::new(if bookmarked_count > 0 {
+                format!("Bookmarked ({bookmarked_count})")
+            } else {
+                "Bookmarked".into()
+            })
+            .icon(&ui::BOOKMARK)
+            .variant(if bookmarked_only {
+                ButtonVariant::Outline
+            } else {
+                ButtonVariant::GhostMuted
+            })
+            .on_press_tx(|s: &mut Workspace, tx| {
+                let l = live_mut(s);
+                l.commands.timeline_bookmarked_only = true;
+                l.commands.timeline_selected = None;
+                tx.scroll_to_y("timeline-scroll", 0.0);
+            })
+            .build(k)
+            .h(26.0)
+            .px(9.0)
+            .key("timeline-filter-bookmarked"),
+        );
     let mut body = col()
         .w_full()
         .h_full()
@@ -198,6 +289,7 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                 )
                 .on_input_key(timeline_key),
         )
+        .child(filter_bar)
         .child(
             col()
                 .key("timeline-scroll")
@@ -211,8 +303,16 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         );
     if count == 0 {
         body = body.child(ui::empty(
-            "No matching prompts",
-            "Try another search or load earlier history.",
+            if bookmarked_only {
+                "No bookmarked messages"
+            } else {
+                "No matching prompts"
+            },
+            if bookmarked_only {
+                "Right-click a message or click its bookmark icon to save it here."
+            } else {
+                "Try another search or load earlier history."
+            },
             k,
         ));
     }
@@ -268,19 +368,14 @@ pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return false;
     };
     let query = l.commands.search.text.to_lowercase();
-    let ids: Vec<_> = l.app.sessions[index]
-        .conversation
-        .entries
-        .iter()
-        .filter(|e| {
-            e.kind() == EntryKind::User
-                && caelum_core::application::presentation::entry_visible(e)
-                && caelum_core::application::presentation::entry_text(e)
-                    .to_lowercase()
-                    .contains(&query)
-        })
-        .map(|e| e.id.clone())
-        .collect();
+    let ids: Vec<_> = matching_entries(
+        &l.app.sessions[index],
+        &query,
+        l.commands.timeline_bookmarked_only,
+    )
+    .into_iter()
+    .map(|(_, pos)| l.app.sessions[index].conversation.entries[pos].id.clone())
+    .collect();
     let current = ids
         .iter()
         .position(|id| Some(id) == l.commands.timeline_selected.as_ref());
