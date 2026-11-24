@@ -2,8 +2,7 @@ use super::{Session, Workspace};
 use caelum_protocol::GitHubPullRequest;
 
 impl Workspace {
-    /// Only surface feedback on branches attributed to this session, never on a
-    /// PR found just because another session or a stack ancestor shares its checkout.
+    /// Surface feedback only on branches attributed to this session.
     pub fn requested_changes(&self, session: &Session) -> Option<&GitHubPullRequest> {
         let details = session.details.as_ref()?;
         details
