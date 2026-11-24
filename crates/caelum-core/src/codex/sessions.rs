@@ -8,6 +8,30 @@ use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
 
 impl CodexProvider {
+    pub(crate) fn side_command(
+        &self,
+        path: &str,
+        id: &str,
+    ) -> Result<std::process::Command, String> {
+        let project = self.project(path).map_err(|e| e.to_string())?;
+        self.connection(&project)
+            .and_then(|c| c.owned_thread(&project, id, false))
+            .map_err(|e| e.to_string())?;
+        if let Some(vm) = &self.inner.remote {
+            return vm.side_codex(path);
+        }
+        let exe = match &self.inner.executable {
+            Some(e) => e.clone(),
+            None => super::find_codex_executable().map_err(|e| e.to_string())?,
+        };
+        let mut command = std::process::Command::new(&exe);
+        command
+            .args(["app-server", "--listen", "stdio://"])
+            .env("PATH", crate::executable::path(&exe))
+            .current_dir(path);
+        Ok(command)
+    }
+
     pub(crate) fn fork_session(
         &self,
         path: &str,

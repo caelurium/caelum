@@ -599,7 +599,7 @@ impl AntigravityProvider {
                 project_path: project.path().to_string_lossy().into_owned(),
                 session_id: Some(session_id.to_owned()),
                 method: "antigravity/turnStarted".into(),
-                params: json!({ "sessionId": session_id }),
+                params: json!({ "sessionId": session_id, "turnId":uuid::Uuid::new_v4().to_string(), "_created":crate::application::presentation::now() }),
             },
         );
         if let Err(error) = connection.send_prompt(

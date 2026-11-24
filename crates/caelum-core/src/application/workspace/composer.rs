@@ -175,6 +175,7 @@ impl Workspace {
         self.cancel_mentions(index);
         let session = &mut self.sessions[index];
         session.side_generation += 1;
+        session.side_cancel = None;
         session.completion_generation += 1;
         session.generating = false;
         session.side_question = None;
@@ -203,7 +204,10 @@ impl Workspace {
 
     pub fn ask(&mut self, index: usize, prompt: String) -> bool {
         let session = &mut self.sessions[index];
-        if session.scope.provider != Provider::OpenCode
+        if !session.scope.provider_available()
+            || session.forgotten()
+            || session.archived()
+            || session.disconnected
             || session.generating
             || session.rewinding()
             || prompt.trim().is_empty()
@@ -211,7 +215,7 @@ impl Workspace {
             return false;
         }
         let Some(key) = session.key() else {
-            session.error = Some("Start an OpenCode session before asking a side question".into());
+            session.error = Some("Start a session before asking a side question".into());
             return false;
         };
         session.generating = true;
@@ -222,10 +226,30 @@ impl Workspace {
         session.side_question = Some((prompt.clone(), String::new()));
         let context =
             crate::application::composer::with_context(&prompt, &session.side_attachments);
-        self.request(
-            Command::Generate(key, context),
-            Pending::Generate(index, prompt, generation),
-        );
+        let command = if key.scope.provider == Provider::OpenCode {
+            Command::Generate(key, context)
+        } else {
+            let (cancel, until) = tokio::sync::watch::channel(());
+            let text = match crate::side_questions::prompt(&session.conversation, &context) {
+                Ok(text) => text,
+                Err(error) => {
+                    session.generating = false;
+                    session.side_error = Some(error);
+                    return false;
+                }
+            };
+            session.side_cancel = Some(cancel);
+            Command::SideTurn(
+                key,
+                crate::side_questions::Turn {
+                    generation,
+                    text,
+                    model: session.options.model.clone(),
+                    until,
+                },
+            )
+        };
+        self.request(command, Pending::Generate(index, prompt, generation));
         true
     }
 }

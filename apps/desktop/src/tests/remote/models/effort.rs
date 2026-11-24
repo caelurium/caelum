@@ -34,7 +34,9 @@ fn send(
     let app = &mut live_mut(&mut rt.state).app;
     assert_eq!(app.remote.saved.checkouts[VM].thread.draft, text);
     assert!(
-        app.commands().is_empty(),
+        !app.commands()
+            .iter()
+            .any(|(_, c)| matches!(c, Command::Remote(..))),
         "editing effort must not start a turn"
     );
     click(rt, "remote-send");
@@ -91,6 +93,7 @@ fn editing_effort_before_and_between_turns_only_applies_on_send() {
             lines: vec![],
             cursor: Some("page".into()),
             more: false,
+            model: None,
             status: RunStatus::Ended(TurnEnd::Finished),
         })),
     );

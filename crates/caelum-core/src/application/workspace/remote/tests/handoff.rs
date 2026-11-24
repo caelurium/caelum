@@ -236,6 +236,7 @@ fn deletion_waits_for_the_confirmed_boat_target_and_retires_late_results() {
     app.apply(Event::Completed(
         feed,
         Ok(Reply::Remote(Outcome::Page(Page {
+            model: None,
             cursor: None,
             more: false,
             lines: vec![],
@@ -604,12 +605,17 @@ fn pi_handoff_publishes_from_main_and_survives_restore_without_replaying_chat_af
                 &mut reopened,
                 req,
                 Outcome::Page(Page {
+                    model: None,
                     lines: vec![],
                     cursor: None,
                     more: false,
                     status: RunStatus::Ended(TurnEnd::Finished),
                 }),
             );
+            assert!(matches!(
+                reopened.commands().as_slice(),
+                [(_, Command::RecordUsage(_))]
+            ));
             assert!(reopened.set_vm_model(&id, &editor, VmProvider::Pi, None));
             assert!(reopened.send_remote(&id, "Again"));
             assert!(

@@ -107,6 +107,20 @@ fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
         return;
     }
     let editor = &mut l.remote.editors.get_mut(owner).unwrap().draft;
+    if editor.text.trim() == "/stats" {
+        editor.clear();
+        l.app
+            .remote
+            .saved
+            .checkouts
+            .get_mut(&id)
+            .unwrap()
+            .thread
+            .draft
+            .clear();
+        crate::commands::open_stats(s);
+        return;
+    }
     if l.app.send_remote(&id, &editor.text) {
         editor.clear();
         editor.focused = true;

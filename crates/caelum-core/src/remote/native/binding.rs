@@ -37,6 +37,7 @@ impl Binding {
             | Command::Enqueue(k, ..)
             | Command::RemoveQueued(k, _)
             | Command::Generate(k, _)
+            | Command::SideTurn(k, _)
             | Command::RegenerateTitle(k)
             | Command::Rename(k, _)
             | Command::CheckpointFiles(k, ..)
@@ -57,6 +58,7 @@ impl Binding {
             | Command::VerifyOpenCodeMove { from: k, .. } => Some(&mut k.scope.project),
             Command::Approve(p, _) => Some(&mut p.project_path),
             Command::Answer(p, _) => Some(&mut p.project_path),
+            Command::RecordUsage(_) | Command::Task(Task::Stats { .. }) => None,
             Command::Task(t) => t.project_mut(),
             Command::Remote(
                 crate::remote::Operation::Discover(p)
@@ -106,6 +108,7 @@ impl Binding {
             }
             Event::Completed(_, Err(_)) => {}
             Event::Checkout(path) => self.bind(path).ok()?,
+            Event::SideAnswer(key, ..) => self.bind(&mut key.scope.project).ok()?,
             Event::Branch(b) => self.bind(&mut b.project_path).ok()?,
             Event::Codex(e) => self.bind(&mut e.project_path).ok()?,
             Event::Approvals(items) => items.retain_mut(|p| self.bind(&mut p.project_path).is_ok()),
