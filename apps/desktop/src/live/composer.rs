@@ -1,5 +1,5 @@
 use rune::{El, TextStyle, col, row, text_input};
-use rune_kit::{ButtonVariant, Kit, Placement};
+use rune_kit::{ButtonVariant, Kit, Placement, ScrollBar};
 
 use crate::context::EditMenu;
 use crate::select::{Choice, Select, choice_label};
@@ -167,12 +167,11 @@ pub fn composer_for(
         }))
         .child(submit);
     let pickers = pickers(s, k, index, split, layers).min_w(0.0);
-    let usage_label =
-        !split && (wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0));
+    let usage_label = wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0);
     let usage = row()
         .center_y()
         .gap(4.0)
-        .children((!split).then(|| crate::remote::handoff_button(s, k, Some(index))))
+        .child(crate::remote::handoff_button(s, k, Some(index)))
         .child(crate::activity::context(s, k, index, usage_label));
     let controls = if wide {
         row().center_y().gap(8.0).child(pickers.grow(1.0)).child(
@@ -208,20 +207,42 @@ pub fn composer_for(
                 crate::activity::indicator(a, session.options.agent.as_deref(), k).grow(1.0)
             }))
             .children(has_queue.then(|| crate::panels::queue_summary(s, k, index)));
-    ui::composer(
-        crate::composer::editor(s, index, input),
-        controls,
-        col()
-            .key(format!("{prefix}composer-context-{index}"))
-            .w_full()
-            .max_h(180.0)
-            .gap(6.0)
-            .children((activity.is_some() || has_queue).then_some(status))
-            .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
-            .child(crate::panels::composer_context(s, k, index)),
-        padding,
-        k,
-    )
+    let context = col()
+        .key(format!("{prefix}composer-context-{index}"))
+        .w_full()
+        .max_h(180.0)
+        .gap(6.0)
+        .children((activity.is_some() || has_queue).then_some(status))
+        .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
+        .child(crate::panels::composer_context(s, k, index));
+    if split {
+        ui::composer_dock(
+            col()
+                .key(format!("split-message-composer-{index}"))
+                .role("form")
+                .label("Split message composer")
+                .child(
+                    context
+                        .scroll(rune::ScrollSpec {
+                            stick_bottom: false,
+                        })
+                        .scroll_bar(k),
+                )
+                .child(crate::composer::editor(s, index, input))
+                .child(ui::divider(k).opacity(0.5).mt(8.0).mb(8.0))
+                .child(controls.min_h(32.0)),
+            padding,
+            k,
+        )
+    } else {
+        ui::composer(
+            crate::composer::editor(s, index, input),
+            controls,
+            context,
+            padding,
+            k,
+        )
+    }
 }
 
 fn send_split(s: &mut Workspace, index: usize) {

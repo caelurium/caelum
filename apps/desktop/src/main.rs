@@ -441,7 +441,27 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         live.window_width.set(window_width);
     }
     let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
-    let padding = if width < 540.0 { 16.0 } else { 32.0 };
+    let split_visible = s
+        .live
+        .as_ref()
+        .is_some_and(|l| l.split.is_visible(window_width));
+    let pane_width = if split_visible {
+        let ratio = s
+            .live
+            .as_ref()
+            .map_or(0.5, |l| l.split.ratio.clamp(0.3, 0.7));
+        width * ratio
+    } else {
+        width
+    };
+    let padding = if split_visible {
+        20.0
+    } else if pane_width < 540.0 {
+        16.0
+    } else {
+        32.0
+    };
+    let composer_wide = pane_width > 760.0;
     let remote = s
         .live
         .as_ref()
@@ -502,7 +522,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     }) {
         main
     } else {
-        main.child(composer(s, &k, padding, width > 760.0, &mut layers))
+        main.child(composer(s, &k, padding, composer_wide, &mut layers))
     };
     let main = split::wrap_main(
         s,
@@ -510,6 +530,8 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         main,
         cx.is_reduced_motion(),
         window_width,
+        padding,
+        composer_wide,
         pane_border,
         &mut layers,
     );
@@ -530,7 +552,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             .a11y_hidden()
     }));
     let toolbar = Toolbar::new()
-        .leading(live::heading(s, &k))
+        .leading(split::toolbar_heading(s, &k, window_width, pane_border))
         .trailing(if s.live.is_some() {
             context::workspace_button(s, &k)
         } else {

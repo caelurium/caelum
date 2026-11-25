@@ -169,142 +169,43 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     false
 }
 
-pub fn wrap_main(
-    s: &Workspace,
-    k: &Kit,
-    primary: El,
-    reduced: bool,
-    window_width: f32,
-    pane_border: rune::Color,
-    layers: &mut Vec<El>,
-) -> El {
+pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: rune::Color) -> El {
     let Some(l) = s.live.as_ref() else {
-        return primary;
+        return crate::live::heading(s, k);
     };
     if !l.split.is_visible(window_width) {
-        return primary;
+        return crate::live::heading(s, k);
     }
     let Some(secondary) = l.split.secondary.clone() else {
-        return primary;
+        return crate::live::heading(s, k);
     };
     let ratio = l.split.ratio.clamp(0.3, 0.7);
     let primary_active = l.split.active == ActivePane::Primary;
 
-    let (primary_title, primary_sub) = l
-        .app
-        .selected
-        .and_then(|i| l.app.sessions.get(i))
-        .map(|sess| (sess.title.clone(), Some(sess.scope.provider.name())))
-        .unwrap_or_else(|| ("Primary".into(), None));
-
-    let left = col()
-        .key("split-primary-pane")
+    let left = row()
         .grow(ratio)
         .min_w(0.0)
-        .h_full()
-        .min_h(0.0)
+        .pr(12.0)
+        .center_y()
+        .opacity(if primary_active { 1.0 } else { 0.72 })
         .on_press(|s: &mut Workspace| {
             if live(s).split.active != ActivePane::Primary {
                 focus_pane(s, ActivePane::Primary);
             }
         })
-        .child(pane_header(
-            &primary_title,
-            primary_sub,
-            primary_active,
-            None,
-            k,
-        ))
-        .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
-        .child(primary.grow(1.0).min_h(0.0));
+        .child(crate::live::heading(s, k));
 
-    let right = secondary_pane(
-        s,
-        k,
-        secondary,
-        !primary_active,
-        reduced,
-        pane_border,
-        layers,
-    )
-    .grow(1.0 - ratio)
-    .min_w(0.0)
-    .h_full()
-    .min_h(0.0);
-
-    row()
-        .key("split-workspace")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(left)
-        .child(rune::el().w(1.0).h_full().fill(pane_border).a11y_hidden())
-        .child(right)
-}
-
-fn pane_header(
-    title: &str,
-    subtitle: Option<&str>,
-    active: bool,
-    trailing: Option<El>,
-    k: &Kit,
-) -> El {
-    row()
-        .w_full()
-        .h(38.0)
-        .px(16.0)
-        .gap(8.0)
-        .center_y()
-        .fill(if active { k.c.bg_base } else { k.c.layer_01 })
-        .child(
-            rune::el()
-                .size(6.0, 6.0)
-                .radius(3.0)
-                .fill(if active {
-                    k.c.text_accent
-                } else {
-                    k.alpha(k.c.text_muted, 0.35)
-                })
-                .a11y_hidden(),
-        )
-        .child(
-            text(title)
-                .font(k.ty.ui_medium)
-                .color(if active {
-                    k.c.text_base
-                } else {
-                    k.c.text_muted
-                })
-                .truncate()
-                .min_w(0.0),
-        )
-        .children(subtitle.map(|sub| ui::caption(sub, k).truncate()))
-        .child(rune::el().grow(1.0))
-        .children(trailing)
-}
-
-fn secondary_pane(
-    s: &Workspace,
-    k: &Kit,
-    secondary: SecondaryPane,
-    active: bool,
-    reduced: bool,
-    pane_border: rune::Color,
-    layers: &mut Vec<El>,
-) -> El {
-    let (title, subtitle, can_swap) = match &secondary {
-        SecondaryPane::Session(index) => live(s)
-            .app
-            .sessions
-            .get(*index)
-            .map(|sess| (sess.title.clone(), Some(sess.scope.provider.name()), true))
-            .unwrap_or_else(|| ("Session".into(), None, false)),
+    let (right_heading, can_swap) = match &secondary {
+        SecondaryPane::Session(index) => (crate::live::session_heading(s, k, *index, true), true),
         SecondaryPane::Review(_, url) => (
-            format!(
+            text(format!(
                 "PR Review · {}",
                 url.rsplit('/').next().unwrap_or(url.as_str())
-            ),
-            None,
+            ))
+            .font(k.ty.ui_medium)
+            .color(k.c.text_base)
+            .truncate()
+            .min_w(0.0),
             false,
         ),
     };
@@ -325,8 +226,100 @@ fn secondary_pane(
                 .key("split-close"),
         );
 
+    let right = row()
+        .grow(1.0 - ratio)
+        .min_w(0.0)
+        .pl(12.0)
+        .gap(8.0)
+        .center_y()
+        .opacity(if !primary_active { 1.0 } else { 0.72 })
+        .on_press(|s: &mut Workspace| {
+            if live(s).split.active != ActivePane::Secondary {
+                focus_pane(s, ActivePane::Secondary);
+            }
+        })
+        .child(right_heading)
+        .child(rune::el().grow(1.0))
+        .child(actions);
+
+    row()
+        .key("split-toolbar-heading")
+        .w_full()
+        .grow(1.0)
+        .min_w(0.0)
+        .center_y()
+        .child(left)
+        .child(rune::el().w(1.0).h(26.0).fill(pane_border).a11y_hidden())
+        .child(right)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn wrap_main(
+    s: &Workspace,
+    k: &Kit,
+    primary: El,
+    reduced: bool,
+    window_width: f32,
+    padding: f32,
+    wide: bool,
+    pane_border: rune::Color,
+    layers: &mut Vec<El>,
+) -> El {
+    let Some(l) = s.live.as_ref() else {
+        return primary;
+    };
+    if !l.split.is_visible(window_width) {
+        return primary;
+    }
+    let Some(secondary) = l.split.secondary.clone() else {
+        return primary;
+    };
+    let ratio = l.split.ratio.clamp(0.3, 0.7);
+
+    let left = col()
+        .key("split-primary-pane")
+        .grow(ratio)
+        .min_w(0.0)
+        .h_full()
+        .min_h(0.0)
+        .on_press(|s: &mut Workspace| {
+            if live(s).split.active != ActivePane::Primary {
+                focus_pane(s, ActivePane::Primary);
+            }
+        })
+        .child(primary.grow(1.0).min_h(0.0));
+
+    let right = secondary_pane(s, k, secondary, reduced, padding, wide, pane_border, layers)
+        .grow(1.0 - ratio)
+        .min_w(0.0)
+        .h_full()
+        .min_h(0.0);
+
+    row()
+        .key("split-workspace")
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .child(left)
+        .child(rune::el().w(1.0).h_full().fill(pane_border).a11y_hidden())
+        .child(right)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn secondary_pane(
+    s: &Workspace,
+    k: &Kit,
+    secondary: SecondaryPane,
+    reduced: bool,
+    padding: f32,
+    wide: bool,
+    pane_border: rune::Color,
+    layers: &mut Vec<El>,
+) -> El {
     let content = match secondary {
-        SecondaryPane::Session(index) => secondary_session(s, k, index, reduced, layers),
+        SecondaryPane::Session(index) => {
+            secondary_session(s, k, index, reduced, padding, wide, layers)
+        }
         SecondaryPane::Review(_, _) => crate::panels::view(s, k, layers),
     };
 
@@ -340,7 +333,6 @@ fn secondary_pane(
                 focus_pane(s, ActivePane::Secondary);
             }
         })
-        .child(pane_header(&title, subtitle, active, Some(actions), k))
         .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
         .child(content.grow(1.0).min_h(0.0))
 }
@@ -350,9 +342,10 @@ fn secondary_session(
     k: &Kit,
     index: usize,
     reduced: bool,
+    padding: f32,
+    wide: bool,
     layers: &mut Vec<El>,
 ) -> El {
-    let padding = 20.0;
     col()
         .w_full()
         .h_full()
@@ -362,6 +355,6 @@ fn secondary_session(
             s, k, index, reduced, padding, true,
         ))
         .child(crate::live::composer_for(
-            s, k, index, padding, false, true, layers,
+            s, k, index, padding, wide, true, layers,
         ))
 }

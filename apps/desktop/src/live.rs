@@ -19,6 +19,7 @@ pub use composer::composer;
 pub use composer::composer_for;
 pub use composer::open_effort;
 pub(crate) use heading::heading;
+pub(crate) use heading::session_heading;
 pub(crate) use menus::archive_disabled;
 pub use menus::close_session_menu;
 pub use menus::delete_confirmation;
