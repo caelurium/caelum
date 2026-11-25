@@ -361,11 +361,6 @@ pub fn composer_target_bar(s: &Workspace, k: &Kit) -> Option<El> {
                     },
                 )
                 .children(selected.then(|| active_dot(k)))
-                .child(text(side_label).font(k.ty.small_medium).color(if selected {
-                    k.c.text_accent
-                } else {
-                    k.c.text_muted
-                }))
                 .child(
                     text(title)
                         .font(if selected {
