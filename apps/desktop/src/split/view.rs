@@ -73,6 +73,14 @@ fn secondary_title(s: &Workspace, k: &Kit, secondary: &SecondaryPane) -> (El, bo
             .min_w(0.0),
             false,
         ),
+        SecondaryPane::Overview => (
+            text("Overview")
+                .font(k.ty.ui_medium)
+                .color(k.c.text_base)
+                .truncate()
+                .min_w(0.0),
+            false,
+        ),
     }
 }
 
@@ -479,6 +487,7 @@ fn secondary_pane(
             crate::live::transcript_for(s, k, index, reduced, padding, true)
         }
         SecondaryPane::Review(_, _) => crate::panels::view(s, k, layers),
+        SecondaryPane::Overview => crate::overview::view(s, k, layers),
     };
     let secondary_active = live(s).split.active == ActivePane::Secondary;
 

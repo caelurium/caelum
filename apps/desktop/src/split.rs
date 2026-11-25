@@ -33,6 +33,7 @@ pub enum SplitOrientation {
 pub enum SecondaryPane {
     Session(usize),
     Review(String, String),
+    Overview,
 }
 
 #[derive(Debug, Clone)]
@@ -106,13 +107,22 @@ impl SplitLayout {
 }
 
 pub fn composer_target(l: &crate::live::Live) -> Option<usize> {
-    if l.split.effective_active(l.window_width.get()) == ActivePane::Secondary
-        && let Some(SecondaryPane::Session(index)) = l.split.visible_secondary()
-        && *index < l.app.sessions.len()
-    {
-        return Some(*index);
+    let primary = (l.panels.screen == crate::panels::Screen::Conversation)
+        .then_some(l.app.selected)
+        .flatten()
+        .filter(|&i| i < l.app.sessions.len());
+    let secondary = l
+        .split
+        .is_visible(l.window_width.get())
+        .then(|| match l.split.visible_secondary() {
+            Some(SecondaryPane::Session(i)) if *i < l.app.sessions.len() => Some(*i),
+            _ => None,
+        })
+        .flatten();
+    match l.split.effective_active(l.window_width.get()) {
+        ActivePane::Secondary => secondary.or(primary),
+        ActivePane::Primary => primary.or(secondary),
     }
-    l.app.selected
 }
 
 /// Opens `index` in a split with the given `orientation`.

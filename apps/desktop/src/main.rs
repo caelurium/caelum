@@ -507,14 +507,18 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 &mut layers,
             ))
     };
-    let has_composer = !s.live.as_ref().is_some_and(|live| {
-        matches!(
-            live.panels.screen,
-            panels::Screen::Home
-                | panels::Screen::Overview
-                | panels::Screen::Review
-                | panels::Screen::Remote
-        )
+    let has_composer = s.live.as_ref().is_none_or(|live| {
+        if split_visible {
+            split::composer_target(live).is_some()
+        } else {
+            !matches!(
+                live.panels.screen,
+                panels::Screen::Home
+                    | panels::Screen::Overview
+                    | panels::Screen::Review
+                    | panels::Screen::Remote
+            )
+        }
     });
     let main = if split_visible {
         let panes = split::wrap_main(

@@ -232,6 +232,20 @@ fn split_pane_supports_vertical_horizontal_and_offscreen_deck_rotation() {
             .any(|(_, c)| matches!(c, Command::Cancel(k) if k.id == "s0"))
     );
 
+    // Opening Overview while Secondary is active takes over Secondary and keeps the composer for Primary.
+    rt.update(crate::overview::open);
+    advance(&mut rt, 0.2);
+    {
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(
+            l.split.visible_secondary(),
+            Some(&crate::split::SecondaryPane::Overview)
+        );
+        assert_eq!(l.panels.screen, crate::panels::Screen::Conversation);
+        assert_eq!(crate::split::composer_target(l), l.app.selected);
+    }
+    assert!(rt.find("message-composer").is_some());
+
     // Compact window width (< 1100pt) collapses vertical split, while horizontal stays visible.
     let mut compact = live_runtime_size((960.0, 720.0));
     compact.update(|s, _| {
