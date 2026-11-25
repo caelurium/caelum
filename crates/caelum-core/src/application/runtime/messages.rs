@@ -21,11 +21,15 @@ pub enum Command {
         run_id: u64,
     },
     #[serde(skip)]
+    RecordUsage(crate::telemetry::Record),
+    #[serde(skip)]
     Remote(crate::remote::Operation),
     Inbox(SessionKey),
     Enqueue(SessionKey, String, String),
     RemoveQueued(SessionKey, String),
     Generate(SessionKey, String),
+    #[serde(skip)]
+    SideTurn(SessionKey, crate::side_questions::Turn),
     RegenerateTitle(SessionKey),
     Rename(SessionKey, String),
     CheckpointFiles(SessionKey, String, String),
@@ -77,6 +81,7 @@ pub enum Command {
     HandoffChat(SessionKey),
     CodexControlHistory(SessionKey, crate::application::HistoryAction),
     Send(SessionKey, String, Options),
+    RunOpenCodeCommand(SessionKey, String, Options),
     Cancel(SessionKey),
     Approve(ApprovalPrompt, ApprovalDecision),
     Answer(QuestionPrompt, Option<crate::questions::Answer>),
@@ -127,6 +132,7 @@ pub enum Reply {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum Event {
+    SideAnswer(SessionKey, u64, String),
     #[serde(skip)]
     UpdateProgress(u64, crate::updates::Progress),
     #[serde(skip)]

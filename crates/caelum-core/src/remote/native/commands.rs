@@ -23,6 +23,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         | Command::History(k, _)
         | Command::CodexControlHistory(k, _)
         | Command::Send(k, ..)
+        | Command::SideTurn(k, ..)
         | Command::Cancel(k)
             if k.scope.provider == Provider::Codex =>
         {
@@ -39,6 +40,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         Command::Task(
             t @ (Task::EncodeImage { .. }
             | Task::Completions { .. }
+            | Task::Templates { .. }
             | Task::Directory { .. }
             | Task::File { .. }
             | Task::Search { .. }
@@ -53,6 +55,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
             | Task::Merge { .. }
             | Task::SetAutoMerge { .. }
             | Task::UpdateBranch { .. }
+            | Task::CheckLogs { .. }
             | Task::Worktrees { .. }),
         ) => t.project(),
         _ => return false,

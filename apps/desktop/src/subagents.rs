@@ -267,16 +267,59 @@ fn section(s: &Workspace, k: &Kit, index: usize, id: &str, name: &str, value: &s
 }
 
 pub fn parent(s: &Workspace, k: &Kit, index: usize) -> Option<El> {
-    let parent = live(s).app.subagent_parent(index)?;
-    Some(
-        ui::Button::new("Back to parent session")
-            .variant(ButtonVariant::GhostMuted)
-            .on_press(move |s: &mut Workspace| live_mut(s).app.select(parent))
-            .build(k)
-            .help(&live(s).app.sessions[parent].title)
-            .key("subagent-parent")
-            .self_start(),
-    )
+    let l = live(s);
+    if let Some(parent) = l.app.subagent_parent(index) {
+        return Some(
+            ui::Button::new("Back to parent session")
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(move |s: &mut Workspace| live_mut(s).app.select(parent))
+                .build(k)
+                .help(&l.app.sessions[parent].title)
+                .key("subagent-parent")
+                .self_start(),
+        );
+    }
+    if let Some(caelum_protocol::SessionOrigin::PullRequestCheck {
+        project,
+        pr_url,
+        pr_number,
+        check_name,
+        ..
+    }) = l.app.sessions.get(index).and_then(|s| s.origin.as_ref())
+    {
+        let project = project.clone();
+        let pr_url = pr_url.clone();
+        let pr_number = *pr_number;
+        let check_name = check_name.clone();
+        let parent_session = l.app.origin_parent_session(index);
+        return Some(
+            row()
+                .w_full()
+                .center_y()
+                .gap(8.0)
+                .key("ci-fix-origin-bar")
+                .child(
+                    ui::Button::new(format!("Back to PR #{pr_number}"))
+                        .icon(&ui::BACK)
+                        .variant(ButtonVariant::GhostMuted)
+                        .on_press(move |s: &mut Workspace| {
+                            crate::panels::open_review(s, project.clone(), pr_url.clone());
+                        })
+                        .build(k)
+                        .key("ci-fix-back-pr"),
+                )
+                .children(parent_session.map(|parent| {
+                    ui::Button::new("Back to parent session")
+                        .variant(ButtonVariant::GhostMuted)
+                        .on_press(move |s: &mut Workspace| live_mut(s).app.select(parent))
+                        .build(k)
+                        .help(&l.app.sessions[parent].title)
+                        .key("ci-fix-back-parent")
+                }))
+                .child(ui::caption(format!("CI fix · {check_name}"), k).truncate()),
+        );
+    }
+    None
 }
 
 pub(crate) fn scene(s: &mut Workspace, status: &str) {

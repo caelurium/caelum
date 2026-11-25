@@ -8,6 +8,14 @@ impl Workspace {
         pending: Pending,
         result: Result<Reply, String>,
     ) {
+        if matches!(pending, Pending::Templates) {
+            self.complete_templates(request, result);
+            return;
+        }
+        if let Pending::ScopedApproval(attempt) = pending {
+            self.finish_scoped(attempt, result);
+            return;
+        }
         if let Pending::PreviousHistory(index, segment) = pending {
             self.complete_previous_history(index, segment, request, result);
             return;
@@ -152,6 +160,7 @@ impl Workspace {
                     Pending::Generate(index, _, generation) => {
                         if self.sessions[index].side_generation == generation {
                             self.sessions[index].generating = false;
+                            self.sessions[index].side_cancel = None;
                             self.sessions[index].side_error = Some(error);
                         }
                     }
@@ -160,7 +169,9 @@ impl Workspace {
                         self.store_loaded(request, Err(error));
                     }
                     Pending::Save => self.store_saved(request, Err(error)),
-                    Pending::Remote(_)
+                    Pending::Templates
+                    | Pending::ScopedApproval(_)
+                    | Pending::Remote(_)
                     | Pending::PreviousHistory(..)
                     | Pending::CheckHandoff(..)
                     | Pending::Home(_)
@@ -238,6 +249,7 @@ impl Workspace {
             (Pending::Generate(index, prompt, generation), Reply::Generated(text)) => {
                 if self.sessions[index].side_generation == generation {
                     self.sessions[index].generating = false;
+                    self.sessions[index].side_cancel = None;
                     self.sessions[index].side_question = Some((prompt, text));
                 }
             }
@@ -320,6 +332,9 @@ impl Workspace {
                                 session.restore_archive(saved.archived, 0);
                                 session.reading = saved.reading;
                                 session.unread = saved.unread;
+                                session.origin = saved.origin;
+                                session.pinned = saved.pinned;
+                                session.bookmarked_entries = saved.bookmarked_entries;
                                 session
                             })
                             .collect();

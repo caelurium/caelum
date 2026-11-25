@@ -247,6 +247,17 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
             Action::CloseSplit,
         ));
     }
+    if (active_session.is_some() && provider_available) || l.app.remote.saved.selected.is_some() {
+        entries.push(Entry::new(
+            Section::Commands,
+            "Statistics",
+            "Inspect token usage, cost, and activity history",
+            None,
+            None,
+            "tokens cost metrics stats",
+            Action::Stats,
+        ));
+    }
     if active_session.is_some() && provider_available {
         entries.push(Entry::new(
             Section::Commands,
@@ -304,27 +315,16 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
                 Action::Usage,
             ));
         }
-        if provider == Some(Provider::OpenCode) {
+        if has_remote_session {
             entries.push(Entry::new(
                 Section::Commands,
-                "Statistics",
-                "Inspect token usage, cost, and activity history",
+                "Side question",
+                "Ask a quick side question without altering the main thread",
                 None,
                 None,
-                "tokens cost metrics stats",
-                Action::Stats,
+                "btw ask aside",
+                Action::SideQuestion,
             ));
-            if has_remote_session {
-                entries.push(Entry::new(
-                    Section::Commands,
-                    "Side question",
-                    "Ask a quick side question without altering the main thread",
-                    None,
-                    None,
-                    "btw ask aside",
-                    Action::SideQuestion,
-                ));
-            }
         }
     }
     entries.push(Entry::new(

@@ -364,6 +364,10 @@ impl Workspace {
             }) if valid(&machine) && c.root.as_ref().is_none_or(|old| old == &root) => {
                 c.root = Some(root);
                 c.phase = Phase::Ready { machine, branch };
+                self.templates_changed(crate::templates::Target::Boat(id.into()));
+                self.templates_changed(crate::templates::Target::Checkout(
+                    crate::remote::native::project_key(id),
+                ));
                 if self.remote.branch_checks.contains_key(id) {
                     self.refresh_remote(id);
                     return;

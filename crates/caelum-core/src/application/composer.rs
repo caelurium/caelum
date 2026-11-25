@@ -190,6 +190,8 @@ impl Completion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueuedPrompt {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub provider_command: bool,
     pub text: String,
     pub options: Options,
 }

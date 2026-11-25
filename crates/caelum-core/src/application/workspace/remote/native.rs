@@ -195,6 +195,7 @@ impl Workspace {
     }
 
     pub fn native_connected(&mut self, project: &str) {
+        self.templates_changed(crate::templates::Target::Checkout(project.into()));
         let scope = Scope {
             project: project.to_owned(),
             provider: Provider::Codex,
@@ -247,6 +248,7 @@ impl Workspace {
 
     pub(super) fn forget_native_sessions(&mut self, id: &str) {
         let project = project_key(id);
+        self.forget_approval_checkout(&project);
         for s in self
             .sessions
             .iter_mut()

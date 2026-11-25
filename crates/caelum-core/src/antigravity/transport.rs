@@ -269,6 +269,17 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                         let _ = sender.send(result);
                     }
                     Some(PendingCall::Prompt { session_id }) => {
+                        if let Some(usage) = result.as_ref().ok().and_then(|r| r.get("usage")) {
+                            publish_event(
+                                &subscribers,
+                                AntigravityEvent {
+                                    project_path: project.clone(),
+                                    session_id: Some(session_id.clone()),
+                                    method: "antigravity/turnUsage".into(),
+                                    params: json!({"usage":usage}),
+                                },
+                            );
+                        }
                         let effect = lock(&progress).on_prompt_replied(&session_id, result);
                         dispatch_progress_effect(&project, effect, &subscribers, &progress);
                     }
@@ -570,18 +581,6 @@ fn handle_server_request(
     } else {
         summary.clone()
     };
-    let options = params["options"].as_array().cloned().unwrap_or_default();
-    let allow_option = options
-        .iter()
-        .find(|o| matches!(o["kind"].as_str(), Some("allow_once" | "allow_always")))
-        .and_then(|o| o["optionId"].as_str())
-        .map(str::to_owned);
-    let reject_option = options
-        .iter()
-        .find(|o| matches!(o["kind"].as_str(), Some("reject_once" | "reject_always")))
-        .and_then(|o| o["optionId"].as_str())
-        .map(str::to_owned);
-
     let decision = approvals
         .request(PermissionRequest {
             provider: PROVIDER_NAME.into(),
@@ -595,14 +594,9 @@ fn handle_server_request(
         .map(|waiter| waiter.wait(APPROVAL_TIMEOUT))
         .unwrap_or(ApprovalDecision::Deny);
 
-    let outcome = match decision {
-        ApprovalDecision::AllowOnce => allow_option
-            .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
-            .unwrap_or_else(|| json!({ "outcome": "cancelled" })),
-        ApprovalDecision::Deny => reject_option
-            .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
-            .unwrap_or_else(|| json!({ "outcome": "cancelled" })),
-    };
+    let outcome = super::protocol::permission_option(params, decision)
+        .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
+        .unwrap_or_else(|| json!({ "outcome": "cancelled" }));
 
     let _ = write_message(
         writer,
@@ -636,5 +630,28 @@ fn id_to_key(id: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
         other => other.to_string(),
+    }
+}
+
+impl super::AntigravityProvider {
+    pub(crate) fn side_command(
+        &self,
+        path: &str,
+        id: &str,
+    ) -> Result<std::process::Command, String> {
+        let project = crate::projects::Project::open(path).map_err(|e| e.to_string())?;
+        let c = self.connection(&project).map_err(|e| e.to_string())?;
+        self.verify_session_owned(&c, &project, id)
+            .map_err(|e| e.to_string())?;
+        let exe = self.executable().map_err(|e| e.to_string())?;
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.args([
+            "acp",
+            "--stdio",
+            "--sandbox",
+            "--include-default-customizations=false",
+        ])
+        .env("PATH", crate::executable::path(&exe));
+        Ok(cmd)
     }
 }

@@ -11,6 +11,21 @@ use serde_json::{json, Value};
 
 use super::SessionOptionState;
 
+pub(crate) fn permission_option(
+    params: &Value,
+    decision: caelum_protocol::ApprovalDecision,
+) -> Option<&str> {
+    let kind = match decision {
+        caelum_protocol::ApprovalDecision::AllowOnce => "allow_once",
+        caelum_protocol::ApprovalDecision::Deny => "reject_once",
+    };
+    let options = params["options"].as_array()?;
+    let id = options.iter().find(|v| v["kind"] == kind)?["optionId"]
+        .as_str()
+        .filter(|s| !s.is_empty())?;
+    (options.iter().filter(|v| v["optionId"] == id).count() == 1).then_some(id)
+}
+
 pub(super) fn parse_session_list(
     result: &Value,
     project_path: &Path,

@@ -34,6 +34,8 @@ pub use messages::Reply;
 /// Shared by desktop adapters; constructing this does not start a provider.
 #[derive(Clone)]
 pub struct ProviderRuntime {
+    side_output: crate::side_questions::Output,
+    pub(super) usage: crate::telemetry::Store,
     vm: Option<Arc<crate::remote::native::Access>>,
     pub codex: CodexProvider,
     pub opencode: OpenCodeProvider,
@@ -56,6 +58,8 @@ impl Default for ProviderRuntime {
         let questions = QuestionBroker::default();
         let (p, a, q) = (processes.clone(), approvals.clone(), questions.clone());
         Self {
+            side_output: Default::default(),
+            usage: Default::default(),
             vm: None,
             codex: CodexProvider::new(p.clone(), a.clone(), q.clone()),
             opencode: OpenCodeProvider::new(p.clone(), a.clone(), q.clone()),
@@ -85,6 +89,7 @@ impl ProviderRuntime {
             let db = crate::database::WorkspaceDatabase::open(parent.join("branches.sqlite3"))
                 .map_err(|e| e.to_string())?;
             self.branches.reset(db)?;
+            self.usage.open(path);
             self.antigravity
                 .open_metadata(parent.join("antigravity-sessions.json"))?;
         }
@@ -132,6 +137,11 @@ impl ProviderRuntime {
             Command::StopCommand { project, run_id } => {
                 self.runner.stop(project, *run_id);
                 Ok(())
+            }
+            Command::RecordUsage(_) => return Err("Turn usage requires its local writer.".into()),
+            Command::SideTurn(key, turn) => {
+                return crate::side_questions::run(self, key, turn, &self.side_output)
+                    .map(Reply::Generated);
             }
             Command::Remote(op) => return self.remote.execute(op).map(Reply::Remote),
             Command::Inbox(key) => {
@@ -513,6 +523,9 @@ impl ProviderRuntime {
                     .map_err(|e| e.to_string())?;
                 return self.history_page(key, None).map(Reply::History);
             }
+            Command::RunOpenCodeCommand(key, prompt, options) => {
+                self.run_opencode_command(key, prompt, options)
+            }
             Command::Send(key, prompt, options) => match key.scope.provider {
                 Provider::Codex => self
                     .codex
@@ -529,29 +542,6 @@ impl ProviderRuntime {
                         self.opencode
                             .select_agent(&key.scope.project, &key.id, agent)
                             .map_err(|e| e.to_string())?;
-                    }
-                    let command_text = super::composer::command_text(prompt);
-                    if let Some(input) = command_text
-                        .strip_prefix('/')
-                        .filter(|_| !prompt.starts_with("//"))
-                    {
-                        let (name, text) =
-                            input.split_once(char::is_whitespace).unwrap_or((input, ""));
-                        return self
-                            .opencode
-                            .run_command(
-                                &key.scope.project,
-                                &key.id,
-                                &caelum_protocol::OpenCodeCommandInput {
-                                    name: name.into(),
-                                    text: text.into(),
-                                    files: super::composer::command_files(prompt),
-                                },
-                                options.model.as_deref(),
-                                options.effort.as_deref(),
-                            )
-                            .map(|()| Reply::Done)
-                            .map_err(|e| e.to_string());
                     }
                     self.opencode
                         .send_prompt_with_options(
@@ -592,12 +582,7 @@ impl ProviderRuntime {
             },
             Command::Approve(prompt, decision) => self
                 .approvals
-                .resolve(
-                    &prompt.provider,
-                    &prompt.project_path,
-                    &prompt.request_id,
-                    *decision,
-                )
+                .resolve_prompt(prompt, *decision)
                 .map_err(|e| e.to_string()),
             Command::Answer(prompt, answer) => self.questions.resolve(
                 &prompt.provider,
@@ -616,6 +601,7 @@ type Execute = Arc<dyn Fn(&Command) -> Result<Reply, String> + Send + Sync>;
 /// Background I/O with a bounded UI inbox. The UI drains a batch once per frame;
 /// event arrival wakes it, so idle windows need no polling timer.
 pub struct Runtime {
+    usage: crate::telemetry::Store,
     checkout_watch: Option<mpsc::Sender<Vec<String>>>,
     watched_projects: Vec<String>,
     providers: Option<ProviderRuntime>,
@@ -643,6 +629,10 @@ impl Runtime {
             Arc::new(wake),
         );
         let local = providers.vm.is_none();
+        runtime.usage = providers.usage.clone();
+        providers
+            .side_output
+            .connect(runtime.sender.clone(), runtime.wake.clone());
         if local {
             providers
                 .updates
@@ -694,6 +684,7 @@ impl Runtime {
             worker::Workers::start(execute, sender.clone(), wake.clone(), closed.clone());
         Self {
             checkout_watch: None,
+            usage: Default::default(),
             watched_projects: Vec::new(),
             providers: None,
             mailboxes,
@@ -733,6 +724,10 @@ impl Runtime {
     }
 
     pub fn submit(&mut self, id: u64, mut command: Command) -> Result<(), String> {
+        if let Command::RecordUsage(row) = command {
+            self.usage.record(row);
+            return Ok(());
+        }
         if crate::remote::native::Binding::owner(&mut command)
             .and_then(|p| crate::remote::native::checkout_id(p))
             .is_some()

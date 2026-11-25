@@ -4,6 +4,39 @@ use serde_json::json;
 
 const NOW: u64 = 1_800_000_000_000;
 
+pub(super) fn worktree_sessions(l: &mut Live) {
+    for (path, title, provider) in [
+        (
+            "/projects/caelum-native",
+            "Restore the worktree sidebar",
+            Provider::Codex,
+        ),
+        (
+            "/projects/caelum-providers",
+            "Reconnect provider sessions",
+            Provider::OpenCode,
+        ),
+    ] {
+        let index = l.app.new_session(Scope {
+            project: path.into(),
+            provider,
+        });
+        let session = &mut l.app.sessions[index];
+        session.title = title.into();
+        session.draft = format!("Independent draft for {title}");
+        if provider == Provider::Codex {
+            session.conversation.set_working(true);
+        } else {
+            session.queue.push(caelum_core::application::QueuedPrompt {
+                provider_command: false,
+                text: "Review the reconnect changes".into(),
+                options: Default::default(),
+            });
+            session.queue_paused = true;
+        }
+    }
+}
+
 pub(super) fn scene(state: &mut Workspace, name: &str) -> bool {
     if !matches!(
         name,
@@ -156,6 +189,8 @@ fn overview(l: &mut Live) {
         &json!({"itemId":"focus-progress", "delta":"I’m tracing where the editor loses focus when the inspector opens."}));
     let session = &l.app.sessions[4];
     l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         provider: session.scope.provider.as_str().into(),
         project_path: session.scope.project.clone(),
         session_id: session.remote_id.clone(),
@@ -164,6 +199,7 @@ fn overview(l: &mut Live) {
         description: String::new(),
     });
     l.app.sessions[5].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Compare the cold and incremental build times before the next release.".into(),
         options: Default::default(),
     });

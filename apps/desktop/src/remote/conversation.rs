@@ -12,6 +12,7 @@ use std::{cell::Cell, rc::Rc};
 
 #[derive(Default)]
 pub(super) struct Editors {
+    template_error: Option<String>,
     draft: TextEdit,
     recovery: TextEdit,
     pub(super) reading: Rc<Cell<ScrollPos>>,
@@ -89,6 +90,10 @@ pub(super) fn sync_editor(l: &mut Live) {
 
 fn changed(s: &mut Workspace, owner: &str) {
     let l = live_mut(s);
+    l.completion.active = 0;
+    if let Some(e) = l.remote.editors.get_mut(owner) {
+        e.template_error = None;
+    }
     if let Some(id) = &l.app.remote.saved.selected
         && let Some(c) = l.app.remote.saved.checkouts.get_mut(id)
         && c.thread.editor_key(id) == owner
@@ -98,20 +103,48 @@ fn changed(s: &mut Workspace, owner: &str) {
             .clone_from(&l.remote.editors[owner].draft.text);
     }
 }
-fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
+pub(crate) fn draft_editor<'a>(l: &'a Live, thread: &str) -> Option<&'a TextEdit> {
+    Some(&l.remote.editors.get(thread)?.draft)
+}
+pub(crate) fn draft_editor_mut<'a>(l: &'a mut Live, thread: &str) -> Option<&'a mut TextEdit> {
+    Some(&mut l.remote.editors.get_mut(thread)?.draft)
+}
+pub(crate) fn send(s: &mut Workspace, tx: &mut Tx, owner: &str) {
     let l = live_mut(s);
+    crate::completion::sync_templates(l);
     let Some(id) = l.app.remote.saved.selected.clone() else {
         return;
     };
     if l.app.remote.saved.checkouts[&id].thread.editor_key(&id) != owner {
         return;
     }
-    let editor = &mut l.remote.editors.get_mut(owner).unwrap().draft;
-    if l.app.send_remote(&id, &editor.text) {
-        editor.clear();
-        editor.focused = true;
-        tx.scroll_to_bottom(format!("remote-transcript-{owner}"));
-        l.schedule();
+    if l.remote.editors.get(owner).unwrap().draft.text.trim() == "/stats" {
+        let editors = l.remote.editors.get_mut(owner).unwrap();
+        editors.draft.clear();
+        editors.template_error = None;
+        l.app
+            .remote
+            .saved
+            .checkouts
+            .get_mut(&id)
+            .unwrap()
+            .thread
+            .draft
+            .clear();
+        crate::commands::open_stats(s);
+        return;
+    }
+    let editors = l.remote.editors.get_mut(owner).unwrap();
+    match l.app.send_remote_draft(&id, &editors.draft.text) {
+        Ok(true) => {
+            editors.draft.clear();
+            editors.draft.focused = true;
+            editors.template_error = None;
+            tx.scroll_to_bottom(format!("remote-transcript-{owner}"));
+            l.schedule();
+        }
+        Err(error) => editors.template_error = Some(error),
+        Ok(false) => {}
     }
 }
 
@@ -178,6 +211,7 @@ pub(super) fn view(
     let Some(editors) = l.remote.editors.get(key) else {
         return body;
     };
+    crate::completion::overlay(s, k, layers);
     let busy = matches!(l.app.remote.feeds.get(id), Some(Job::Busy(_)));
     let status = super::status::status(&l.app.remote, id, c);
     let mut context = col().w_full().max_h(160.0).gap(6.0).child(
@@ -189,6 +223,9 @@ pub(super) fn view(
             .children(super::stats::pinned(s, k, id, c)),
     );
     let too_long = editors.draft.text.len() > Thread::MAX_MESSAGE_BYTES;
+    if let Some(message) = &editors.template_error {
+        context = context.child(ui::caption(message, k).color(k.c.danger.fg));
+    }
     if too_long {
         context = context.child(ui::caption(
             "Shorten your message to 64 KiB before sending.",
@@ -297,6 +334,9 @@ pub(super) fn view(
         )
         .on_input_key(move |s: &mut Workspace, e, tx| {
             if e.key == Key::Enter && !e.mods.shift {
+                if crate::completion::on_key(s, e, tx) {
+                    return true;
+                }
                 send(s, tx, &key_owner);
                 true
             } else {

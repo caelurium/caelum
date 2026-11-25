@@ -25,7 +25,7 @@ use crate::{
     quiet_button, theme, ui,
 };
 use caelum_core::application::{Provider, Scope, Task};
-use caelum_protocol::OpenCodeStatsFilter;
+use caelum_protocol::{OpenCodeStatsFilter, StatsProvider};
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 use rune_kit::{ButtonVariant, Kit, Markdown, ScrollBar, glyphs};
 
@@ -36,11 +36,14 @@ pub struct State {
     pub usage_target: Option<Scope>,
     pub search: TextEdit,
     pub stats_project: Option<String>,
+    pub stats_provider: Option<StatsProvider>,
+    stats_target: Option<String>,
     pub stats_days: Option<u64>,
     pub stats_anchor: u64,
     pub stats_projects_open: bool,
     pub timeline_selected: Option<String>,
     pub timeline_current: Option<String>,
+    pub timeline_bookmarked_only: bool,
     pub sessions_search: TextEdit,
     pub sessions_selected: Option<String>,
     pub side_owner: Option<usize>,
@@ -56,11 +59,14 @@ impl Default for State {
             usage_target: None,
             search: TextEdit::new(""),
             stats_project: None,
+            stats_provider: None,
+            stats_target: None,
             stats_days: None,
             stats_anchor: 0,
             stats_projects_open: false,
             timeline_selected: None,
             timeline_current: None,
+            timeline_bookmarked_only: false,
             sessions_search: TextEdit::new(""),
             sessions_selected: None,
             side_owner: None,
@@ -144,28 +150,27 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
         ));
         if session.generating {
             body = body.child(ui::caption("Answering independently…", k).role("status"));
-        } else {
-            if !answer.is_empty() {
-                body = body.child(
-                    col()
-                        .key("side-answer")
-                        .w_full()
-                        .max_h(150.0)
-                        .scroll(ScrollSpec {
-                            stick_bottom: false,
-                        })
-                        .child(
-                            Markdown::new(caelum_core::application::presentation::visible_text(
-                                answer,
-                            ))
+        }
+        if !answer.is_empty() {
+            body = body.child(
+                col()
+                    .key("side-answer")
+                    .w_full()
+                    .max_h(150.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .child(
+                        Markdown::new(caelum_core::application::presentation::visible_text(answer))
                             .selectable(true)
                             .render(&theme::markdown(k)),
-                        ),
-                );
-            }
-            if let Some(error) = &session.side_error {
-                body = body.child(ui::caption(error, k).color(k.c.danger.fg));
-            }
+                    ),
+            );
+        }
+        if let Some(error) = &session.side_error {
+            body = body.child(ui::caption(error, k).color(k.c.danger.fg));
+        }
+        if !session.generating {
             let copy = caelum_core::application::presentation::visible_text(answer);
             let mut actions = row().gap(8.0).child(
                 Button::new("Edit question")
@@ -290,6 +295,9 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
     if screen == Screen::Usage {
         return usage::view(s, k);
     }
+    if screen == Screen::Stats {
+        return stats(s, k, layers);
+    }
     let Some(index) = live(s).commands.owner else {
         return col();
     };
@@ -298,22 +306,64 @@ pub fn view(s: &Workspace, k: &Kit, screen: Screen, layers: &mut Vec<El>) -> El 
         Screen::Fork => fork::view(s, k),
         Screen::Timeline => timeline(s, k, index),
         Screen::Sessions => sessions(s, k, index),
-        Screen::Stats => stats(s, k, index, layers),
         _ => col(),
     }
 }
 
+pub(crate) fn open_stats(s: &mut Workspace) {
+    let l = live_mut(s);
+    let local = l
+        .app
+        .active_project
+        .as_ref()
+        .filter(|p| caelum_core::remote::native::checkout_id(p).is_none())
+        .or_else(|| {
+            l.app
+                .projects
+                .iter()
+                .find(|p| caelum_core::remote::native::checkout_id(&p.path).is_none())
+                .map(|p| &p.path)
+        });
+    l.commands.stats_target = local
+        .cloned()
+        .or_else(|| {
+            l.app
+                .selected
+                .map(|i| l.app.sessions[i].scope.project.clone())
+        })
+        .or_else(|| {
+            l.app
+                .remote
+                .saved
+                .selected
+                .as_deref()
+                .map(caelum_core::remote::native::project_key)
+        });
+    l.commands.stats_anchor = caelum_core::application::presentation::now();
+    l.commands.stats_projects_open = false;
+    l.commands.search.clear();
+    l.panels.set_overlay(Some(Screen::Stats));
+    refresh_stats(s);
+}
+fn stats_owner(s: &Workspace) -> Option<&str> {
+    let l = live(s);
+    l.commands.stats_target.as_deref().or_else(|| {
+        l.commands
+            .owner
+            .map(|i| l.app.sessions[i].scope.project.as_str())
+    })
+}
 fn stats_task(s: &Workspace) -> Option<Task> {
     let l = live(s);
-    let index = l.commands.owner?;
     Some(Task::Stats {
-        project: l.app.sessions[index].scope.project.clone(),
+        project: stats_owner(s)?.into(),
         filter: OpenCodeStatsFilter {
             from: l
                 .commands
                 .stats_days
                 .map(|days| l.commands.stats_anchor.saturating_sub(days * 86_400_000)),
             project: l.commands.stats_project.clone(),
+            provider: l.commands.stats_provider,
             ..Default::default()
         },
     })
@@ -323,13 +373,12 @@ pub(crate) fn refresh_stats(s: &mut Workspace) {
         live_mut(s).app.task(task);
     }
 }
-fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
+fn stats(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     let l = live(s);
-    let checkout = l
-        .app
-        .services
-        .checkouts
-        .get(&l.app.sessions[index].scope.project);
+    let Some(owner) = stats_owner(s) else {
+        return col();
+    };
+    let checkout = l.app.services.checkouts.get(owner);
     let mut track = ui::segmented_track(k);
     for (name, days) in [
         ("All history", None),
@@ -353,6 +402,7 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                 .find(|p| Some(&p.id) == l.commands.stats_project.as_ref())
         })
         .and_then(|p| p.name.as_deref())
+        .or(l.commands.stats_project.as_deref())
         .unwrap_or("All projects");
     let query = l.commands.search.text.to_lowercase();
     let mut projects = vec![("All projects".to_owned(), None)];
@@ -423,13 +473,39 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
             )
             .build(k, layers),
     );
-    let mut body = col().w_full().gap(16.0).child(ranges);
+    let mut providers = ui::segmented_track(k);
+    for choice in [
+        None,
+        Some(StatsProvider::Codex),
+        Some(StatsProvider::OpenCode),
+        Some(StatsProvider::Antigravity),
+        Some(StatsProvider::Boat),
+    ] {
+        let name = choice.map_or("All", StatsProvider::name);
+        providers = providers.child(
+            ui::segment(name, l.commands.stats_provider == choice, k)
+                .key(format!("stats-provider-{name}"))
+                .on_press(move |s: &mut Workspace| {
+                    live_mut(s).commands.stats_provider = choice;
+                    refresh_stats(s);
+                }),
+        );
+    }
+    let mut body = col()
+        .w_full()
+        .gap(12.0)
+        .child(ranges)
+        .child(row().child(providers).label("Statistics provider"));
     if let Some(stats) = checkout.and_then(|c| c.stats.as_ref()) {
         let mut totals = row().w_full().gap(8.0);
         for (name, value) in [
             ("Sessions", stats.sessions.to_string()),
             ("Prompts", stats.prompts.to_string()),
-            ("Total cost", format!("${:.2}", stats.cost)),
+            (
+                "Observed time",
+                caelum_core::application::presentation::duration(stats.duration_ms),
+            ),
+            ("Est. cost", cost(stats.cost, stats.unpriced, stats.prompts)),
         ] {
             totals = totals.child(
                 ui::card(k)
@@ -445,6 +521,24 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
             );
         }
         body = body.child(totals);
+        if stats.recorded_only {
+            body=body.child(ui::caption("OpenCode server history unavailable for this scope · Showing locally recorded turns.",k));
+        }
+        if stats.estimated_turns > 0 || stats.unpriced > 0 {
+            body = body.child(ui::caption(
+                format!(
+                    "{} turns with approximate text tokens · {} turns without a price",
+                    stats.estimated_turns, stats.unpriced
+                ),
+                k,
+            ));
+        }
+        if stats.dropped > 0 {
+            body = body.child(ui::caption(
+                format!("Local storage missed {} usage samples.", stats.dropped),
+                k,
+            ));
+        }
         let mut activity = ui::card(k).gap(12.0).child(
             row()
                 .w_full()
@@ -585,7 +679,7 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                     )
                     .child(
                         row().w(60.0).justify_end().child(
-                            text(format!("${:.2}", model.cost))
+                            text(cost(model.cost, model.unpriced, model.steps))
                                 .font(k.ty.mono)
                                 .color(k.c.text_base),
                         ),
@@ -617,6 +711,15 @@ fn stats(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
         stats_task(s).unwrap(),
         checkout.is_some_and(|c| c.stats.is_some()),
     )
+}
+fn cost(usd: f64, unknown: u64, count: u64) -> String {
+    if unknown > 0 && unknown == count {
+        "—".into()
+    } else if unknown > 0 {
+        format!("${usd:.2}+")
+    } else {
+        format!("${usd:.2}")
+    }
 }
 fn compact(n: f64) -> String {
     if n >= 1e9 {

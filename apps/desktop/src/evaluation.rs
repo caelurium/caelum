@@ -1,6 +1,7 @@
 //! Deterministic demanding workload, explicitly opt-in and isolated from user data.
 mod feed;
 mod models;
+mod requests;
 mod review;
 #[cfg(test)]
 pub(crate) use review::seed_review_files;
@@ -167,35 +168,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         seed_worktrees(l, serde_json::from_value(json!({
             "project":{"path":project,"name":"caelum"},"storageDirectory":"/projects","branches":["main","unused-branch"],"defaultBase":"main","worktrees":trees,
         })).unwrap());
-        for (path, title, provider) in [
-            (
-                "/projects/caelum-native",
-                "Restore the worktree sidebar",
-                Provider::Codex,
-            ),
-            (
-                "/projects/caelum-providers",
-                "Reconnect provider sessions",
-                Provider::OpenCode,
-            ),
-        ] {
-            let index = l.app.new_session(Scope {
-                project: path.into(),
-                provider,
-            });
-            let session = &mut l.app.sessions[index];
-            session.title = title.into();
-            session.draft = format!("Independent draft for {title}");
-            if provider == Provider::Codex {
-                session.conversation.set_working(true);
-            } else {
-                session.queue.push(caelum_core::application::QueuedPrompt {
-                    text: "Review the reconnect changes".into(),
-                    options: Default::default(),
-                });
-                session.queue_paused = true;
-            }
-        }
+        feed::worktree_sessions(l);
         if matches!(
             name,
             "sidebar-worktrees-projects" | "sidebar-worktrees-vercel"
@@ -378,7 +351,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             l.app.services.checkouts.get_mut(project).unwrap().stats = Some(serde_json::from_value(json!({
                 "range":{"from":0,"to":1800000000000_u64},"sessions":24,"subagents":8,"prompts":126,"steps":372,
                 "tokens":tokens,
-                "cost":14.28,"activeDays":12,"streak":4,
+                "cost":14.28,"durationMs":7382000,"activeDays":12,"streak":4,
                 "activity":(1..=30).map(|i| json!({"date":format!("2026-10-{i:02}"),"steps":if i%6==0 {0} else {(i*17)%35+2}})).collect::<Vec<_>>(),
                 "models":[{"model":{"providerID":"openai","id":"gpt-5.3-codex"},"steps":242,"tokens":tokens,"cost":10.14},
                     {"model":{"providerID":"anthropic","id":"claude-sonnet-4-6"},"steps":130,"tokens":tokens,"cost":4.14}]
@@ -386,30 +359,18 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
             let checkout = l.app.services.checkouts.get_mut(project).unwrap();
             checkout.stats_projects = vec![
                 caelum_protocol::OpenCodeStatsProject {
-                    id: "caelum".into(),
+                    id: project.into(),
                     name: Some("Caelum".into()),
                     canonical: project.into(),
                 },
                 caelum_protocol::OpenCodeStatsProject {
-                    id: "website".into(),
+                    id: "/projects/website".into(),
                     name: Some("Website".into()),
                     canonical: "/projects/website".into(),
                 },
             ];
             if name == "stats-empty" {
-                let stats = checkout.stats.as_mut().unwrap();
-                stats.sessions = 0;
-                stats.prompts = 0;
-                stats.cost = 0.0;
-                stats.activity.clear();
-                stats.models.clear();
-                stats.steps = 0;
-                stats.active_days = 0;
-                stats.streak = 0;
-                stats.tokens = serde_json::from_value(
-                    json!({"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}),
-                )
-                .unwrap();
+                *checkout.stats.as_mut().unwrap() = caelum_protocol::OpenCodeStats::default();
             }
         }
         if matches!(name, "stats-loading" | "stats-error") {
@@ -565,29 +526,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         }
         return true;
     }
-    if matches!(name, "approval" | "questions") {
-        l.app.sessions[0].remote_id = Some("thread-fixture".into());
-        l.app.sessions[0].conversation = Default::default();
-        if name == "approval" {
-            l.app
-                .apply(Event::Approvals(vec![caelum_protocol::ApprovalPrompt {
-                    provider: "codex".into(),
-                    project_path: project.into(),
-                    session_id: Some("thread-fixture".into()),
-                    request_id: "fixture".into(),
-                    summary: "Run the workspace checks?".into(),
-                    description: "cargo test --workspace --locked".into(),
-                }]));
-        } else {
-            l.app.apply(Event::Questions(vec![caelum_protocol::QuestionPrompt {provider:"codex".into(),project_path:project.into(),session_id:"thread-fixture".into(),request_id:"fixture".into(),title:"Choose the implementation scope".into(),fields:vec![json!({"key":"target","type":"multiselect","title":"Platforms","required":true,"options":[{"value":"macos","label":"macOS","description":"Native desktop experience"},{"value":"linux","label":"Linux","description":"Shared core and CLI"}],"default":["macos"],"custom":true})] }]));
-        }
-        return true;
-    }
-    if name == "commands" {
-        l.sync_editors();
-        l.drafts[0].replace_text("/");
-        l.drafts[0].set_caret(1);
-        l.drafts[0].focused = true;
+    if requests::scene(l, project, name) {
         return true;
     }
     if matches!(name, "working" | "thinking" | "retrying" | "stopping") {

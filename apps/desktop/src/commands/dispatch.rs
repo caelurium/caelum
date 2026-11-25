@@ -1,4 +1,4 @@
-use super::{ask, refresh_stats};
+use super::{ask, open_stats};
 use crate::{
     Workspace,
     live::{live, live_mut},
@@ -17,7 +17,10 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     let input = live(s).drafts[index].text.clone();
     let command = match LocalCommand::parse(&input, live(s).app.sessions[index].scope.provider) {
         Ok(Some(command)) => command,
-        Ok(None) => return false,
+        Ok(None) => {
+            crate::completion::sync_templates(live_mut(s));
+            return false;
+        }
         Err(error) => {
             live_mut(s).app.sessions[index].error = Some(error);
             return true;
@@ -29,8 +32,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     }
     let l = live_mut(s);
     if command == LocalCommand::SideQuestion && l.app.sessions[index].remote_id.is_none() {
-        l.app.sessions[index].error =
-            Some("Open an OpenCode session before asking a side question.".into());
+        l.app.sessions[index].error = Some("Start a session before asking a side question.".into());
         return true;
     }
     l.app.sessions[index].error = None;
@@ -75,11 +77,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
                 provider: scope.provider,
             });
         }
-        LocalCommand::Stats => {
-            l.commands.stats_anchor = caelum_core::application::presentation::now();
-            l.panels.set_overlay(Some(Screen::Stats));
-            refresh_stats(s);
-        }
+        LocalCommand::Stats => open_stats(s),
         LocalCommand::SideQuestion => {
             l.app.dismiss_side_question(index);
             l.commands.side_owner = Some(index);
@@ -91,6 +89,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
                 .get(index)
                 .cloned()
                 .unwrap_or_default();
+            l.app.sessions[index].draft.clone_from(&previous);
             l.drafts[index].replace_text(previous);
             l.drafts[index].focused = false;
             if !args.is_empty() {

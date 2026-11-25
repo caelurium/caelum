@@ -1,10 +1,13 @@
 //! Caret-aware native command/file/PR completion. Requests and captured context are core-owned.
+mod commands;
+mod owner;
 use crate::{
     Workspace,
     live::{live, live_mut},
     ui,
 };
 use caelum_core::application::{Completion, CompletionKind, Provider, Task};
+use owner::EditorOwner;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{Kit, Placement, ScrollBar, popover};
 
@@ -25,38 +28,6 @@ enum Phase {
     Dismissed(Capture),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum EditorOwner {
-    Composer(usize),
-    SideQuestion(usize),
-}
-
-impl EditorOwner {
-    fn index(self) -> usize {
-        match self {
-            Self::Composer(index) | Self::SideQuestion(index) => index,
-        }
-    }
-
-    fn current(l: &crate::live::Live) -> Option<Self> {
-        let index = l.app.selected?;
-        Some(if l.commands.side_owner == Some(index) {
-            Self::SideQuestion(index)
-        } else {
-            Self::Composer(index)
-        })
-    }
-
-    fn editor(self, l: &crate::live::Live) -> Option<&TextEdit> {
-        match self {
-            Self::Composer(index) => l.drafts.get(index),
-            Self::SideQuestion(index) => {
-                (l.commands.side_owner == Some(index)).then_some(&l.commands.side_editor)
-            }
-        }
-    }
-}
-
 struct Capture {
     owner: EditorOwner,
     text: String,
@@ -75,7 +46,7 @@ impl Capture {
     }
 
     fn matches(&self, l: &crate::live::Live) -> bool {
-        Some(self.owner) == EditorOwner::current(l)
+        Some(&self.owner) == EditorOwner::current(l).as_ref()
             && self.owner.editor(l).is_some_and(|editor| {
                 editor.focused
                     && editor.preedit.is_none()
@@ -87,6 +58,7 @@ impl Capture {
 }
 
 pub fn sync(l: &mut crate::live::Live) {
+    sync_templates(l);
     if let Phase::Applying { request, capture } = &l.completion.phase {
         if !l.app.mention_pending(*request) {
             l.completion.phase = Phase::Available;
@@ -96,39 +68,46 @@ pub fn sync(l: &mut crate::live::Live) {
     }
 }
 
+pub(crate) fn sync_templates(l: &mut crate::live::Live) {
+    let target = EditorOwner::current(l)
+        .filter(|owner| {
+            owner.editor(l).is_some_and(|e| {
+                let text = e.text.trim_start();
+                text.starts_with('/') && !text.starts_with("//")
+            })
+        })
+        .and_then(|owner| owner.target(l));
+    l.app.show_templates(target);
+}
+
 pub fn cancel(l: &mut crate::live::Live) {
-    if let Phase::Applying { capture, .. } = std::mem::take(&mut l.completion.phase) {
-        l.app.cancel_mentions(capture.owner.index());
+    if let Phase::Applying { capture, .. } = std::mem::take(&mut l.completion.phase)
+        && let Some(i) = capture.owner.index()
+    {
+        l.app.cancel_mentions(i);
     }
 }
 
 #[derive(Clone)]
 struct Choice {
     title: String,
-    args: &'static str,
+    args: String,
     detail: String,
     value: String,
     project: String,
-    custom: bool,
+    badge: Option<&'static str>,
 }
 
 pub fn editor(s: &Workspace) -> Option<&TextEdit> {
     let l = live(s);
-    let index = l.app.selected?;
-    if l.commands.side_owner == Some(index) {
-        Some(&l.commands.side_editor)
-    } else {
-        l.drafts.get(index)
-    }
+    EditorOwner::current(l)?.editor(l)
 }
 
 pub fn token(s: &Workspace) -> Option<Completion> {
     let l = live(s);
-    let index = l.app.selected?;
-    let editor = editor(s)?;
+    let owner = EditorOwner::current(l)?;
+    let editor = owner.editor(l)?;
     if !editor.focused
-        || !l.app.sessions[index].scope.provider_available()
-        || l.panels.screen != crate::panels::Screen::Conversation
         || editor.preedit.is_some()
         || l.panels.overlay().is_some()
         || l.models.is_open()
@@ -139,51 +118,25 @@ pub fn token(s: &Workspace) -> Option<Completion> {
         return None;
     }
     Completion::at(&editor.text, editor.anchor, editor.focus)
+        .filter(|t| owner.index().is_some() || t.kind == CompletionKind::Command)
 }
 
 fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
     let l = live(s);
+    let Some(owner) = EditorOwner::current(l) else {
+        return Vec::new();
+    };
+    let query = token.query.to_lowercase();
+    if token.kind == CompletionKind::Command {
+        return commands::choices(l, &owner, &query);
+    }
     let Some(index) = l.app.selected else {
         return Vec::new();
     };
     let session = &l.app.sessions[index];
     let project = session.scope.project.clone();
-    let query = token.query.to_lowercase();
     match token.kind {
-        CompletionKind::Command if l.commands.side_owner.is_some() => Vec::new(),
-        CompletionKind::Command => {
-            let mut choices: Vec<_> = caelum_core::application::commands::COMMANDS
-                .iter()
-                .filter(|(_, _, c)| c.available(session.scope.provider))
-                .map(|(n, d, c)| (n.to_string(), d.to_string(), command_args(*c), false))
-                .collect();
-            if session.scope.provider == Provider::OpenCode
-                && let Some(commands) = l.app.provider_commands.get(&session.scope)
-            {
-                for c in commands {
-                    if !choices.iter().any(|(n, _, _, _)| n == &c.name) {
-                        choices.push((
-                            c.name.clone(),
-                            c.description.clone().unwrap_or_default(),
-                            "",
-                            true,
-                        ));
-                    }
-                }
-            }
-            choices
-                .into_iter()
-                .filter(|(n, d, _, _)| format!("{n} {d}").to_lowercase().contains(&query))
-                .map(|(name, detail, args, custom)| Choice {
-                    title: format!("/{name}"),
-                    args,
-                    value: name,
-                    detail,
-                    project: project.clone(),
-                    custom,
-                })
-                .collect()
-        }
+        CompletionKind::Command => unreachable!(),
         CompletionKind::File => l
             .app
             .services
@@ -196,11 +149,11 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
                     .iter()
                     .map(|hit| Choice {
                         title: hit.path.clone(),
-                        args: "",
+                        args: String::new(),
                         detail: "Attach file snapshot".into(),
                         value: hit.path.clone(),
                         project: project.clone(),
-                        custom: false,
+                        badge: None,
                     })
                     .collect()
             })
@@ -226,11 +179,11 @@ fn choices(s: &Workspace, token: &Completion) -> Vec<Choice> {
                 .into_iter()
                 .map(|(p, pr)| Choice {
                     title: format!("#{}", pr.number),
-                    args: "",
+                    args: String::new(),
                     detail: pr.title.clone(),
                     value: pr.url.clone(),
                     project: p.clone(),
-                    custom: false,
+                    badge: None,
                 })
                 .collect()
         }
@@ -267,8 +220,11 @@ fn dismiss(s: &mut Workspace) {
         let Some(editor) = owner.editor(l) else {
             return;
         };
+        let index = owner.index();
         let capture = Capture::new(owner, editor);
-        l.app.cancel_mentions(owner.index());
+        if let Some(i) = index {
+            l.app.cancel_mentions(i);
+        }
         l.completion.phase = Phase::Dismissed(capture);
     }
 }
@@ -283,23 +239,32 @@ fn choose(s: &mut Workspace, choice: Choice, token: Completion, execute: bool, t
     {
         return;
     }
-    let Some(index) = live(s).app.selected else {
+    let Some(owner) = EditorOwner::current(live(s)) else {
         return;
     };
-    if live(s).app.sessions[index].attaching > 0 {
+    if owner
+        .index()
+        .is_some_and(|i| live(s).app.sessions[i].attaching > 0)
+    {
         return;
     }
     if token.kind == CompletionKind::Command {
         let l = live_mut(s);
-        let (text, caret) = token.replace(&l.drafts[index].text, &format!("/{}", choice.value));
-        l.drafts[index].replace_text(text);
-        l.drafts[index].set_caret(caret);
-        l.drafts[index].focused = true;
+        let (text, caret) = token.replace(
+            &owner.editor(l).unwrap().text,
+            &format!("/{}", choice.value),
+        );
+        owner.replace(l, text, caret);
         dismiss(s);
         if execute {
-            s.send(tx);
+            if let EditorOwner::Boat { thread, .. } = owner {
+                crate::remote::send_draft(s, tx, &thread);
+            } else {
+                s.send(tx);
+            }
         }
     } else {
+        let Some(index) = owner.index() else { return };
         let replacement = if token.kind == CompletionKind::File {
             format!("@{}", choice.value)
         } else {
@@ -343,9 +308,6 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.live.is_none() {
         return false;
     }
-    let Some(index) = live(s).app.selected else {
-        return false;
-    };
     let Some(editor) = editor(s) else {
         return false;
     };
@@ -386,9 +348,9 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
             _ => {}
         }
     }
-    if live(s).commands.side_owner.is_some() {
+    let Some(EditorOwner::Composer(index)) = EditorOwner::current(live(s)) else {
         return false;
-    }
+    };
     if !event.mods.cmd
         && !event.mods.ctrl
         && !event.mods.alt
@@ -449,14 +411,19 @@ pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
     if token(s).is_none() {
         return;
     }
-    let Some([_, _, width, _]) = rune::memo::window_layout("composer-editor") else {
+    let anchor = if crate::home::is_home(s) {
+        "home-editor"
+    } else {
+        "composer-editor"
+    };
+    let Some([_, _, width, _]) = rune::memo::window_layout(anchor) else {
         return;
     };
 
     layers.push(popover::anchored(
         k,
         popover::raised(k, panel(s, k).w(width), ui::POPUP_RADIUS),
-        "composer-editor",
+        anchor,
         Placement::TopStart,
         ui::POPUP_OFFSET,
     ));
@@ -498,27 +465,47 @@ fn panel(s: &Workspace, k: &Kit) -> El {
         k,
     ));
     let l = live(s);
-    let index = l.app.selected.unwrap();
-    let project = &l.app.sessions[index].scope.project;
-    let busy = l.app.sessions[index].attaching > 0
+    let owner = EditorOwner::current(l).unwrap();
+    let session = owner.index().map(|i| &l.app.sessions[i]);
+    let busy = session.is_some_and(|s| s.attaching > 0)
         || token.kind == CompletionKind::File
             && l.app.services.busy(&Task::Completions {
-                project: project.clone(),
+                project: session.unwrap().scope.project.clone(),
                 query: token.query.clone(),
             });
     if busy {
         content = content.child(ui::skeleton("Loading context", 1, k).px(8.0));
     }
-    if let Some(error) = l.app.sessions[index].error.as_ref().or_else(|| {
-        l.app
-            .services
-            .checkouts
-            .get(project)
-            .and_then(|c| c.error.as_ref())
-    }) {
+    if token.kind == CompletionKind::Command
+        && matches!(
+            l.app.templates,
+            caelum_core::templates::Catalog::Loading { .. }
+        )
+    {
+        content = content.child(ui::caption("Loading prompt templates…", k).px(8.0));
+    }
+    if let Some(error) = session
+        .and_then(|s| {
+            s.error.as_ref().or_else(|| {
+                l.app
+                    .services
+                    .checkouts
+                    .get(&s.scope.project)?
+                    .error
+                    .as_ref()
+            })
+        })
+        .or_else(|| match &l.app.templates {
+            caelum_core::templates::Catalog::Failed { error, .. }
+                if token.kind == CompletionKind::Command =>
+            {
+                Some(error)
+            }
+            _ => None,
+        })
+    {
         content = content.child(ui::caption(error, k).color(k.c.danger.fg).px(8.0));
     }
-    let mut options = col().w_full().gap(2.0);
     if items.is_empty() && !busy {
         let empty_title = match token.kind {
             CompletionKind::Command => "No matching commands",
@@ -538,19 +525,29 @@ fn panel(s: &Workspace, k: &Kit) -> El {
                 )),
         );
     }
-    for (i, item) in items.into_iter().enumerate() {
-        let t = token.clone();
-        let choice = item.clone();
-        options = options.child(
-            completion_row(&item, token.kind, i == selected, k)
-                .disabled(busy)
-                .on_press_tx(move |s: &mut Workspace, tx| {
-                    choose(s, choice.clone(), t.clone(), false, tx)
-                })
-                .w_full()
-                .key(format!("completion-{i}")),
+    let kit = k.clone();
+    let options = col()
+        .w_full()
+        .growth(rune::GrowthSpec::default())
+        .virtual_rows(
+            count,
+            36.0,
+            |_: &Workspace, i| format!("completion-{i}").into(),
+            move |_: &Workspace, i| {
+                let choice = items[i].clone();
+                let t = token.clone();
+                let captured = owner.clone();
+                completion_row(&choice, token.kind, i == selected, &kit)
+                    .disabled(busy)
+                    .on_press_tx(move |s: &mut Workspace, tx| {
+                        if EditorOwner::current(live(s)).as_ref() == Some(&captured) {
+                            choose(s, choice.clone(), t.clone(), false, tx)
+                        }
+                    })
+                    .w_full()
+                    .h(36.0)
+            },
         );
-    }
     content
         .child(
             col()
@@ -623,15 +620,15 @@ fn completion_row(item: &Choice, kind: CompletionKind, selected: bool, k: &Kit) 
                     }))
                     .children(
                         (!item.args.is_empty())
-                            .then(|| text(item.args).font(k.ty.mono).color(k.c.text_faint)),
+                            .then(|| text(&item.args).font(k.ty.mono).color(k.c.text_faint)),
                     ),
             )
             .children(
                 (!item.detail.is_empty())
                     .then(|| ui::caption(&item.detail, k).truncate().grow(1.0).min_w(0.0)),
             )
-            .children(item.custom.then(|| {
-                text("Custom")
+            .children(item.badge.map(|badge| {
+                text(badge)
                     .font(k.ty.small)
                     .color(k.c.text_muted)
                     .px(6.0)

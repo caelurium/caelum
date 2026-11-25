@@ -157,6 +157,9 @@ impl Session {
             archived,
             reading,
             unread,
+            origin,
+            pinned,
+            bookmarked_entries,
         } = saved;
         self.vm_link == *vm_link
             && self.provider_switch.threads == *previous_threads
@@ -178,5 +181,8 @@ impl Session {
             && self.archived() == *archived
             && self.reading == *reading
             && self.unread == *unread
+            && self.origin == *origin
+            && self.pinned == *pinned
+            && self.bookmarked_entries == *bookmarked_entries
     }
 }

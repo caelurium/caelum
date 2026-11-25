@@ -293,6 +293,7 @@ def run_prompt(req_id, session_id, blocks):
                     "rawInput": {"command": "echo hi"},
                 },
                 "options": [
+                    {"optionId": "allow_always", "name": "Always allow", "kind": "allow_always"},
                     {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
                     {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
                 ],

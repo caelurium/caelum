@@ -55,6 +55,7 @@ fn replacement_relaunch_and_workspace_restoration() {
         ),
     );
     app.sessions[index].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Retain this queued prompt".into(),
         options: Default::default(),
     });

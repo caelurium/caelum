@@ -1,3 +1,4 @@
+mod approval_policy;
 mod archive;
 mod completion;
 mod composer;
@@ -18,6 +19,7 @@ mod sessions;
 mod subagents;
 mod submission;
 mod tasks;
+mod templates;
 mod titles;
 
 pub use fork::FilePreview;
@@ -77,6 +79,9 @@ pub struct Session {
     archive_status: archive::Status,
     pub reading: f32,
     pub unread: bool,
+    pub origin: Option<caelum_protocol::SessionOrigin>,
+    pub pinned: bool,
+    pub bookmarked_entries: Vec<String>,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
     shell_revision: u64,
     pub details: Option<caelum_protocol::SessionDetails>,
@@ -85,12 +90,14 @@ pub struct Session {
     pub side_attachments: Vec<Attachment>,
     pub side_error: Option<String>,
     pub side_generation: u64,
+    side_cancel: Option<tokio::sync::watch::Sender<()>>,
     pub side_completion_caret: Option<usize>,
     pub generating: bool,
     pub disconnected: bool,
     options_dirty: bool,
     revision: u64,
     seen_events: std::collections::VecDeque<String>,
+    usage: crate::telemetry::Tracking,
 }
 
 impl Session {
@@ -125,6 +132,9 @@ impl Session {
             archive_status: Default::default(),
             reading: -1.0,
             unread: false,
+            origin: None,
+            pinned: false,
+            bookmarked_entries: Vec::new(),
             shells: Vec::new(),
             shell_revision: 0,
             details: None,
@@ -133,12 +143,14 @@ impl Session {
             side_attachments: Vec::new(),
             side_error: None,
             side_generation: 0,
+            side_cancel: None,
             side_completion_caret: None,
             generating: false,
             disconnected: false,
             options_dirty: false,
             revision: 0,
             seen_events: Default::default(),
+            usage: Default::default(),
         }
     }
 
@@ -151,6 +163,10 @@ impl Session {
 
     pub fn working(&self) -> bool {
         self.submitting() || self.conversation.working()
+    }
+
+    pub fn is_bookmarked(&self, entry_id: &str) -> bool {
+        self.bookmarked_entries.iter().any(|id| id == entry_id)
     }
 
     fn record_activity(&mut self, at: u64) {
@@ -205,6 +221,8 @@ impl Session {
 }
 
 enum Pending {
+    ScopedApproval(approval_policy::Attempt),
+    Templates,
     PreviousHistory(usize, usize),
     Remote(remote::Lane),
     ConversationControl(usize, SessionKey, controls::Operation),
@@ -257,6 +275,8 @@ enum Pending {
 /// first-send creation; every pending request carries its original owner.
 #[derive(Default)]
 pub struct Workspace {
+    policy: approval_policy::State,
+    pub templates: crate::templates::Catalog,
     fork: Option<ForkPicker>,
     handoff: Option<VmHandoff>,
     pub home: Home,
@@ -294,6 +314,7 @@ pub struct Workspace {
     next_request: u64,
     latest_open: u64,
     launches: HashMap<u64, (Provider, u64)>,
+    pending_ci_fixes: HashMap<u64, review::PendingCiFix>,
     remembered: HashMap<String, usize>,
     remembered_checkouts: HashMap<String, usize>,
     managed_worktrees: BTreeSet<String>,
@@ -361,6 +382,12 @@ impl Workspace {
             .attachments
             .push(super::Attachment::new(label, body, None, truncated));
         true
+    }
+
+    fn record_usage(&mut self, row: crate::telemetry::Record) {
+        self.next_request += 1;
+        self.outgoing
+            .push((self.next_request, Command::RecordUsage(row)));
     }
 
     fn request(&mut self, mut command: Command, pending: Pending) -> u64 {

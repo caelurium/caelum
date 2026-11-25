@@ -89,7 +89,6 @@ impl LocalCommand {
     pub fn available(self, provider: Provider) -> bool {
         match self {
             Self::Usage => matches!(provider, Provider::OpenCode | Provider::Antigravity),
-            Self::Stats | Self::SideQuestion => provider == Provider::OpenCode,
             _ => true,
         }
     }
@@ -103,11 +102,7 @@ impl LocalCommand {
             return Ok(None);
         };
         if !command.available(provider) {
-            return Err(if *command == Self::Usage {
-                "/usage is only available with OpenCode and Antigravity.".into()
-            } else {
-                format!("/{name} is only available with OpenCode.")
-            });
+            return Err("/usage is only available with OpenCode and Antigravity.".into());
         }
         if !matches!(
             *command,

@@ -9,15 +9,18 @@
 
 ## Provider approvals
 
-Provider adapters submit `PermissionRequest` values that retain provider-specific details as opaque data. The UI sees only the provider name, request ID, summary, and description; provider-specific payloads are not forwarded. Caelum does not collapse provider permission modes into a single broad permission model. Adapters must clearly disclose when a request grants broad system access rather than implying that it is confined to the selected project.
+Provider adapters submit `PermissionRequest` values that retain structured provider data. The broker publishes the display fields, request owner, a fresh attempt ID and, when available, a narrow rule description. Raw provider payloads are not forwarded to the UI.
 
-- Every request requires a user decision: **Allow once** or **Deny**.
-- There is no persistent allow-all decision.
+- **Allow similar in session** is offered only for recognized exact commands in the checkout root or single-file reads. Rules match structured requests, never display strings. File changes, additional privileges and unclassifiable requests remain manual.
+- Rules live in memory, scoped to the checkout, provider and conversation. Each match receives a one-shot approval and a transcript entry; the session heading supports inspection and revocation. The broker verifies the pending attempt before accepting a decision, including when a provider reuses an ID.
 - Timeouts, cancellation, app shutdown, unknown IDs, and dropped waiters resolve as denied.
 
 The Codex adapter routes app-server command-execution and file-change approval requests through this broker. Caelum responds with a one-request `accept` or `decline`; unsupported request methods are rejected instead of being silently granted. New threads request Codex's `workspace-write` sandbox and `untrusted` approval policy. Review those provider-managed sandbox semantics separately from Caelum's own filesystem boundary.
 
 The OpenCode adapter maps server `permission.asked` requests to the same broker and responds with OpenCode's one-shot `once` or `reject` decision. It never answers `always`. OpenCode applies its own project permissions and tool sandboxing; those provider-managed rules do not become Caelum filesystem restrictions.
+
+Antigravity selects only ACP `allow_once` or `reject_once` options. If the
+corresponding one-shot option is absent, it cancels the request.
 
 ## Child-process lifecycle
 

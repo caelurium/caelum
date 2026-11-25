@@ -7,7 +7,9 @@ use std::{
     time::Duration,
 };
 
-use caelum_protocol::{ApprovalDecision, ApprovalPrompt, PermissionRequest};
+mod policy;
+
+use caelum_protocol::{ApprovalDecision, ApprovalPrompt, ApprovalRule, PermissionRequest};
 use thiserror::Error;
 
 type RequestKey = (String, String, String);
@@ -30,7 +32,8 @@ struct OpenBroker {
 }
 
 struct PendingRequest {
-    attempt: Arc<()>,
+    attempt: uuid::Uuid,
+    rule: Option<ApprovalRule>,
     request: PermissionRequest,
     response: Sender<ApprovalDecision>,
 }
@@ -66,11 +69,12 @@ impl ApprovalBroker {
             return Err(ApprovalError::DuplicateRequest);
         }
 
-        let attempt = Arc::new(());
+        let attempt = uuid::Uuid::new_v4();
         open.pending.insert(
             key.clone(),
             PendingRequest {
-                attempt: attempt.clone(),
+                attempt,
+                rule: policy::classify(&request),
                 request,
                 response,
             },
@@ -130,6 +134,36 @@ impl ApprovalBroker {
         request_id: &str,
         decision: ApprovalDecision,
     ) -> Result<(), ApprovalError> {
+        self.resolve_checked(provider, project_path, request_id, decision, |_| true)
+    }
+
+    /// Resolve only this published attempt, even if the provider has reused its request ID.
+    pub fn resolve_prompt(
+        &self,
+        prompt: &ApprovalPrompt,
+        decision: ApprovalDecision,
+    ) -> Result<(), ApprovalError> {
+        self.resolve_checked(
+            &prompt.provider,
+            &prompt.project_path,
+            &prompt.request_id,
+            decision,
+            |p| {
+                Some(p.attempt) == uuid::Uuid::parse_str(&prompt.attempt).ok()
+                    && p.request.session_id == prompt.session_id
+                    && p.rule == prompt.repeatable
+            },
+        )
+    }
+
+    fn resolve_checked(
+        &self,
+        provider: &str,
+        project_path: &str,
+        request_id: &str,
+        decision: ApprovalDecision,
+        matches: impl FnOnce(&PendingRequest) -> bool,
+    ) -> Result<(), ApprovalError> {
         let key = (
             provider.to_owned(),
             project_path.to_owned(),
@@ -139,13 +173,16 @@ impl ApprovalBroker {
         let BrokerState::Open(open) = &mut *state else {
             return Err(ApprovalError::Closed);
         };
+        if !open.pending.get(&key).is_some_and(matches) {
+            return Err(ApprovalError::UnknownRequest);
+        }
         let pending = open
             .pending
             .remove(&key)
             .ok_or(ApprovalError::UnknownRequest)?;
-        let _ = pending.response.send(decision);
+        let result = pending.response.send(decision);
         Self::publish(open);
-        Ok(())
+        result.map_err(|_| ApprovalError::UnknownRequest)
     }
 
     /// Reject pending approvals during app shutdown and notify the UI.
@@ -166,6 +203,8 @@ impl ApprovalBroker {
             .pending
             .values()
             .map(|pending| ApprovalPrompt {
+                attempt: pending.attempt.to_string(),
+                repeatable: pending.rule.clone(),
                 provider: pending.request.provider.clone(),
                 project_path: pending.request.project_path.clone(),
                 session_id: pending.request.session_id.clone(),
@@ -192,7 +231,7 @@ impl ApprovalBroker {
 
 pub struct ApprovalWaiter {
     key: RequestKey,
-    attempt: Arc<()>,
+    attempt: uuid::Uuid,
     receiver: Receiver<ApprovalDecision>,
     state: Weak<Mutex<BrokerState>>,
 }
@@ -205,14 +244,14 @@ impl ApprovalWaiter {
     pub(crate) fn decision(self, timeout: Duration) -> Option<ApprovalDecision> {
         match self.receiver.recv_timeout(timeout) {
             Ok(decision) => Some(decision),
-            Err(RecvTimeoutError::Timeout) => Some(ApprovalDecision::Deny),
+            Err(RecvTimeoutError::Timeout) => {
+                self.retire();
+                self.receiver.try_recv().ok()
+            }
             Err(RecvTimeoutError::Disconnected) => None,
         }
     }
-}
-
-impl Drop for ApprovalWaiter {
-    fn drop(&mut self) {
+    fn retire(&self) {
         let Some(state) = self.state.upgrade() else {
             return;
         };
@@ -225,13 +264,19 @@ impl Drop for ApprovalWaiter {
         if let std::collections::btree_map::Entry::Occupied(entry) =
             open.pending.entry(self.key.clone())
         {
-            if !Arc::ptr_eq(&self.attempt, &entry.get().attempt) {
+            if self.attempt != entry.get().attempt {
                 return;
             }
             let pending = entry.remove();
             let _ = pending.response.send(ApprovalDecision::Deny);
             ApprovalBroker::publish(open);
         }
+    }
+}
+
+impl Drop for ApprovalWaiter {
+    fn drop(&mut self) {
+        self.retire();
     }
 }
 

@@ -6,81 +6,24 @@ use crate::{
     quiet_button,
     ui::{self, Button},
 };
-use caelum_core::application::{Entry, EntryKind};
+use caelum_core::application::EntryKind;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, icon, row, text, text_input};
 use rune_kit::{ButtonVariant, Kit, ScrollBar, glyphs};
 
-const DAY_MS: u64 = 86_400_000;
+mod entries;
 
-#[derive(Clone, Copy)]
-struct TurnSummary {
-    ordinal: usize,
-    position: usize,
-    tools: usize,
-    attachments: usize,
-    failed: bool,
-    running: bool,
-    compacted: bool,
-}
+use entries::{DAY_MS, day_bucket, matching_turns};
 
 pub(crate) fn open(s: &mut Workspace) {
     let l = live_mut(s);
     let Some(index) = l.app.selected else { return };
     l.commands.owner = Some(index);
     l.commands.search.clear();
+    l.commands.timeline_bookmarked_only = false;
     l.commands.timeline_selected = l.current_prompt.clone();
     l.commands.timeline_current = l.current_prompt.clone();
     l.panels.set_overlay(Some(Screen::Timeline));
     l.commands.search.focused = true;
-}
-
-fn summarize_turns(entries: &[Entry]) -> Vec<TurnSummary> {
-    let positions: Vec<usize> = entries
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| {
-            e.kind() == EntryKind::User && caelum_core::application::presentation::entry_visible(e)
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    positions
-        .iter()
-        .enumerate()
-        .map(|(idx, &start)| {
-            let end = positions.get(idx + 1).copied().unwrap_or(entries.len());
-            let mut tools = 0;
-            let mut failed = false;
-            let mut running = false;
-            let mut compacted = false;
-            for entry in &entries[start + 1..end] {
-                if !entry.complete() {
-                    running = true;
-                }
-                if !entry.error.is_empty() || matches!(entry.status(), "error" | "failed") {
-                    failed = true;
-                }
-                match entry.kind() {
-                    EntryKind::Tool => tools += 1,
-                    EntryKind::Compaction => compacted = true,
-                    _ => {}
-                }
-            }
-            TurnSummary {
-                ordinal: idx + 1,
-                position: start,
-                tools,
-                attachments: entries[start].media.len(),
-                failed,
-                running,
-                compacted,
-            }
-        })
-        .collect()
-}
-
-fn day_bucket(entry: &Entry) -> Option<u64> {
-    entry.started_at.map(|at| at / DAY_MS)
 }
 
 fn day_heading(day: Option<u64>, now: u64) -> String {
@@ -270,23 +213,15 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
     let l = live(s);
     let session = &l.app.sessions[index];
     let query = l.commands.search.text.to_lowercase();
-    let all_turns = summarize_turns(&session.conversation.entries);
-    let total = all_turns.len();
-    let matches: Vec<TurnSummary> = all_turns
-        .into_iter()
-        .filter(|turn| {
-            caelum_core::application::presentation::entry_text(
-                &session.conversation.entries[turn.position],
-            )
-            .to_lowercase()
-            .contains(&query)
-        })
-        .collect();
+    let bookmarked_only = l.commands.timeline_bookmarked_only;
+    let total = matching_turns(session, "", bookmarked_only).len();
+    let bookmarked_count = matching_turns(session, "", true).len();
+    let matches = matching_turns(session, &query, bookmarked_only);
     let count = matches.len();
     let active_index = matches
         .iter()
         .position(|turn| {
-            Some(&session.conversation.entries[turn.position].id)
+            Some(&session.conversation.entries[turn.target_position].id)
                 == l.commands.timeline_selected.as_ref()
         })
         .unwrap_or(0);
@@ -294,10 +229,10 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
     let mut group_counts = vec![0usize; count];
     let mut group_start = 0;
     while group_start < count {
-        let day = day_bucket(&session.conversation.entries[matches[group_start].position]);
+        let day = day_bucket(&session.conversation.entries[matches[group_start].target_position]);
         let mut group_end = group_start + 1;
         while group_end < count
-            && day_bucket(&session.conversation.entries[matches[group_end].position]) == day
+            && day_bucket(&session.conversation.entries[matches[group_end].target_position]) == day
         {
             group_end += 1;
         }
@@ -320,14 +255,14 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
             move |s: &Workspace, i| {
                 format!(
                     "timeline-{}",
-                    live(s).app.sessions[index].conversation.entries[ids[i].position].id
+                    live(s).app.sessions[index].conversation.entries[ids[i].target_position].id
                 )
                 .into()
             },
             move |s: &Workspace, i| {
                 let turn = matches[i];
                 let entries = &live(s).app.sessions[index].conversation.entries;
-                let entry = &entries[turn.position];
+                let entry = &entries[turn.target_position];
                 let id = entry.id.clone();
                 let current = live(s).commands.timeline_current.as_ref() == Some(&id);
                 let selected = i == active_index;
@@ -359,9 +294,9 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                     .collect::<Vec<_>>()
                 };
                 let day = day_bucket(entry);
-                let start = i == 0 || day_bucket(&entries[matches[i - 1].position]) != day;
-                let end_of_group =
-                    i + 1 == matches.len() || day_bucket(&entries[matches[i + 1].position]) != day;
+                let start = i == 0 || day_bucket(&entries[matches[i - 1].target_position]) != day;
+                let end_of_group = i + 1 == matches.len()
+                    || day_bucket(&entries[matches[i + 1].target_position]) != day;
                 let age = relative_time(entry.started_at, now);
 
                 let mut item = col().w_full();
@@ -489,6 +424,22 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
                                             .grow(1.0)
                                             .min_w(0.0),
                                     )
+                                    .children((entry.kind() == EntryKind::Assistant).then(|| {
+                                        text("Reply")
+                                            .font(kit.ty.small)
+                                            .color(kit.c.text_muted)
+                                            .px(6.0)
+                                            .py(1.0)
+                                            .radius(4.0)
+                                            .fill(kit.c.layer_02)
+                                    }))
+                                    .children(live(s).app.sessions[index].is_bookmarked(&id).then(
+                                        || {
+                                            icon(&ui::BOOKMARK, 11.0)
+                                                .color(kit.c.text_accent)
+                                                .a11y_hidden()
+                                        },
+                                    ))
                                     .children(current.then(|| {
                                         text("Reading here")
                                             .font(TextStyle::new(10.5, 550.0))
@@ -575,11 +526,68 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         .h_full()
         .gap(10.0)
         .min_h(0.0)
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(6.0)
+                .child(
+                    Button::new("All prompts")
+                        .variant(if bookmarked_only {
+                            ButtonVariant::GhostMuted
+                        } else {
+                            ButtonVariant::Outline
+                        })
+                        .on_press_tx(|s: &mut Workspace, tx| {
+                            let l = live_mut(s);
+                            l.commands.timeline_bookmarked_only = false;
+                            l.commands.timeline_selected = None;
+                            tx.scroll_to_y("timeline-scroll", 0.0);
+                        })
+                        .build(k)
+                        .h(26.0)
+                        .px(9.0)
+                        .key("timeline-filter-all"),
+                )
+                .child(
+                    Button::new(if bookmarked_count > 0 {
+                        format!("Bookmarked ({bookmarked_count})")
+                    } else {
+                        "Bookmarked".into()
+                    })
+                    .icon(&ui::BOOKMARK)
+                    .variant(if bookmarked_only {
+                        ButtonVariant::Outline
+                    } else {
+                        ButtonVariant::GhostMuted
+                    })
+                    .on_press_tx(|s: &mut Workspace, tx| {
+                        let l = live_mut(s);
+                        l.commands.timeline_bookmarked_only = true;
+                        l.commands.timeline_selected = None;
+                        tx.scroll_to_y("timeline-scroll", 0.0);
+                    })
+                    .build(k)
+                    .h(26.0)
+                    .px(9.0)
+                    .key("timeline-filter-bookmarked"),
+                ),
+        )
         .child(search_bar(s, count, total, k));
 
     if count == 0 {
         let filtered = !l.commands.search.text.is_empty();
-        let (title, detail) = if filtered {
+        let (title, detail) = if bookmarked_only && !filtered {
+            (
+                "No bookmarked messages",
+                "Bookmark a prompt or reply to save it here.",
+            )
+        } else if filtered && bookmarked_only {
+            (
+                "No matching bookmarks",
+                "Try another search or clear the filter.",
+            )
+        } else if filtered {
             (
                 "No matching prompts",
                 "Try another search or clear the filter.",
@@ -630,10 +638,15 @@ pub(super) fn timeline(s: &Workspace, k: &Kit, index: usize) -> El {
         body = body.child(ui::caption(error, k).color(k.c.danger.fg));
     }
 
-    let summary = if count == total {
-        format!("{count} {}", if count == 1 { "prompt" } else { "prompts" })
+    let noun = if bookmarked_only {
+        if count == 1 { "message" } else { "messages" }
     } else {
-        format!("{count} of {total} prompts")
+        if count == 1 { "prompt" } else { "prompts" }
+    };
+    let summary = if count == total {
+        format!("{count} {noun}")
+    } else {
+        format!("{count} of {total} {noun}")
     };
     let mut trailing = row()
         .center_y()
@@ -685,19 +698,18 @@ pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return false;
     };
     let query = l.commands.search.text.to_lowercase();
-    let ids: Vec<_> = l.app.sessions[index]
-        .conversation
-        .entries
-        .iter()
-        .filter(|e| {
-            e.kind() == EntryKind::User
-                && caelum_core::application::presentation::entry_visible(e)
-                && caelum_core::application::presentation::entry_text(e)
-                    .to_lowercase()
-                    .contains(&query)
-        })
-        .map(|e| e.id.clone())
-        .collect();
+    let ids: Vec<_> = matching_turns(
+        &l.app.sessions[index],
+        &query,
+        l.commands.timeline_bookmarked_only,
+    )
+    .into_iter()
+    .map(|turn| {
+        l.app.sessions[index].conversation.entries[turn.target_position]
+            .id
+            .clone()
+    })
+    .collect();
     let current = ids
         .iter()
         .position(|id| Some(id) == l.commands.timeline_selected.as_ref());

@@ -58,6 +58,9 @@ pub enum Task {
         project: String,
         query: String,
     },
+    Templates {
+        project: String,
+    },
     Directory {
         project: String,
         path: String,
@@ -144,6 +147,13 @@ pub enum Task {
         url: String,
         head: String,
     },
+    CheckLogs {
+        project: String,
+        url: String,
+        head: String,
+        check_name: String,
+        details_url: String,
+    },
     #[serde(skip)]
     ImportSettings {
         path: String,
@@ -152,6 +162,7 @@ pub enum Task {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum TaskReply {
+    Templates(Vec<crate::templates::Template>),
     Shell(String),
     #[serde(skip)]
     Updates(UpdateCheck),
@@ -177,6 +188,7 @@ pub enum TaskReply {
     ReviewFiles(GitHubPullRequestFiles),
     Feedback(GitHubPullRequestFeedback),
     AutoMerge(GitHubAutoMergeResult),
+    CheckLogs(GitHubCheckLogs),
     #[serde(skip)]
     Preferences(Preferences),
     Done,
@@ -187,6 +199,7 @@ macro_rules! project_field {
         match $task {
             Task::Shell { project, .. }
             | Task::Completions { project, .. }
+            | Task::Templates { project }
             | Task::Image { project, .. }
             | Task::EncodeImage { project, .. }
             | Task::Reveal { project, .. }
@@ -209,7 +222,8 @@ macro_rules! project_field {
             | Task::Feedback { project, .. }
             | Task::Merge { project, .. }
             | Task::SetAutoMerge { project, .. }
-            | Task::UpdateBranch { project, .. } => Some(project),
+            | Task::UpdateBranch { project, .. }
+            | Task::CheckLogs { project, .. } => Some(project),
             Task::ImportSettings { .. }
             | Task::Updates
             | Task::Update(_)
@@ -239,7 +253,8 @@ impl Task {
             | Self::Feedback { url, head, .. }
             | Self::Merge { url, head, .. }
             | Self::SetAutoMerge { url, head, .. }
-            | Self::UpdateBranch { url, head, .. } => Some((url, Some(head))),
+            | Self::UpdateBranch { url, head, .. }
+            | Self::CheckLogs { url, head, .. } => Some((url, Some(head))),
             _ => None,
         }
     }
@@ -259,6 +274,7 @@ impl Task {
             Self::Stats { .. } => "stats".into(),
             Self::AttachPullRequest { url, .. } => format!("attach-pr:{url}"),
             Self::Completions { .. } => "completions".into(),
+            Self::Templates { .. } => "templates".into(),
             Self::Directory { path, .. } => format!("directory:{path}"),
             Self::File { path, .. } => format!("file:{path}"),
             Self::Search { .. } => "search".into(),
@@ -278,6 +294,9 @@ impl Task {
             Self::Merge { url, .. }
             | Self::SetAutoMerge { url, .. }
             | Self::UpdateBranch { url, .. } => format!("mutation:{url}"),
+            Self::CheckLogs {
+                url, check_name, ..
+            } => format!("check-logs:{url}:{check_name}"),
             Self::ImportSettings { .. } => "settings".into(),
         };
         serde_json::json!([self.project(), part]).to_string()
@@ -292,6 +311,9 @@ impl Task {
             };
         }
         match self {
+            Self::Templates { project } => {
+                crate::templates::load(project).map(TaskReply::Templates)
+            }
             Self::Shell {
                 project,
                 session,
@@ -379,16 +401,13 @@ impl Task {
                 }
                 _ => reply!(runtime.opencode.usage_limits(project), Usage),
             },
-            Self::Stats { project, filter } => Ok(TaskReply::Stats(
-                runtime
-                    .opencode
-                    .session_stats(project, filter)
-                    .map_err(|e| e.to_string())?,
-                runtime
-                    .opencode
-                    .stats_projects(project)
-                    .map_err(|e| e.to_string())?,
-            )),
+            Self::Stats { project, filter } => {
+                let server = crate::remote::native::checkout_id(project)
+                    .is_none()
+                    .then_some((&runtime.opencode, project.as_str()));
+                let (stats, projects) = runtime.usage.stats(server, filter)?;
+                Ok(TaskReply::Stats(stats, projects))
+            }
             Self::AttachPullRequest { project, url } => {
                 reply!(
                     github::pull_request_details(project, url).map(Box::new),
@@ -518,6 +537,16 @@ impl Task {
                     .map(|()| TaskReply::Done)
                     .map_err(|e| e.to_string())
             }
+            Self::CheckLogs {
+                project,
+                url,
+                head,
+                check_name,
+                details_url,
+            } => reply!(
+                github::pull_request_check_logs(project, url, head, check_name, details_url),
+                CheckLogs
+            ),
             Self::ImportSettings { path } => Preferences::import_tauri(
                 &std::fs::read_to_string(path).map_err(|e| e.to_string())?,
             )

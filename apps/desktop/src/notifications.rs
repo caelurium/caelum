@@ -105,7 +105,9 @@ pub fn dispatch(live: &mut Live) -> bool {
     live.panels.archived = false;
     live.models = Default::default();
     live.session_menu = None;
-    live.commands.side_owner = None;
+    if let Some(owner) = live.commands.side_owner.take() {
+        live.app.dismiss_side_question(owner);
+    }
     live.sync_editors();
     live.focus();
     true

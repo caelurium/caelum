@@ -76,6 +76,7 @@ impl Workspace {
                                 | Task::Details { .. }
                                 | Task::ReviewFiles { .. }
                                 | Task::Feedback { .. }
+                                | Task::CheckLogs { .. }
                                 | Task::Worktrees { .. }
                                 | Task::CreateWorktree { .. }
                                 | Task::RemoveWorktree { .. }
@@ -92,6 +93,9 @@ impl Workspace {
                 || matches!(
                     request.1,
                     Command::Load(_)
+                        | Command::RecordUsage(_)
+                        | Command::SideTurn(..)
+                        | Command::Generate(..)
                         | Command::Task(
                             Task::Updates
                                 | Task::Update(_)
@@ -100,6 +104,8 @@ impl Workspace {
                         )
                         | Command::Cancel(_)
                         | Command::Remote(crate::remote::Operation::Interrupt(..))
+                        | Command::Remote(crate::remote::Operation::Templates(_))
+                        | Command::Task(Task::Templates { .. })
                         | Command::Task(
                             Task::Shell { .. }
                                 | Task::Git { .. }
@@ -298,6 +304,9 @@ impl Workspace {
                     archived: s.archived(),
                     reading: s.reading,
                     unread: s.unread,
+                    origin: s.origin.clone(),
+                    pinned: s.pinned,
+                    bookmarked_entries: s.bookmarked_entries.clone(),
                 })
             })
             .collect();

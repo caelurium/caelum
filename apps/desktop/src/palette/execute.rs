@@ -61,15 +61,7 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
                 });
             }
         }
-        Action::Stats => {
-            if let Some(index) = live(s).app.selected {
-                let l = live_mut(s);
-                l.commands.owner = Some(index);
-                l.commands.stats_anchor = caelum_core::application::presentation::now();
-                l.panels.set_overlay(Some(Screen::Stats));
-                crate::commands::refresh_stats(s);
-            }
-        }
+        Action::Stats => crate::commands::open_stats(s),
         Action::ProviderSessions => {
             if let Some(index) = live(s).app.selected {
                 let l = live_mut(s);

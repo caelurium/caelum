@@ -271,6 +271,8 @@ fn background_wait_status_yields_to_foreground_work_input_and_lifecycle_changes(
                 }
                 "retrying" => session.conversation.set_retrying(true),
                 "input" => l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+                    attempt: "fixture".into(),
+                    repeatable: None,
                     provider: "opencode".into(),
                     project_path: session.scope.project.clone(),
                     session_id: session.remote_id.clone(),
@@ -436,4 +438,107 @@ fn pull_request_rows_in_overview_keep_repository_identity_and_focus() {
             "Preserve this café draft"
         );
     }
+}
+
+#[test]
+fn overview_inline_approval_and_stop_act_without_leaving_overview() {
+    let mut rt = design_runtime("session-feed", (1280.0, 900.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let scope = l.app.sessions[0].scope.clone();
+        l.app.sessions[0].remote_id = Some("ses-approve".into());
+        l.app.approvals.push(caelum_protocol::ApprovalPrompt {
+            attempt: "fixture".into(),
+            repeatable: None,
+            provider: scope.provider.as_str().into(),
+            project_path: scope.project,
+            session_id: Some("ses-approve".into()),
+            request_id: "req-1".into(),
+            summary: "Run cargo test".into(),
+            description: String::new(),
+        });
+        l.app.sessions[1].remote_id = Some("ses-work".into());
+        l.app.sessions[1].conversation.set_working(true);
+    });
+    click(&mut rt, "nav-overview");
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.screen,
+        crate::panels::Screen::Overview
+    );
+    assert!(rt.find("overview-approve-0").is_some());
+    assert!(rt.find("overview-deny-0").is_some());
+    assert!(rt.find("overview-stop-1").is_some());
+
+    click(&mut rt, "overview-approve-0");
+    click(&mut rt, "overview-stop-1");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().panels.screen,
+        crate::panels::Screen::Overview
+    );
+    let commands = rt.state.live.as_mut().unwrap().app.commands();
+    assert!(commands.iter().any(|(_, c)| matches!(
+        c,
+        caelum_core::application::Command::Approve(p, caelum_protocol::ApprovalDecision::AllowOnce)
+            if p.request_id == "req-1"
+    )));
+    assert!(
+        commands
+            .iter()
+            .any(|(_, c)| matches!(c, caelum_core::application::Command::Cancel(_)))
+    );
+}
+
+#[test]
+fn session_pinning_and_timeline_bookmark_filter_work_end_to_end() {
+    let mut rt = design_runtime("session-feed", (1280.0, 900.0));
+    let before = rt
+        .state
+        .live
+        .as_ref()
+        .unwrap()
+        .app
+        .session_feed(None, "", false);
+    let last = *before.last().unwrap();
+    rt.update(|s, _| {
+        s.live.as_mut().unwrap().app.toggle_pin(last);
+    });
+    advance(&mut rt, 0.1);
+    let after = rt
+        .state
+        .live
+        .as_ref()
+        .unwrap()
+        .app
+        .session_feed(None, "", false);
+    assert_eq!(after[0], last);
+
+    let target_id = {
+        let l = rt.state.live.as_ref().unwrap();
+        let selected = l.app.selected.unwrap();
+        l.app.sessions[selected]
+            .conversation
+            .entries
+            .iter()
+            .find(|e| {
+                matches!(
+                    e.kind(),
+                    caelum_core::application::EntryKind::Assistant
+                        | caelum_core::application::EntryKind::User
+                ) && caelum_core::application::presentation::entry_visible(e)
+            })
+            .map(|e| e.id.clone())
+            .expect("fixture has a visible message entry")
+    };
+    let bookmark_id = target_id.clone();
+    rt.update(move |s, _| {
+        let l = s.live.as_mut().unwrap();
+        let selected = l.app.selected.unwrap();
+        l.app.toggle_bookmark(selected, bookmark_id.clone());
+    });
+    rt.update(|s, _| crate::commands::open_timeline(s));
+    advance(&mut rt, 0.2);
+    click(&mut rt, "timeline-filter-bookmarked");
+    advance(&mut rt, 0.2);
+    assert!(rt.find(&format!("timeline-{target_id}")).is_some());
 }

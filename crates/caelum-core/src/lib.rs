@@ -21,6 +21,9 @@ pub mod questions;
 pub mod remote;
 pub mod runner;
 pub mod session_branches;
+pub mod side_questions;
+pub mod telemetry;
+pub mod templates;
 pub mod updates;
 pub mod worktrees;
 

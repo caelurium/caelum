@@ -200,6 +200,42 @@ pub struct GitHubPullRequestFeedback {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubCheckLogs {
+    pub run_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<u64>,
+    pub check_name: String,
+    pub excerpt: String,
+    pub truncated: bool,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionOrigin {
+    Subagent {
+        parent_remote_id: String,
+        entry_id: String,
+    },
+    PullRequestCheck {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_session_id: Option<String>,
+        project: String,
+        pr_url: String,
+        pr_number: u64,
+        head_oid: String,
+        check_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_id: Option<u64>,
+    },
+    Orchestration {
+        orchestration_id: String,
+        task_id: String,
+    },
+}
+
 /// GitHub exposes both Actions check runs and legacy commit statuses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "__typename")]
@@ -385,6 +421,10 @@ pub struct PermissionRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPrompt {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub attempt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeatable: Option<ApprovalRule>,
     pub provider: String,
     pub project_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -392,6 +432,21 @@ pub struct ApprovalPrompt {
     pub request_id: String,
     pub summary: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApprovalRule {
+    ExactCommand(String),
+    ReadFile(String),
+}
+
+impl std::fmt::Display for ApprovalRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExactCommand(cmd) => write!(f, "Run `{cmd}` in the checkout root"),
+            Self::ReadFile(path) => write!(f, "Read {path}"),
+        }
+    }
 }
 
 /// Decisions are one-shot: there is deliberately no persistent "allow all".
@@ -730,6 +785,8 @@ mod tests {
     #[test]
     fn approval_prompts_include_project_and_session_context() {
         let prompt = ApprovalPrompt {
+            attempt: String::new(),
+            repeatable: None,
             provider: "opencode".into(),
             project_path: "/workspace/project".into(),
             session_id: Some("ses_1".into()),

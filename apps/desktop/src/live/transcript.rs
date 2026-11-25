@@ -5,7 +5,6 @@ use std::{
 };
 
 use caelum_core::application::EntryKind;
-use caelum_protocol::ApprovalDecision;
 use rune::{El, ScrollSpec, TextEdit, col, icon, row, text};
 use rune_kit::{ButtonVariant, Kit, Markdown, glyphs};
 
@@ -333,6 +332,8 @@ pub(super) fn timeline_row(
             }
             EntryKind::Assistant => {
                 let id = entry.id.clone();
+                let bookmark_id = entry.id.clone();
+                let bookmarked = session.is_bookmarked(&entry.id);
                 item = item
                     .child(
                         row()
@@ -355,23 +356,51 @@ pub(super) fn timeline_row(
                                     ),
                             )
                             .child(
-                                quiet_button(&glyphs::COPY, "Copy response")
-                                    .on_press_tx(move |s: &mut Workspace, tx| {
-                                        if let Some(entry) = live_mut(s).app.sessions[index]
-                                            .conversation
-                                            .entries
-                                            .iter()
-                                            .find(|entry| entry.id == id)
-                                        {
-                                            tx.copy(
-                                                caelum_core::application::presentation::entry_text(
-                                                    entry,
-                                                ),
-                                            );
-                                        }
-                                    })
-                                    .build(k)
-                                    .key(format!("copy-response-{index}-{row_id}")),
+                                row()
+                                    .center_y()
+                                    .gap(2.0)
+                                    .child(
+                                        quiet_button(
+                                            &ui::BOOKMARK,
+                                            if bookmarked {
+                                                "Remove bookmark"
+                                            } else {
+                                                "Bookmark message"
+                                            },
+                                        )
+                                        .on_press(move |s: &mut Workspace| {
+                                            live_mut(s)
+                                                .app
+                                                .toggle_bookmark(index, bookmark_id.clone());
+                                        })
+                                        .build(k)
+                                        .color(if bookmarked {
+                                            k.c.text_accent
+                                        } else {
+                                            k.c.icon_muted
+                                        })
+                                        .key(format!("bookmark-response-{index}-{row_id}")),
+                                    )
+                                    .child(
+                                        quiet_button(&glyphs::COPY, "Copy response")
+                                            .on_press_tx(move |s: &mut Workspace, tx| {
+                                                if let Some(entry) = live_mut(s).app.sessions
+                                                    [index]
+                                                    .conversation
+                                                    .entries
+                                                    .iter()
+                                                    .find(|entry| entry.id == id)
+                                                {
+                                                    tx.copy(
+                                                        caelum_core::application::presentation::entry_text(
+                                                            entry,
+                                                        ),
+                                                    );
+                                                }
+                                            })
+                                            .build(k)
+                                            .key(format!("copy-response-{index}-{row_id}")),
+                                    ),
                             ),
                     )
                     .child(
@@ -421,6 +450,16 @@ pub(super) fn timeline_row(
                 item = item.child(crate::activity::compaction(s, k, index, entry));
             }
             EntryKind::Status => {
+                if entry.name == "session-approval" {
+                    item = item.child(
+                        ui::caption("Auto-approved · Session rule", k)
+                            .self_start()
+                            .px(6.0)
+                            .py(2.0)
+                            .radius(4.0)
+                            .fill(k.c.layer_02),
+                    );
+                }
                 item = item.child(
                     text(caelum_core::application::presentation::entry_text(entry))
                         .font(k.ty.small)
@@ -445,6 +484,8 @@ pub(super) fn timeline_row(
                 && !entry.optimistic()
                 && session.previous_scope(entry).is_none())
             .then(|| entry.id.clone()),
+            matches!(entry.kind(), EntryKind::User | EntryKind::Assistant)
+                .then(|| entry.id.clone()),
         ));
     }
     if let Some(notice) = session.conversation.failure.notice() {
@@ -529,8 +570,6 @@ pub(super) fn timeline_row(
             && p.provider == session.scope.provider.as_str()
             && (p.session_id.is_none() || p.session_id == session.remote_id)
     }) {
-        let allow = prompt.clone();
-        let deny = prompt.clone();
         content = content.child(
             col()
                 .w_full()
@@ -581,35 +620,7 @@ pub(super) fn timeline_row(
                                 .selectable(true),
                         )
                 }))
-                .child(
-                    row()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            Button::new("Allow once")
-                                .variant(ButtonVariant::Contrast)
-                                .disabled(!crate::remote::native::ready(live))
-                                .on_press(move |s: &mut Workspace| {
-                                    live_mut(s)
-                                        .app
-                                        .approve(allow.clone(), ApprovalDecision::AllowOnce)
-                                })
-                                .build(k)
-                                .key(format!("allow-once-{}", prompt.request_id)),
-                        )
-                        .child(
-                            Button::new("Deny")
-                                .variant(ButtonVariant::Outline)
-                                .disabled(!crate::remote::native::ready(live))
-                                .on_press(move |s: &mut Workspace| {
-                                    live_mut(s)
-                                        .app
-                                        .approve(deny.clone(), ApprovalDecision::Deny)
-                                })
-                                .build(k)
-                                .key(format!("deny-{}", prompt.request_id)),
-                        ),
-                ),
+                .child(super::approval_rules::actions(live, prompt, k)),
         );
     }
     content
