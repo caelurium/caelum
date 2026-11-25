@@ -128,7 +128,19 @@ pub(super) fn scene(state: &mut Workspace, name: &str) {
         caelum_protocol::GitHubPullRequestFile {path:"assets/icon.png".into(),status:"modified".into(),previous_path:None,additions:0,deletions:0,patch:None}
     ];
     details.base_ref_oid = "b".repeat(40);
-    review.threads=(0..2).map(|n|serde_json::from_value(json!({"id":format!("thread-{n}"),"path":"src/workspace.rs","line":n+2,"startLine":null,"originalLine":n+2,"diffSide":"RIGHT","isResolved":n==1,"isOutdated":false,"comments":[{"id":format!("comment-{n}"),"body":if n==0 {"Keep newer navigation intact while a restore is pending."} else {"Reading position now survives refresh. Looks good."},"url":url,"author":{"login":"reviewer"},"createdAt":"2026-11-07T10:00:00Z","state":null,"diffHunk":null}],"nextCursor":null})).unwrap()).collect();
+    review.threads = (0..2)
+        .map(|n| {
+            serde_json::from_value(json!({
+        "id":format!("thread-{n}"), "path":"src/workspace.rs", "line":n+2, "originalLine":n+2,
+        "diffSide":"RIGHT", "isResolved":n==1, "isOutdated":false,
+        "viewerCanReply":true, "viewerCanResolve":n==0, "viewerCanUnresolve":n==1,
+        "comments":[{"id":format!("comment-{n}"), "body":if n==0 {
+            "Keep newer navigation intact while a restore is pending."
+        } else {"Reading position now survives refresh. Looks good."},
+        "url":url, "author":{"login":"reviewer"}, "createdAt":"2026-11-07T10:00:00Z"}]
+    })).unwrap()
+        })
+        .collect();
     for n in 0..9 {
         files.push(caelum_protocol::GitHubPullRequestFile {
             path: format!("crates/core/src/session_{n}.rs"),

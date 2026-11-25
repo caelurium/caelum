@@ -2,7 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+mod github_review;
 mod stats;
+pub use github_review::GitHubDiffSide;
+pub use github_review::GitHubPendingReviewComment;
+pub use github_review::GitHubReviewDraft;
+pub use github_review::GitHubReviewEvent;
+pub use github_review::GitHubReviewWrite;
+pub use github_review::GitHubReviewWriteResult;
 pub use stats::*;
 
 /// Stable, serializable application metadata shared across Caelum interfaces.
@@ -188,8 +195,24 @@ pub struct GitHubReviewThread {
     pub diff_side: String,
     pub is_resolved: bool,
     pub is_outdated: bool,
+    #[serde(default)]
+    pub viewer_can_reply: bool,
+    #[serde(default)]
+    pub viewer_can_resolve: bool,
+    #[serde(default)]
+    pub viewer_can_unresolve: bool,
     pub comments: Vec<GitHubReviewComment>,
     pub next_cursor: Option<String>,
+}
+
+impl GitHubReviewThread {
+    pub fn can_toggle_resolution(&self) -> bool {
+        if self.is_resolved {
+            self.viewer_can_unresolve
+        } else {
+            self.viewer_can_resolve
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

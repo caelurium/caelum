@@ -26,12 +26,15 @@ struct Files {
 #[derive(Default)]
 pub struct Review {
     pub(super) generation: u64,
+    draft_revision: u64,
     state: State,
     pub discussion: Vec<GitHubReviewComment>,
     pub reviews: Vec<GitHubReviewComment>,
     pub threads: Vec<GitHubReviewThread>,
     pub cursors: BTreeMap<String, Option<String>>,
     pub selected_comments: HashSet<String>,
+    pub draft: GitHubReviewDraft,
+    pub reply_drafts: BTreeMap<String, String>,
     pub check_logs: BTreeMap<String, GitHubCheckLogs>,
     pub error: Option<String>,
     pub notice: Option<String>,
@@ -55,6 +58,101 @@ impl Review {
 
     pub fn head(&self) -> Option<&str> {
         self.details().map(|details| details.head_ref_oid.as_str())
+    }
+
+    pub fn writable_head(&self) -> Option<&str> {
+        let details = self.details()?;
+        (!self.cached() && details.state == "OPEN").then_some(details.head_ref_oid.as_str())
+    }
+
+    /// Changes when drafts lose their diff anchors, including a base-only change.
+    /// A refresh of the same revision keeps the editor and in-flight write valid.
+    pub fn draft_revision(&self) -> u64 {
+        self.draft_revision
+    }
+
+    pub(in crate::application) fn admits_write(
+        &self,
+        head: &str,
+        base: &str,
+        action: &GitHubReviewWrite,
+    ) -> bool {
+        self.writable_head() == Some(head)
+            && self.expected_base() == Some(base)
+            && match action {
+                GitHubReviewWrite::Reply { thread_id, body } => {
+                    !body.trim().is_empty()
+                        && self
+                            .threads
+                            .iter()
+                            .any(|t| &t.id == thread_id && t.viewer_can_reply)
+                }
+                GitHubReviewWrite::SetResolved {
+                    thread_id,
+                    resolved,
+                } => self.threads.iter().any(|t| {
+                    &t.id == thread_id && t.is_resolved != *resolved && t.can_toggle_resolution()
+                }),
+                GitHubReviewWrite::Submit(draft) => draft.can_submit(),
+            }
+    }
+
+    /// Returns whether fresh feedback pages are needed after this confirmation.
+    pub(super) fn confirm_write(
+        &mut self,
+        action: &GitHubReviewWrite,
+        result: GitHubReviewWriteResult,
+    ) -> bool {
+        match (action, result) {
+            (GitHubReviewWrite::Submit(sent), GitHubReviewWriteResult::Submitted) => {
+                if &self.draft == sent {
+                    self.draft = Default::default();
+                }
+                self.notice = Some("Review submitted.".into());
+                true
+            }
+            (
+                GitHubReviewWrite::Reply { thread_id, body },
+                GitHubReviewWriteResult::Replied(comment),
+            ) => {
+                if self.reply_drafts.get(thread_id) == Some(body) {
+                    self.reply_drafts.remove(thread_id);
+                }
+                self.notice = Some("Reply posted.".into());
+                let Some(thread) = self.threads.iter_mut().find(|t| &t.id == thread_id) else {
+                    return true;
+                };
+                if !thread.comments.iter().any(|c| c.id == comment.id) {
+                    thread.comments.push(comment);
+                }
+                false
+            }
+            (
+                GitHubReviewWrite::SetResolved { thread_id, .. },
+                GitHubReviewWriteResult::Resolution {
+                    resolved,
+                    can_resolve,
+                    can_unresolve,
+                },
+            ) => {
+                self.notice = Some(
+                    if resolved {
+                        "Thread resolved."
+                    } else {
+                        "Thread reopened."
+                    }
+                    .into(),
+                );
+                let Some(thread) = self.threads.iter_mut().find(|t| &t.id == thread_id) else {
+                    return true;
+                };
+                thread.is_resolved = resolved;
+                thread.viewer_can_resolve = can_resolve;
+                thread.viewer_can_unresolve = can_unresolve;
+                false
+            }
+            _ => false,
+        }
     }
 
     pub fn expected_base(&self) -> Option<&str> {
@@ -91,6 +189,7 @@ impl Review {
         self.state = State::Unloaded;
         self.generation += 1;
         self.clear_feedback();
+        self.clear_drafts();
     }
 
     pub fn edit_details(&mut self, edit: impl FnOnce(&mut GitHubPullRequestDetails)) -> bool {
@@ -104,6 +203,7 @@ impl Review {
             verified.files = None;
             self.generation += 1;
             self.clear_feedback();
+            self.clear_drafts();
         }
         true
     }
@@ -125,6 +225,25 @@ impl Review {
         self.cursors.clear();
         self.selected_comments.clear();
         self.check_logs.clear();
+    }
+
+    pub(super) fn replace_revision(&mut self) {
+        self.clear_drafts();
+        self.error = None;
+        self.state = State::Unloaded;
+    }
+
+    fn clear_drafts(&mut self) {
+        self.draft_revision += 1;
+        self.notice = (!self.draft.body.is_empty()
+            || !self.draft.comments.is_empty()
+            || !self.reply_drafts.is_empty())
+        .then(|| {
+            "The diff changed. Unsubmitted review feedback for the previous revision was cleared."
+                .into()
+        });
+        self.draft = Default::default();
+        self.reply_drafts.clear();
     }
 
     pub(super) fn accept_details(&mut self, request: u64, details: GitHubPullRequestDetails) {

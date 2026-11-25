@@ -147,6 +147,13 @@ pub enum Task {
         url: String,
         head: String,
     },
+    WriteReview {
+        project: String,
+        url: String,
+        head: String,
+        base: String,
+        action: GitHubReviewWrite,
+    },
     CheckLogs {
         project: String,
         url: String,
@@ -188,6 +195,7 @@ pub enum TaskReply {
     ReviewFiles(GitHubPullRequestFiles),
     Feedback(GitHubPullRequestFeedback),
     AutoMerge(GitHubAutoMergeResult),
+    ReviewWritten(GitHubReviewWriteResult),
     CheckLogs(GitHubCheckLogs),
     #[serde(skip)]
     Preferences(Preferences),
@@ -223,6 +231,7 @@ macro_rules! project_field {
             | Task::Merge { project, .. }
             | Task::SetAutoMerge { project, .. }
             | Task::UpdateBranch { project, .. }
+            | Task::WriteReview { project, .. }
             | Task::CheckLogs { project, .. } => Some(project),
             Task::ImportSettings { .. }
             | Task::Updates
@@ -237,7 +246,10 @@ impl Task {
     fn mutates_review(&self) -> bool {
         matches!(
             self,
-            Self::Merge { .. } | Self::SetAutoMerge { .. } | Self::UpdateBranch { .. }
+            Self::Merge { .. }
+                | Self::SetAutoMerge { .. }
+                | Self::UpdateBranch { .. }
+                | Self::WriteReview { .. }
         )
     }
     pub fn project(&self) -> &str {
@@ -254,6 +266,7 @@ impl Task {
             | Self::Merge { url, head, .. }
             | Self::SetAutoMerge { url, head, .. }
             | Self::UpdateBranch { url, head, .. }
+            | Self::WriteReview { url, head, .. }
             | Self::CheckLogs { url, head, .. } => Some((url, Some(head))),
             _ => None,
         }
@@ -293,13 +306,17 @@ impl Task {
             } => format!("feedback:{url}:{kind:?}:{thread:?}"),
             Self::Merge { url, .. }
             | Self::SetAutoMerge { url, .. }
-            | Self::UpdateBranch { url, .. } => format!("mutation:{url}"),
+            | Self::UpdateBranch { url, .. }
+            | Self::WriteReview { url, .. } => return Self::mutation_slot(self.project(), url),
             Self::CheckLogs {
                 url, check_name, ..
             } => format!("check-logs:{url}:{check_name}"),
             Self::ImportSettings { .. } => "settings".into(),
         };
         serde_json::json!([self.project(), part]).to_string()
+    }
+    fn mutation_slot(project: &str, url: &str) -> String {
+        serde_json::json!([project, format!("mutation:{url}")]).to_string()
     }
 
     pub(super) fn execute(&self, runtime: &ProviderRuntime) -> Result<TaskReply, String> {
@@ -537,6 +554,16 @@ impl Task {
                     .map(|()| TaskReply::Done)
                     .map_err(|e| e.to_string())
             }
+            Self::WriteReview {
+                project,
+                url,
+                head,
+                base,
+                action,
+            } => reply!(
+                github::write_review(project, url, head, base, action),
+                ReviewWritten
+            ),
             Self::CheckLogs {
                 project,
                 url,

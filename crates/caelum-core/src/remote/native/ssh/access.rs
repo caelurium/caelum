@@ -7,7 +7,11 @@ use std::{
     process::Stdio,
     time::Duration,
 };
-use tokio::{io::AsyncReadExt, process::Command, runtime::Handle};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    process::Command,
+    runtime::Handle,
+};
 
 pub(crate) struct Metadata {
     pub(crate) branches: WorkspaceDatabase,
@@ -138,12 +142,27 @@ impl Access {
         limit: usize,
         codes: &[i32],
     ) -> Result<Vec<u8>, String> {
+        self.run_with_input(script, limit, codes, None).await
+    }
+
+    async fn run_with_input(
+        &self,
+        script: &str,
+        limit: usize,
+        codes: &[i32],
+        input: Option<&[u8]>,
+    ) -> Result<Vec<u8>, String> {
         if !self.live.load(std::sync::atomic::Ordering::Acquire) {
             return Err("The VM connection closed.".into());
         }
         let mut child = self
             .channel(&[])
             .arg(format!("sh -c {} caelum-vm", quote(script)))
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .spawn()
             .map_err(|e| e.to_string())?;
         let stdout = child.stdout.take().expect("piped stdout");
@@ -158,7 +177,14 @@ impl Access {
             let mut data = Vec::new();
             let mut stdout = stdout.take(limit as u64 + 1);
             let diagnostics = tokio::spawn(read_diagnostic(stderr));
-            if let Err(error) = stdout.read_to_end(&mut data).await {
+            let mut stdin = child.stdin.take();
+            let send = async move {
+                if let (Some(pipe), Some(bytes)) = (&mut stdin, input) {
+                    pipe.write_all(bytes).await?;
+                }
+                Ok(())
+            };
+            if let Err(error) = tokio::try_join!(send, stdout.read_to_end(&mut data)) {
                 let _ = child.kill().await;
                 return Err(error.to_string());
             }
@@ -219,6 +245,7 @@ impl Access {
         &self,
         args: impl Iterator<Item = &'a std::ffi::OsStr>,
         timeout: Duration,
+        input: Option<&[u8]>,
     ) -> Result<Vec<u8>, String> {
         let args = args
             .map(|a| a.to_str().map(quote).ok_or("Invalid gh argument"))
@@ -226,9 +253,12 @@ impl Access {
             .join(" ");
         let script=format!("cd -P {} && unset GH_REPO && PATH=\"$HOME/.local/bin:$HOME/.nix-profile/bin:$HOME/.opencode/bin:$HOME/.npm-global/bin:$HOME/.volta/bin:$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.local/share/mise/shims:$HOME/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" GH_PROMPT_DISABLED=1 GH_SPINNER_DISABLED=1 GH_PAGER=cat GH_NO_UPDATE_NOTIFIER=1 gh {args}",quote(&self.root));
         self.io.block_on(async {
-            tokio::time::timeout(timeout, self.run(&script, 1024 * 1024, &[0]))
-                .await
-                .map_err(|_| "GitHub timed out on the VM.")?
+            tokio::time::timeout(
+                timeout,
+                self.run_with_input(&script, 1024 * 1024, &[0], input),
+            )
+            .await
+            .map_err(|_| "GitHub timed out on the VM.")?
         })
     }
 }

@@ -25,6 +25,7 @@ pub use auto_merge::set_pull_request_auto_merge;
 pub use cache::CachedReview;
 pub use checks::{parse_actions_run, pull_request_check_logs};
 use host::Gh;
+pub(crate) use review::write::write_review;
 pub use review::{pull_request_feedback, pull_request_files};
 pub(crate) use vm_branch::create_vm_branch;
 
@@ -241,6 +242,7 @@ fn github_command(executable: &(impl Gh + ?Sized), project_path: &Path) -> Comma
     let mut command = Command::new(executable.program());
     command
         .current_dir(project_path)
+        .stdin(Stdio::null())
         .env_remove("GH_REPO")
         .env("GH_PROMPT_DISABLED", "1")
         .env("GH_PAGER", "cat")
@@ -304,7 +306,6 @@ fn gh_executable() -> PathBuf {
 
 fn bounded_output(mut command: Command, timeout: Duration) -> io::Result<Output> {
     let mut child = command
-        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;

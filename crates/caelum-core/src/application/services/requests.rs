@@ -16,6 +16,10 @@ pub(super) struct Request {
 enum Owner {
     Independent,
     Mutation,
+    ReviewWrite {
+        key: (String, String),
+        revision: u64,
+    },
     Review {
         key: (String, String),
         generation: u64,
@@ -51,6 +55,10 @@ impl Services {
         }
         match &request.owner {
             Owner::Independent | Owner::Mutation => true,
+            Owner::ReviewWrite { key, revision } => self
+                .reviews
+                .get(key)
+                .is_some_and(|r| r.draft_revision() == *revision),
             Owner::Review {
                 key,
                 generation,
@@ -66,6 +74,13 @@ impl Services {
         matches!(self.requests.get(&task.slot()), Some(Slot::Running(_)))
     }
 
+    pub fn review_mutating(&self, project: &str, url: &str) -> bool {
+        matches!(
+            self.requests.get(&Task::mutation_slot(project, url)),
+            Some(Slot::Running(_))
+        )
+    }
+
     pub fn error(&self, task: &Task) -> Option<&str> {
         match self.requests.get(&task.slot()) {
             Some(Slot::Failed(error)) => Some(error),
@@ -78,7 +93,13 @@ impl Services {
             let key = (task.project().into(), url.into());
             let review = self.reviews.entry(key.clone()).or_default();
             review.error = None;
-            if task.mutates_review() {
+            if let Task::WriteReview { .. } = task {
+                review.notice = None;
+                Owner::ReviewWrite {
+                    key,
+                    revision: review.draft_revision(),
+                }
+            } else if task.mutates_review() {
                 Owner::Mutation
             } else {
                 let pin = match task {

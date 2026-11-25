@@ -250,9 +250,7 @@ impl Services {
                 if review.head() != Some(&details.head_ref_oid)
                     || review.expected_base() != Some(&details.base_ref_oid)
                 {
-                    let generation = review.generation;
-                    *review = Review::default();
-                    review.generation = generation;
+                    review.replace_revision();
                 }
                 let head = details.head_ref_oid.clone();
                 let base = details.base_ref_oid.clone();
@@ -394,6 +392,27 @@ impl Services {
                     project: project.clone(),
                     url: url.clone(),
                 });
+            }
+            (
+                Task::WriteReview {
+                    project,
+                    url,
+                    action,
+                    ..
+                },
+                TaskReply::ReviewWritten(result),
+            ) => {
+                let reload = self
+                    .reviews
+                    .get_mut(&(project.clone(), url.clone()))
+                    .is_some_and(|review| review.confirm_write(action, result));
+                if reload {
+                    self.refresh_review(project, url);
+                    next.push(Task::Details {
+                        project: project.clone(),
+                        url: url.clone(),
+                    });
+                }
             }
             (
                 Task::CheckLogs {

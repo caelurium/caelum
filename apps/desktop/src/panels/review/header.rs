@@ -62,6 +62,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
         let project = project.clone();
         let url = url.clone();
         navigation = navigation
+            .children(super::composer::trigger(s, k))
             .child(
                 quiet_button(&ui::EXTERNAL, "Open pull request on GitHub")
                     .on_press_tx(move |_: &mut Workspace, tx| {

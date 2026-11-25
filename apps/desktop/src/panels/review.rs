@@ -1,4 +1,12 @@
+mod authoring;
+mod composer;
 mod header;
+mod threads;
+
+pub(super) use authoring::Editor;
+pub(super) use authoring::Owner;
+pub(super) use composer::comment_on_line;
+pub(super) use threads::thread_actions;
 
 use caelum_core::application::Task;
 use caelum_protocol::GitHubFeedbackKind;
@@ -35,6 +43,7 @@ pub fn open_review(s: &mut Workspace, project: String, url: String) {
         live.panels.diff_hash = hash;
         live.panels.annotations_hash = notes;
         live.panels.review_file = file;
+        live.panels.review_editor = None;
     }
     live.panels.screen = Screen::Review;
     live.panels.review = Some((project.clone(), url.clone()));
@@ -73,7 +82,11 @@ pub(super) fn review(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             )
             .child(
                 action(
-                    "Retry",
+                    if review.details().is_some() {
+                        "Refresh review"
+                    } else {
+                        "Retry"
+                    },
                     Task::Details {
                         project: project.clone(),
                         url: url.clone(),
@@ -88,6 +101,7 @@ pub(super) fn review(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
     if let Some(notice) = &review.notice {
         notices = notices.child(label(notice, k));
     }
+    composer::popover(s, k, layers);
     let Some(details) = review.details() else {
         return content.child(scroll(if review.error.is_some() {
             notices

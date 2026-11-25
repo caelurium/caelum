@@ -1,6 +1,7 @@
 mod attention;
 mod auto_merge;
 mod cache;
+mod write;
 
 use super::*;
 
