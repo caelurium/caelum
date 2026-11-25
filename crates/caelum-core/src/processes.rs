@@ -65,6 +65,23 @@ impl ProcessRegistry {
         child.terminate().map_err(ProcessError::from)
     }
 
+    /// Reap a single child process if it has already exited.
+    pub fn try_wait_one(&self, id: ProcessId) -> Result<Option<ExitStatus>, ProcessError> {
+        let mut state = self.lock();
+        let RegistryState::Open(processes) = &mut *state else {
+            return Err(ProcessError::Closed);
+        };
+        let status = processes
+            .get_mut(&id)
+            .ok_or(ProcessError::UnknownProcess)?
+            .try_wait()
+            .map_err(ProcessError::from)?;
+        if status.is_some() {
+            processes.remove(&id);
+        }
+        Ok(status)
+    }
+
     /// Reap completed children and return their exit statuses for provider-level
     /// recovery decisions.
     pub fn poll_exited(&self) -> Result<Vec<(ProcessId, ExitStatus)>, ProcessError> {

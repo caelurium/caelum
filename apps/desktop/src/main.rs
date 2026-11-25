@@ -20,9 +20,11 @@ mod palette;
 mod panels;
 mod questions;
 mod remote;
+mod runner;
 mod select;
 mod settings;
 mod shells;
+mod split;
 mod state;
 mod subagents;
 mod theme;
@@ -435,6 +437,9 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 .min(window_width - inspector_pane.width() - 280.0),
         );
     }
+    if let Some(live) = s.live.as_ref() {
+        live.window_width.set(window_width);
+    }
     let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
     let remote = s
@@ -499,6 +504,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     } else {
         main.child(composer(s, &k, padding, width > 760.0, &mut layers))
     };
+    let main = split::wrap_main(s, &k, main, window_width, pane_border, &mut layers);
     let main = main.children((vercel && sidebar_pane.is_open()).then(|| {
         rune::el()
             .key("sidebar-divider")
@@ -612,12 +618,13 @@ fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return models::key(s, ev, tx);
     }
     if s.live.is_some() && live::live(s).panels.overlay().is_some() {
-        return panels::on_key(s, ev, tx);
+        return runner::on_key(s, ev, tx) || panels::on_key(s, ev, tx);
     }
     if s.live.is_some()
         && (home::on_key(s, ev, tx)
             || overview::on_key(s, ev, tx)
             || questions::on_key(s, ev, tx)
+            || split::on_key(s, ev, tx)
             || live::sidebar_key(s, ev, tx)
             || completion::on_key(s, ev, tx)
             || panels::on_key(s, ev, tx)

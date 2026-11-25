@@ -37,6 +37,19 @@ verify_app() {
   test "$("$app/Contents/MacOS/$executable" --version)" = "Caelum $version"
   test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Contents/Info.plist")" = "caelum"
 }
+verify_dmg() {
+  local dmg="$1" attempt
+  for attempt in 1 2 3; do
+    if hdiutil verify "$dmg"; then
+      return 0
+    fi
+    if [[ "$attempt" == 3 ]]; then
+      return 1
+    fi
+    echo "DMG verification attempt $attempt failed; retrying" >&2
+    sleep "$attempt"
+  done
+}
 
 app_bundle="target/$TARGET/release/bundle/macos/Caelum.app"
 bash scripts/release/package_macos_app.sh --with-cli
@@ -57,7 +70,7 @@ ditto "$app_bundle" "$scratch/image/Caelum.app"
 ln -s /Applications "$scratch/image/Applications"
 dmg="$dist/Caelum-v${version}-${ARCH}.dmg"
 hdiutil create -ov -volname Caelum -srcfolder "$scratch/image" -format UDZO "$dmg"
-hdiutil verify "$dmg"
+verify_dmg "$dmg"
 hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$scratch/mount"
 mounted=true
 verify_app "$scratch/mount/Caelum.app"

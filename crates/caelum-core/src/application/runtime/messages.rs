@@ -10,6 +10,17 @@ use caelum_protocol::{
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     #[serde(skip)]
+    RunCommand {
+        project: String,
+        run_id: u64,
+        command: String,
+    },
+    #[serde(skip)]
+    StopCommand {
+        project: String,
+        run_id: u64,
+    },
+    #[serde(skip)]
     RecordUsage(crate::telemetry::Record),
     #[serde(skip)]
     Remote(crate::remote::Operation),
@@ -124,6 +135,8 @@ pub enum Event {
     SideAnswer(SessionKey, u64, String),
     #[serde(skip)]
     UpdateProgress(u64, crate::updates::Progress),
+    #[serde(skip)]
+    Runner(crate::runner::RunnerEvent),
     Checkout(String),
     Completed(u64, Result<Reply, String>),
     Codex(CodexEvent),

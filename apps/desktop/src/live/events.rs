@@ -66,6 +66,11 @@ impl Live {
                     && self.panels.settings_page == crate::settings::Page::About;
                 continue;
             }
+            if let Event::Runner(ev) = event {
+                let updated = self.app.runner.apply(ev);
+                changed |= updated && self.panels.overlay() == Some(crate::panels::Screen::Runner);
+                continue;
+            }
             let trace = caelum_core::diagnostics::event(&event).filter(|mark| {
                 self.app.selected.is_some_and(|i| {
                     mark.owner() != 0
