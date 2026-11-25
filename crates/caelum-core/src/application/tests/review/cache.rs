@@ -162,6 +162,18 @@ fn failed_refresh_keeps_cached_content_without_admitting_mutations_or_stale_page
             head: "head".into(),
             method: None,
         },
+        Task::WriteReview {
+            project: "/a".into(),
+            url: URL.into(),
+            head: "head".into(),
+            base: "base".into(),
+            action: caelum_protocol::GitHubReviewWrite::Submit(
+                caelum_protocol::GitHubReviewDraft {
+                    event: caelum_protocol::GitHubReviewEvent::Approve,
+                    ..Default::default()
+                },
+            ),
+        },
         Task::ReviewFiles {
             project: "/a".into(),
             url: URL.into(),

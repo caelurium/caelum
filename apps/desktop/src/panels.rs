@@ -119,6 +119,7 @@ pub struct Panels {
     pub(crate) merge_menu: bool,
     pub(crate) expanded_checks: HashSet<Target>,
     expanded_threads: HashSet<String>,
+    review_editor: Option<review::Editor>,
     search: TextEdit,
     find: TextEdit,
     finding: Find,
@@ -175,6 +176,7 @@ impl Default for Panels {
             merge_menu: false,
             expanded_checks: Default::default(),
             expanded_threads: Default::default(),
+            review_editor: None,
             search: TextEdit::new(""),
             find: TextEdit::new(""),
             finding: Find::Closed,
@@ -265,7 +267,15 @@ impl Panels {
         }
     }
     pub fn sync(&mut self, app: &Application) -> bool {
-        let form_changed = self.worktree_mut().is_some_and(|form| form.sync(app));
+        let mut form_changed = self.worktree_mut().is_some_and(|form| form.sync(app));
+        if self
+            .review_editor
+            .as_ref()
+            .is_some_and(|form| !form.owner.matches(self, app))
+        {
+            self.review_editor = None;
+            form_changed = true;
+        }
         if self.change_file.as_ref().is_some_and(|(p, f)| {
             app.services
                 .checkouts
@@ -717,7 +727,10 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         live_mut(s).panels.sessions.focused = false;
         live_mut(s).panels.searching_sessions = false;
     } else if ev.key == Key::Escape && live(s).panels.screen == Screen::Review {
-        live_mut(s).panels.screen = Screen::Conversation;
+        let panels = &mut live_mut(s).panels;
+        if panels.review_editor.take().is_none() {
+            panels.screen = Screen::Conversation;
+        }
     } else {
         return false;
     }

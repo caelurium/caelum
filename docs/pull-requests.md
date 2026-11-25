@@ -50,6 +50,19 @@ action to submit the source-linked feedback as a new turn to its displayed sessi
 The destination must be connected and idle with no pending requests or queued messages.
 Its independent composer draft and attachments are preserved.
 
+On an open PR, use **Reply** to post directly to a thread, or **Resolve** /
+**Unresolve** when GitHub allows it. To batch feedback, click **+** in a diff
+line's gutter and choose **Add to review**. Added and removed lines keep their
+respective sides of the patch. Open **Review (N)** in the header to inspect or
+remove pending comments, add a summary, and submit **Comment**, **Approve**, or
+**Request changes**. Requesting changes requires a summary.
+
+Review summaries, queued comments and thread reply drafts stay in memory for
+that checkout, PR and revision.
+Navigating away, refreshing the same revision or a failed submission keeps the
+draft. A changed head or base clears it so an old comment cannot land on a new
+line. Cached reviews are read-only until GitHub verifies the revision.
+
 File/feedback reads are pinned to the displayed head and request generation;
 late responses cannot replace a different review or mix commits. Periodic metadata
 refresh failures retain loaded data and expose a retryable error.

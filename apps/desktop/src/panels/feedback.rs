@@ -194,6 +194,7 @@ pub(super) fn thread_view(
     for comment in &thread.comments {
         content = content.child(comment_view(s, k, project, url, comment));
     }
+    content = content.children(super::review::thread_actions(s, k, thread));
     if thread.is_resolved {
         let id = thread.id.clone();
         content = content.child(
