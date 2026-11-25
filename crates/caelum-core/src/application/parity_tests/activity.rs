@@ -188,6 +188,8 @@ fn unread_and_notifications_follow_visibility_and_do_not_replay_completed_activi
     assert!(!app.acknowledge());
     assert!(app.snapshot().sessions[0].unread);
     let prompt = caelum_protocol::ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         provider: "codex".into(),
         project_path: "/project".into(),
         session_id: Some("session-1".into()),

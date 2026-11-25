@@ -190,6 +190,8 @@ fn mixed_batches_keep_completion_errors_and_permission_requests_immediate() {
     let l = state.live.as_mut().unwrap();
     l.apply_events([delta(provider, "background", "first")]);
     let approval = caelum_protocol::ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         provider: "codex".into(),
         project_path: "/project".into(),
         session_id: Some("background".into()),

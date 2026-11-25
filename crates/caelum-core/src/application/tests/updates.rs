@@ -16,6 +16,7 @@ fn restart_requires_the_latest_drafts_attachments_and_queue_to_be_durable() {
         Attachment::new("file.rs".into(), "captured text".into(), None, false),
     );
     app.sessions[index].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "queued work".into(),
         options: Default::default(),
     });

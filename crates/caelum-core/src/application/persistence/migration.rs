@@ -209,11 +209,13 @@ mod tests {
         ));
         app.sessions[i].failed_prompt = Some("failed send".into());
         app.sessions[i].queue.push(QueuedPrompt {
+            provider_command: false,
             text: "queued".into(),
             options: Options::default(),
         });
         let mut expected = app.snapshot();
         expected.sessions[i].pending_submission = Some(QueuedPrompt {
+            provider_command: false,
             text: "unacknowledged send".into(),
             options: Options::default(),
         });

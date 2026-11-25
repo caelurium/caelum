@@ -59,6 +59,8 @@ fn colliding_machine_paths_and_session_ids_keep_independent_editors_brokers_and_
         Command::VerifyOpenCodeMove { .. } | Command::Start(..) | Command::Send(..)
     )));
     let approval = |p: &str| ApprovalPrompt {
+        attempt: "fixture".into(),
+        repeatable: None,
         project_path: p.into(),
         provider: "codex".into(),
         session_id: Some("ses_same".into()),
@@ -426,6 +428,8 @@ fn vm_routing_refuses_opencode_operations_even_with_a_codex_session_key() {
         }),
         Command::Approve(
             ApprovalPrompt {
+                attempt: "fixture".into(),
+                repeatable: None,
                 provider: "opencode".into(),
                 project_path: project.clone(),
                 session_id: None,

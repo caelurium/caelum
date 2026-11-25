@@ -97,6 +97,7 @@ scenes += ("native-connected", "native-offline")
 scenes += ("edit-branch", "rewind-checkpoint", "rename-session")
 scenes += ("remote-handoff",)
 scenes += ("home", "home-empty", "home-draft", "home-projects")
+scenes += ("approval-rules", "prompt-templates")
 scenes += ("update-downloading", "update-verifying", "update-preparing", "update-cancelling", "update-failed", "update-success")
 
 

@@ -77,6 +77,7 @@ pub(crate) fn heading(s: &Workspace, k: &Kit) -> El {
         return base
             .child(el().size(3.0, 26.0).radius(1.5).fill(ink))
             .child(title)
+            .children(super::approval_rules::trigger(l, index, k))
             .children(super::attention::session_attention(s, k));
     }
     let project = s

@@ -40,6 +40,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         Command::Task(
             t @ (Task::EncodeImage { .. }
             | Task::Completions { .. }
+            | Task::Templates { .. }
             | Task::Directory { .. }
             | Task::File { .. }
             | Task::Search { .. }

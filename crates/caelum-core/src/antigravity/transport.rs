@@ -581,18 +581,6 @@ fn handle_server_request(
     } else {
         summary.clone()
     };
-    let options = params["options"].as_array().cloned().unwrap_or_default();
-    let allow_option = options
-        .iter()
-        .find(|o| matches!(o["kind"].as_str(), Some("allow_once" | "allow_always")))
-        .and_then(|o| o["optionId"].as_str())
-        .map(str::to_owned);
-    let reject_option = options
-        .iter()
-        .find(|o| matches!(o["kind"].as_str(), Some("reject_once" | "reject_always")))
-        .and_then(|o| o["optionId"].as_str())
-        .map(str::to_owned);
-
     let decision = approvals
         .request(PermissionRequest {
             provider: PROVIDER_NAME.into(),
@@ -606,14 +594,9 @@ fn handle_server_request(
         .map(|waiter| waiter.wait(APPROVAL_TIMEOUT))
         .unwrap_or(ApprovalDecision::Deny);
 
-    let outcome = match decision {
-        ApprovalDecision::AllowOnce => allow_option
-            .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
-            .unwrap_or_else(|| json!({ "outcome": "cancelled" })),
-        ApprovalDecision::Deny => reject_option
-            .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
-            .unwrap_or_else(|| json!({ "outcome": "cancelled" })),
-    };
+    let outcome = super::protocol::permission_option(params, decision)
+        .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
+        .unwrap_or_else(|| json!({ "outcome": "cancelled" }));
 
     let _ = write_message(
         writer,

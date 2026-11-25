@@ -96,6 +96,7 @@ fn move_check(app: &mut Workspace, path: &str) -> (u64, OpenCodeMove) {
 fn moved_session_preserves_its_local_slot_and_reconnects_in_the_verified_checkout() {
     let (mut app, index) = fixture();
     app.sessions[index].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Queued for old checkout".into(),
         options: Options::default(),
     });

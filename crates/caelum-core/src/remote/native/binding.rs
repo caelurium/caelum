@@ -54,6 +54,7 @@ impl Binding {
             | Command::HandoffChat(k)
             | Command::CodexControlHistory(k, _)
             | Command::Send(k, ..)
+            | Command::RunOpenCodeCommand(k, ..)
             | Command::Cancel(k)
             | Command::VerifyOpenCodeMove { from: k, .. } => Some(&mut k.scope.project),
             Command::Approve(p, _) => Some(&mut p.project_path),

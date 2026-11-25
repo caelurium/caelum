@@ -173,7 +173,14 @@ before it reaches session cancellation.
 Failed submissions stay separate from newer typing. Recovery retries once;
 **Refresh session** explicitly retries again. Approvals and question
 forms belong to the requesting session, including when another session is selected.
-Permission choices are **Allow once** and **Deny**.
+**Allow once** and **Deny** decide the current request. When Caelum recognizes
+an exact command in the checkout root or a read of one named file, the card
+shows the rule it can remember. **Allow similar in session** approves this
+request and future matches in this provider session only. Each automatic
+approval appears in the transcript. Click the rule count in the session heading
+to inspect or remove a rule, or choose **Clear rules**. Restarting Caelum clears
+all rules. Destructive, ambiguous and project-wide requests still need a decision.
+
 Agent questions temporarily take over the composer's glass dock. Answer choices and
 custom fields scroll inside it while **Submit answers** and **Dismiss** stay visible.
 Tab and arrow keys navigate the form, **⌘Enter** submits, and Escape dismisses the
@@ -222,6 +229,32 @@ Antigravity support `/stats` and `/btw question` (`/ask` is an alias).
 `/usage` shows subscription allowances for OpenCode and Antigravity.
 `/sessions` searches the current project's Codex or OpenCode history, including archived
 sessions; choose a result to load that conversation.
+
+### Prompt templates
+
+Save a Markdown file in `.caelum/commands/` in the checkout, or in
+`~/.caelum/commands/` on your computer for use across projects. The filename
+is the slash command. For example, `.caelum/commands/explain.md`:
+
+```markdown
+---
+description: Explain a change for a particular audience
+argument_hint: '<change> <audience>'
+---
+Explain $1 to $2. Include one example.
+```
+
+Type `/explain "the retry timer" maintainers` to send the expanded prompt.
+`$1`, `$2`, … select arguments (quotes group words); `$ARGUMENTS` inserts the
+whole argument text. Substitution is single-pass. Even a result that starts
+with `/` is sent as a message. In the `/` menu, look for the **Template** badge;
+Tab or click completes the name and Enter sends it.
+
+Codex, OpenCode, Antigravity and Boat VM composers use the same syntax.
+On a VM, checkout templates come from that VM. Checkout definitions take
+precedence over user templates and provider commands; built-in names are
+reserved. Discovery reads regular `.md` files up to 64 KiB and keeps up to
+128 templates.
 
 Type `/fork` in an idle conversation to branch its history into a new session in
 the same checkout. Press Enter for the newest turn, or use ↑/↓, search, and

@@ -84,6 +84,11 @@ impl Backend {
         op: &Operation,
     ) -> Result<Outcome, String> {
         match op {
+            Operation::Templates(target) => Self::connected(connection)
+                .await?
+                .templates(target)
+                .await
+                .map(Outcome::Templates),
             Operation::Models => boat_sdk::agents::provider_models()
                 .await
                 .map(super::models::model_lists)

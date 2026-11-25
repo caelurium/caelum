@@ -75,7 +75,10 @@ impl Workspace {
                     ..
                 }) = self.remote.saved.checkouts.get_mut(id)
                 {
-                    branch.clone_from(&review.revision.branch);
+                    if branch != &review.revision.branch {
+                        branch.clone_from(&review.revision.branch);
+                        self.templates_changed(crate::templates::Target::Boat(id.into()));
+                    }
                 }
                 Changes::Ready(review)
             }

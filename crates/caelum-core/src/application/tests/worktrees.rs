@@ -190,6 +190,7 @@ fn switching_worktrees_restores_each_checkout_session_without_redirecting_main()
     app.sessions[linked].draft = "Linked draft".into();
     app.sessions[linked].conversation.set_working(true);
     app.sessions[linked].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Next linked turn".into(),
         options: Default::default(),
     });

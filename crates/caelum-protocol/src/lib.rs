@@ -421,6 +421,10 @@ pub struct PermissionRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPrompt {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub attempt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeatable: Option<ApprovalRule>,
     pub provider: String,
     pub project_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -428,6 +432,21 @@ pub struct ApprovalPrompt {
     pub request_id: String,
     pub summary: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApprovalRule {
+    ExactCommand(String),
+    ReadFile(String),
+}
+
+impl std::fmt::Display for ApprovalRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExactCommand(cmd) => write!(f, "Run `{cmd}` in the checkout root"),
+            Self::ReadFile(path) => write!(f, "Read {path}"),
+        }
+    }
 }
 
 /// Decisions are one-shot: there is deliberately no persistent "allow all".
@@ -766,6 +785,8 @@ mod tests {
     #[test]
     fn approval_prompts_include_project_and_session_context() {
         let prompt = ApprovalPrompt {
+            attempt: String::new(),
+            repeatable: None,
             provider: "opencode".into(),
             project_path: "/workspace/project".into(),
             session_id: Some("ses_1".into()),

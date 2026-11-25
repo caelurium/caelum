@@ -23,6 +23,7 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
                 l.app.sessions[0].conversation.set_working(true);
                 l.app.sessions[0].queue = (0..3)
                     .map(|i| caelum_core::application::QueuedPrompt {
+                        provider_command: false,
                         text: format!("Follow-up {i}"),
                         options: Default::default(),
                     })

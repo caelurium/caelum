@@ -176,6 +176,8 @@ fn failed_approval_reply_stays_with_its_origin_after_navigation() {
     let first = started(&mut workspace, scope(Provider::Codex, "/a"), "one");
     workspace.approve(
         caelum_protocol::ApprovalPrompt {
+            attempt: "fixture".into(),
+            repeatable: None,
             provider: "codex".into(),
             project_path: "/a".into(),
             session_id: Some("one".into()),

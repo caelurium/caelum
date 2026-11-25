@@ -148,6 +148,7 @@ fn closing_project_groups_keeps_sessions_work_and_drafts_through_reopen_and_rest
         Attachment::new("src/main.rs".into(), "snapshot".into(), None, false),
     );
     app.sessions[1].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Next turn".into(),
         options: Default::default(),
     });

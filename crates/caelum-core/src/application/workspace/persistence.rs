@@ -104,6 +104,8 @@ impl Workspace {
                         )
                         | Command::Cancel(_)
                         | Command::Remote(crate::remote::Operation::Interrupt(..))
+                        | Command::Remote(crate::remote::Operation::Templates(_))
+                        | Command::Task(Task::Templates { .. })
                         | Command::Task(
                             Task::Shell { .. }
                                 | Task::Git { .. }

@@ -276,6 +276,7 @@ fn rewind_previews_without_mutation_and_rechecks_queues_then_reloads_only_its_ow
         Ok(Reply::CheckpointFiles(vec!["source.rs".into()])),
     ));
     app.sessions[0].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "waiting".into(),
         options: Default::default(),
     });

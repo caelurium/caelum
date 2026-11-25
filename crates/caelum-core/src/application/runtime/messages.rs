@@ -70,6 +70,7 @@ pub enum Command {
     HandoffChat(SessionKey),
     CodexControlHistory(SessionKey, crate::application::HistoryAction),
     Send(SessionKey, String, Options),
+    RunOpenCodeCommand(SessionKey, String, Options),
     Cancel(SessionKey),
     Approve(ApprovalPrompt, ApprovalDecision),
     Answer(QuestionPrompt, Option<crate::questions::Answer>),

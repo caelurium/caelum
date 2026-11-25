@@ -58,6 +58,9 @@ pub enum Task {
         project: String,
         query: String,
     },
+    Templates {
+        project: String,
+    },
     Directory {
         project: String,
         path: String,
@@ -159,6 +162,7 @@ pub enum Task {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum TaskReply {
+    Templates(Vec<crate::templates::Template>),
     Shell(String),
     #[serde(skip)]
     Updates(UpdateCheck),
@@ -195,6 +199,7 @@ macro_rules! project_field {
         match $task {
             Task::Shell { project, .. }
             | Task::Completions { project, .. }
+            | Task::Templates { project }
             | Task::Image { project, .. }
             | Task::EncodeImage { project, .. }
             | Task::Reveal { project, .. }
@@ -269,6 +274,7 @@ impl Task {
             Self::Stats { .. } => "stats".into(),
             Self::AttachPullRequest { url, .. } => format!("attach-pr:{url}"),
             Self::Completions { .. } => "completions".into(),
+            Self::Templates { .. } => "templates".into(),
             Self::Directory { path, .. } => format!("directory:{path}"),
             Self::File { path, .. } => format!("file:{path}"),
             Self::Search { .. } => "search".into(),
@@ -305,6 +311,9 @@ impl Task {
             };
         }
         match self {
+            Self::Templates { project } => {
+                crate::templates::load(project).map(TaskReply::Templates)
+            }
             Self::Shell {
                 project,
                 session,

@@ -2,6 +2,40 @@ use super::{OpenCodeMove, Options, Provider, ProviderRuntime, Reply, SessionKey,
 use crate::opencode::OpenCodeError;
 
 impl ProviderRuntime {
+    pub(super) fn run_opencode_command(
+        &self,
+        key: &SessionKey,
+        prompt: &str,
+        options: &Options,
+    ) -> Result<(), String> {
+        let command = crate::application::composer::command_text(prompt);
+        let input = command
+            .trim_start()
+            .strip_prefix('/')
+            .filter(|s| !s.starts_with('/'))
+            .filter(|_| key.scope.provider == Provider::OpenCode)
+            .ok_or("Invalid OpenCode command")?;
+        let (name, text) = input.split_once(char::is_whitespace).unwrap_or((input, ""));
+        if let Some(agent) = &options.agent {
+            self.opencode
+                .select_agent(&key.scope.project, &key.id, agent)
+                .map_err(|e| e.to_string())?;
+        }
+        self.opencode
+            .run_command(
+                &key.scope.project,
+                &key.id,
+                &caelum_protocol::OpenCodeCommandInput {
+                    name: name.into(),
+                    text: text.into(),
+                    files: crate::application::composer::command_files(prompt),
+                },
+                options.model.as_deref(),
+                options.effort.as_deref(),
+            )
+            .map_err(|e| e.to_string())
+    }
+
     pub(super) fn verify_opencode_move(
         &self,
         from: &SessionKey,
