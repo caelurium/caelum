@@ -460,6 +460,7 @@ pub fn wrap_main(
         .min_w(0.0)
         .h_full()
         .min_h(0.0)
+        .clip_rounded(0.0)
         .child(left_content);
 
     let right = col()
@@ -468,6 +469,7 @@ pub fn wrap_main(
         .min_w(0.0)
         .h_full()
         .min_h(0.0)
+        .clip_rounded(0.0)
         .child(right_content);
 
     let divider = row()

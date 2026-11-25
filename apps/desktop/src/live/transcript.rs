@@ -137,6 +137,7 @@ pub fn transcript_for(
                         &kit,
                         reduced,
                         padding,
+                        prefix,
                         index,
                         if row == 0 {
                             0
@@ -186,6 +187,7 @@ pub(super) fn timeline_row(
     k: &Kit,
     reduced: bool,
     padding: f32,
+    prefix: &str,
     index: usize,
     row_index: usize,
 ) -> El {
@@ -265,9 +267,16 @@ pub(super) fn timeline_row(
             EntryKind::User => {
                 let (_, files) = caelum_core::application::split_context(&entry.text);
                 let message = caelum_core::application::presentation::entry_text(entry);
-                let mut bubble =
-                    ui::user_bubble(&message, !files.is_empty() || !entry.media.is_empty(), k)
-                        .key(format!("user-bubble-{index}-{row_id}"));
+                let pane_width = rune::memo::window_layout(&format!("{prefix}-transcript-{index}"))
+                    .or_else(|| rune::memo::window_layout("main-pane"))
+                    .map(|r| r[2]);
+                let mut bubble = ui::user_bubble_in(
+                    &message,
+                    !files.is_empty() || !entry.media.is_empty(),
+                    pane_width,
+                    k,
+                )
+                .key(format!("user-bubble-{index}-{row_id}"));
                 if !message.trim().is_empty() {
                     bubble = bubble.child(
                         Markdown::new(&message)
