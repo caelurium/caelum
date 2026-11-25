@@ -73,12 +73,13 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
     rt.update(|s, _| crate::split::open_session_on(s, 1, crate::split::SplitSide::Right));
     advance(&mut rt, 0.2);
     assert!(rt.find("split-secondary-pane").is_some());
+    assert!(rt.find("split-composer-target").is_some());
     assert_eq!(
         rt.state.live.as_ref().unwrap().split.active,
         crate::split::ActivePane::Secondary
     );
 
-    fill(&mut rt, "split-draft-1", "Secondary draft");
+    fill(&mut rt, "live-draft-1", "Secondary draft");
     assert_eq!(
         rt.state.live.as_ref().unwrap().drafts[0].text,
         "Primary draft"
@@ -87,6 +88,20 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
         rt.state.live.as_ref().unwrap().drafts[1].text,
         "Secondary draft"
     );
+
+    // Clicking the target pills in the shared composer switches active pane and draft.
+    click(&mut rt, "split-target-left");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Primary
+    );
+    assert!(rt.find("live-draft-0").is_some());
+    click(&mut rt, "split-target-right");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Secondary
+    );
+    assert!(rt.find("live-draft-1").is_some());
 
     // ⌥⌘← switches focus to primary; ⌥⌘→ switches back to secondary.
     key(

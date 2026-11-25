@@ -84,14 +84,16 @@ impl SplitLayout {
         self.secondary = None;
         self.active = ActivePane::Primary;
     }
+}
 
-    pub fn primary_fraction(&self) -> f32 {
-        let left = self.ratio.clamp(0.25, 0.75);
-        match self.side {
-            SplitSide::Right => left,
-            SplitSide::Left => 1.0 - left,
-        }
+pub fn composer_target(l: &crate::live::Live) -> Option<usize> {
+    if l.split.effective_active(l.window_width.get()) == ActivePane::Secondary
+        && let Some(SecondaryPane::Session(index)) = l.split.secondary
+        && index < l.app.sessions.len()
+    {
+        return Some(index);
     }
+    l.app.selected
 }
 
 pub fn open_session_on(s: &mut Workspace, index: usize, side: SplitSide) {
@@ -153,7 +155,7 @@ pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
                 && let Some(draft) = l.drafts.get_mut(i)
             {
                 draft.focused = true;
-                l.focus_key = Some(format!("split-draft-{i}"));
+                l.focus_key = Some(format!("live-draft-{i}"));
             }
         }
     }
@@ -219,13 +221,15 @@ pub fn toolbar_heading(
 
     let primary_slot = row()
         .min_w(0.0)
+        .gap(6.0)
         .center_y()
-        .opacity(if primary_active { 1.0 } else { 0.72 })
+        .opacity(if primary_active { 1.0 } else { 0.62 })
         .on_press(|s: &mut Workspace| {
             if live(s).split.active != ActivePane::Primary {
                 focus_pane(s, ActivePane::Primary);
             }
         })
+        .children(primary_active.then(|| active_dot(k)))
         .child(crate::live::heading(s, k));
 
     let (sec_heading, can_swap) = match &secondary {
@@ -261,14 +265,15 @@ pub fn toolbar_heading(
 
     let secondary_slot = row()
         .min_w(0.0)
-        .gap(8.0)
+        .gap(6.0)
         .center_y()
-        .opacity(if !primary_active { 1.0 } else { 0.72 })
+        .opacity(if !primary_active { 1.0 } else { 0.62 })
         .on_press(|s: &mut Workspace| {
             if live(s).split.active != ActivePane::Secondary {
                 focus_pane(s, ActivePane::Secondary);
             }
         })
+        .children((!primary_active).then(|| active_dot(k)))
         .child(sec_heading)
         .child(rune::el().grow(1.0))
         .child(actions);
@@ -300,6 +305,118 @@ pub fn toolbar_heading(
         .child(right)
 }
 
+fn active_dot(k: &Kit) -> El {
+    rune::el()
+        .size(6.0, 6.0)
+        .radius(3.0)
+        .fill(k.c.text_accent)
+        .a11y_hidden()
+}
+
+pub fn composer_target_bar(s: &Workspace, k: &Kit) -> Option<El> {
+    let l = s.live.as_ref()?;
+    if !l.split.is_visible(l.window_width.get()) {
+        return None;
+    }
+    let Some(SecondaryPane::Session(sec)) = l.split.secondary else {
+        return None;
+    };
+    let prim = l.app.selected?;
+    if prim == sec || prim >= l.app.sessions.len() || sec >= l.app.sessions.len() {
+        return None;
+    }
+    let active = l.split.active;
+    let ((left_pane, left_idx), (right_pane, right_idx)) = match l.split.side {
+        SplitSide::Right => ((ActivePane::Primary, prim), (ActivePane::Secondary, sec)),
+        SplitSide::Left => ((ActivePane::Secondary, sec), (ActivePane::Primary, prim)),
+    };
+    let pill = |key: &'static str, side_label: &'static str, pane: ActivePane, index: usize| {
+        let session = &l.app.sessions[index];
+        let selected = active == pane;
+        let title = if session.title.trim().is_empty() {
+            "Untitled session"
+        } else {
+            session.title.as_str()
+        };
+        k.interactive(
+            row()
+                .h(24.0)
+                .px(8.0)
+                .gap(6.0)
+                .center_y()
+                .radius(6.0)
+                .max_w(240.0)
+                .min_w(0.0)
+                .fill(if selected {
+                    k.c.layer_02
+                } else {
+                    rune::Color::TRANSPARENT
+                })
+                .border(
+                    1.0,
+                    if selected {
+                        k.c.border_base
+                    } else {
+                        rune::Color::TRANSPARENT
+                    },
+                )
+                .children(selected.then(|| active_dot(k)))
+                .child(text(side_label).font(k.ty.small_medium).color(if selected {
+                    k.c.text_accent
+                } else {
+                    k.c.text_muted
+                }))
+                .child(
+                    text(title)
+                        .font(if selected {
+                            k.ty.small_medium
+                        } else {
+                            k.ty.small
+                        })
+                        .color(if selected {
+                            k.c.text_base
+                        } else {
+                            k.c.text_muted
+                        })
+                        .truncate()
+                        .min_w(0.0),
+                )
+                .children(
+                    session
+                        .working()
+                        .then(|| ui::busy_icon(&ui::CLOCK, 11.0, k)),
+                ),
+        )
+        .key(key)
+        .role("tab")
+        .label(format!("Send to {side_label} pane: {title}"))
+        .focusable(true)
+        .focus_selected(selected)
+        .focus_ring(1.5, 0.0, k.c.border_focus)
+        .on_press(move |s: &mut Workspace| focus_pane(s, pane))
+    };
+
+    Some(
+        row()
+            .key("split-composer-target")
+            .w_full()
+            .center_y()
+            .gap(8.0)
+            .pb(2.0)
+            .child(
+                ui::segmented_track(k)
+                    .child(pill("split-target-left", "Left", left_pane, left_idx))
+                    .child(pill("split-target-right", "Right", right_pane, right_idx)),
+            )
+            .child(rune::el().grow(1.0))
+            .child(
+                text(ui::shortcut("⌥⌘← / ⌥⌘→"))
+                    .font(k.ty.small)
+                    .color(k.c.text_muted),
+            ),
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn wrap_main(
     s: &Workspace,
@@ -309,7 +426,6 @@ pub fn wrap_main(
     window_width: f32,
     main_width: f32,
     padding: f32,
-    wide: bool,
     pane_border: rune::Color,
     layers: &mut Vec<El>,
 ) -> El {
@@ -336,7 +452,7 @@ pub fn wrap_main(
         })
         .child(primary.grow(1.0).min_h(0.0));
 
-    let secondary_el = secondary_pane(s, k, secondary, reduced, padding, wide, pane_border, layers);
+    let secondary_el = secondary_pane(s, k, secondary, reduced, padding, pane_border, layers);
 
     let (left_content, right_content) = match l.split.side {
         SplitSide::Right => (primary_el, secondary_el),
@@ -406,13 +522,12 @@ fn secondary_pane(
     secondary: SecondaryPane,
     reduced: bool,
     padding: f32,
-    wide: bool,
     pane_border: rune::Color,
     layers: &mut Vec<El>,
 ) -> El {
     let content = match secondary {
         SecondaryPane::Session(index) => {
-            secondary_session(s, k, index, reduced, padding, wide, layers)
+            crate::live::transcript_for(s, k, index, reduced, padding, true)
         }
         SecondaryPane::Review(_, _) => crate::panels::view(s, k, layers),
     };
@@ -429,26 +544,4 @@ fn secondary_pane(
         })
         .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
         .child(content.grow(1.0).min_h(0.0))
-}
-
-fn secondary_session(
-    s: &Workspace,
-    k: &Kit,
-    index: usize,
-    reduced: bool,
-    padding: f32,
-    wide: bool,
-    layers: &mut Vec<El>,
-) -> El {
-    col()
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .items_center()
-        .child(crate::live::transcript_for(
-            s, k, index, reduced, padding, true,
-        ))
-        .child(crate::live::composer_for(
-            s, k, index, padding, wide, true, layers,
-        ))
 }

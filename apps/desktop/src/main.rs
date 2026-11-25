@@ -445,20 +445,9 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         .live
         .as_ref()
         .is_some_and(|l| l.split.is_visible(window_width));
-    let pane_width = if split_visible {
-        let frac = s.live.as_ref().map_or(0.5, |l| l.split.primary_fraction());
-        width * frac
-    } else {
-        width
-    };
-    let padding = if split_visible {
-        20.0
-    } else if pane_width < 540.0 {
-        16.0
-    } else {
-        32.0
-    };
-    let composer_wide = pane_width > 760.0;
+    let padding = if width < 540.0 { 16.0 } else { 32.0 };
+    let transcript_padding = if split_visible { 20.0 } else { padding };
+    let composer_wide = width > 760.0;
     let remote = s
         .live
         .as_ref()
@@ -479,7 +468,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                     s,
                     &k,
                     cx.is_reduced_motion(),
-                    padding,
+                    transcript_padding,
                     &mut layers,
                 ))
                 .child(composer(s, &k, padding, width > 760.0, &mut layers))
@@ -504,11 +493,11 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 s,
                 &k,
                 cx.is_reduced_motion(),
-                padding,
+                transcript_padding,
                 &mut layers,
             ))
     };
-    let main = if s.live.as_ref().is_some_and(|live| {
+    let has_composer = !s.live.as_ref().is_some_and(|live| {
         matches!(
             live.panels.screen,
             panels::Screen::Home
@@ -516,23 +505,35 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 | panels::Screen::Review
                 | panels::Screen::Remote
         )
-    }) {
-        main
-    } else {
+    });
+    let main = if split_visible {
+        let panes = split::wrap_main(
+            s,
+            &k,
+            main,
+            cx.is_reduced_motion(),
+            window_width,
+            width,
+            transcript_padding,
+            pane_border,
+            &mut layers,
+        );
+        if has_composer {
+            col()
+                .w_full()
+                .h_full()
+                .min_h(0.0)
+                .items_center()
+                .child(panes.grow(1.0).min_h(0.0))
+                .child(composer(s, &k, padding, composer_wide, &mut layers))
+        } else {
+            panes
+        }
+    } else if has_composer {
         main.child(composer(s, &k, padding, composer_wide, &mut layers))
+    } else {
+        main
     };
-    let main = split::wrap_main(
-        s,
-        &k,
-        main,
-        cx.is_reduced_motion(),
-        window_width,
-        width,
-        padding,
-        composer_wide,
-        pane_border,
-        &mut layers,
-    );
     let main = main.children((vercel && sidebar_pane.is_open()).then(|| {
         rune::el()
             .key("sidebar-divider")
