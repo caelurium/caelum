@@ -70,7 +70,7 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
     let mut rt = live_runtime_size((1280.0, 900.0));
     fill(&mut rt, "live-draft-0", "Primary draft");
 
-    rt.update(|s, _| crate::split::open_session(s, 1));
+    rt.update(|s, _| crate::split::open_session_on(s, 1, crate::split::SplitSide::Right));
     advance(&mut rt, 0.2);
     assert!(rt.find("split-secondary-pane").is_some());
     assert_eq!(
@@ -141,9 +141,45 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
     click(&mut rt, "split-close");
     assert!(rt.find("split-secondary-pane").is_none());
 
+    // Split left places secondary on the left and flips spatial focus routing.
+    rt.update(|s, _| crate::split::open_session_on(s, 1, crate::split::SplitSide::Left));
+    advance(&mut rt, 0.2);
+    assert!(rt.find("split-divider").is_some());
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.side,
+        crate::split::SplitSide::Left
+    );
+    key(
+        &mut rt,
+        Key::Right,
+        Mods {
+            cmd: true,
+            alt: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Primary
+    );
+    key(
+        &mut rt,
+        Key::Left,
+        Mods {
+            cmd: true,
+            alt: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Secondary
+    );
+    click(&mut rt, "split-close");
+
     // Compact window width (< 1100pt) collapses split pane automatically.
     let mut compact = live_runtime_size((960.0, 720.0));
-    compact.update(|s, _| crate::split::open_session(s, 1));
+    compact.update(|s, _| crate::split::open_session_on(s, 1, crate::split::SplitSide::Right));
     advance(&mut compact, 0.2);
     assert!(compact.find("split-secondary-pane").is_none());
 }

@@ -1,6 +1,6 @@
 //! Split-pane workspace layout: view two sessions side-by-side or a session beside a PR review.
 
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use rune::{Cursor, Cx, Drag, El, Key, KeyEvent, Phase, Tx, col, row, text};
 use rune_kit::{Kit, glyphs};
 
 use crate::{
@@ -18,6 +18,13 @@ pub enum ActivePane {
     Secondary,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SplitSide {
+    Left,
+    #[default]
+    Right,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecondaryPane {
     Session(usize),
@@ -27,7 +34,9 @@ pub enum SecondaryPane {
 #[derive(Debug, Clone)]
 pub struct SplitLayout {
     pub secondary: Option<SecondaryPane>,
+    pub side: SplitSide,
     pub active: ActivePane,
+    /// Fraction of the workspace allocated to the left visual pane (`0.25..=0.75`).
     pub ratio: f32,
 }
 
@@ -35,6 +44,7 @@ impl Default for SplitLayout {
     fn default() -> Self {
         Self {
             secondary: None,
+            side: SplitSide::Right,
             active: ActivePane::Primary,
             ratio: 0.5,
         }
@@ -58,13 +68,15 @@ impl SplitLayout {
         }
     }
 
-    pub fn open_session(&mut self, index: usize) {
+    pub fn open_session_on(&mut self, index: usize, side: SplitSide) {
         self.secondary = Some(SecondaryPane::Session(index));
+        self.side = side;
         self.active = ActivePane::Secondary;
     }
 
     pub fn open_review(&mut self, project: String, url: String) {
         self.secondary = Some(SecondaryPane::Review(project, url));
+        self.side = SplitSide::Right;
         self.active = ActivePane::Secondary;
     }
 
@@ -72,14 +84,22 @@ impl SplitLayout {
         self.secondary = None;
         self.active = ActivePane::Primary;
     }
+
+    pub fn primary_fraction(&self) -> f32 {
+        let left = self.ratio.clamp(0.25, 0.75);
+        match self.side {
+            SplitSide::Right => left,
+            SplitSide::Left => 1.0 - left,
+        }
+    }
 }
 
-pub fn open_session(s: &mut Workspace, index: usize) {
+pub fn open_session_on(s: &mut Workspace, index: usize, side: SplitSide) {
     let l = live_mut(s);
     if index >= l.app.sessions.len() {
         return;
     }
-    l.split.open_session(index);
+    l.split.open_session_on(index, side);
     focus_pane(s, ActivePane::Secondary);
 }
 
@@ -94,10 +114,11 @@ pub fn swap(s: &mut Workspace) {
     let Some(SecondaryPane::Session(secondary)) = l.split.secondary else {
         return;
     };
+    let side = l.split.side;
     let primary = l.app.selected;
     l.app.select(secondary);
     if let Some(prev) = primary.filter(|&p| p != secondary) {
-        l.split.open_session(prev);
+        l.split.open_session_on(prev, side);
         focus_pane(s, ActivePane::Primary);
     } else {
         close(s);
@@ -146,11 +167,19 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
         return false;
     }
     if ev.mods.cmd && ev.mods.alt && ev.key == Key::Right {
-        focus_pane(s, ActivePane::Secondary);
+        let target = match l.split.side {
+            SplitSide::Right => ActivePane::Secondary,
+            SplitSide::Left => ActivePane::Primary,
+        };
+        focus_pane(s, target);
         return true;
     }
     if ev.mods.cmd && ev.mods.alt && ev.key == Key::Left {
-        focus_pane(s, ActivePane::Primary);
+        let target = match l.split.side {
+            SplitSide::Right => ActivePane::Primary,
+            SplitSide::Left => ActivePane::Secondary,
+        };
+        focus_pane(s, target);
         return true;
     }
     if ev.is_command('l') {
@@ -169,7 +198,13 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     false
 }
 
-pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: rune::Color) -> El {
+pub fn toolbar_heading(
+    s: &Workspace,
+    k: &Kit,
+    cx: &Cx<Workspace>,
+    window_width: f32,
+    pane_border: rune::Color,
+) -> El {
     let Some(l) = s.live.as_ref() else {
         return crate::live::heading(s, k);
     };
@@ -179,13 +214,11 @@ pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: r
     let Some(secondary) = l.split.secondary.clone() else {
         return crate::live::heading(s, k);
     };
-    let ratio = l.split.ratio.clamp(0.3, 0.7);
+    let left_ratio = l.split.ratio.clamp(0.25, 0.75);
     let primary_active = l.split.active == ActivePane::Primary;
 
-    let left = row()
-        .grow(ratio)
+    let primary_slot = row()
         .min_w(0.0)
-        .pr(12.0)
         .center_y()
         .opacity(if primary_active { 1.0 } else { 0.72 })
         .on_press(|s: &mut Workspace| {
@@ -195,7 +228,7 @@ pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: r
         })
         .child(crate::live::heading(s, k));
 
-    let (right_heading, can_swap) = match &secondary {
+    let (sec_heading, can_swap) = match &secondary {
         SecondaryPane::Session(index) => (crate::live::session_heading(s, k, *index, true), true),
         SecondaryPane::Review(_, url) => (
             text(format!(
@@ -226,10 +259,8 @@ pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: r
                 .key("split-close"),
         );
 
-    let right = row()
-        .grow(1.0 - ratio)
+    let secondary_slot = row()
         .min_w(0.0)
-        .pl(12.0)
         .gap(8.0)
         .center_y()
         .opacity(if !primary_active { 1.0 } else { 0.72 })
@@ -238,9 +269,25 @@ pub fn toolbar_heading(s: &Workspace, k: &Kit, window_width: f32, pane_border: r
                 focus_pane(s, ActivePane::Secondary);
             }
         })
-        .child(right_heading)
+        .child(sec_heading)
         .child(rune::el().grow(1.0))
         .child(actions);
+
+    let (left_inner, right_inner) = match l.split.side {
+        SplitSide::Right => (primary_slot, secondary_slot),
+        SplitSide::Left => (secondary_slot, primary_slot),
+    };
+
+    let exact_left = cx
+        .layout("split-left-pane")
+        .zip(cx.layout("split-toolbar-heading"))
+        .map(|(pane, bar)| (pane[0] + pane[2] - bar[0]).max(120.0));
+
+    let left = match exact_left {
+        Some(w) => left_inner.w(w).pr(12.0),
+        None => left_inner.grow(left_ratio).pr(12.0),
+    };
+    let right = right_inner.grow(1.0).pl(12.0);
 
     row()
         .key("split-toolbar-heading")
@@ -260,6 +307,7 @@ pub fn wrap_main(
     primary: El,
     reduced: bool,
     window_width: f32,
+    main_width: f32,
     padding: f32,
     wide: bool,
     pane_border: rune::Color,
@@ -274,12 +322,11 @@ pub fn wrap_main(
     let Some(secondary) = l.split.secondary.clone() else {
         return primary;
     };
-    let ratio = l.split.ratio.clamp(0.3, 0.7);
+    let left_ratio = l.split.ratio.clamp(0.25, 0.75);
 
-    let left = col()
+    let primary_el = col()
         .key("split-primary-pane")
-        .grow(ratio)
-        .min_w(0.0)
+        .w_full()
         .h_full()
         .min_h(0.0)
         .on_press(|s: &mut Workspace| {
@@ -289,11 +336,58 @@ pub fn wrap_main(
         })
         .child(primary.grow(1.0).min_h(0.0));
 
-    let right = secondary_pane(s, k, secondary, reduced, padding, wide, pane_border, layers)
-        .grow(1.0 - ratio)
+    let secondary_el = secondary_pane(s, k, secondary, reduced, padding, wide, pane_border, layers);
+
+    let (left_content, right_content) = match l.split.side {
+        SplitSide::Right => (primary_el, secondary_el),
+        SplitSide::Left => (secondary_el, primary_el),
+    };
+
+    let left = col()
+        .key("split-left-pane")
+        .grow(left_ratio)
         .min_w(0.0)
         .h_full()
-        .min_h(0.0);
+        .min_h(0.0)
+        .child(left_content);
+
+    let right = col()
+        .key("split-right-pane")
+        .grow(1.0 - left_ratio)
+        .min_w(0.0)
+        .h_full()
+        .min_h(0.0)
+        .child(right_content);
+
+    let divider = row()
+        .key("split-divider")
+        .w(5.0)
+        .h_full()
+        .justify_center()
+        .cursor(Cursor::ResizeColumn)
+        .role("separator")
+        .label("Resize split panes")
+        .help("Drag to resize · Double-click to reset")
+        .child(rune::el().w(1.0).h_full().fill(pane_border).a11y_hidden())
+        .on_drag(move |s: &mut Workspace, d: &mut Drag, tx: &mut Tx| {
+            let l = live_mut(s);
+            match d.phase {
+                Phase::Down => d.data = l.split.ratio,
+                Phase::Move => {
+                    tx.instant();
+                    let total = main_width.max(400.0);
+                    l.split.ratio = (d.data + d.dx / total).clamp(0.25, 0.75);
+                }
+                Phase::Up => {
+                    if d.cancelled() {
+                        l.split.ratio = d.data;
+                    }
+                }
+            }
+        })
+        .on_double_press(|s: &mut Workspace| {
+            live_mut(s).split.ratio = 0.5;
+        });
 
     row()
         .key("split-workspace")
@@ -301,7 +395,7 @@ pub fn wrap_main(
         .h_full()
         .min_h(0.0)
         .child(left)
-        .child(rune::el().w(1.0).h_full().fill(pane_border).a11y_hidden())
+        .child(divider)
         .child(right)
 }
 

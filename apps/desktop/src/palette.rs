@@ -65,6 +65,7 @@ enum Action {
     Files,
     Changes,
     Runner,
+    SplitLeft,
     SplitRight,
     CloseSplit,
     OpenProject,
@@ -230,13 +231,22 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         }
     }
     if l.app.selected.is_some() {
-        entries.push(Entry::cmd(
-            "Split right",
-            "View a session or PR review side-by-side",
-            Some("⌥⌘→"),
-            "split pane two columns",
-            Action::SplitRight,
-        ));
+        entries.extend([
+            Entry::cmd(
+                "Split left",
+                "View a session side-by-side on the left",
+                Some("⌥⌘←"),
+                "split pane left two columns",
+                Action::SplitLeft,
+            ),
+            Entry::cmd(
+                "Split right",
+                "View a session or PR review side-by-side on the right",
+                Some("⌥⌘→"),
+                "split pane right two columns",
+                Action::SplitRight,
+            ),
+        ]);
     }
     if l.split.is_open() {
         entries.push(Entry::cmd(

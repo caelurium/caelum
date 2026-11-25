@@ -446,11 +446,8 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         .as_ref()
         .is_some_and(|l| l.split.is_visible(window_width));
     let pane_width = if split_visible {
-        let ratio = s
-            .live
-            .as_ref()
-            .map_or(0.5, |l| l.split.ratio.clamp(0.3, 0.7));
-        width * ratio
+        let frac = s.live.as_ref().map_or(0.5, |l| l.split.primary_fraction());
+        width * frac
     } else {
         width
     };
@@ -530,6 +527,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         main,
         cx.is_reduced_motion(),
         window_width,
+        width,
         padding,
         composer_wide,
         pane_border,
@@ -552,7 +550,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             .a11y_hidden()
     }));
     let toolbar = Toolbar::new()
-        .leading(split::toolbar_heading(s, &k, window_width, pane_border))
+        .leading(split::toolbar_heading(s, &k, cx, window_width, pane_border))
         .trailing(if s.live.is_some() {
             context::workspace_button(s, &k)
         } else {

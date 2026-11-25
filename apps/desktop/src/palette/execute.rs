@@ -32,12 +32,20 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
         Action::Files => panels::show(s, Screen::Files),
         Action::Changes => panels::show(s, Screen::Changes),
         Action::Runner => crate::runner::open(s),
+        Action::SplitLeft => {
+            if let Some(i) = live(s).app.selected {
+                let target = (0..live(s).app.sessions.len())
+                    .find(|&idx| idx != i)
+                    .unwrap_or(i);
+                crate::split::open_session_on(s, target, crate::split::SplitSide::Left);
+            }
+        }
         Action::SplitRight => {
             if let Some(i) = live(s).app.selected {
                 let target = (0..live(s).app.sessions.len())
                     .find(|&idx| idx != i)
                     .unwrap_or(i);
-                crate::split::open_session(s, target);
+                crate::split::open_session_on(s, target, crate::split::SplitSide::Right);
             }
         }
         Action::CloseSplit => crate::split::close(s),
