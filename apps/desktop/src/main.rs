@@ -504,7 +504,15 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     } else {
         main.child(composer(s, &k, padding, width > 760.0, &mut layers))
     };
-    let main = split::wrap_main(s, &k, main, window_width, pane_border, &mut layers);
+    let main = split::wrap_main(
+        s,
+        &k,
+        main,
+        cx.is_reduced_motion(),
+        window_width,
+        pane_border,
+        &mut layers,
+    );
     let main = main.children((vercel && sidebar_pane.is_open()).then(|| {
         rune::el()
             .key("sidebar-divider")

@@ -9,27 +9,51 @@ use crate::{SEND, STOP, Workspace, on_key, ui};
 use super::{live, live_mut};
 
 pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut Vec<El>) -> El {
-    if let Some(index) = live(s).app.selected
-        && let Some(prompt) = crate::questions::active(live(s), index)
-    {
-        return crate::questions::view(s, k, index, prompt, padding);
-    }
-    if live(s).commands.side_owner == live(s).app.selected && live(s).commands.side_owner.is_some()
-    {
-        return crate::commands::side_view(s, k, padding);
-    }
-    let live = live(s);
-    let Some(index) = live.app.selected else {
+    let Some(index) = live(s).app.selected else {
         return col();
     };
-    crate::completion::overlay(s, k, layers);
+    composer_for(s, k, index, padding, wide, false, layers)
+}
+
+pub fn composer_for(
+    s: &Workspace,
+    k: &Kit,
+    index: usize,
+    padding: f32,
+    wide: bool,
+    split: bool,
+    layers: &mut Vec<El>,
+) -> El {
+    if !split {
+        if let Some(prompt) = crate::questions::active(live(s), index) {
+            return crate::questions::view(s, k, index, prompt, padding);
+        }
+        if live(s).commands.side_owner == Some(index) {
+            return crate::commands::side_view(s, k, padding);
+        }
+        crate::completion::overlay(s, k, layers);
+    }
+    let live = live(s);
+    if index >= live.app.sessions.len() || index >= live.drafts.len() {
+        return col();
+    }
     let session = &live.app.sessions[index];
     let draft = &live.drafts[index];
     let queued = live.app.will_queue(index);
+    let prefix = if split { "split-" } else { "" };
+    let draft_key = if split {
+        format!("split-draft-{index}")
+    } else {
+        format!("live-draft-{index}")
+    };
     let input = text_input(draft, TextStyle::new(14.0, 400.0).lh(23.0))
-        .label("Message")
+        .label(if split { "Split message" } else { "Message" })
         .placeholder(
-            "Use / for commands, @ for files, # for PRs.",
+            if split {
+                "Message split session…"
+            } else {
+                "Use / for commands, @ for files, # for PRs."
+            },
             k.c.text_muted,
         )
         .help(if queued {
@@ -41,12 +65,22 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .selection_color(k.selection())
         .w_full()
         .edit_menu_changed(
-            format!("live-draft-{index}"),
+            draft_key,
             move |s| live_mut(s).drafts.get_mut(index),
-            crate::completion::changed,
+            move |s, tx| {
+                if !split {
+                    crate::completion::changed(s, tx);
+                }
+            },
         )
         .on_input_key(on_key)
-        .on_submit(Workspace::send)
+        .on_submit(move |s: &mut Workspace, tx: &mut rune::Tx| {
+            if split {
+                send_split(s, index);
+            } else {
+                s.send(tx);
+            }
+        })
         .on_input_paste(move |s: &mut Workspace, content, _| {
             let Some(image) = content.image() else {
                 return false;
@@ -80,12 +114,18 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
                 || (draft.text.trim().is_empty() && session.attachments.is_empty()),
         )
         .on_press_tx(move |s: &mut Workspace, tx| {
-            if live_mut(s).app.selected == Some(index) {
+            if split {
+                send_split(s, index);
+            } else if live_mut(s).app.selected == Some(index) {
                 s.send(tx);
             }
         })
         .build(k)
-        .key("send")
+        .key(if split {
+            format!("split-send-{index}")
+        } else {
+            "send".into()
+        })
         .label(if queued {
             "Queue message"
         } else {
@@ -97,7 +137,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             "Send message · Enter\nShift+Enter for a new line"
         });
     let actions = row()
-        .key("composer-actions")
+        .key(format!("{prefix}composer-actions"))
         .center_y()
         .justify_end()
         .gap(6.0)
@@ -117,17 +157,22 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             })
             .build(k)
             .px(8.0)
-            .key("stop")
+            .key(if split {
+                format!("split-stop-{index}")
+            } else {
+                "stop".into()
+            })
             .label("Stop generation")
             .help("Stop generation and pause the queue · Escape")
         }))
         .child(submit);
-    let pickers = pickers(s, k, layers).min_w(0.0);
-    let usage_label = wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0);
+    let pickers = pickers(s, k, index, split, layers).min_w(0.0);
+    let usage_label =
+        !split && (wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0));
     let usage = row()
         .center_y()
         .gap(4.0)
-        .child(crate::remote::handoff_button(s, k, Some(index)))
+        .children((!split).then(|| crate::remote::handoff_button(s, k, Some(index))))
         .child(crate::activity::context(s, k, index, usage_label));
     let controls = if wide {
         row().center_y().gap(8.0).child(pickers.grow(1.0)).child(
@@ -149,7 +194,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
                 .child(actions),
         )
     }
-    .key("composer-controls")
+    .key(format!("{prefix}composer-controls"))
     .w_full();
     let activity = crate::activity::session_activity(s, index);
     let has_queue = !session.queue.is_empty() || !session.inbox.items.is_empty();
@@ -167,7 +212,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         crate::composer::editor(s, index, input),
         controls,
         col()
-            .key(format!("composer-context-{index}"))
+            .key(format!("{prefix}composer-context-{index}"))
             .w_full()
             .max_h(180.0)
             .gap(6.0)
@@ -179,24 +224,38 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
     )
 }
 
-fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
+fn send_split(s: &mut Workspace, index: usize) {
+    let l = live_mut(s);
+    if index >= l.drafts.len() {
+        return;
+    }
+    let text = l.drafts[index].text.clone();
+    if text.trim().is_empty() && l.app.sessions[index].attachments.is_empty() {
+        return;
+    }
+    if l.app.send(index, text) {
+        l.drafts[index].clear();
+        l.schedule();
+    }
+}
+
+fn pickers(s: &Workspace, k: &Kit, index: usize, split: bool, layers: &mut Vec<El>) -> El {
     let live = live(s);
+    let prefix = if split { "split-" } else { "" };
     let maximum = rune::memo::window_layout("composer-options").map_or(220.0, |r| r[2].max(80.0));
     let mut content = row()
-        .key("composer-options")
+        .key(format!("{prefix}composer-options"))
         .flex_wrap()
         .gap(4.0)
         .center_y();
-    let Some(index) = live.app.selected else {
-        return content;
-    };
     let session = &live.app.sessions[index];
     let choices = live.app.choices.get(&session.scope);
     let providers = live.app.available_providers(Some(&session.scope.project));
     if providers.iter().any(|&p| p != session.scope.provider) {
+        let menu_name: &'static str = if split { "split-provider" } else { "provider" };
         content = content.child(
             Select::choices(
-                "provider",
+                menu_name,
                 providers
                     .iter()
                     .map(|p| Choice::new(p.as_str(), p.name()))
@@ -208,18 +267,18 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .disabled(!live.app.can_switch_provider(index))
             .current(Some(session.scope.provider.as_str()))
             .placement(Placement::TopStart)
-            .open(live.menu == Some(("provider", index)))
-            .on_toggle(|s: &mut Workspace| {
-                toggle_menu(s, "provider");
+            .open(live.menu == Some((menu_name, index)))
+            .on_toggle(move |s: &mut Workspace| {
+                toggle_menu_for(s, menu_name, index);
                 let l = live_mut(s);
-                if l.menu.is_some_and(|(name, _)| name == "provider") {
+                if l.menu.is_some_and(|(name, _)| name == menu_name) {
                     l.refresh_installed_providers();
                 }
             })
             .on_close(|s: &mut Workspace| live_mut(s).menu = None)
             .on_choose(move |s: &mut Workspace, value, _| {
                 let l = live_mut(s);
-                if l.app.selected != Some(index) || l.menu != Some(("provider", index)) {
+                if l.menu != Some((menu_name, index)) {
                     return;
                 }
                 if let Some(&provider) = providers.iter().find(|p| p.as_str() == value)
@@ -228,14 +287,17 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     l.schedule();
                 }
                 l.menu = None;
-                l.focus();
+                if !split {
+                    l.focus();
+                }
             })
             .build(k, layers)
             .max_w(maximum),
         );
     }
+    let model_key = if split { "split-model" } else { "model" };
     content = content.child(
-        Select::new::<&str>("model", &[])
+        Select::new::<&str>(model_key, &[])
             .current(
                 choices
                     .and_then(|c| {
@@ -250,11 +312,16 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .label("Model")
             .prominent()
             .placement(Placement::TopStart)
-            .open(live.models.is_open())
+            .open(!split && live.models.is_open())
             .disabled(
                 session.archived() || session.archiving() || !session.scope.provider_available(),
             )
-            .on_toggle(|s: &mut Workspace| crate::models::open(s, None))
+            .on_toggle(move |s: &mut Workspace| {
+                if split {
+                    live_mut(s).app.select(index);
+                }
+                crate::models::open(s, None);
+            })
             .trigger(k)
             .max_w(maximum.min(220.0))
             .min_w(0.0),
@@ -292,24 +359,27 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 } else {
                     current
                 });
+            let menu_name: &'static str = if split { "split-effort" } else { "effort" };
             content = content.child(
-                Select::choices("effort", efforts)
+                Select::choices(menu_name, efforts)
                     .current(Some(current))
                     .display(display)
                     .label("Reasoning effort")
                     .menu_description("Depth of reasoning for the next message")
                     .width(280.0)
                     .placement(Placement::TopStart)
-                    .open(live.menu == Some(("effort", index)))
+                    .open(live.menu == Some((menu_name, index)))
                     .disabled(session.archived() || session.archiving())
-                    .on_toggle(|s: &mut Workspace| toggle_menu(s, "effort"))
+                    .on_toggle(move |s: &mut Workspace| toggle_menu_for(s, menu_name, index))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
                         let live = live_mut(s);
                         live.app
                             .set_effort(index, (!value.is_empty()).then(|| value.into()));
                         live.menu = None;
-                        live.focus();
+                        if !split {
+                            live.focus();
+                        }
                     })
                     .build(k, layers)
                     .max_w(maximum),
@@ -324,16 +394,17 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .iter()
                     .map(|agent| Choice::new(&agent.id, choice_label(agent))),
             );
+            let menu_name: &'static str = if split { "split-agent" } else { "agent" };
             content = content.child(
-                Select::choices("agent", agents)
+                Select::choices(menu_name, agents)
                     .current(Some(session.options.agent.as_deref().unwrap_or("")))
                     .label("Agent")
                     .menu_description("Agent for the next message")
                     .width(280.0)
                     .placement(Placement::TopStart)
-                    .open(live.menu == Some(("agent", index)))
+                    .open(live.menu == Some((menu_name, index)))
                     .disabled(session.archived() || session.archiving())
-                    .on_toggle(|s: &mut Workspace| toggle_menu(s, "agent"))
+                    .on_toggle(move |s: &mut Workspace| toggle_menu_for(s, menu_name, index))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
                         let live = live_mut(s);
@@ -341,7 +412,9 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                             (!value.is_empty()).then(|| value.into());
                         live.app.options_changed(index);
                         live.menu = None;
-                        live.focus();
+                        if !split {
+                            live.focus();
+                        }
                     })
                     .build(k, layers)
                     .max_w(maximum),
@@ -370,9 +443,9 @@ pub(super) fn effort_description(id: &str) -> Option<&'static str> {
     }
 }
 
-fn toggle_menu(s: &mut Workspace, name: &'static str) {
+fn toggle_menu_for(s: &mut Workspace, name: &'static str, index: usize) {
     let live = live_mut(s);
-    let next = live.app.selected.map(|index| (name, index));
+    let next = Some((name, index));
     live.menu = if live.menu == next { None } else { next };
 }
 

@@ -1,14 +1,12 @@
 //! Split-pane workspace layout: view two sessions side-by-side or a session beside a PR review.
 
-use rune::{El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, row, text, text_input};
-use rune_kit::{ButtonVariant, Kit, Markdown, glyphs};
+use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use rune_kit::{Kit, glyphs};
 
 use crate::{
-    SEND, STOP, Workspace,
-    context::EditMenu,
+    Workspace,
     live::{live, live_mut},
-    quiet_button,
-    ui::{self, Button},
+    quiet_button, ui,
 };
 
 pub const COMPACT_WIDTH: f32 = 1100.0;
@@ -91,6 +89,21 @@ pub fn open_review(s: &mut Workspace, project: String, url: String) {
     l.split.open_review(project, url);
 }
 
+pub fn swap(s: &mut Workspace) {
+    let l = live_mut(s);
+    let Some(SecondaryPane::Session(secondary)) = l.split.secondary else {
+        return;
+    };
+    let primary = l.app.selected;
+    l.app.select(secondary);
+    if let Some(prev) = primary.filter(|&p| p != secondary) {
+        l.split.open_session(prev);
+        focus_pane(s, ActivePane::Primary);
+    } else {
+        close(s);
+    }
+}
+
 pub fn close(s: &mut Workspace) {
     live_mut(s).split.close();
     focus_pane(s, ActivePane::Primary);
@@ -160,6 +173,7 @@ pub fn wrap_main(
     s: &Workspace,
     k: &Kit,
     primary: El,
+    reduced: bool,
     window_width: f32,
     pane_border: rune::Color,
     layers: &mut Vec<El>,
@@ -176,6 +190,13 @@ pub fn wrap_main(
     let ratio = l.split.ratio.clamp(0.3, 0.7);
     let primary_active = l.split.active == ActivePane::Primary;
 
+    let (primary_title, primary_sub) = l
+        .app
+        .selected
+        .and_then(|i| l.app.sessions.get(i))
+        .map(|sess| (sess.title.clone(), Some(sess.scope.provider.name())))
+        .unwrap_or_else(|| ("Primary".into(), None));
+
     let left = col()
         .key("split-primary-pane")
         .grow(ratio)
@@ -187,24 +208,29 @@ pub fn wrap_main(
                 focus_pane(s, ActivePane::Primary);
             }
         })
-        .child(
-            rune::el()
-                .w_full()
-                .h(2.0)
-                .fill(if primary_active {
-                    k.c.text_accent
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .a11y_hidden(),
-        )
+        .child(pane_header(
+            &primary_title,
+            primary_sub,
+            primary_active,
+            None,
+            k,
+        ))
+        .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
         .child(primary.grow(1.0).min_h(0.0));
 
-    let right = secondary_pane(s, k, secondary, !primary_active, pane_border, layers)
-        .grow(1.0 - ratio)
-        .min_w(0.0)
-        .h_full()
-        .min_h(0.0);
+    let right = secondary_pane(
+        s,
+        k,
+        secondary,
+        !primary_active,
+        reduced,
+        pane_border,
+        layers,
+    )
+    .grow(1.0 - ratio)
+    .min_w(0.0)
+    .h_full()
+    .min_h(0.0);
 
     row()
         .key("split-workspace")
@@ -216,42 +242,82 @@ pub fn wrap_main(
         .child(right)
 }
 
+fn pane_header(
+    title: &str,
+    subtitle: Option<&str>,
+    active: bool,
+    trailing: Option<El>,
+    k: &Kit,
+) -> El {
+    row()
+        .w_full()
+        .h(38.0)
+        .px(16.0)
+        .gap(8.0)
+        .center_y()
+        .fill(if active { k.c.bg_base } else { k.c.layer_01 })
+        .child(
+            rune::el()
+                .size(6.0, 6.0)
+                .radius(3.0)
+                .fill(if active {
+                    k.c.text_accent
+                } else {
+                    k.alpha(k.c.text_muted, 0.35)
+                })
+                .a11y_hidden(),
+        )
+        .child(
+            text(title)
+                .font(k.ty.ui_medium)
+                .color(if active {
+                    k.c.text_base
+                } else {
+                    k.c.text_muted
+                })
+                .truncate()
+                .min_w(0.0),
+        )
+        .children(subtitle.map(|sub| ui::caption(sub, k).truncate()))
+        .child(rune::el().grow(1.0))
+        .children(trailing)
+}
+
 fn secondary_pane(
     s: &Workspace,
     k: &Kit,
     secondary: SecondaryPane,
     active: bool,
+    reduced: bool,
     pane_border: rune::Color,
     layers: &mut Vec<El>,
 ) -> El {
-    let title = match &secondary {
+    let (title, subtitle, can_swap) = match &secondary {
         SecondaryPane::Session(index) => live(s)
             .app
             .sessions
             .get(*index)
-            .map(|sess| sess.title.clone())
-            .unwrap_or_else(|| "Session".into()),
-        SecondaryPane::Review(_, url) => format!(
-            "PR Review · {}",
-            url.rsplit('/').next().unwrap_or(url.as_str())
+            .map(|sess| (sess.title.clone(), Some(sess.scope.provider.name()), true))
+            .unwrap_or_else(|| ("Session".into(), None, false)),
+        SecondaryPane::Review(_, url) => (
+            format!(
+                "PR Review · {}",
+                url.rsplit('/').next().unwrap_or(url.as_str())
+            ),
+            None,
+            false,
         ),
     };
 
-    let header = row()
-        .w_full()
-        .h(38.0)
-        .px(14.0)
-        .gap(8.0)
+    let actions = row()
         .center_y()
-        .child(
-            text(title)
-                .font(k.ty.ui_medium)
-                .color(k.c.text_base)
-                .truncate()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .child(ui::caption(if active { "Active" } else { "Split" }, k))
+        .gap(2.0)
+        .children(can_swap.then(|| {
+            quiet_button(&ui::BACK, "Swap with primary pane")
+                .on_press(swap)
+                .build(k)
+                .key("split-swap")
+        }))
         .child(
             quiet_button(&glyphs::CLOSE, "Close split pane")
                 .on_press(close)
@@ -260,7 +326,7 @@ fn secondary_pane(
         );
 
     let content = match secondary {
-        SecondaryPane::Session(index) => secondary_session(s, k, index),
+        SecondaryPane::Session(index) => secondary_session(s, k, index, reduced, layers),
         SecondaryPane::Review(_, _) => crate::panels::view(s, k, layers),
     };
 
@@ -274,125 +340,28 @@ fn secondary_pane(
                 focus_pane(s, ActivePane::Secondary);
             }
         })
-        .child(
-            rune::el()
-                .w_full()
-                .h(2.0)
-                .fill(if active {
-                    k.c.text_accent
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .a11y_hidden(),
-        )
-        .child(header)
+        .child(pane_header(&title, subtitle, active, Some(actions), k))
         .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
         .child(content.grow(1.0).min_h(0.0))
 }
 
-fn secondary_session(s: &Workspace, k: &Kit, index: usize) -> El {
-    let l = live(s);
-    let Some(session) = l.app.sessions.get(index) else {
-        return ui::empty(
-            "Session unavailable",
-            "Close the split pane or select another session.",
-            k,
-        );
-    };
-
-    let mut messages = col().w_full().px(18.0).py(16.0).gap(16.0);
-    if session.conversation.entries.is_empty() {
-        messages = messages.child(ui::empty(
-            "No messages yet",
-            "Send a message below in this split session.",
-            k,
-        ));
-    } else {
-        for entry in session
-            .conversation
-            .entries
-            .iter()
-            .filter(|e| caelum_core::application::presentation::entry_visible(e))
-        {
-            match entry.kind() {
-                caelum_core::application::EntryKind::User => {
-                    messages = messages.child(ui::user_message(&entry.text, k));
-                }
-                caelum_core::application::EntryKind::Assistant => {
-                    messages = messages.child(Markdown::new(&entry.text).selectable(true).build(k));
-                }
-                _ => {}
-            }
-        }
-    }
-
-    let scroll = col()
-        .key(format!("split-transcript-{index}"))
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .scroll(ScrollSpec { stick_bottom: true })
-        .child(messages);
-
-    let draft = &l.drafts[index];
-    let working = session.working();
-    let input = text_input(draft, TextStyle::new(13.5, 400.0).lh(21.0))
-        .label("Split message")
-        .placeholder("Message split session…", k.c.text_muted)
-        .color(k.c.text_base)
-        .selection_color(k.selection())
-        .w_full()
-        .edit_menu(format!("split-draft-{index}"), move |s| {
-            live_mut(s).drafts.get_mut(index)
-        })
-        .on_input_key(crate::on_key)
-        .on_submit(move |s: &mut Workspace, _tx| send_secondary(s, index));
-
-    let action = if working {
-        Button::new("Stop")
-            .icon(&STOP)
-            .variant(ButtonVariant::Danger)
-            .on_press(move |s: &mut Workspace| live_mut(s).app.cancel(index))
-            .build(k)
-            .key(format!("split-stop-{index}"))
-    } else {
-        Button::new("Send")
-            .icon(&SEND)
-            .variant(ButtonVariant::Contrast)
-            .disabled(!session.can_send() || draft.text.trim().is_empty())
-            .on_press(move |s: &mut Workspace| send_secondary(s, index))
-            .build(k)
-            .key(format!("split-send-{index}"))
-    };
-
-    let composer = row()
-        .w_full()
-        .px(14.0)
-        .py(10.0)
-        .gap(8.0)
-        .center_y()
-        .border(1.0, k.c.border_muted)
-        .child(input.grow(1.0).min_w(0.0))
-        .child(action);
-
+fn secondary_session(
+    s: &Workspace,
+    k: &Kit,
+    index: usize,
+    reduced: bool,
+    layers: &mut Vec<El>,
+) -> El {
+    let padding = 20.0;
     col()
         .w_full()
         .h_full()
         .min_h(0.0)
-        .child(scroll)
-        .child(composer)
-}
-
-fn send_secondary(s: &mut Workspace, index: usize) {
-    let l = live_mut(s);
-    if index >= l.drafts.len() {
-        return;
-    }
-    let text = l.drafts[index].text.clone();
-    if text.trim().is_empty() {
-        return;
-    }
-    if l.app.send(index, text) {
-        l.drafts[index].clear();
-    }
+        .items_center()
+        .child(crate::live::transcript_for(
+            s, k, index, reduced, padding, true,
+        ))
+        .child(crate::live::composer_for(
+            s, k, index, padding, false, true, layers,
+        ))
 }

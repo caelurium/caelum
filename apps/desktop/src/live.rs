@@ -16,6 +16,7 @@ mod sidebar;
 mod transcript;
 
 pub use composer::composer;
+pub use composer::composer_for;
 pub use composer::open_effort;
 pub(crate) use heading::heading;
 pub(crate) use menus::archive_disabled;
@@ -28,6 +29,7 @@ pub use sidebar::on_key as sidebar_key;
 pub(crate) use sidebar::select as select_session;
 pub use sidebar::sidebar;
 pub use transcript::transcript;
+pub use transcript::transcript_for;
 
 use std::{cell::Cell, collections::HashSet};
 
