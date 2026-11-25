@@ -32,6 +32,7 @@ pub struct Review {
     pub threads: Vec<GitHubReviewThread>,
     pub cursors: BTreeMap<String, Option<String>>,
     pub selected_comments: HashSet<String>,
+    pub check_logs: BTreeMap<String, GitHubCheckLogs>,
     pub error: Option<String>,
     pub notice: Option<String>,
 }
@@ -123,6 +124,7 @@ impl Review {
         self.threads.clear();
         self.cursors.clear();
         self.selected_comments.clear();
+        self.check_logs.clear();
     }
 
     pub(super) fn accept_details(&mut self, request: u64, details: GitHubPullRequestDetails) {

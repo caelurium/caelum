@@ -76,6 +76,7 @@ impl Workspace {
                                 | Task::Details { .. }
                                 | Task::ReviewFiles { .. }
                                 | Task::Feedback { .. }
+                                | Task::CheckLogs { .. }
                                 | Task::Worktrees { .. }
                                 | Task::CreateWorktree { .. }
                                 | Task::RemoveWorktree { .. }
@@ -303,6 +304,7 @@ impl Workspace {
                     archived: s.archived(),
                     reading: s.reading,
                     unread: s.unread,
+                    origin: s.origin.clone(),
                     pinned: s.pinned,
                     bookmarked_entries: s.bookmarked_entries.clone(),
                 })
