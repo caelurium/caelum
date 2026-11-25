@@ -243,7 +243,7 @@ fn provider_controls_run_during_execution_without_clearing_stop_on_failure() {
     assert!(app.send(0, "/goal pause".into()));
     assert!(app.sessions[0].queue.is_empty());
     let (id, command) = app.commands().pop().unwrap();
-    assert!(matches!(command, Command::Send(..)));
+    assert!(matches!(command, Command::RunOpenCodeCommand(..)));
     assert!(!app.send(0, "/goal pause".into()));
     app.apply(Event::Completed(id, Err("Rejected control".into())));
     assert!(app.sessions[0].working());

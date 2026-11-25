@@ -17,7 +17,10 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
     let input = live(s).drafts[index].text.clone();
     let command = match LocalCommand::parse(&input, live(s).app.sessions[index].scope.provider) {
         Ok(Some(command)) => command,
-        Ok(None) => return false,
+        Ok(None) => {
+            crate::completion::sync_templates(live_mut(s));
+            return false;
+        }
         Err(error) => {
             live_mut(s).app.sessions[index].error = Some(error);
             return true;

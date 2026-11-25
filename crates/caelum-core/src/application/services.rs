@@ -58,6 +58,9 @@ pub enum Task {
         project: String,
         query: String,
     },
+    Templates {
+        project: String,
+    },
     Directory {
         project: String,
         path: String,
@@ -151,6 +154,13 @@ pub enum Task {
         base: String,
         action: GitHubReviewWrite,
     },
+    CheckLogs {
+        project: String,
+        url: String,
+        head: String,
+        check_name: String,
+        details_url: String,
+    },
     #[serde(skip)]
     ImportSettings {
         path: String,
@@ -159,6 +169,7 @@ pub enum Task {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum TaskReply {
+    Templates(Vec<crate::templates::Template>),
     Shell(String),
     #[serde(skip)]
     Updates(UpdateCheck),
@@ -185,6 +196,7 @@ pub enum TaskReply {
     Feedback(GitHubPullRequestFeedback),
     AutoMerge(GitHubAutoMergeResult),
     ReviewWritten(GitHubReviewWriteResult),
+    CheckLogs(GitHubCheckLogs),
     #[serde(skip)]
     Preferences(Preferences),
     Done,
@@ -195,6 +207,7 @@ macro_rules! project_field {
         match $task {
             Task::Shell { project, .. }
             | Task::Completions { project, .. }
+            | Task::Templates { project }
             | Task::Image { project, .. }
             | Task::EncodeImage { project, .. }
             | Task::Reveal { project, .. }
@@ -218,7 +231,8 @@ macro_rules! project_field {
             | Task::Merge { project, .. }
             | Task::SetAutoMerge { project, .. }
             | Task::UpdateBranch { project, .. }
-            | Task::WriteReview { project, .. } => Some(project),
+            | Task::WriteReview { project, .. }
+            | Task::CheckLogs { project, .. } => Some(project),
             Task::ImportSettings { .. }
             | Task::Updates
             | Task::Update(_)
@@ -252,7 +266,8 @@ impl Task {
             | Self::Merge { url, head, .. }
             | Self::SetAutoMerge { url, head, .. }
             | Self::UpdateBranch { url, head, .. }
-            | Self::WriteReview { url, head, .. } => Some((url, Some(head))),
+            | Self::WriteReview { url, head, .. }
+            | Self::CheckLogs { url, head, .. } => Some((url, Some(head))),
             _ => None,
         }
     }
@@ -272,6 +287,7 @@ impl Task {
             Self::Stats { .. } => "stats".into(),
             Self::AttachPullRequest { url, .. } => format!("attach-pr:{url}"),
             Self::Completions { .. } => "completions".into(),
+            Self::Templates { .. } => "templates".into(),
             Self::Directory { path, .. } => format!("directory:{path}"),
             Self::File { path, .. } => format!("file:{path}"),
             Self::Search { .. } => "search".into(),
@@ -292,6 +308,9 @@ impl Task {
             | Self::SetAutoMerge { url, .. }
             | Self::UpdateBranch { url, .. }
             | Self::WriteReview { url, .. } => return Self::mutation_slot(self.project(), url),
+            Self::CheckLogs {
+                url, check_name, ..
+            } => format!("check-logs:{url}:{check_name}"),
             Self::ImportSettings { .. } => "settings".into(),
         };
         serde_json::json!([self.project(), part]).to_string()
@@ -309,6 +328,9 @@ impl Task {
             };
         }
         match self {
+            Self::Templates { project } => {
+                crate::templates::load(project).map(TaskReply::Templates)
+            }
             Self::Shell {
                 project,
                 session,
@@ -541,6 +563,16 @@ impl Task {
             } => reply!(
                 github::write_review(project, url, head, base, action),
                 ReviewWritten
+            ),
+            Self::CheckLogs {
+                project,
+                url,
+                head,
+                check_name,
+                details_url,
+            } => reply!(
+                github::pull_request_check_logs(project, url, head, check_name, details_url),
+                CheckLogs
             ),
             Self::ImportSettings { path } => Preferences::import_tauri(
                 &std::fs::read_to_string(path).map_err(|e| e.to_string())?,

@@ -1,5 +1,6 @@
 mod handoff;
 mod native;
+mod templates;
 
 use crate::{
     application::{Command, Event, Reply, Workspace},

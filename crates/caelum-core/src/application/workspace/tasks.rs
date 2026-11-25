@@ -13,6 +13,7 @@ impl Workspace {
                 | Task::Merge { .. }
                 | Task::SetAutoMerge { .. }
                 | Task::UpdateBranch { .. }
+                | Task::CheckLogs { .. }
         ) && task.review().is_some_and(|(url, _)| {
             self.services
                 .reviews
@@ -257,6 +258,11 @@ impl Workspace {
                 self.branch_update(update.clone());
             }
         }
+        if let (Task::CheckLogs { url, head, .. }, Ok(TaskReply::CheckLogs(logs))) =
+            (&task, &result)
+        {
+            self.attach_check_logs_to_child(url, head, logs);
+        }
         if let Ok(TaskReply::Worktree(worktree)) = &result {
             if let Task::CreateWorktree { project, .. } = &task {
                 self.managed_worktrees.insert(worktree.path.clone());
@@ -264,10 +270,12 @@ impl Workspace {
                 let root = self.group_path(project).to_owned();
                 self.project_roots
                     .insert(worktree.project.path.clone(), root);
-                if let Some((provider, _)) = launch.filter(|(_, navigation)| {
-                    *navigation == self.navigation && !self.closed_since(project, request)
-                }) {
-                    self.launch_project(worktree.project.path.clone(), provider);
+                if !self.complete_ci_fix_worktree(request, worktree) {
+                    if let Some((provider, _)) = launch.filter(|(_, navigation)| {
+                        *navigation == self.navigation && !self.closed_since(project, request)
+                    }) {
+                        self.launch_project(worktree.project.path.clone(), provider);
+                    }
                 }
             }
             if matches!(task, Task::RemoveWorktree { .. }) {

@@ -90,7 +90,7 @@ impl Worktree<'_> {
     pub(super) async fn command(&self, command: &str) -> Result<String, String> {
         let path = quote(&self.root);
         let script = format!(
-            "cd -P {path} && test \"$PWD\" = {path} && test \"$(git rev-parse --show-toplevel)\" = \"$PWD\" && {{ {command}; }}"
+            "cd -P {path} && test \"$PWD\" = {path} && test \"$(git rev-parse --show-toplevel)\" = \"$PWD\" && {{ {command}\n}}"
         );
         let result = self
             .boat

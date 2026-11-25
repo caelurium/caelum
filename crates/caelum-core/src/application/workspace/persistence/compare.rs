@@ -157,6 +157,7 @@ impl Session {
             archived,
             reading,
             unread,
+            origin,
             pinned,
             bookmarked_entries,
         } = saved;
@@ -180,6 +181,7 @@ impl Session {
             && self.archived() == *archived
             && self.reading == *reading
             && self.unread == *unread
+            && self.origin == *origin
             && self.pinned == *pinned
             && self.bookmarked_entries == *bookmarked_entries
     }

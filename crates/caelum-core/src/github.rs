@@ -16,12 +16,14 @@ use crate::projects::{Project, ProjectError};
 
 mod auto_merge;
 pub(crate) mod cache;
+mod checks;
 mod host;
 mod identity;
 mod review;
 mod vm_branch;
 pub use auto_merge::set_pull_request_auto_merge;
 pub use cache::CachedReview;
+pub use checks::{parse_actions_run, pull_request_check_logs};
 use host::Gh;
 pub(crate) use review::write::write_review;
 pub use review::{pull_request_feedback, pull_request_files};

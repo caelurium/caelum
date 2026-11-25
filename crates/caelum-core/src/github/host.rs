@@ -145,6 +145,14 @@ impl Access {
                 ..
             } => review::write::run(self, root, url, head, base, action)
                 .map(TaskReply::ReviewWritten),
+            Task::CheckLogs {
+                url,
+                head,
+                check_name,
+                details_url,
+                ..
+            } => checks::check_logs(self, root, url, head, check_name, details_url)
+                .map(TaskReply::CheckLogs),
             _ => return Err("Unsupported VM checkout operation.".into()),
         }
         .map_err(|e| e.to_string())

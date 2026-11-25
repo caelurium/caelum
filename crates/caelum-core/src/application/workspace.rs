@@ -1,3 +1,4 @@
+mod approval_policy;
 mod archive;
 mod completion;
 mod composer;
@@ -18,6 +19,7 @@ mod sessions;
 mod subagents;
 mod submission;
 mod tasks;
+mod templates;
 mod titles;
 
 pub use fork::FilePreview;
@@ -77,6 +79,7 @@ pub struct Session {
     archive_status: archive::Status,
     pub reading: f32,
     pub unread: bool,
+    pub origin: Option<caelum_protocol::SessionOrigin>,
     pub pinned: bool,
     pub bookmarked_entries: Vec<String>,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
@@ -129,6 +132,7 @@ impl Session {
             archive_status: Default::default(),
             reading: -1.0,
             unread: false,
+            origin: None,
             pinned: false,
             bookmarked_entries: Vec::new(),
             shells: Vec::new(),
@@ -217,6 +221,8 @@ impl Session {
 }
 
 enum Pending {
+    ScopedApproval(approval_policy::Attempt),
+    Templates,
     PreviousHistory(usize, usize),
     Remote(remote::Lane),
     ConversationControl(usize, SessionKey, controls::Operation),
@@ -269,6 +275,8 @@ enum Pending {
 /// first-send creation; every pending request carries its original owner.
 #[derive(Default)]
 pub struct Workspace {
+    policy: approval_policy::State,
+    pub templates: crate::templates::Catalog,
     fork: Option<ForkPicker>,
     handoff: Option<VmHandoff>,
     pub home: Home,
@@ -305,6 +313,7 @@ pub struct Workspace {
     next_request: u64,
     latest_open: u64,
     launches: HashMap<u64, (Provider, u64)>,
+    pending_ci_fixes: HashMap<u64, review::PendingCiFix>,
     remembered: HashMap<String, usize>,
     remembered_checkouts: HashMap<String, usize>,
     managed_worktrees: BTreeSet<String>,

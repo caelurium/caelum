@@ -1,6 +1,7 @@
 //! Deterministic demanding workload, explicitly opt-in and isolated from user data.
 mod feed;
 mod models;
+mod requests;
 mod review;
 #[cfg(test)]
 pub(crate) use review::seed_review_files;
@@ -167,35 +168,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         seed_worktrees(l, serde_json::from_value(json!({
             "project":{"path":project,"name":"caelum"},"storageDirectory":"/projects","branches":["main","unused-branch"],"defaultBase":"main","worktrees":trees,
         })).unwrap());
-        for (path, title, provider) in [
-            (
-                "/projects/caelum-native",
-                "Restore the worktree sidebar",
-                Provider::Codex,
-            ),
-            (
-                "/projects/caelum-providers",
-                "Reconnect provider sessions",
-                Provider::OpenCode,
-            ),
-        ] {
-            let index = l.app.new_session(Scope {
-                project: path.into(),
-                provider,
-            });
-            let session = &mut l.app.sessions[index];
-            session.title = title.into();
-            session.draft = format!("Independent draft for {title}");
-            if provider == Provider::Codex {
-                session.conversation.set_working(true);
-            } else {
-                session.queue.push(caelum_core::application::QueuedPrompt {
-                    text: "Review the reconnect changes".into(),
-                    options: Default::default(),
-                });
-                session.queue_paused = true;
-            }
-        }
+        feed::worktree_sessions(l);
         if matches!(
             name,
             "sidebar-worktrees-projects" | "sidebar-worktrees-vercel"
@@ -553,29 +526,7 @@ fn polish_scene(state: &mut Workspace, name: &str) -> bool {
         }
         return true;
     }
-    if matches!(name, "approval" | "questions") {
-        l.app.sessions[0].remote_id = Some("thread-fixture".into());
-        l.app.sessions[0].conversation = Default::default();
-        if name == "approval" {
-            l.app
-                .apply(Event::Approvals(vec![caelum_protocol::ApprovalPrompt {
-                    provider: "codex".into(),
-                    project_path: project.into(),
-                    session_id: Some("thread-fixture".into()),
-                    request_id: "fixture".into(),
-                    summary: "Run the workspace checks?".into(),
-                    description: "cargo test --workspace --locked".into(),
-                }]));
-        } else {
-            l.app.apply(Event::Questions(vec![caelum_protocol::QuestionPrompt {provider:"codex".into(),project_path:project.into(),session_id:"thread-fixture".into(),request_id:"fixture".into(),title:"Choose the implementation scope".into(),fields:vec![json!({"key":"target","type":"multiselect","title":"Platforms","required":true,"options":[{"value":"macos","label":"macOS","description":"Native desktop experience"},{"value":"linux","label":"Linux","description":"Shared core and CLI"}],"default":["macos"],"custom":true})] }]));
-        }
-        return true;
-    }
-    if name == "commands" {
-        l.sync_editors();
-        l.drafts[0].replace_text("/");
-        l.drafts[0].set_caret(1);
-        l.drafts[0].focused = true;
+    if requests::scene(l, project, name) {
         return true;
     }
     if matches!(name, "working" | "thinking" | "retrying" | "stopping") {

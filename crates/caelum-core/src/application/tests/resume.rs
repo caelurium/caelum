@@ -43,6 +43,7 @@ fn bundled_resume_is_ready_without_a_history_command_and_recovers_inbox_before_q
         .inbox
         .snapshot(0, std::slice::from_ref(&delivered));
     workspace.sessions[index].queue.push(QueuedPrompt {
+        provider_command: false,
         text: "Next".into(),
         options: Options::default(),
     });

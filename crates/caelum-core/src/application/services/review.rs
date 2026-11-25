@@ -35,6 +35,7 @@ pub struct Review {
     pub selected_comments: HashSet<String>,
     pub draft: GitHubReviewDraft,
     pub reply_drafts: BTreeMap<String, String>,
+    pub check_logs: BTreeMap<String, GitHubCheckLogs>,
     pub error: Option<String>,
     pub notice: Option<String>,
 }
@@ -223,6 +224,7 @@ impl Review {
         self.threads.clear();
         self.cursors.clear();
         self.selected_comments.clear();
+        self.check_logs.clear();
     }
 
     pub(super) fn replace_revision(&mut self) {

@@ -40,6 +40,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
         Command::Task(
             t @ (Task::EncodeImage { .. }
             | Task::Completions { .. }
+            | Task::Templates { .. }
             | Task::Directory { .. }
             | Task::File { .. }
             | Task::Search { .. }
@@ -55,6 +56,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
             | Task::SetAutoMerge { .. }
             | Task::UpdateBranch { .. }
             | Task::WriteReview { .. }
+            | Task::CheckLogs { .. }
             | Task::Worktrees { .. }),
         ) => t.project(),
         _ => return false,

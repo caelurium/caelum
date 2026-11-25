@@ -2,7 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+mod github_review;
 mod stats;
+pub use github_review::GitHubDiffSide;
+pub use github_review::GitHubPendingReviewComment;
+pub use github_review::GitHubReviewDraft;
+pub use github_review::GitHubReviewEvent;
+pub use github_review::GitHubReviewWrite;
+pub use github_review::GitHubReviewWriteResult;
 pub use stats::*;
 
 /// Stable, serializable application metadata shared across Caelum interfaces.
@@ -216,69 +223,40 @@ pub struct GitHubPullRequestFeedback {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum GitHubReviewEvent {
-    #[default]
-    Comment,
-    Approve,
-    RequestChanges,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubCheckLogs {
+    pub run_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<u64>,
+    pub check_name: String,
+    pub excerpt: String,
+    pub truncated: bool,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitHubPendingReviewComment {
-    pub path: String,
-    pub line: u32,
-    pub side: GitHubDiffSide,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum GitHubDiffSide {
-    Left,
-    Right,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitHubReviewDraft {
-    pub event: GitHubReviewEvent,
-    pub body: String,
-    pub comments: Vec<GitHubPendingReviewComment>,
-}
-
-impl GitHubReviewDraft {
-    pub fn can_submit(&self) -> bool {
-        self.comments
-            .iter()
-            .all(|c| c.line > 0 && !c.body.trim().is_empty() && !c.path.is_empty())
-            && match self.event {
-                GitHubReviewEvent::Approve => true,
-                GitHubReviewEvent::Comment => {
-                    !self.body.trim().is_empty() || !self.comments.is_empty()
-                }
-                GitHubReviewEvent::RequestChanges => !self.body.trim().is_empty(),
-            }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum GitHubReviewWrite {
-    Reply { thread_id: String, body: String },
-    SetResolved { thread_id: String, resolved: bool },
-    Submit(GitHubReviewDraft),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum GitHubReviewWriteResult {
-    Replied(GitHubReviewComment),
-    Resolution {
-        resolved: bool,
-        can_resolve: bool,
-        can_unresolve: bool,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionOrigin {
+    Subagent {
+        parent_remote_id: String,
+        entry_id: String,
     },
-    Submitted,
+    PullRequestCheck {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_session_id: Option<String>,
+        project: String,
+        pr_url: String,
+        pr_number: u64,
+        head_oid: String,
+        check_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_id: Option<u64>,
+    },
+    Orchestration {
+        orchestration_id: String,
+        task_id: String,
+    },
 }
 
 /// GitHub exposes both Actions check runs and legacy commit statuses.
@@ -466,6 +444,10 @@ pub struct PermissionRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPrompt {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub attempt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeatable: Option<ApprovalRule>,
     pub provider: String,
     pub project_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -473,6 +455,21 @@ pub struct ApprovalPrompt {
     pub request_id: String,
     pub summary: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApprovalRule {
+    ExactCommand(String),
+    ReadFile(String),
+}
+
+impl std::fmt::Display for ApprovalRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExactCommand(cmd) => write!(f, "Run `{cmd}` in the checkout root"),
+            Self::ReadFile(path) => write!(f, "Read {path}"),
+        }
+    }
 }
 
 /// Decisions are one-shot: there is deliberately no persistent "allow all".
@@ -811,6 +808,8 @@ mod tests {
     #[test]
     fn approval_prompts_include_project_and_session_context() {
         let prompt = ApprovalPrompt {
+            attempt: String::new(),
+            repeatable: None,
             provider: "opencode".into(),
             project_path: "/workspace/project".into(),
             session_id: Some("ses_1".into()),

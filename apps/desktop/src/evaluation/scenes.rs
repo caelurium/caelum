@@ -188,6 +188,8 @@ pub(crate) const SCENES: &[Scene] = &[
     ("files-loading", |s| scene(s, "files-loading")),
     ("changes-empty", |s| scene(s, "changes-empty")),
     ("approval", |s| scene(s, "approval")),
+    ("approval-rules", |s| scene(s, "approval-rules")),
+    ("prompt-templates", |s| scene(s, "prompt-templates")),
     ("questions", |s| scene(s, "questions")),
     ("image-preview", |s| scene(s, "image-preview")),
     ("review-error", |s| scene(s, "review-error")),
@@ -466,6 +468,7 @@ pub(super) fn composer_queue(session: &mut caelum_core::application::Session, na
             "Check attachments and multiline drafts.",
         ]
         .map(|text| caelum_core::application::QueuedPrompt {
+            provider_command: false,
             text: text.into(),
             options: session.options.clone(),
         })
