@@ -421,7 +421,8 @@ impl Live {
             self.commands.previous_drafts[index].clear();
             self.drafts[index].focused = true;
             let is_split = self.split.is_visible(self.window_width.get())
-                && self.split.secondary == Some(crate::split::SecondaryPane::Session(index))
+                && self.split.visible_secondary()
+                    == Some(&crate::split::SecondaryPane::Session(index))
                 && self.app.selected != Some(index);
             let key = if is_split {
                 format!("split-transcript-{index}")

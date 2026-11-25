@@ -440,13 +440,23 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     if let Some(live) = s.live.as_ref() {
         live.window_width.set(window_width);
     }
-    let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
+    let main_rect = cx.layout("main-pane");
+    let width = main_rect.map_or(840.0, |r| r[2]);
+    let height = main_rect.map_or(720.0, |r| r[3]);
     let split_visible = s
         .live
         .as_ref()
         .is_some_and(|l| l.split.is_visible(window_width));
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
-    let transcript_padding = if split_visible { 20.0 } else { padding };
+    let transcript_padding = if split_visible
+        && s.live
+            .as_ref()
+            .is_some_and(|l| l.split.orientation == split::SplitOrientation::Vertical)
+    {
+        20.0
+    } else {
+        padding
+    };
     let composer_wide = width > 760.0;
     let remote = s
         .live
@@ -513,7 +523,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             main,
             cx.is_reduced_motion(),
             window_width,
-            width,
+            (width, height),
             transcript_padding,
             pane_border,
             &mut layers,

@@ -108,33 +108,33 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
     content = content
         .child(
             session_action_row(
-                "Split left",
-                "Open this session on the left side",
+                "Split vertical",
+                "Open this session side-by-side",
                 &rune_kit::shell::INSPECTOR,
                 false,
                 false,
                 k,
             )
             .on_press(move |s: &mut Workspace| {
-                crate::split::open_session_on(s, index, crate::split::SplitSide::Left);
+                crate::split::open_session(s, index, crate::split::SplitOrientation::Vertical);
                 close_session_menu(s);
             })
-            .key("split-session-left"),
+            .key("split-session-vertical"),
         )
         .child(
             session_action_row(
-                "Split right",
-                "Open this session on the right side",
+                "Split horizontal",
+                "Open this session stacked below",
                 &rune_kit::shell::INSPECTOR,
                 false,
                 false,
                 k,
             )
             .on_press(move |s: &mut Workspace| {
-                crate::split::open_session_on(s, index, crate::split::SplitSide::Right);
+                crate::split::open_session(s, index, crate::split::SplitOrientation::Horizontal);
                 close_session_menu(s);
             })
-            .key("split-session"),
+            .key("split-session-horizontal"),
         );
     content = content.child(
         session_action_row(
