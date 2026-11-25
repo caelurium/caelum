@@ -21,6 +21,7 @@ pub use launcher::open_launcher;
 pub use links::open_link;
 pub use overlays::overlays;
 pub use queue::composer_context;
+pub use queue::queue_popover;
 pub use queue::queue_summary;
 pub(crate) use queue::queued_preview;
 pub use review::open_review;
