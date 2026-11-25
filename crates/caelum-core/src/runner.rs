@@ -13,6 +13,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 use crate::{
     application::{presentation::now, Event},
     processes::{ProcessId, ProcessRegistry},
@@ -324,6 +327,8 @@ type Observer = (SyncSender<Event>, Arc<dyn Fn() + Send + Sync>);
 struct ActiveRun {
     run_id: u64,
     process: ProcessId,
+    #[cfg(unix)]
+    process_group: i32,
     cancelled: Arc<AtomicBool>,
 }
 
@@ -364,6 +369,8 @@ impl Backend {
         self.stop_any(project);
 
         let mut cmd = shell_command(trimmed);
+        #[cfg(unix)]
+        cmd.process_group(0);
         cmd.current_dir(opened.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -379,6 +386,8 @@ impl Backend {
                 return Err(error.to_string());
             }
         };
+        #[cfg(unix)]
+        let process_group = child.id() as i32;
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
         let process = match self.processes.register(child) {
@@ -401,6 +410,8 @@ impl Backend {
                 ActiveRun {
                     run_id,
                     process,
+                    #[cfg(unix)]
+                    process_group,
                     cancelled: cancelled.clone(),
                 },
             );
@@ -502,8 +513,7 @@ impl Backend {
             }
         };
         if let Some(run) = target {
-            run.cancelled.store(true, Ordering::Release);
-            let _ = self.processes.terminate(run.process);
+            self.terminate(run);
         }
     }
 
@@ -514,8 +524,7 @@ impl Backend {
             .unwrap_or_else(|e| e.into_inner())
             .remove(project);
         if let Some(run) = target {
-            run.cancelled.store(true, Ordering::Release);
-            let _ = self.processes.terminate(run.process);
+            self.terminate(run);
         }
     }
 
@@ -528,9 +537,18 @@ impl Backend {
             .map(|(_, v)| v)
             .collect();
         for run in all {
-            run.cancelled.store(true, Ordering::Release);
-            let _ = self.processes.terminate(run.process);
+            self.terminate(run);
         }
+    }
+
+    fn terminate(&self, run: ActiveRun) {
+        run.cancelled.store(true, Ordering::Release);
+        #[cfg(unix)]
+        if let Some(process_group) = rustix::process::Pid::from_raw(run.process_group) {
+            let _ =
+                rustix::process::kill_process_group(process_group, rustix::process::Signal::KILL);
+        }
+        let _ = self.processes.terminate(run.process);
     }
 }
 

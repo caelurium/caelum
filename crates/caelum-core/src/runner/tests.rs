@@ -101,7 +101,7 @@ fn backend_runs_streams_and_cancels_commands_cleanly() {
     assert!(finished.1.contains("err"));
 
     // Cancellation terminates a long-running process and reports cancelled = true.
-    backend.start(&project, 2, "sleep 30").unwrap();
+    backend.start(&project, 2, "sleep 30 & wait").unwrap();
     thread::sleep(Duration::from_millis(80));
     backend.stop(&project, 2);
     let cancelled = loop {
