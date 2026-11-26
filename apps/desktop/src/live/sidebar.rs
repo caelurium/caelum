@@ -293,15 +293,6 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
                     rune::Color::TRANSPARENT
                 })
                 .child(
-                    icon(&crate::overview::NAV_ICON, 13.0)
-                        .color(if overview_selected {
-                            k.c.text_accent
-                        } else {
-                            k.c.icon_muted
-                        })
-                        .a11y_hidden(),
-                )
-                .child(
                     text("Overview")
                         .font(if overview_selected {
                             k.ty.ui_medium
