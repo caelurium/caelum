@@ -163,8 +163,10 @@ impl CodexPermissions {
 
     pub fn description(self) -> &'static str {
         match self {
-            Self::Ask => "Require approval for commands; write only in workspace",
-            Self::AutoWorkspace => "Run commands without asking; write only in workspace",
+            Self::Ask => "Require approval for commands; write only in workspace; network allowed",
+            Self::AutoWorkspace => {
+                "Run commands without asking; write only in workspace; network allowed"
+            }
             Self::FullAccess => "Run commands without asking or sandbox restrictions",
         }
     }
@@ -185,7 +187,9 @@ impl CodexPermissions {
 
     pub(crate) fn sandbox_policy(self) -> serde_json::Value {
         match self {
-            Self::Ask | Self::AutoWorkspace => serde_json::json!({ "type": "workspaceWrite" }),
+            Self::Ask | Self::AutoWorkspace => {
+                serde_json::json!({ "type": "workspaceWrite", "networkAccess": true })
+            }
             Self::FullAccess => serde_json::json!({ "type": "dangerFullAccess" }),
         }
     }

@@ -499,7 +499,8 @@ impl CodexProvider {
             "effort": effort,
             "input": input
         });
-        if let Some(policy) = permissions {
+        let effective = permissions.or_else(|| project.is_remote().then(CodexPermissions::default));
+        if let Some(policy) = effective {
             params["approvalPolicy"] = policy.approval_policy().into();
             params["sandboxPolicy"] = policy.sandbox_policy();
         }
