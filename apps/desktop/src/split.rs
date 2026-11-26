@@ -107,6 +107,12 @@ impl SplitLayout {
 }
 
 pub fn composer_target(l: &crate::live::Live) -> Option<usize> {
+    if matches!(
+        l.panels.screen,
+        crate::panels::Screen::Home | crate::panels::Screen::Remote
+    ) {
+        return None;
+    }
     let primary = (l.panels.screen == crate::panels::Screen::Conversation)
         .then_some(l.app.selected)
         .flatten()

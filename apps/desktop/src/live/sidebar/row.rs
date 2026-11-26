@@ -23,6 +23,12 @@ pub(super) struct Card<'a> {
 
 impl Card<'_> {
     pub fn build(self, k: &Kit, bottom: El, selected: bool, position: usize, count: usize) -> El {
+        let title = self
+            .title
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or_else(|| self.title.trim());
         k.interactive(
             col()
                 .w_full()
@@ -59,7 +65,7 @@ impl Card<'_> {
                         ),
                 )
                 .child(
-                    text(self.title)
+                    text(title)
                         .font(k.ty.ui_medium)
                         .color(k.c.text_base)
                         .truncate()
@@ -68,7 +74,7 @@ impl Card<'_> {
                 .child(bottom),
         )
         .role("listitem")
-        .label(self.title)
+        .label(title)
         .focusable(true)
         .focus_selected(selected)
         .focus_group()
