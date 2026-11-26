@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    io::{self, Write},
+    io,
     path::Path,
     sync::{atomic::Ordering, mpsc, Mutex},
     thread,
@@ -8,6 +8,8 @@ use std::{
 
 use caelum_protocol::CodexEvent;
 use serde_json::{json, Value};
+
+use crate::json_lines::JsonLines;
 
 use super::requests::{handle_server_request, request_question};
 use super::{
@@ -111,7 +113,7 @@ impl CodexConnection {
 
 pub(super) type Messages = Box<dyn Iterator<Item = io::Result<String>> + Send>;
 pub(super) enum Writer {
-    Stdio(Mutex<std::process::ChildStdin>),
+    Stdio(JsonLines),
     WebSocket(
         tokio::sync::mpsc::Sender<super::websocket::Outgoing>,
         tokio::sync::watch::Sender<bool>,
@@ -355,8 +357,8 @@ fn codex_event(
 }
 
 pub(super) fn write_message(writer: &Writer, message: &Value) -> Result<(), String> {
-    let mut writer = match writer {
-        Writer::Stdio(writer) => writer.lock().unwrap_or_else(|p| p.into_inner()),
+    match writer {
+        Writer::Stdio(writer) => writer.send(message),
         Writer::WebSocket(tx, stop, live) => {
             if !live.load(Ordering::Acquire) || *stop.borrow() {
                 return Err("Codex WebSocket closed.".into());
@@ -364,7 +366,7 @@ pub(super) fn write_message(writer: &Writer, message: &Value) -> Result<(), Stri
             let (delivered, response) = std::sync::mpsc::channel();
             tx.try_send((message.to_string(), delivered))
                 .map_err(|_| "Codex WebSocket is busy or closed.")?;
-            return match response.recv_timeout(REQUEST_TIMEOUT) {
+            match response.recv_timeout(REQUEST_TIMEOUT) {
                 Ok(Ok(())) => Ok(()),
                 Ok(Err(error)) => Err(error),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -373,12 +375,9 @@ pub(super) fn write_message(writer: &Writer, message: &Value) -> Result<(), Stri
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     Err("Codex WebSocket closed before the write was confirmed.".into())
                 }
-            };
+            }
         }
-    };
-    serde_json::to_writer(&mut *writer, message).map_err(|error| error.to_string())?;
-    writer.write_all(b"\n").map_err(|error| error.to_string())?;
-    writer.flush().map_err(|error| error.to_string())
+    }
 }
 
 fn publish_event(subscribers: &EventSubscribers, event: CodexEvent) {
