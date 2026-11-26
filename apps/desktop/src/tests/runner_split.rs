@@ -257,3 +257,63 @@ fn split_pane_supports_vertical_horizontal_and_offscreen_deck_rotation() {
     advance(&mut compact, 0.2);
     assert!(compact.find("split-bottom-pane").is_some());
 }
+
+#[test]
+fn composer_target_bar_keeps_long_titles_vertically_centered_and_within_the_pill() {
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    let first_line =
+        "find an implicit state machine in this repository and replace it with an explicit enum";
+    let multiline_title = format!("{first_line}\n\nMore details on a later line");
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        l.app.sessions[0].title = multiline_title.clone();
+        l.app.sessions[1].title = "Feature worktree".into();
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+    click(&mut rt, "split-target-primary");
+    let pill = element(&rt, "split-target-primary").rect;
+    let label = rt
+        .elements()
+        .iter()
+        .find(|e| {
+            e.text.as_deref().is_some_and(|t| t.starts_with(first_line))
+                && e.rect[0] > 250.0
+                && e.rect[1] > 600.0
+        })
+        .expect("missing primary target title")
+        .rect;
+    assert!(
+        label[1] >= pill[1] - 0.5 && label[1] + label[3] <= pill[1] + pill[3] + 0.5,
+        "target pill title clipped vertically: pill={pill:?} label={label:?}"
+    );
+    assert!(
+        label[0] >= pill[0] && label[0] + label[2] <= pill[0] + pill[2] + 0.5,
+        "target pill title overflowed horizontally: pill={pill:?} label={label:?}"
+    );
+}
+
+#[test]
+fn remote_and_home_screens_do_not_render_a_second_shared_composer_in_split() {
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    rt.update(|s, _| {
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+    assert!(rt.find("message-composer").is_some());
+
+    for screen in [crate::panels::Screen::Remote, crate::panels::Screen::Home] {
+        rt.update(|s, _| {
+            s.live.as_mut().unwrap().panels.screen = screen;
+        });
+        advance(&mut rt, 0.2);
+        assert_eq!(
+            crate::split::composer_target(rt.state.live.as_ref().unwrap()),
+            None
+        );
+        assert!(
+            rt.find("message-composer").is_none(),
+            "shared composer should not stack below {screen:?} in a split"
+        );
+    }
+}
