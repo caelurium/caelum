@@ -111,6 +111,16 @@ fn archive_toast_pauses_for_presented_keyboard_focus_then_expires() {
     let mut rt = live_runtime_size((800.0, 620.0));
     rt.update(|s, _| s.live.as_mut().unwrap().archive(1, true));
     advance(&mut rt, 0.3);
+    let toast = element(&rt, "archive-toast").rect;
+    let undo = element(&rt, "undo-archive").rect;
+    let dismiss = element(&rt, "dismiss-archive").rect;
+    let toast_mid = toast[1] + toast[3] * 0.5;
+    let undo_mid = undo[1] + undo[3] * 0.5;
+    let dismiss_mid = dismiss[1] + dismiss[3] * 0.5;
+    assert!(
+        (undo_mid - toast_mid).abs() <= 1.0 && (undo_mid - dismiss_mid).abs() <= 1.0,
+        "undo button should be vertically centered in archive toast: toast={toast:?} undo={undo:?} dismiss={dismiss:?}"
+    );
     for _ in 0..40 {
         key(&mut rt, Key::Tab, Mods::default());
         advance(&mut rt, 0.05);

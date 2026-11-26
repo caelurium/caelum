@@ -62,3 +62,26 @@ fn approval_controls_show_matches_in_the_transcript_and_revoke_from_the_heading(
     assert!(!element(&rt, "allow-similar-fixture").focusable);
     assert!(element(&rt, "allow-once-fixture").focusable);
 }
+
+#[test]
+fn approval_description_wraps_long_unbroken_tokens_within_the_card() {
+    let mut rt = design_runtime("approval", (800., 620.));
+    let mut p = live(&rt.state).app.approvals[0].clone();
+    p.description = "RecvTimeoutError};').replace('mpsc::channel::<Vec<String>>()','std::sync::mpsc::channel::<Vec<String>>()')".into();
+    let id = p.attempt.clone();
+    rt.update(|s, _| live_mut(s).app.apply(Event::Approvals(vec![p])));
+    advance(&mut rt, 0.2);
+    let container_key = format!("approval-description-{id}");
+    let text_key = format!("approval-description-text-{id}");
+    reveal(&mut rt, &container_key);
+    let container = element(&rt, &container_key).rect;
+    let body = element(&rt, &text_key).rect;
+    assert!(
+        body[0] >= container[0] && body[0] + body[2] <= container[0] + container[2] + 1.0,
+        "approval description text should stay inside container: container={container:?} body={body:?}"
+    );
+    assert!(
+        body[3] > 24.0,
+        "long unbroken token should wrap onto multiple lines: body={body:?}"
+    );
+}

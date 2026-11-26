@@ -300,6 +300,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                 .build(k)
                 .h(28.0)
                 .px(10.0)
+                .self_center()
                 .key("undo-archive"),
             )
             .child(
