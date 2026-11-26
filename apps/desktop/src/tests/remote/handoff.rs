@@ -134,6 +134,8 @@ fn composer_handoff_can_be_cancelled_then_continued_on_a_vm_without_sending() {
     click(&mut rt, "continue-on-vm");
     rt.update(|s, _| live_mut(s).apply(Event::Completed(old, Err("Old read failed".into()))));
     prepare(&mut rt, "/project", true);
+    let attach = element(&rt, "attach-vm-vm-fixture");
+    assert!(attach.visible[3] >= attach.rect[3] - 1., "{attach:?}");
     click(&mut rt, "attach-vm-vm-fixture");
     confirm(&mut rt);
     rt.update(|s, _| {

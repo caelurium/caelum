@@ -84,20 +84,20 @@ pub(super) fn change_button(k: &Kit) -> El {
 pub(crate) fn height(s: &Workspace) -> f32 {
     let l = live(s);
     if l.app.remote.inventory.is_none() {
-        return 222.0;
+        return 236.0;
     }
     match &l.app.remote.picker {
-        None => 286.0,
+        None => 310.0,
         Some(Picker::Ready(source)) => {
             super::picker::existing_height(s, source).unwrap_or_else(|| {
                 if rune::memo::window_layout("shell").is_some_and(|r| r[2] < 520.) {
-                    420.0
+                    456.0
                 } else {
-                    340.0
+                    392.0
                 }
             })
         }
-        _ => 180.0,
+        _ => 196.0,
     }
 }
 

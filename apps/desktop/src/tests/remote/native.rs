@@ -322,9 +322,11 @@ fn vm_codex_permissions_picker_updates_session_defaults_and_commands_only_on_vms
     advance(&mut rt, 0.2);
     let slot = live(&rt.state).app.selected.unwrap();
     assert!(rt.find("permissions-trigger").is_some());
+    assert!(rt.find("session-vm-permissions").is_none());
 
     click(&mut rt, "permissions-trigger");
     click(&mut rt, "option2");
+    assert!(rt.find("session-vm-permissions").is_some());
     assert_eq!(
         live(&rt.state).app.sessions[slot].options.permissions,
         Some(CodexPermissions::FullAccess)

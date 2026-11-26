@@ -165,11 +165,12 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
     let stopped = checkout
         .machine()
         .is_some_and(|m| matches!(m.state.as_str(), "stopped" | "archived"));
-    let (message, action) = match (unavailable(&l.app, id), job, l.native.status(id)) {
-        (_, Some(Job::Deleting(_)), _) => ("Deleting VM on Boat…", None),
+    let (message, action, warning) = match (unavailable(&l.app, id), job, l.native.status(id)) {
+        (_, Some(Job::Deleting(_)), _) => ("Deleting VM on Boat…", None, true),
         (Some(block), _, _) => (
             block.reason(),
             (stopped && matches!(block, Blocked::Stopped)).then_some(Action::Resume),
+            true,
         ),
         _ if l
             .app
@@ -179,34 +180,61 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
             (
                 "OpenCode is unavailable for native VM sessions. Your draft is saved.",
                 l.app.can_open_vm_session(id).then_some(Action::NewCodex),
+                true,
             )
         }
         (_, _, Some(Status::Connected)) => return None,
-        (_, _, Some(Status::Disconnected(e))) => (e.as_str(), Some(Action::Reconnect)),
-        (_, Some(Job::Failed(e)), _) => (e.as_str(), Some(Action::Refresh)),
+        (_, _, Some(Status::Disconnected(e))) => (e.as_str(), Some(Action::Reconnect), true),
+        (_, Some(Job::Failed(e)), _) => (e.as_str(), Some(Action::Refresh), true),
         _ if !l.app.can_open_vm_session(id) => (
             "Preparing VM checkout…",
             job.is_none().then_some(Action::Refresh),
+            false,
         ),
-        _ => ("Connecting to VM…", None),
+        _ => ("Connecting to VM…", None, false),
     };
     let title = format!("{} · {message}", checkout.title());
     let id = id.to_owned();
     Some(
         row()
             .w_full()
-            .min_h(30.)
-            .px(12.)
-            .gap(6.)
+            .min_h(34.)
+            .mx(12.)
+            .mt(6.)
+            .px(10.)
+            .py(6.)
+            .gap(8.)
+            .radius(8.)
+            .fill(if warning {
+                k.alpha(k.c.warning.fg, 0.10)
+            } else {
+                k.c.layer_01
+            })
+            .border(
+                1.0,
+                if warning {
+                    k.alpha(k.c.warning.fg, 0.25)
+                } else {
+                    k.c.border_base
+                },
+            )
             .center_y()
             .key("native-workspace-status")
             .role("status")
             .label(&title)
-            .child(icon(&ui::SERVER, 13.).color(k.c.icon_muted))
+            .child(icon(&ui::SERVER, 13.).color(if warning {
+                k.c.warning.fg
+            } else {
+                k.c.icon_muted
+            }))
             .child(
                 text(title)
-                    .font(k.ty.small)
-                    .color(k.c.text_muted)
+                    .font(k.ty.small_medium)
+                    .color(if warning {
+                        k.c.text_base
+                    } else {
+                        k.c.text_muted
+                    })
                     .grow(1.)
                     .min_w(0.)
                     .wrap(),
@@ -219,7 +247,11 @@ pub(crate) fn banner(s: &Workspace, k: &Kit) -> Option<El> {
                     Action::NewCodex => ("New Codex session", "native-new-codex"),
                 };
                 ui::Button::new(label)
-                    .variant(ButtonVariant::GhostMuted)
+                    .variant(if warning {
+                        ButtonVariant::Outline
+                    } else {
+                        ButtonVariant::GhostMuted
+                    })
                     .disabled(matches!(action, Action::Resume) && matches!(job, Some(Job::Busy(_))))
                     .on_press(move |s: &mut Workspace| match action {
                         Action::Reconnect => live_mut(s).native.retry(&id),

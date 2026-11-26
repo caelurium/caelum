@@ -31,22 +31,30 @@ pub(super) fn checkout(k: &Kit, source: &Source) -> El {
     row()
         .w_full()
         .center_y()
-        .gap(6.0)
-        .child(icon(&ui::BRANCH, 13.0).color(k.c.icon_muted))
+        .gap(8.0)
         .child(ui::caption("Session branch", k))
         .child(
-            text(&source.base)
-                .font(k.ty.ui_medium)
-                .color(k.c.text_base)
+            row()
+                .center_y()
+                .gap(5.0)
+                .px(7.0)
+                .py(2.0)
+                .radius(5.0)
+                .fill(k.c.layer_02)
                 .min_w(0.0)
-                .truncate()
-                .help(format!("Published session branch: {}", source.base))
-                .key("handoff-base"),
+                .shrink()
+                .child(icon(&ui::BRANCH, 12.0).color(k.c.icon_muted).a11y_hidden())
+                .child(
+                    text(&source.base)
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_base)
+                        .min_w(0.0)
+                        .truncate()
+                        .help(format!("Published session branch: {}", source.base))
+                        .key("handoff-base"),
+                ),
         )
-        .children(
-            tip.get(..8)
-                .map(|short| ui::caption(format!("· {short}"), k).help(tip)),
-        )
+        .children(tip.get(..8).map(|short| ui::caption(short, k).help(tip)))
 }
 
 // Boat's standard size names and capacities: https://docs.boat.dev/machines.md
@@ -62,7 +70,7 @@ pub(super) fn machine(s: &Workspace, k: &Kit) -> El {
     let mut sizes = row()
         .w_full()
         .flex_wrap()
-        .gap(4.0)
+        .gap(6.0)
         .role("radiogroup")
         .label("Machine size");
     for (size, name, spec) in SIZES {
@@ -71,8 +79,9 @@ pub(super) fn machine(s: &Workspace, k: &Kit) -> El {
             .grow(1.0)
             .min_w(84.0)
             .center()
-            .min_h(46.0)
-            .px(4.0)
+            .min_h(52.0)
+            .px(8.0)
+            .py(6.0)
             .gap(2.0)
             .child(text(name).font(k.ty.ui_medium).color(if selected {
                 k.c.text_accent
@@ -90,7 +99,7 @@ pub(super) fn machine(s: &Workspace, k: &Kit) -> El {
     let mut timers = row()
         .w_full()
         .flex_wrap()
-        .gap(4.0)
+        .gap(6.0)
         .role("radiogroup")
         .label("Auto-stop");
     for value in Lifetime::CHOICES {
@@ -98,8 +107,8 @@ pub(super) fn machine(s: &Workspace, k: &Kit) -> El {
         let selected = form.lifetime == value;
         let chip =
             row()
-                .min_h(28.0)
-                .px(8.0)
+                .min_h(30.0)
+                .px(10.0)
                 .center()
                 .child(text(name).font(k.ty.small_medium).color(if selected {
                     k.c.text_accent
