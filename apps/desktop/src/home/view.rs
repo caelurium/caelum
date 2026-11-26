@@ -27,8 +27,14 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
     } else {
         background
     };
+    let is_default = l
+        .home
+        .background
+        .as_ref()
+        .is_none_or(|artwork| artwork.id == super::backgrounds::DEFAULT);
     let background = background.children(
-        (k.dark && l.panels.overlay().is_none()).then(|| super::art::view(reduced_motion)),
+        (is_default && k.dark && l.panels.overlay().is_none())
+            .then(|| super::art::view(reduced_motion)),
     );
     let content = col()
         .key("home-content")
@@ -61,6 +67,25 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
                 .or(l.app.error.as_ref())
                 .map(|error| ui::caption(error, k).color(k.c.danger.fg).w_full()),
         );
+    let scrim = if is_default {
+        k.dark.then(|| {
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .gradient(Color::BLACK.alpha(0.06), Color::BLACK.alpha(0.55))
+                .a11y_hidden()
+        })
+    } else if k.dark {
+        Some(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .gradient(Color::BLACK.alpha(0.28), Color::BLACK.alpha(0.62))
+                .a11y_hidden(),
+        )
+    } else {
+        Some(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .gradient(k.alpha(k.c.bg_base, 0.36), k.alpha(k.c.bg_base, 0.62))
+                .a11y_hidden(),
+        )
+    };
     col()
         .key("home")
         .w_full()
@@ -68,11 +93,7 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
         .min_h(0.0)
         .clip_rounded(0.0)
         .child(background)
-        .children(k.dark.then(|| {
-            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                .gradient(Color::BLACK.alpha(0.06), Color::BLACK.alpha(0.55))
-                .a11y_hidden()
-        }))
+        .children(scrim)
         .child(
             col()
                 .key("home-scroll")

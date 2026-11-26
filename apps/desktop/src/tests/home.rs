@@ -354,3 +354,55 @@ fn home_editor_restores_long_draft_scroll_after_navigation() {
     let restored = element(&rt, "home-editor").rect[1] - element(&rt, "home-draft").rect[1];
     assert!((offset - restored).abs() < 1.0, "{offset} -> {restored}");
 }
+
+#[test]
+fn home_background_presets_decode_swap_and_persist() {
+    let mut rt = design_runtime("home", (1280.0, 1000.0));
+    assert_eq!(
+        live(&rt.state).home.background.as_ref().unwrap().id,
+        crate::home::backgrounds::DEFAULT
+    );
+    assert!(rt.find("home-ascii").is_some());
+
+    for preset in crate::home::backgrounds::PRESETS {
+        rt.update(|s, _| {
+            live_mut(s).app.preferences.home_background = preset.id.into();
+        });
+        advance(&mut rt, 0.2);
+        let bg = live(&rt.state).home.background.as_ref().unwrap();
+        assert_eq!(bg.id, preset.id);
+        assert!(
+            bg.dark.error().is_none(),
+            "preset {} failed dark decode: {:?}",
+            preset.id,
+            bg.dark.error()
+        );
+        assert!(
+            bg.light.error().is_none(),
+            "preset {} failed light decode: {:?}",
+            preset.id,
+            bg.light.error()
+        );
+        assert_eq!(
+            rt.find("home-ascii").is_some(),
+            preset.id == crate::home::backgrounds::DEFAULT
+        );
+    }
+
+    rt.update(|s, _| {
+        live_mut(s).app.preferences.home_background = "unknown-preset".into();
+    });
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        live(&rt.state).home.background.as_ref().unwrap().id,
+        crate::home::backgrounds::DEFAULT
+    );
+
+    rt.update(|s, _| {
+        live_mut(s).app.preferences.home_background = "starry-columns".into();
+    });
+    let snapshot: caelum_core::application::Snapshot =
+        serde_json::from_slice(&serde_json::to_vec(&live(&rt.state).app.snapshot()).unwrap())
+            .unwrap();
+    assert_eq!(snapshot.preferences.home_background, "starry-columns");
+}
