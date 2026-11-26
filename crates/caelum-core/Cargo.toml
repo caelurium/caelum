@@ -10,7 +10,7 @@ boat-sdk = { git = "https://github.com/caelurium/boat-sdk-rs", tag = "v0.6.0" }
 caelum-protocol = { path = "../caelum-protocol" }
 futures-util = { version = "0.3", features = ["sink"] }
 ignore = "0.4"
-notify = "8.2"
+notify = "9.0"
 regex = "1"
 reqwest = { workspace = true, features = ["rustls-tls"] }
 rusqlite.workspace = true
