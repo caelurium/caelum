@@ -57,7 +57,7 @@ fn settings_project(s: &Workspace) -> Option<String> {
 pub fn height(s: &Workspace) -> f32 {
     let l = live(s);
     let height = match l.panels.settings_page {
-        Page::Appearance => 460.0,
+        Page::Appearance => 540.0,
         Page::Providers => {
             360.0
                 + if settings_provider(s) == Provider::OpenCode {

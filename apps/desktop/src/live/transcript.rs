@@ -67,15 +67,19 @@ pub fn transcript_for(
         );
     }
     let prefix = if split { "split" } else { "live" };
+    let peaceful = live.app.preferences.peaceful_mode;
     let mut version = DefaultHasher::new();
     index.hash(&mut version);
+    peaceful.hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
         live.app.sessions[index]
             .conversation
             .entries
             .iter()
             .enumerate()
-            .filter(|(_, e)| caelum_core::application::presentation::entry_visible(e))
+            .filter(|(_, e)| {
+                caelum_core::application::presentation::entry_visible_in_mode(e, peaceful)
+            })
             .map(|(i, entry)| {
                 live.app.sessions[index]
                     .transcript_id(entry)
