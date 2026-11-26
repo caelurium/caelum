@@ -35,6 +35,11 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
             s.inspector.toggle();
             live_mut(s).focus();
         }
+        Action::TogglePeacefulMode => {
+            let l = live_mut(s);
+            l.app.preferences.peaceful_mode = !l.app.preferences.peaceful_mode;
+            l.focus();
+        }
         Action::Files => panels::show(s, Screen::Files),
         Action::Changes => panels::show(s, Screen::Changes),
         Action::Runner => crate::runner::open(s),
