@@ -289,3 +289,58 @@ fn steering_does_not_restart_the_original_prompt_timer_after_reopening() {
     paged.history(Provider::OpenCode, &messages[..1], true);
     assert_eq!(output(&paged, "opencode-answer-text-1"), 129_000);
 }
+
+#[test]
+fn antigravity_history_reconciliation_adopts_live_chunks_without_duplicating() {
+    let mut conversation = Conversation::default();
+    conversation.begin_turn(Some("Auto".into()), 1_000);
+    conversation.optimistic("local-1".into(), "Perfect raise a PR".into());
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnStarted",
+        &json!({ "_created": 1_200, "model": "Auto" }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "agent_message_chunk",
+        &json!({
+            "content": { "type": "text", "text": "It's already up and ready at PR #335." }
+        }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnCompleted",
+        &json!({ "_created": 20_500 }),
+    );
+    assert_eq!(
+        conversation
+            .entries
+            .iter()
+            .filter(|e| e.kind() == EntryKind::Assistant)
+            .count(),
+        1
+    );
+
+    // Reconciling a session/load history replay adopts the synthetic acp-live-assistant-* entry
+    // into acp-assistant-2 without duplicating it, and preserves the recorded duration.
+    conversation.history(
+        Provider::Antigravity,
+        &[
+            json!({ "id": "acp-user-1", "type": "user", "text": "Perfect raise a PR" }),
+            json!({
+                "id": "acp-assistant-2",
+                "type": "assistant",
+                "text": "It's already up and ready at PR #335."
+            }),
+        ],
+        false,
+    );
+    let assistants: Vec<_> = conversation
+        .entries
+        .iter()
+        .filter(|e| e.kind() == EntryKind::Assistant)
+        .collect();
+    assert_eq!(assistants.len(), 1);
+    assert_eq!(assistants[0].id, "acp-assistant-2");
+    assert_eq!(output(&conversation, "acp-assistant-2"), 19_500);
+}

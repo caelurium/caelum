@@ -32,6 +32,65 @@ impl AntigravityProvider {
                         .is_some_and(|name| crate::executable::find(name).is_some()))
         })
     }
+
+    pub(super) fn connection(
+        &self,
+        project: &crate::projects::Project,
+    ) -> Result<Arc<AcpConnection>, AntigravityError> {
+        if self.inner.closed.load(Ordering::Acquire) {
+            return Err(AntigravityError::ConnectionClosed);
+        }
+        if let Some(existing) = lock(&self.inner.connection).as_ref().cloned() {
+            if existing.alive.load(Ordering::Acquire) {
+                return Ok(existing);
+            }
+        }
+        // Serialize spawning so concurrent startup discovery across projects never launches
+        // overlapping `agy acp --stdio` processes racing on the same OAuth credential store.
+        let _guard = lock(&self.inner.connect_lock);
+        if self.inner.closed.load(Ordering::Acquire) {
+            return Err(AntigravityError::ConnectionClosed);
+        }
+        if let Some(existing) = lock(&self.inner.connection).as_ref().cloned() {
+            if existing.alive.load(Ordering::Acquire) {
+                return Ok(existing);
+            }
+        }
+        let connection = spawn_connection(
+            self.executable(),
+            project.path(),
+            &self.inner.processes,
+            self.inner.approvals.clone(),
+            self.inner.questions.clone(),
+            self.inner.subscribers.clone(),
+        )?;
+        let mut slot = lock(&self.inner.connection);
+        if self.inner.closed.load(Ordering::Acquire) {
+            connection.alive.store(false, Ordering::Release);
+            let _ = self.inner.processes.terminate(connection.process_id);
+            return Err(AntigravityError::ConnectionClosed);
+        }
+        *slot = Some(connection.clone());
+        Ok(connection)
+    }
+
+    pub(super) fn executable(&self) -> Result<PathBuf, AntigravityError> {
+        if let Some(path) = &self.inner.executable {
+            return Ok(path.clone());
+        }
+        if let Some(env_path) = std::env::var_os("CAELUM_ANTIGRAVITY_BIN") {
+            let path = PathBuf::from(env_path);
+            if !path.as_os_str().is_empty() {
+                return Ok(path);
+            }
+        }
+        crate::executable::find("agy").ok_or_else(|| {
+            AntigravityError::Launch(
+                "Could not find `agy` on PATH. Install Antigravity CLI or set CAELUM_ANTIGRAVITY_BIN."
+                    .into(),
+            )
+        })
+    }
 }
 
 impl AcpConnection {
@@ -163,6 +222,7 @@ pub(super) fn spawn_connection(
     let commands = Arc::new(Mutex::new(Vec::new()));
     let session_options = Arc::new(Mutex::new(HashMap::new()));
     let session_titles = Arc::new(Mutex::new(HashMap::new()));
+    let session_projects = Arc::new(Mutex::new(HashMap::new()));
     let transcripts = Arc::new(Mutex::new(super::titles::TranscriptStore::default()));
 
     let connection = Arc::new(AcpConnection {
@@ -179,6 +239,7 @@ pub(super) fn spawn_connection(
         commands: commands.clone(),
         session_options: session_options.clone(),
         session_titles: session_titles.clone(),
+        session_projects: session_projects.clone(),
         session_changes: Mutex::new(HashMap::new()),
         transcripts: transcripts.clone(),
     });
@@ -193,12 +254,13 @@ pub(super) fn spawn_connection(
             subscribers,
             approvals,
             questions,
-            project_path: project_path.to_path_buf(),
+            default_project: project_path.to_path_buf(),
             progress,
             replays,
             commands,
             session_options,
             session_titles,
+            session_projects,
             transcripts,
         },
     );
@@ -218,6 +280,16 @@ pub(super) fn spawn_connection(
     Ok(connection)
 }
 
+fn resolve_project(
+    session_projects: &Arc<Mutex<HashMap<String, String>>>,
+    session_id: Option<&str>,
+    default_project: &str,
+) -> String {
+    session_id
+        .and_then(|sid| lock(session_projects).get(sid).cloned())
+        .unwrap_or_else(|| default_project.to_owned())
+}
+
 fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
     thread::spawn(move || {
         let ReaderContext {
@@ -228,15 +300,16 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
             subscribers,
             approvals,
             questions,
-            project_path,
+            default_project,
             progress,
             replays,
             commands,
             session_options,
             session_titles,
+            session_projects,
             transcripts,
         } = context;
-        let project = project_path.to_string_lossy().into_owned();
+        let default_project = default_project.to_string_lossy().into_owned();
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             let line = match line {
@@ -269,6 +342,8 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                         let _ = sender.send(result);
                     }
                     Some(PendingCall::Prompt { session_id }) => {
+                        let project =
+                            resolve_project(&session_projects, Some(&session_id), &default_project);
                         if let Some(usage) = result.as_ref().ok().and_then(|r| r.get("usage")) {
                             publish_event(
                                 &subscribers,
@@ -294,7 +369,11 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 let params = message.get("params").cloned().unwrap_or(Value::Null);
                 let writer = writer.clone();
                 let approvals = approvals.clone();
-                let project = project.clone();
+                let project = resolve_project(
+                    &session_projects,
+                    params["sessionId"].as_str(),
+                    &default_project,
+                );
                 thread::spawn(move || {
                     handle_server_request(&writer, &approvals, &project, id, &method, &params);
                 });
@@ -305,6 +384,11 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 let method = message["method"].as_str().unwrap_or_default();
                 let params = message.get("params").cloned().unwrap_or(Value::Null);
                 if method == "session/update" {
+                    let project = resolve_project(
+                        &session_projects,
+                        params["sessionId"].as_str(),
+                        &default_project,
+                    );
                     handle_session_update(
                         &project,
                         &params,
@@ -326,7 +410,12 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
         }
 
         alive.store(false, Ordering::Release);
-        questions.clear(PROVIDER_NAME, &project, None);
+        let mut affected_projects: HashSet<String> =
+            lock(&session_projects).values().cloned().collect();
+        affected_projects.insert(default_project.clone());
+        for project in &affected_projects {
+            questions.clear(PROVIDER_NAME, project, None);
+        }
         let remaining: Vec<_> = lock(&pending).drain().map(|(_, call)| call).collect();
         for call in remaining {
             match call {
@@ -334,6 +423,8 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                     let _ = sender.send(Err("Antigravity ACP connection closed".into()));
                 }
                 PendingCall::Prompt { session_id } => {
+                    let project =
+                        resolve_project(&session_projects, Some(&session_id), &default_project);
                     let _ = lock(&progress).on_prompt_replied(
                         &session_id,
                         Err("Antigravity ACP connection closed".into()),
@@ -341,7 +432,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                     publish_event(
                         &subscribers,
                         AntigravityEvent {
-                            project_path: project.clone(),
+                            project_path: project,
                             session_id: Some(session_id),
                             method: "antigravity/turnCompleted".into(),
                             params: json!({
@@ -355,17 +446,25 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
         }
         let disconnected_effects = lock(&progress).on_disconnected();
         for effect in disconnected_effects {
+            let sid = match &effect {
+                ProgressEffect::TurnYielded { session_id }
+                | ProgressEffect::ScheduleSettle { session_id, .. }
+                | ProgressEffect::TurnCompleted { session_id, .. } => Some(session_id.as_str()),
+            };
+            let project = resolve_project(&session_projects, sid, &default_project);
             dispatch_progress_effect(&project, effect, &subscribers, &progress);
         }
-        publish_event(
-            &subscribers,
-            AntigravityEvent {
-                project_path: project,
-                session_id: None,
-                method: "antigravity/processExited".into(),
-                params: Value::Null,
-            },
-        );
+        for project in affected_projects {
+            publish_event(
+                &subscribers,
+                AntigravityEvent {
+                    project_path: project,
+                    session_id: None,
+                    method: "antigravity/processExited".into(),
+                    params: Value::Null,
+                },
+            );
+        }
     });
 }
 

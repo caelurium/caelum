@@ -13,17 +13,28 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
     } else {
         adoptions(&live, &history)
     };
+    let acp_live = if older || !live.iter().any(is_acp_live) {
+        BTreeMap::new()
+    } else {
+        acp_adoptions(&live, &history, &optimistic)
+    };
     let mut optimistic_context = BTreeMap::new();
+    let mut acp_existing = BTreeMap::new();
     let insertion = live
         .iter()
         .position(|entry| ids.contains(entry.id.as_str()))
-        .or_else(|| optimistic.first_key_value().map(|(&index, _)| index))
+        .into_iter()
+        .chain(optimistic.first_key_value().map(|(&index, _)| index))
+        .chain(acp_live.first_key_value().map(|(&index, _)| index))
+        .min()
         .unwrap_or(if older { 0 } else { live.len() });
     let mut after = Vec::new();
     let mut existing = BTreeMap::new();
     for (index, entry) in live.drain(..).enumerate() {
         if let Some(&history_index) = optimistic.get(&index) {
             optimistic_context.insert(history_index, entry);
+        } else if let Some(&history_index) = acp_live.get(&index) {
+            acp_existing.insert(history_index, entry);
         } else if ids.contains(entry.id.as_str()) {
             existing.insert(entry.id.clone(), entry);
         } else if index < insertion {
@@ -36,7 +47,10 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
         if let Some(optimistic) = optimistic_context.remove(&index) {
             preserve_optimistic_context(&mut snapshot, &optimistic);
         }
-        let entry = match existing.remove(&snapshot.id) {
+        let entry = match existing
+            .remove(&snapshot.id)
+            .or_else(|| acp_existing.remove(&index))
+        {
             Some(current) => merge_entry(snapshot, current),
             None => snapshot_entry(snapshot),
         };
@@ -45,6 +59,57 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
     before.extend(after);
     conversation.entries = before;
     super::subagents::reconcile(&mut conversation.entries);
+}
+
+fn is_acp_live(entry: &Entry) -> bool {
+    entry.previous_thread.is_none() && entry.id.starts_with("acp-live-")
+}
+
+/// Match synthetic live Antigravity stream entries (`acp-live-*`) against sequential
+/// history replay entries (`acp-*`) so refreshing history preserves timing metadata
+/// without duplicating messages.
+fn acp_adoptions(
+    live: &[Entry],
+    history: &[Entry],
+    optimistic: &BTreeMap<usize, usize>,
+) -> BTreeMap<usize, usize> {
+    let claimed: HashSet<usize> = optimistic.values().copied().collect();
+    let mut matches = BTreeMap::new();
+    let mut end = history.len();
+
+    for (index, entry) in live
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|(_, entry)| is_acp_live(entry))
+    {
+        if let Some(history_index) = history[..end]
+            .iter()
+            .enumerate()
+            .rposition(|(h, snapshot)| {
+                !claimed.contains(&h)
+                    && snapshot.id.starts_with("acp-")
+                    && !snapshot.id.starts_with("acp-live-")
+                    && acp_live_matches(snapshot, entry)
+            })
+        {
+            matches.insert(index, history_index);
+            end = history_index;
+        }
+    }
+    matches
+}
+
+fn acp_live_matches(snapshot: &Entry, live: &Entry) -> bool {
+    if snapshot.kind() != live.kind() {
+        return false;
+    }
+    if snapshot.text == live.text || snapshot.text.trim() == live.text.trim() {
+        return true;
+    }
+    !live.complete()
+        && !live.text.is_empty()
+        && (snapshot.text.starts_with(&live.text) || live.text.starts_with(&snapshot.text))
 }
 
 fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
