@@ -32,14 +32,24 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
         Action::Files => panels::show(s, Screen::Files),
         Action::Changes => panels::show(s, Screen::Changes),
         Action::Runner => crate::runner::open(s),
-        Action::SplitRight => {
+        Action::SplitVertical => {
             if let Some(i) = live(s).app.selected {
                 let target = (0..live(s).app.sessions.len())
                     .find(|&idx| idx != i)
                     .unwrap_or(i);
-                crate::split::open_session(s, target);
+                crate::split::open_session(s, target, crate::split::SplitOrientation::Vertical);
             }
         }
+        Action::SplitHorizontal => {
+            if let Some(i) = live(s).app.selected {
+                let target = (0..live(s).app.sessions.len())
+                    .find(|&idx| idx != i)
+                    .unwrap_or(i);
+                crate::split::open_session(s, target, crate::split::SplitOrientation::Horizontal);
+            }
+        }
+        Action::RotateSplit => crate::split::rotate_forward(s),
+        Action::ToggleSplitOrientation => crate::split::toggle_orientation(s),
         Action::CloseSplit => crate::split::close(s),
         Action::OpenProject => crate::live::open_project(s, tx),
         Action::ChooseModel => crate::models::open(s, None),

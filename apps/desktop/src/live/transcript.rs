@@ -47,7 +47,26 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
             )
             .grow(1.0);
     };
+    transcript_for(s, k, index, reduced, padding, false)
+}
 
+pub fn transcript_for(
+    s: &Workspace,
+    k: &Kit,
+    index: usize,
+    reduced: bool,
+    padding: f32,
+    split: bool,
+) -> El {
+    let live = live(s);
+    if index >= live.app.sessions.len() {
+        return ui::empty(
+            "Session unavailable",
+            "Close the split pane or select another session.",
+            k,
+        );
+    }
+    let prefix = if split { "split" } else { "live" };
     let mut version = DefaultHasher::new();
     index.hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
@@ -68,89 +87,99 @@ pub fn transcript(s: &Workspace, k: &Kit, reduced: bool, padding: f32, layers: &
     let count = visible.len();
     let keys = visible.clone();
     let rows = visible.clone();
-    let reading = live.reading[index].position.clone();
+    let reading = (!split).then(|| live.reading[index].position.clone());
     let kit = k.clone();
-    col()
-        .key(format!("live-transcript-{index}"))
+    let mut container = col()
+        .key(format!("{prefix}-transcript-{index}"))
         .role("region")
-        .label("Conversation")
+        .label(if split {
+            "Split conversation"
+        } else {
+            "Conversation"
+        })
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .items_center()
-        .scroll(ScrollSpec { stick_bottom: true })
-        .on_scroll_offset(move |position| reading.set(position))
-        .child(
-            col()
-                .key(format!("live-rows-{index}"))
-                .w_full()
-                .max_w(840.0)
-                .growth(rune::GrowthSpec::default())
-                .virtual_rows(
-                    count + 2,
-                    130.0,
-                    move |s: &Workspace, row| {
-                        if row == 0 {
-                            return format!("live-header-{index}").into();
-                        }
-                        let session = &crate::live::live(s).app.sessions[index];
-                        match session
-                            .conversation
-                            .entries
-                            .get(keys.get(row - 1).copied().unwrap_or(usize::MAX))
-                        {
-                            Some(entry) => {
-                                format!("live-entry-{index}-{}", session.transcript_id(entry))
-                                    .into()
-                            }
-                            None => format!("live-tail-{index}").into(),
-                        }
-                    },
-                    move |s: &Workspace, row| {
-                        timeline_row(
-                            s,
-                            &kit,
-                            reduced,
-                            padding,
-                            index,
-                            if row == 0 {
-                                0
-                            } else {
-                                rows.get(row - 1).map_or(usize::MAX, |i| i + 1)
-                            },
-                        )
-                    },
-                )
-                .virtual_rows_version(version.finish())
-                .on_visible_rows(move |s: &mut Workspace, range| {
-                    let positions: Vec<_> = range
-                        .filter_map(|row| row.checked_sub(1).and_then(|i| visible.get(i).copied()))
-                        .collect();
-                    let l = live_mut(s);
-                    let entries = &l.app.sessions[index].conversation.entries;
-                    let next: HashSet<_> = positions
-                        .iter()
-                        .filter_map(|i| {
-                            entries.get(*i).map(|e| {
-                                (index, l.app.sessions[index].transcript_id(e).into_owned())
-                            })
-                        })
-                        .collect();
-                    l.visible_entries = next;
-                    if let Some(first) = positions.first().filter(|i| **i < entries.len()) {
-                        l.current_prompt = entries[..=*first]
-                            .iter()
-                            .rev()
-                            .find(|e| {
-                                e.kind() == EntryKind::User
-                                    && caelum_core::application::presentation::entry_visible(e)
-                            })
-                            .map(|e| e.id.clone());
+        .scroll(ScrollSpec { stick_bottom: true });
+    if let Some(reading) = reading {
+        container = container.on_scroll_offset(move |position| reading.set(position));
+    }
+    container.child(
+        col()
+            .key(format!("{prefix}-rows-{index}"))
+            .w_full()
+            .max_w(840.0)
+            .growth(rune::GrowthSpec::default())
+            .virtual_rows(
+                count + 2,
+                130.0,
+                move |s: &Workspace, row| {
+                    if row == 0 {
+                        return format!("{prefix}-header-{index}").into();
                     }
+                    let session = &crate::live::live(s).app.sessions[index];
+                    match session
+                        .conversation
+                        .entries
+                        .get(keys.get(row - 1).copied().unwrap_or(usize::MAX))
+                    {
+                        Some(entry) => {
+                            format!("{prefix}-entry-{index}-{}", session.transcript_id(entry))
+                                .into()
+                        }
+                        None => format!("{prefix}-tail-{index}").into(),
+                    }
+                },
+                move |s: &Workspace, row| {
+                    timeline_row(
+                        s,
+                        &kit,
+                        reduced,
+                        padding,
+                        prefix,
+                        index,
+                        if row == 0 {
+                            0
+                        } else {
+                            rows.get(row - 1).map_or(usize::MAX, |i| i + 1)
+                        },
+                    )
+                },
+            )
+            .virtual_rows_version(version.finish())
+            .on_visible_rows(move |s: &mut Workspace, range| {
+                if split {
+                    return false;
+                }
+                let positions: Vec<_> = range
+                    .filter_map(|row| row.checked_sub(1).and_then(|i| visible.get(i).copied()))
+                    .collect();
+                let l = live_mut(s);
+                let entries = &l.app.sessions[index].conversation.entries;
+                let next: HashSet<_> = positions
+                    .iter()
+                    .filter_map(|i| {
+                        entries
+                            .get(*i)
+                            .map(|e| (index, l.app.sessions[index].transcript_id(e).into_owned()))
+                    })
+                    .collect();
+                l.visible_entries = next;
+                if let Some(first) = positions.first().filter(|i| **i < entries.len()) {
+                    l.current_prompt = entries[..=*first]
+                        .iter()
+                        .rev()
+                        .find(|e| {
+                            e.kind() == EntryKind::User
+                                && caelum_core::application::presentation::entry_visible(e)
+                        })
+                        .map(|e| e.id.clone());
+                }
 
-                    crate::media::request(s, index, &positions)
-                }),
-        )
+                crate::media::request(s, index, &positions)
+            }),
+    )
 }
 
 pub(super) fn timeline_row(
@@ -158,6 +187,7 @@ pub(super) fn timeline_row(
     k: &Kit,
     reduced: bool,
     padding: f32,
+    prefix: &str,
     index: usize,
     row_index: usize,
 ) -> El {
@@ -237,9 +267,16 @@ pub(super) fn timeline_row(
             EntryKind::User => {
                 let (_, files) = caelum_core::application::split_context(&entry.text);
                 let message = caelum_core::application::presentation::entry_text(entry);
-                let mut bubble =
-                    ui::user_bubble(&message, !files.is_empty() || !entry.media.is_empty(), k)
-                        .key(format!("user-bubble-{index}-{row_id}"));
+                let pane_width = rune::memo::window_layout(&format!("{prefix}-transcript-{index}"))
+                    .or_else(|| rune::memo::window_layout("main-pane"))
+                    .map(|r| r[2]);
+                let mut bubble = ui::user_bubble_in(
+                    &message,
+                    !files.is_empty() || !entry.media.is_empty(),
+                    pane_width,
+                    k,
+                )
+                .key(format!("user-bubble-{index}-{row_id}"));
                 if !message.trim().is_empty() {
                     bubble = bubble.child(
                         Markdown::new(&message)

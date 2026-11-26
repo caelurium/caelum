@@ -1,14 +1,14 @@
-//! Split-pane workspace layout: view two sessions side-by-side or a session beside a PR review.
+//! Split-pane workspace layout: vertical/horizontal splits with an off-screen rotatable deck.
 
-use rune::{El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, row, text, text_input};
-use rune_kit::{ButtonVariant, Kit, Markdown, glyphs};
+mod view;
+
+pub use view::{composer_target_bar, toolbar_heading, wrap_main};
+
+use rune::{Key, KeyEvent, Tx};
 
 use crate::{
-    SEND, STOP, Workspace,
-    context::EditMenu,
+    Workspace,
     live::{live, live_mut},
-    quiet_button,
-    ui::{self, Button},
 };
 
 pub const COMPACT_WIDTH: f32 = 1100.0;
@@ -20,23 +20,38 @@ pub enum ActivePane {
     Secondary,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SplitOrientation {
+    /// Side-by-side columns (`left | right`).
+    #[default]
+    Vertical,
+    /// Stacked rows (`top / bottom`).
+    Horizontal,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecondaryPane {
     Session(usize),
     Review(String, String),
+    Overview,
 }
 
 #[derive(Debug, Clone)]
 pub struct SplitLayout {
-    pub secondary: Option<SecondaryPane>,
+    /// Ordered deck of secondary panes. `deck[0]` is currently visible beside the primary pane;
+    /// `deck[1..]` sit off-screen and can be rotated back into view.
+    pub deck: Vec<SecondaryPane>,
+    pub orientation: SplitOrientation,
     pub active: ActivePane,
+    /// Fraction of the workspace allocated to the primary pane (`0.25..=0.75`).
     pub ratio: f32,
 }
 
 impl Default for SplitLayout {
     fn default() -> Self {
         Self {
-            secondary: None,
+            deck: Vec::new(),
+            orientation: SplitOrientation::Vertical,
             active: ActivePane::Primary,
             ratio: 0.5,
         }
@@ -45,11 +60,25 @@ impl Default for SplitLayout {
 
 impl SplitLayout {
     pub fn is_open(&self) -> bool {
-        self.secondary.is_some()
+        !self.deck.is_empty()
+    }
+
+    pub fn visible_secondary(&self) -> Option<&SecondaryPane> {
+        self.deck.first()
+    }
+
+    pub fn offscreen_count(&self) -> usize {
+        self.deck.len().saturating_sub(1)
     }
 
     pub fn is_visible(&self, window_width: f32) -> bool {
-        self.secondary.is_some() && window_width >= COMPACT_WIDTH
+        if self.deck.is_empty() {
+            return false;
+        }
+        match self.orientation {
+            SplitOrientation::Vertical => window_width >= COMPACT_WIDTH,
+            SplitOrientation::Horizontal => window_width >= 480.0,
+        }
     }
 
     pub fn effective_active(&self, window_width: f32) -> ActivePane {
@@ -60,40 +89,186 @@ impl SplitLayout {
         }
     }
 
-    pub fn open_session(&mut self, index: usize) {
-        self.secondary = Some(SecondaryPane::Session(index));
+    pub fn push_pane(&mut self, pane: SecondaryPane, orientation: SplitOrientation) {
+        self.deck.retain(|p| p != &pane);
+        self.deck.insert(0, pane);
+        self.orientation = orientation;
         self.active = ActivePane::Secondary;
     }
 
-    pub fn open_review(&mut self, project: String, url: String) {
-        self.secondary = Some(SecondaryPane::Review(project, url));
-        self.active = ActivePane::Secondary;
-    }
-
-    pub fn close(&mut self) {
-        self.secondary = None;
-        self.active = ActivePane::Primary;
+    pub fn close_visible(&mut self) {
+        if !self.deck.is_empty() {
+            self.deck.remove(0);
+        }
+        if self.deck.is_empty() {
+            self.active = ActivePane::Primary;
+        }
     }
 }
 
-pub fn open_session(s: &mut Workspace, index: usize) {
+pub fn composer_target(l: &crate::live::Live) -> Option<usize> {
+    let primary = (l.panels.screen == crate::panels::Screen::Conversation)
+        .then_some(l.app.selected)
+        .flatten()
+        .filter(|&i| i < l.app.sessions.len());
+    let secondary = l
+        .split
+        .is_visible(l.window_width.get())
+        .then(|| match l.split.visible_secondary() {
+            Some(SecondaryPane::Session(i)) if *i < l.app.sessions.len() => Some(*i),
+            _ => None,
+        })
+        .flatten();
+    match l.split.effective_active(l.window_width.get()) {
+        ActivePane::Secondary => secondary.or(primary),
+        ActivePane::Primary => primary.or(secondary),
+    }
+}
+
+/// Opens `index` in a split with the given `orientation`.
+/// If two sessions are already visible, the previous primary slides off-screen into the deck
+/// so it can be rotated back in later.
+pub fn open_session(s: &mut Workspace, index: usize, orientation: SplitOrientation) {
     let l = live_mut(s);
     if index >= l.app.sessions.len() {
         return;
     }
-    l.split.open_session(index);
+    if l.app.selected == Some(index) {
+        l.split.orientation = orientation;
+        focus_pane(s, ActivePane::Primary);
+        return;
+    }
+    if let Some(SecondaryPane::Session(current_sec)) = l.split.deck.first().cloned()
+        && current_sec != index
+    {
+        let prev_primary = l.app.selected;
+        l.split.deck.remove(0);
+        l.app.select(current_sec);
+        if let Some(prev) = prev_primary.filter(|&p| p != current_sec && p != index) {
+            l.split.deck.retain(|p| p != &SecondaryPane::Session(prev));
+            l.split.deck.push(SecondaryPane::Session(prev));
+        }
+    }
+    l.split
+        .push_pane(SecondaryPane::Session(index), orientation);
     focus_pane(s, ActivePane::Secondary);
 }
 
 pub fn open_review(s: &mut Workspace, project: String, url: String) {
     let l = live_mut(s);
     l.panels.review = Some((project.clone(), url.clone()));
-    l.split.open_review(project, url);
+    l.split.push_pane(
+        SecondaryPane::Review(project, url),
+        SplitOrientation::Vertical,
+    );
+}
+
+pub fn toggle_orientation(s: &mut Workspace) {
+    let l = live_mut(s);
+    if !l.split.is_open() {
+        return;
+    }
+    l.split.orientation = match l.split.orientation {
+        SplitOrientation::Vertical => SplitOrientation::Horizontal,
+        SplitOrientation::Horizontal => SplitOrientation::Vertical,
+    };
+}
+
+/// Rotates the split deck forward (next off-screen pane rotates into view; oldest visible
+/// session slides off-screen). If only two sessions are open, swaps them.
+pub fn rotate_forward(s: &mut Workspace) {
+    let l = live_mut(s);
+    if l.split.deck.is_empty() {
+        return;
+    }
+    if l.split.deck.len() == 1 {
+        swap(s);
+        return;
+    }
+    let visible_sec = l.split.deck.remove(0);
+    let next_sec = l.split.deck.remove(0);
+    let prev_primary = l.app.selected;
+    if let SecondaryPane::Session(sec_idx) = visible_sec {
+        l.app.select(sec_idx);
+        if let Some(prev) = prev_primary.filter(|&p| p != sec_idx) {
+            l.split.deck.push(SecondaryPane::Session(prev));
+        }
+    } else {
+        l.split.deck.push(visible_sec);
+    }
+    l.split.deck.insert(0, next_sec);
+    let active = l.split.active;
+    focus_pane(s, active);
+}
+
+/// Rotates the split deck backward (most recently off-screen pane rotates back into view).
+pub fn rotate_backward(s: &mut Workspace) {
+    let l = live_mut(s);
+    if l.split.deck.is_empty() {
+        return;
+    }
+    if l.split.deck.len() == 1 {
+        swap(s);
+        return;
+    }
+    let Some(last) = l.split.deck.pop() else {
+        return;
+    };
+    let prev_primary = l.app.selected;
+    if let SecondaryPane::Session(last_idx) = last {
+        l.app.select(last_idx);
+        if let Some(prev) = prev_primary.filter(|&p| p != last_idx) {
+            l.split.deck.insert(0, SecondaryPane::Session(prev));
+        }
+    } else {
+        l.split.deck.insert(0, last);
+    }
+    let active = l.split.active;
+    focus_pane(s, active);
+}
+
+/// Brings a specific off-screen session from the deck into the visible secondary slot and focuses it.
+pub fn bring_to_view(s: &mut Workspace, index: usize) {
+    let l = live_mut(s);
+    if index >= l.app.sessions.len() {
+        return;
+    }
+    if l.app.selected == Some(index) {
+        focus_pane(s, ActivePane::Primary);
+        return;
+    }
+    if l.split.deck.first() == Some(&SecondaryPane::Session(index)) {
+        focus_pane(s, ActivePane::Secondary);
+        return;
+    }
+    let orientation = l.split.orientation;
+    open_session(s, index, orientation);
+}
+
+pub fn swap(s: &mut Workspace) {
+    let l = live_mut(s);
+    let Some(SecondaryPane::Session(secondary)) = l.split.deck.first().cloned() else {
+        return;
+    };
+    let primary = l.app.selected;
+    l.split.deck.remove(0);
+    l.app.select(secondary);
+    if let Some(prev) = primary.filter(|&p| p != secondary) {
+        l.split.deck.insert(0, SecondaryPane::Session(prev));
+        focus_pane(s, ActivePane::Primary);
+    } else if l.split.deck.is_empty() {
+        close(s);
+    }
 }
 
 pub fn close(s: &mut Workspace) {
-    live_mut(s).split.close();
-    focus_pane(s, ActivePane::Primary);
+    live_mut(s).split.close_visible();
+    let active = if live(s).split.is_open() {
+        live(s).split.active
+    } else {
+        ActivePane::Primary
+    };
+    focus_pane(s, active);
 }
 
 pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
@@ -115,11 +290,11 @@ pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
             }
         }
         ActivePane::Secondary => {
-            if let Some(SecondaryPane::Session(i)) = l.split.secondary
+            if let Some(SecondaryPane::Session(i)) = l.split.visible_secondary().cloned()
                 && let Some(draft) = l.drafts.get_mut(i)
             {
                 draft.focused = true;
-                l.focus_key = Some(format!("split-draft-{i}"));
+                l.focus_key = Some(format!("live-draft-{i}"));
             }
         }
     }
@@ -129,14 +304,25 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     let Some(l) = s.live.as_ref() else {
         return false;
     };
+    if !l.split.is_open() {
+        return false;
+    }
+    if ev.is_command(']') && ev.mods.alt {
+        rotate_forward(s);
+        return true;
+    }
+    if ev.is_command('[') && ev.mods.alt {
+        rotate_backward(s);
+        return true;
+    }
     if !l.split.is_visible(l.window_width.get()) {
         return false;
     }
-    if ev.mods.cmd && ev.mods.alt && ev.key == Key::Right {
+    if ev.mods.cmd && ev.mods.alt && matches!(ev.key, Key::Right | Key::Down) {
         focus_pane(s, ActivePane::Secondary);
         return true;
     }
-    if ev.mods.cmd && ev.mods.alt && ev.key == Key::Left {
+    if ev.mods.cmd && ev.mods.alt && matches!(ev.key, Key::Left | Key::Up) {
         focus_pane(s, ActivePane::Primary);
         return true;
     }
@@ -147,252 +333,11 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     }
     if ev.key == Key::Escape
         && l.split.effective_active(l.window_width.get()) == ActivePane::Secondary
-        && let Some(SecondaryPane::Session(index)) = l.split.secondary
+        && let Some(SecondaryPane::Session(index)) = l.split.visible_secondary().cloned()
         && l.app.sessions.get(index).is_some_and(|s| s.working())
     {
         live_mut(s).app.cancel(index);
         return true;
     }
     false
-}
-
-pub fn wrap_main(
-    s: &Workspace,
-    k: &Kit,
-    primary: El,
-    window_width: f32,
-    pane_border: rune::Color,
-    layers: &mut Vec<El>,
-) -> El {
-    let Some(l) = s.live.as_ref() else {
-        return primary;
-    };
-    if !l.split.is_visible(window_width) {
-        return primary;
-    }
-    let Some(secondary) = l.split.secondary.clone() else {
-        return primary;
-    };
-    let ratio = l.split.ratio.clamp(0.3, 0.7);
-    let primary_active = l.split.active == ActivePane::Primary;
-
-    let left = col()
-        .key("split-primary-pane")
-        .grow(ratio)
-        .min_w(0.0)
-        .h_full()
-        .min_h(0.0)
-        .on_press(|s: &mut Workspace| {
-            if live(s).split.active != ActivePane::Primary {
-                focus_pane(s, ActivePane::Primary);
-            }
-        })
-        .child(
-            rune::el()
-                .w_full()
-                .h(2.0)
-                .fill(if primary_active {
-                    k.c.text_accent
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .a11y_hidden(),
-        )
-        .child(primary.grow(1.0).min_h(0.0));
-
-    let right = secondary_pane(s, k, secondary, !primary_active, pane_border, layers)
-        .grow(1.0 - ratio)
-        .min_w(0.0)
-        .h_full()
-        .min_h(0.0);
-
-    row()
-        .key("split-workspace")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(left)
-        .child(rune::el().w(1.0).h_full().fill(pane_border).a11y_hidden())
-        .child(right)
-}
-
-fn secondary_pane(
-    s: &Workspace,
-    k: &Kit,
-    secondary: SecondaryPane,
-    active: bool,
-    pane_border: rune::Color,
-    layers: &mut Vec<El>,
-) -> El {
-    let title = match &secondary {
-        SecondaryPane::Session(index) => live(s)
-            .app
-            .sessions
-            .get(*index)
-            .map(|sess| sess.title.clone())
-            .unwrap_or_else(|| "Session".into()),
-        SecondaryPane::Review(_, url) => format!(
-            "PR Review · {}",
-            url.rsplit('/').next().unwrap_or(url.as_str())
-        ),
-    };
-
-    let header = row()
-        .w_full()
-        .h(38.0)
-        .px(14.0)
-        .gap(8.0)
-        .center_y()
-        .child(
-            text(title)
-                .font(k.ty.ui_medium)
-                .color(k.c.text_base)
-                .truncate()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .child(ui::caption(if active { "Active" } else { "Split" }, k))
-        .child(
-            quiet_button(&glyphs::CLOSE, "Close split pane")
-                .on_press(close)
-                .build(k)
-                .key("split-close"),
-        );
-
-    let content = match secondary {
-        SecondaryPane::Session(index) => secondary_session(s, k, index),
-        SecondaryPane::Review(_, _) => crate::panels::view(s, k, layers),
-    };
-
-    col()
-        .key("split-secondary-pane")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .on_press(|s: &mut Workspace| {
-            if live(s).split.active != ActivePane::Secondary {
-                focus_pane(s, ActivePane::Secondary);
-            }
-        })
-        .child(
-            rune::el()
-                .w_full()
-                .h(2.0)
-                .fill(if active {
-                    k.c.text_accent
-                } else {
-                    rune::Color::TRANSPARENT
-                })
-                .a11y_hidden(),
-        )
-        .child(header)
-        .child(rune::el().w_full().h(1.0).fill(pane_border).a11y_hidden())
-        .child(content.grow(1.0).min_h(0.0))
-}
-
-fn secondary_session(s: &Workspace, k: &Kit, index: usize) -> El {
-    let l = live(s);
-    let Some(session) = l.app.sessions.get(index) else {
-        return ui::empty(
-            "Session unavailable",
-            "Close the split pane or select another session.",
-            k,
-        );
-    };
-
-    let mut messages = col().w_full().px(18.0).py(16.0).gap(16.0);
-    if session.conversation.entries.is_empty() {
-        messages = messages.child(ui::empty(
-            "No messages yet",
-            "Send a message below in this split session.",
-            k,
-        ));
-    } else {
-        for entry in session
-            .conversation
-            .entries
-            .iter()
-            .filter(|e| caelum_core::application::presentation::entry_visible(e))
-        {
-            match entry.kind() {
-                caelum_core::application::EntryKind::User => {
-                    messages = messages.child(ui::user_message(&entry.text, k));
-                }
-                caelum_core::application::EntryKind::Assistant => {
-                    messages = messages.child(Markdown::new(&entry.text).selectable(true).build(k));
-                }
-                _ => {}
-            }
-        }
-    }
-
-    let scroll = col()
-        .key(format!("split-transcript-{index}"))
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .scroll(ScrollSpec { stick_bottom: true })
-        .child(messages);
-
-    let draft = &l.drafts[index];
-    let working = session.working();
-    let input = text_input(draft, TextStyle::new(13.5, 400.0).lh(21.0))
-        .label("Split message")
-        .placeholder("Message split session…", k.c.text_muted)
-        .color(k.c.text_base)
-        .selection_color(k.selection())
-        .w_full()
-        .edit_menu(format!("split-draft-{index}"), move |s| {
-            live_mut(s).drafts.get_mut(index)
-        })
-        .on_input_key(crate::on_key)
-        .on_submit(move |s: &mut Workspace, _tx| send_secondary(s, index));
-
-    let action = if working {
-        Button::new("Stop")
-            .icon(&STOP)
-            .variant(ButtonVariant::Danger)
-            .on_press(move |s: &mut Workspace| live_mut(s).app.cancel(index))
-            .build(k)
-            .key(format!("split-stop-{index}"))
-    } else {
-        Button::new("Send")
-            .icon(&SEND)
-            .variant(ButtonVariant::Contrast)
-            .disabled(!session.can_send() || draft.text.trim().is_empty())
-            .on_press(move |s: &mut Workspace| send_secondary(s, index))
-            .build(k)
-            .key(format!("split-send-{index}"))
-    };
-
-    let composer = row()
-        .w_full()
-        .px(14.0)
-        .py(10.0)
-        .gap(8.0)
-        .center_y()
-        .border(1.0, k.c.border_muted)
-        .child(input.grow(1.0).min_w(0.0))
-        .child(action);
-
-    col()
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(scroll)
-        .child(composer)
-}
-
-fn send_secondary(s: &mut Workspace, index: usize) {
-    let l = live_mut(s);
-    if index >= l.drafts.len() {
-        return;
-    }
-    let text = l.drafts[index].text.clone();
-    if text.trim().is_empty() {
-        return;
-    }
-    if l.app.send(index, text) {
-        l.drafts[index].clear();
-    }
 }

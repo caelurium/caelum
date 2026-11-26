@@ -82,7 +82,9 @@ pub fn open(s: &mut Workspace, settings: Option<Provider>) {
         };
         Owner::Home(scope)
     } else {
-        let Some(index) = l.app.selected else { return };
+        let Some(index) = crate::split::composer_target(l) else {
+            return;
+        };
         Owner::Session(index, l.app.sessions[index].scope.clone())
     };
     let choices_scope = owner.scope().clone();

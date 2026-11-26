@@ -66,19 +66,30 @@ fn checkout_command_runner_runs_stops_reruns_and_attaches_output() {
 }
 
 #[test]
-fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
+fn split_pane_supports_vertical_horizontal_and_offscreen_deck_rotation() {
     let mut rt = live_runtime_size((1280.0, 900.0));
+    // Add a 3rd session so we can test off-screen deck rotation.
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let scope = l.app.sessions[0].scope.clone();
+        l.app.project_draft(scope);
+        l.sync_editors();
+        l.app.select(0);
+    });
     fill(&mut rt, "live-draft-0", "Primary draft");
 
-    rt.update(|s, _| crate::split::open_session(s, 1));
+    rt.update(|s, _| {
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
     advance(&mut rt, 0.2);
     assert!(rt.find("split-secondary-pane").is_some());
+    assert!(rt.find("split-composer-target").is_some());
     assert_eq!(
         rt.state.live.as_ref().unwrap().split.active,
         crate::split::ActivePane::Secondary
     );
 
-    fill(&mut rt, "split-draft-1", "Secondary draft");
+    fill(&mut rt, "live-draft-1", "Secondary draft");
     assert_eq!(
         rt.state.live.as_ref().unwrap().drafts[0].text,
         "Primary draft"
@@ -88,10 +99,94 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
         "Secondary draft"
     );
 
-    // ⌥⌘← switches focus to primary; ⌥⌘→ switches back to secondary.
+    // Clicking the target pills switches active pane and draft.
+    click(&mut rt, "split-target-primary");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Primary
+    );
+    assert!(rt.find("live-draft-0").is_some());
+    click(&mut rt, "split-target-secondary");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.active,
+        crate::split::ActivePane::Secondary
+    );
+    assert!(rt.find("live-draft-1").is_some());
+
+    // Opening a 3rd session slides session 0 off-screen into the deck (visible: 1 | 2, offscreen: 0).
+    rt.update(|s, _| {
+        crate::split::open_session(s, 2, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+    {
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(l.app.selected, Some(1));
+        assert_eq!(
+            l.split.visible_secondary(),
+            Some(&crate::split::SecondaryPane::Session(2))
+        );
+        assert_eq!(l.split.offscreen_count(), 1);
+    }
+    assert!(rt.find("split-target-offscreen-0").is_some());
+
+    // ⌥⌘] rotates session 0 back into view (visible: 2 | 0, offscreen: 1).
     key(
         &mut rt,
-        Key::Left,
+        Key::Command(']'),
+        Mods {
+            cmd: true,
+            alt: true,
+            ..Default::default()
+        },
+    );
+    {
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(l.app.selected, Some(2));
+        assert_eq!(
+            l.split.visible_secondary(),
+            Some(&crate::split::SecondaryPane::Session(0))
+        );
+    }
+
+    // ⌥⌘[ rotates back (visible: 1 | 2).
+    key(
+        &mut rt,
+        Key::Command('['),
+        Mods {
+            cmd: true,
+            alt: true,
+            ..Default::default()
+        },
+    );
+    {
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(l.app.selected, Some(1));
+        assert_eq!(
+            l.split.visible_secondary(),
+            Some(&crate::split::SecondaryPane::Session(2))
+        );
+    }
+
+    // Clicking the off-screen pill brings session 0 back into view immediately.
+    click(&mut rt, "split-target-offscreen-0");
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.visible_secondary(),
+        Some(&crate::split::SecondaryPane::Session(0))
+    );
+
+    // Toggle to horizontal split (top/bottom) and navigate with ⌥⌘↑ / ⌥⌘↓.
+    click(&mut rt, "split-toggle-orientation");
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().split.orientation,
+        crate::split::SplitOrientation::Horizontal
+    );
+    assert!(rt.find("split-top-pane").is_some());
+    assert!(rt.find("split-bottom-pane").is_some());
+    assert!(rt.find("split-bottom-header").is_some());
+    key(
+        &mut rt,
+        Key::Up,
         Mods {
             cmd: true,
             alt: true,
@@ -104,7 +199,7 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
     );
     key(
         &mut rt,
-        Key::Right,
+        Key::Down,
         Mods {
             cmd: true,
             alt: true,
@@ -116,13 +211,13 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
         crate::split::ActivePane::Secondary
     );
 
-    // Escape stops a working secondary session without stopping primary.
+    // Escape stops the active working secondary session without stopping primary.
     rt.update(|s, _| {
         let l = s.live.as_mut().unwrap();
         l.app.sessions[0].remote_id = Some("s0".into());
         l.app.sessions[0].conversation.set_working(true);
-        l.app.sessions[1].remote_id = Some("s1".into());
-        l.app.sessions[1].conversation.set_working(true);
+        l.app.sessions[2].remote_id = Some("s2".into());
+        l.app.sessions[2].conversation.set_working(true);
     });
     let _ = rt.state.live.as_mut().unwrap().app.commands();
     key(&mut rt, Key::Escape, Mods::default());
@@ -134,16 +229,31 @@ fn split_pane_routes_focus_preserves_drafts_and_collapses_on_compact_width() {
             .app
             .commands()
             .iter()
-            .any(|(_, c)| matches!(c, Command::Cancel(k) if k.id == "s1"))
+            .any(|(_, c)| matches!(c, Command::Cancel(k) if k.id == "s0"))
     );
 
-    // Closing the split pane returns cleanly to primary.
-    click(&mut rt, "split-close");
-    assert!(rt.find("split-secondary-pane").is_none());
+    // Opening Overview while Secondary is active takes over Secondary and keeps the composer for Primary.
+    rt.update(crate::overview::open);
+    advance(&mut rt, 0.2);
+    {
+        let l = rt.state.live.as_ref().unwrap();
+        assert_eq!(
+            l.split.visible_secondary(),
+            Some(&crate::split::SecondaryPane::Overview)
+        );
+        assert_eq!(l.panels.screen, crate::panels::Screen::Conversation);
+        assert_eq!(crate::split::composer_target(l), l.app.selected);
+    }
+    assert!(rt.find("message-composer").is_some());
 
-    // Compact window width (< 1100pt) collapses split pane automatically.
+    // Compact window width (< 1100pt) collapses vertical split, while horizontal stays visible.
     let mut compact = live_runtime_size((960.0, 720.0));
-    compact.update(|s, _| crate::split::open_session(s, 1));
+    compact.update(|s, _| {
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
     advance(&mut compact, 0.2);
     assert!(compact.find("split-secondary-pane").is_none());
+    compact.update(|s, _| crate::split::toggle_orientation(s));
+    advance(&mut compact, 0.2);
+    assert!(compact.find("split-bottom-pane").is_some());
 }

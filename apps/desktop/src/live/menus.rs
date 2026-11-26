@@ -105,21 +105,37 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
             .key("refresh-history"),
         );
     let archive_disabled = archive_disabled(live, index);
-    content = content.child(
-        session_action_row(
-            "Split right",
-            "Open this session side-by-side in a split pane",
-            &rune_kit::shell::INSPECTOR,
-            false,
-            false,
-            k,
+    content = content
+        .child(
+            session_action_row(
+                "Split vertical",
+                "Open this session side-by-side",
+                &rune_kit::shell::INSPECTOR,
+                false,
+                false,
+                k,
+            )
+            .on_press(move |s: &mut Workspace| {
+                crate::split::open_session(s, index, crate::split::SplitOrientation::Vertical);
+                close_session_menu(s);
+            })
+            .key("split-session-vertical"),
         )
-        .on_press(move |s: &mut Workspace| {
-            crate::split::open_session(s, index);
-            close_session_menu(s);
-        })
-        .key("split-session"),
-    );
+        .child(
+            session_action_row(
+                "Split horizontal",
+                "Open this session stacked below",
+                &rune_kit::shell::INSPECTOR,
+                false,
+                false,
+                k,
+            )
+            .on_press(move |s: &mut Workspace| {
+                crate::split::open_session(s, index, crate::split::SplitOrientation::Horizontal);
+                close_session_menu(s);
+            })
+            .key("split-session-horizontal"),
+        );
     content = content.child(
         session_action_row(
             if session.archived() {

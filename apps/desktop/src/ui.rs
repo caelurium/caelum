@@ -670,8 +670,21 @@ pub fn user_markdown(k: &Kit) -> rune_kit::MarkdownStyle {
 }
 
 pub fn user_bubble(message: &str, attachments: bool, k: &Kit) -> El {
-    let maximum =
-        rune::memo::window_layout("main-pane").map_or(660.0, |r| (r[2] - 96.0).clamp(140.0, 660.0));
+    user_bubble_in(
+        message,
+        attachments,
+        rune::memo::window_layout("main-pane").map(|r| r[2]),
+        k,
+    )
+}
+
+pub fn user_bubble_in(
+    message: &str,
+    attachments: bool,
+    container_width: Option<f32>,
+    k: &Kit,
+) -> El {
+    let maximum = container_width.map_or(660.0, |w| (w - 96.0).clamp(140.0, 660.0));
     let width = if message.len() < 180 && !message.contains('\n') {
         rune::text::measure(message, &[], TextStyle::new(14.0, 400.0).lh(23.0), None).0 + 30.0
     } else {
@@ -683,6 +696,7 @@ pub fn user_bubble(message: &str, attachments: bool, k: &Kit) -> El {
             .max(if attachments { 320.0 } else { 48.0 })
             .min(maximum))
         .max_w(maximum)
+        .min_w(0.0)
         .gap(10.0)
         .px(14.0)
         .py(10.0)

@@ -18,6 +18,7 @@ mod transcript;
 pub use composer::composer;
 pub use composer::open_effort;
 pub(crate) use heading::heading;
+pub(crate) use heading::session_heading;
 pub(crate) use menus::archive_disabled;
 pub use menus::close_session_menu;
 pub use menus::delete_confirmation;
@@ -28,6 +29,7 @@ pub use sidebar::on_key as sidebar_key;
 pub(crate) use sidebar::select as select_session;
 pub use sidebar::sidebar;
 pub use transcript::transcript;
+pub use transcript::transcript_for;
 
 use std::{cell::Cell, collections::HashSet};
 
@@ -400,20 +402,32 @@ impl Live {
     }
 
     pub fn send(&mut self, tx: &mut Tx) {
-        if !crate::remote::native::ready(self) {
+        if let Some(index) = crate::split::composer_target(self) {
+            self.send_to(index, tx);
+        }
+    }
+
+    pub fn send_to(&mut self, index: usize, tx: &mut Tx) {
+        if !crate::remote::native::ready(self) || index >= self.drafts.len() {
             return;
         }
         let trace = self.latency.begin("send");
-        self.latency.track(trace, self.app.selected, false);
+        self.latency.track(trace, Some(index), false);
         self.schedule();
-        let Some(index) = self.app.selected else {
-            return;
-        };
         if self.app.send(index, self.drafts[index].text.clone()) {
             self.drafts[index].clear();
             self.commands.previous_drafts[index].clear();
             self.drafts[index].focused = true;
-            tx.scroll_to_bottom(format!("live-transcript-{index}"));
+            let is_split = self.split.is_visible(self.window_width.get())
+                && self.split.visible_secondary()
+                    == Some(&crate::split::SecondaryPane::Session(index))
+                && self.app.selected != Some(index);
+            let key = if is_split {
+                format!("split-transcript-{index}")
+            } else {
+                format!("live-transcript-{index}")
+            };
+            tx.scroll_to_bottom(key);
         }
     }
 

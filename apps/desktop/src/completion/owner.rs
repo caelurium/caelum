@@ -33,7 +33,7 @@ impl EditorOwner {
                 })
             }
             Screen::Conversation => {
-                let i = l.app.selected?;
+                let i = crate::split::composer_target(l)?;
                 if !l.app.sessions[i].scope.provider_available() {
                     return None;
                 }

@@ -440,8 +440,24 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     if let Some(live) = s.live.as_ref() {
         live.window_width.set(window_width);
     }
-    let width = cx.layout("main-pane").map_or(840.0, |r| r[2]);
+    let main_rect = cx.layout("main-pane");
+    let width = main_rect.map_or(840.0, |r| r[2]);
+    let height = main_rect.map_or(720.0, |r| r[3]);
+    let split_visible = s
+        .live
+        .as_ref()
+        .is_some_and(|l| l.split.is_visible(window_width));
     let padding = if width < 540.0 { 16.0 } else { 32.0 };
+    let transcript_padding = if split_visible
+        && s.live
+            .as_ref()
+            .is_some_and(|l| l.split.orientation == split::SplitOrientation::Vertical)
+    {
+        20.0
+    } else {
+        padding
+    };
+    let composer_wide = width > 760.0;
     let remote = s
         .live
         .as_ref()
@@ -462,7 +478,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                     s,
                     &k,
                     cx.is_reduced_motion(),
-                    padding,
+                    transcript_padding,
                     &mut layers,
                 ))
                 .child(composer(s, &k, padding, width > 760.0, &mut layers))
@@ -487,24 +503,51 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 s,
                 &k,
                 cx.is_reduced_motion(),
-                padding,
+                transcript_padding,
                 &mut layers,
             ))
     };
-    let main = if s.live.as_ref().is_some_and(|live| {
-        matches!(
-            live.panels.screen,
-            panels::Screen::Home
-                | panels::Screen::Overview
-                | panels::Screen::Review
-                | panels::Screen::Remote
-        )
-    }) {
-        main
+    let has_composer = s.live.as_ref().is_none_or(|live| {
+        if split_visible {
+            split::composer_target(live).is_some()
+        } else {
+            !matches!(
+                live.panels.screen,
+                panels::Screen::Home
+                    | panels::Screen::Overview
+                    | panels::Screen::Review
+                    | panels::Screen::Remote
+            )
+        }
+    });
+    let main = if split_visible {
+        let panes = split::wrap_main(
+            s,
+            &k,
+            main,
+            cx.is_reduced_motion(),
+            window_width,
+            (width, height),
+            transcript_padding,
+            pane_border,
+            &mut layers,
+        );
+        if has_composer {
+            col()
+                .w_full()
+                .h_full()
+                .min_h(0.0)
+                .items_center()
+                .child(panes.grow(1.0).min_h(0.0))
+                .child(composer(s, &k, padding, composer_wide, &mut layers))
+        } else {
+            panes
+        }
+    } else if has_composer {
+        main.child(composer(s, &k, padding, composer_wide, &mut layers))
     } else {
-        main.child(composer(s, &k, padding, width > 760.0, &mut layers))
+        main
     };
-    let main = split::wrap_main(s, &k, main, window_width, pane_border, &mut layers);
     let main = main.children((vercel && sidebar_pane.is_open()).then(|| {
         rune::el()
             .key("sidebar-divider")
@@ -522,7 +565,7 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
             .a11y_hidden()
     }));
     let toolbar = Toolbar::new()
-        .leading(live::heading(s, &k))
+        .leading(split::toolbar_heading(s, &k, cx, window_width, pane_border))
         .trailing(if s.live.is_some() {
             context::workspace_button(s, &k)
         } else {

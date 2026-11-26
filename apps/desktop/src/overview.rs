@@ -234,6 +234,25 @@ pub(crate) fn shortcut(event: &KeyEvent) -> bool {
 
 pub fn open(s: &mut Workspace, _tx: &mut Tx) {
     let l = live_mut(s);
+    let in_secondary_split = l.split.is_visible(l.window_width.get())
+        && l.split.active == crate::split::ActivePane::Secondary;
+    if in_secondary_split {
+        let orientation = l.split.orientation;
+        l.split
+            .push_pane(crate::split::SecondaryPane::Overview, orientation);
+        l.overview.cursor = None;
+        l.overview.search.clear();
+        l.overview.search.focused = true;
+        l.overview.usage_requested = false;
+        l.panels.set_overlay(None);
+        l.session_menu = None;
+        l.models = Default::default();
+        l.completion = Default::default();
+        for draft in &mut l.drafts {
+            draft.focused = false;
+        }
+        return;
+    }
     if l.panels.screen == Screen::Overview {
         l.overview.search.focused = true;
         return;
@@ -271,6 +290,14 @@ pub fn open_from_nav(s: &mut Workspace) {
 
 pub(crate) fn close(s: &mut Workspace, tx: &mut Tx) {
     let l = live_mut(s);
+    if l.split.visible_secondary() == Some(&crate::split::SecondaryPane::Overview)
+        && l.split.active == crate::split::ActivePane::Secondary
+    {
+        l.overview.search.focused = false;
+        l.overview.frame.get_mut().reset();
+        crate::split::close(s);
+        return;
+    }
     if l.panels.screen != Screen::Overview {
         return;
     }
@@ -307,7 +334,9 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.park_reading(mark);
         l.clear_visible_entries();
     }
-    let shown = l.panels.screen == Screen::Overview && l.panels.overlay().is_none();
+    let shown = (l.panels.screen == Screen::Overview
+        || l.split.visible_secondary() == Some(&crate::split::SecondaryPane::Overview))
+        && l.panels.overlay().is_none();
     if !shown {
         l.overview.host_poll_at = None;
         l.overview.frame.get_mut().reset();
@@ -454,10 +483,26 @@ pub(super) fn next_waiting(s: &mut Workspace, tx: &mut Tx) {
     }
 }
 
+fn overview_active_pane(s: &Workspace) -> bool {
+    let Some(l) = s.live.as_ref() else {
+        return false;
+    };
+    if l.split.is_visible(l.window_width.get()) {
+        match l.split.active {
+            crate::split::ActivePane::Primary => l.panels.screen == Screen::Overview,
+            crate::split::ActivePane::Secondary => {
+                l.split.visible_secondary() == Some(&crate::split::SecondaryPane::Overview)
+            }
+        }
+    } else {
+        l.panels.screen == Screen::Overview
+    }
+}
+
 pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if shortcut(ev) {
         if !tx.key_repeat() {
-            if is_overview(s) {
+            if overview_active_pane(s) {
                 close(s, tx);
             } else {
                 open(s, tx);
@@ -465,7 +510,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    if !is_overview(s) {
+    if !overview_active_pane(s) {
         return false;
     }
     if ev.key == Key::Escape {

@@ -9,20 +9,20 @@ use crate::{SEND, STOP, Workspace, on_key, ui};
 use super::{live, live_mut};
 
 pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut Vec<El>) -> El {
-    if let Some(index) = live(s).app.selected
-        && let Some(prompt) = crate::questions::active(live(s), index)
-    {
-        return crate::questions::view(s, k, index, prompt, padding);
-    }
-    if live(s).commands.side_owner == live(s).app.selected && live(s).commands.side_owner.is_some()
-    {
-        return crate::commands::side_view(s, k, padding);
-    }
-    let live = live(s);
-    let Some(index) = live.app.selected else {
+    let Some(index) = crate::split::composer_target(live(s)) else {
         return col();
     };
+    if let Some(prompt) = crate::questions::active(live(s), index) {
+        return crate::questions::view(s, k, index, prompt, padding);
+    }
+    if live(s).commands.side_owner == Some(index) {
+        return crate::commands::side_view(s, k, padding);
+    }
     crate::completion::overlay(s, k, layers);
+    let live = live(s);
+    if index >= live.app.sessions.len() || index >= live.drafts.len() {
+        return col();
+    }
     let session = &live.app.sessions[index];
     let draft = &live.drafts[index];
     let queued = live.app.will_queue(index);
@@ -79,11 +79,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
                 || (!queued && !session.can_send())
                 || (draft.text.trim().is_empty() && session.attachments.is_empty()),
         )
-        .on_press_tx(move |s: &mut Workspace, tx| {
-            if live_mut(s).app.selected == Some(index) {
-                s.send(tx);
-            }
-        })
+        .on_press_tx(Workspace::send)
         .build(k)
         .key("send")
         .label(if queued {
@@ -122,7 +118,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             .help("Stop generation and pause the queue · Escape")
         }))
         .child(submit);
-    let pickers = pickers(s, k, layers).min_w(0.0);
+    let pickers = pickers(s, k, index, layers).min_w(0.0);
     let usage_label = wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0);
     let usage = row()
         .center_y()
@@ -164,24 +160,26 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             }))
             .children((activity.is_none() && has_queue).then(|| rune::el().grow(1.0)))
             .children(has_queue.then(|| crate::panels::queue_summary(s, k, index)));
+    let context = col()
+        .key(format!("composer-context-{index}"))
+        .w_full()
+        .max_h(180.0)
+        .gap(6.0)
+        .children(crate::split::composer_target_bar(s, k))
+        .children((activity.is_some() || has_queue).then_some(status))
+        .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
+        .child(crate::panels::composer_context(s, k, index));
     crate::panels::queue_popover(s, k, index, layers);
     ui::composer(
         crate::composer::editor(s, index, input),
         controls,
-        col()
-            .key(format!("composer-context-{index}"))
-            .w_full()
-            .max_h(180.0)
-            .gap(6.0)
-            .children((activity.is_some() || has_queue).then_some(status))
-            .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
-            .child(crate::panels::composer_context(s, k, index)),
+        context,
         padding,
         k,
     )
 }
 
-fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
+fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
     let live = live(s);
     let maximum = rune::memo::window_layout("composer-options").map_or(220.0, |r| r[2].max(80.0));
     let mut content = row()
@@ -189,9 +187,6 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
         .flex_wrap()
         .gap(4.0)
         .center_y();
-    let Some(index) = live.app.selected else {
-        return content;
-    };
     let session = &live.app.sessions[index];
     let choices = live.app.choices.get(&session.scope);
     let providers = live.app.available_providers(Some(&session.scope.project));
@@ -211,8 +206,8 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .current(Some(session.scope.provider.as_str()))
             .placement(Placement::TopStart)
             .open(live.menu == Some(("provider", index)))
-            .on_toggle(|s: &mut Workspace| {
-                toggle_menu(s, "provider");
+            .on_toggle(move |s: &mut Workspace| {
+                toggle_menu_for(s, "provider", index);
                 let l = live_mut(s);
                 if l.menu.is_some_and(|(name, _)| name == "provider") {
                     l.refresh_installed_providers();
@@ -221,7 +216,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
             .on_close(|s: &mut Workspace| live_mut(s).menu = None)
             .on_choose(move |s: &mut Workspace, value, _| {
                 let l = live_mut(s);
-                if l.app.selected != Some(index) || l.menu != Some(("provider", index)) {
+                if l.menu != Some(("provider", index)) {
                     return;
                 }
                 if let Some(&provider) = providers.iter().find(|p| p.as_str() == value)
@@ -304,7 +299,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .placement(Placement::TopStart)
                     .open(live.menu == Some(("effort", index)))
                     .disabled(session.archived() || session.archiving())
-                    .on_toggle(|s: &mut Workspace| toggle_menu(s, "effort"))
+                    .on_toggle(move |s: &mut Workspace| toggle_menu_for(s, "effort", index))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
                         let live = live_mut(s);
@@ -335,7 +330,7 @@ fn pickers(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .placement(Placement::TopStart)
                     .open(live.menu == Some(("agent", index)))
                     .disabled(session.archived() || session.archiving())
-                    .on_toggle(|s: &mut Workspace| toggle_menu(s, "agent"))
+                    .on_toggle(move |s: &mut Workspace| toggle_menu_for(s, "agent", index))
                     .on_close(|s: &mut Workspace| live_mut(s).menu = None)
                     .on_choose(move |s: &mut Workspace, value, _| {
                         let live = live_mut(s);
@@ -372,9 +367,9 @@ pub(super) fn effort_description(id: &str) -> Option<&'static str> {
     }
 }
 
-fn toggle_menu(s: &mut Workspace, name: &'static str) {
+fn toggle_menu_for(s: &mut Workspace, name: &'static str, index: usize) {
     let live = live_mut(s);
-    let next = live.app.selected.map(|index| (name, index));
+    let next = Some((name, index));
     live.menu = if live.menu == next { None } else { next };
 }
 

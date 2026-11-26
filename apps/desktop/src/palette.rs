@@ -65,7 +65,10 @@ enum Action {
     Files,
     Changes,
     Runner,
-    SplitRight,
+    SplitVertical,
+    SplitHorizontal,
+    RotateSplit,
+    ToggleSplitOrientation,
     CloseSplit,
     OpenProject,
     ChooseModel,
@@ -230,22 +233,47 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         }
     }
     if l.app.selected.is_some() {
-        entries.push(Entry::cmd(
-            "Split right",
-            "View a session or PR review side-by-side",
-            Some("⌥⌘→"),
-            "split pane two columns",
-            Action::SplitRight,
-        ));
+        entries.extend([
+            Entry::cmd(
+                "Split vertical",
+                "View a session side-by-side",
+                Some("⌥⌘→"),
+                "split pane vertical columns side by side",
+                Action::SplitVertical,
+            ),
+            Entry::cmd(
+                "Split horizontal",
+                "View a session stacked top and bottom",
+                Some("⌥⌘↓"),
+                "split pane horizontal rows stacked",
+                Action::SplitHorizontal,
+            ),
+        ]);
     }
     if l.split.is_open() {
-        entries.push(Entry::cmd(
-            "Close split pane",
-            "Return to single-pane layout",
-            None,
-            "unsplit single pane",
-            Action::CloseSplit,
-        ));
+        entries.extend([
+            Entry::cmd(
+                "Rotate split panes",
+                "Cycle off-screen split panes back into view",
+                Some("⌥⌘]"),
+                "rotate cycle deck split panes",
+                Action::RotateSplit,
+            ),
+            Entry::cmd(
+                "Toggle split orientation",
+                "Switch between vertical and horizontal split",
+                None,
+                "split vertical horizontal orientation",
+                Action::ToggleSplitOrientation,
+            ),
+            Entry::cmd(
+                "Close split pane",
+                "Close the active split pane",
+                None,
+                "unsplit single pane",
+                Action::CloseSplit,
+            ),
+        ]);
     }
     if (active_session.is_some() && provider_available) || l.app.remote.saved.selected.is_some() {
         entries.push(Entry::new(
