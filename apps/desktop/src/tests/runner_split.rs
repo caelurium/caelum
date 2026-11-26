@@ -317,3 +317,81 @@ fn remote_and_home_screens_do_not_render_a_second_shared_composer_in_split() {
         );
     }
 }
+
+#[test]
+fn splitting_projects_keeps_primary_syncs_active_project_and_creates_draft_when_empty() {
+    use caelum_protocol::ProjectInfo;
+
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    let project_a = rt.state.live.as_ref().unwrap().app.sessions[0]
+        .scope
+        .project
+        .clone();
+    let project_b = "/workspace/beta".to_owned();
+    let project_c = "/workspace/gamma".to_owned();
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        l.app.projects.push(ProjectInfo {
+            name: "beta".into(),
+            path: project_b.clone(),
+        });
+        l.app.projects.push(ProjectInfo {
+            name: "gamma".into(),
+            path: project_c.clone(),
+        });
+        let b_idx = l.app.new_session(caelum_core::application::Scope {
+            project: project_b.clone(),
+            provider: caelum_core::application::Provider::Codex,
+        });
+        l.app.sessions[b_idx].title = "Beta work".into();
+        l.app.select(0);
+        l.sync_editors();
+    });
+    advance(&mut rt, 0.2);
+    assert_eq!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .app
+            .active_project
+            .as_deref(),
+        Some(project_a.as_str())
+    );
+
+    // Click the sidebar split button on project_b.
+    let split_b = crate::code_view::source_key(&project_b, "split-project");
+    reveal(&mut rt, &split_b);
+    click(&mut rt, &split_b);
+    advance(&mut rt, 0.2);
+
+    let l = rt.state.live.as_ref().unwrap();
+    assert_eq!(l.app.selected, Some(0));
+    let Some(crate::split::SecondaryPane::Session(sec_b)) = l.split.visible_secondary().cloned()
+    else {
+        panic!("expected beta session in secondary pane");
+    };
+    assert_eq!(l.app.sessions[sec_b].scope.project, project_b);
+    assert_eq!(l.split.active, crate::split::ActivePane::Secondary);
+    assert_eq!(l.app.active_project.as_deref(), Some(project_b.as_str()));
+
+    // Focusing back to primary syncs active_project back to project_a.
+    click(&mut rt, "split-target-primary");
+    advance(&mut rt, 0.1);
+    let l = rt.state.live.as_ref().unwrap();
+    assert_eq!(l.split.active, crate::split::ActivePane::Primary);
+    assert_eq!(l.app.active_project.as_deref(), Some(project_a.as_str()));
+
+    // Splitting a project with no sessions creates a draft for it in the split pane.
+    rt.update(|s, _| {
+        crate::split::open_project(s, &project_c, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+    let l = rt.state.live.as_ref().unwrap();
+    let Some(crate::split::SecondaryPane::Session(sec_c)) = l.split.visible_secondary().cloned()
+    else {
+        panic!("expected gamma draft session in secondary pane");
+    };
+    assert_eq!(l.app.sessions[sec_c].scope.project, project_c);
+    assert_eq!(l.app.active_project.as_deref(), Some(project_c.as_str()));
+}

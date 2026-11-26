@@ -458,6 +458,17 @@ pub fn worktree(el: El, project: String, path: String, origin: String) -> El {
             directory: app.preferences.worktree_directory.clone(),
         };
         let menu = Menu::new()
+            .item(
+                Item::new("split-vertical", "Open in split right")
+                    .icon(&rune_kit::shell::INSPECTOR)
+                    .enabled(tree.available),
+            )
+            .item(
+                Item::new("split-horizontal", "Open in split below")
+                    .icon(&rune_kit::shell::INSPECTOR)
+                    .enabled(tree.available),
+            )
+            .separator()
             .item(Item::new("copy", "Copy worktree path").icon(&glyphs::COPY))
             .item(
                 Item::new("reveal", "Reveal in Finder")
@@ -483,6 +494,20 @@ pub fn worktree(el: El, project: String, path: String, origin: String) -> El {
                     .enabled(crate::checkouts::removal(app, &project, &path).is_some()),
             );
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
+            "split-vertical" => {
+                crate::split::open_checkout(
+                    s,
+                    &directory,
+                    crate::split::SplitOrientation::Vertical,
+                );
+            }
+            "split-horizontal" => {
+                crate::split::open_checkout(
+                    s,
+                    &directory,
+                    crate::split::SplitOrientation::Horizontal,
+                );
+            }
             "copy" => tx.copy(path),
             "reveal" => live_mut(s).app.task(Task::Reveal {
                 project: directory,

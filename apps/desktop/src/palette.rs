@@ -84,6 +84,8 @@ enum Action {
     SelectSession(usize),
     SelectProject(String),
     SelectWorktree(String),
+    SplitProject(String),
+    SplitWorktree(String),
 }
 
 struct Entry {
@@ -476,6 +478,15 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
             "project repository",
             Action::SelectProject(project.path.clone()),
         ));
+        entries.push(Entry::new(
+            Section::Projects,
+            format!("Split: {}", project.name),
+            format!("Open {} in a split pane", project.name),
+            None,
+            None,
+            &format!("{} split pane project side by side", project.path),
+            Action::SplitProject(project.path.clone()),
+        ));
         for tree in l.app.managed_worktrees(&project.path) {
             let tree_name = tree.path.rsplit('/').next().unwrap_or(&tree.path);
             let branch = tree.branch.as_deref().unwrap_or("detached");
@@ -488,6 +499,15 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
                 is_active_tree.then_some(("Active", BadgeTone::Muted)),
                 &format!("{} {} worktree", tree.path, branch),
                 Action::SelectWorktree(tree.path.clone()),
+            ));
+            entries.push(Entry::new(
+                Section::Projects,
+                format!("Split: {} / {}", project.name, tree_name),
+                format!("Open worktree ({branch}) in a split pane"),
+                None,
+                None,
+                &format!("{} {} split pane worktree side by side", tree.path, branch),
+                Action::SplitWorktree(tree.path.clone()),
             ));
         }
     }
