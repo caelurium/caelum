@@ -111,3 +111,26 @@ fn recovery_in_a_background_session_refreshes_its_error_indicator() {
         assert_eq!(l.app.selected, Some(0));
     });
 }
+
+#[test]
+fn session_error_notice_is_dismissible_without_changing_the_draft() {
+    let mut rt = live_runtime_size((800.0, 620.0));
+    fill(&mut rt, "live-draft-0", "Keep this draft");
+    rt.update(|s, _| {
+        s.live.as_mut().unwrap().app.sessions[0].error = Some("Unknown command /usage".into());
+    });
+    advance(&mut rt, 0.2);
+    reveal(&mut rt, "session-error-0");
+    for control in ["session-error-0", "dismiss-session-error-0"] {
+        let e = element(&rt, control);
+        assert!(
+            e.visible[2] >= e.rect[2] - 1.0 && e.visible[3] >= e.rect[3] - 1.0,
+            "{e:?}"
+        );
+    }
+    click(&mut rt, "dismiss-session-error-0");
+    assert!(rt.find("session-error-0").is_none());
+    let l = rt.state.live.as_ref().unwrap();
+    assert!(l.app.sessions[0].error.is_none());
+    assert_eq!(l.drafts[0].text, "Keep this draft");
+}

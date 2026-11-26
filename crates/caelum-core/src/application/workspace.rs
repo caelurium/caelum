@@ -387,6 +387,12 @@ impl Workspace {
         true
     }
 
+    pub fn dismiss_session_error(&mut self, index: usize) {
+        if let Some(session) = self.sessions.get_mut(index) {
+            session.error = None;
+        }
+    }
+
     fn record_usage(&mut self, row: crate::telemetry::Record) {
         self.next_request += 1;
         self.outgoing

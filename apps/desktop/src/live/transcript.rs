@@ -233,12 +233,19 @@ pub(super) fn timeline_row(
                 k,
             ));
             if let Some(error) = live.app.notices.get(&session.scope) {
+                let scope = session.scope.clone();
                 content = content.child(
-                    ui::notice(
+                    dismissible_notice(
                         &format!("Connect {}", ui::provider_name(session.scope.provider)),
                         error,
+                        "Dismiss connection notice",
+                        format!("dismiss-provider-notice-{index}"),
+                        move |s: &mut Workspace| {
+                            live_mut(s).app.notices.remove(&scope);
+                        },
                         k,
                     )
+                    .key(format!("provider-notice-{index}"))
                     .child(
                         Button::new("Provider settings")
                             .variant(ButtonVariant::GhostMuted)
@@ -557,7 +564,17 @@ pub(super) fn timeline_row(
         );
     }
     if let Some(error) = &session.error {
-        content = content.child(ui::notice("Session needs attention", error, k));
+        content = content.child(
+            dismissible_notice(
+                "Session needs attention",
+                error,
+                "Dismiss session notice",
+                format!("dismiss-session-error-{index}"),
+                move |s: &mut Workspace| live_mut(s).app.dismiss_session_error(index),
+                k,
+            )
+            .key(format!("session-error-{index}")),
+        );
     }
     if let Some(status) = session.control_status() {
         content = content.child(ui::caption(status, k).role("status").wrap());
@@ -610,6 +627,7 @@ pub(super) fn timeline_row(
         content = content.child(
             col()
                 .w_full()
+                .min_w(0.0)
                 .gap(12.0)
                 .padding(16.0)
                 .radius(10.0)
@@ -618,6 +636,7 @@ pub(super) fn timeline_row(
                 .child(
                     col()
                         .w_full()
+                        .min_w(0.0)
                         .gap(4.0)
                         .child(
                             row()
@@ -638,12 +657,15 @@ pub(super) fn timeline_row(
                             text(prompt.summary.clone())
                                 .font(k.ty.ui_medium)
                                 .color(k.c.text_base)
-                                .wrap(),
+                                .wrap_anywhere()
+                                .w_full(),
                         ),
                 )
                 .children((!prompt.description.is_empty()).then(|| {
                     col()
+                        .key(format!("approval-description-{}", prompt.attempt))
                         .w_full()
+                        .min_w(0.0)
                         .px(12.0)
                         .py(10.0)
                         .radius(6.0)
@@ -651,9 +673,11 @@ pub(super) fn timeline_row(
                         .border(1.0, k.c.border_base)
                         .child(
                             text(prompt.description.clone())
+                                .key(format!("approval-description-text-{}", prompt.attempt))
                                 .font(k.ty.mono)
                                 .color(k.c.text_muted)
-                                .wrap()
+                                .wrap_anywhere()
+                                .w_full()
                                 .selectable(true),
                         )
                 }))
@@ -661,4 +685,37 @@ pub(super) fn timeline_row(
         );
     }
     content
+}
+
+fn dismissible_notice(
+    title: &str,
+    detail: &str,
+    dismiss_label: &str,
+    dismiss_key: impl Into<String>,
+    on_dismiss: impl Fn(&mut Workspace) + 'static,
+    k: &Kit,
+) -> El {
+    ui::card(k)
+        .gap(4.0)
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text(title)
+                        .font(k.ty.ui_medium)
+                        .color(k.c.danger.fg)
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .wrap(),
+                )
+                .child(
+                    quiet_button(&glyphs::CLOSE, dismiss_label)
+                        .on_press(on_dismiss)
+                        .build(k)
+                        .key(dismiss_key),
+                ),
+        )
+        .child(ui::caption(detail, k).selectable(true))
 }
