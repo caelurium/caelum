@@ -65,6 +65,7 @@ fn offline_drafts_and_options_survive_restart_without_loading_a_laptop_provider_
         model: Some("example/model".into()),
         effort: Some("high".into()),
         agent: Some("plan".into()),
+        permissions: None,
     };
     app.sessions[other].draft = "A parked Codex draft".into();
     let mut writer = local(&target, &parent);

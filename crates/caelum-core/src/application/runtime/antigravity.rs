@@ -40,6 +40,7 @@ impl ProviderRuntime {
                     model: s.session.model,
                     effort: s.session.effort,
                     agent: s.session.agent,
+                    permissions: None,
                 },
             })
             .map_err(|e| e.to_string())
@@ -59,6 +60,7 @@ impl ProviderRuntime {
                             model: info.session.model,
                             effort: info.session.effort,
                             agent: info.session.agent,
+                            permissions: None,
                         },
                     },
                     page,
@@ -86,6 +88,7 @@ fn antigravity_summaries(
                 model: s.model,
                 effort: s.effort,
                 agent: s.agent,
+                permissions: None,
             },
         })
         .collect()

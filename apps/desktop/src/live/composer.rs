@@ -345,6 +345,39 @@ fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
             );
         }
     }
+    if session.scope.provider == caelum_core::application::Provider::Codex
+        && caelum_core::remote::native::checkout_id(&session.scope.project).is_some()
+    {
+        use caelum_core::application::CodexPermissions;
+        let current = session.options.permissions.unwrap_or_default();
+        let choices = CodexPermissions::ALL
+            .iter()
+            .map(|p| Choice::new(p.as_str(), p.label()).detail(p.description()))
+            .collect();
+        content = content.child(
+            Select::choices("permissions", choices)
+                .current(Some(current.as_str()))
+                .display(current.short_label())
+                .label("Permissions")
+                .menu_description("Approval and sandbox policy for Codex in this VM")
+                .width(300.0)
+                .placement(Placement::TopStart)
+                .open(live.menu == Some(("permissions", index)))
+                .disabled(session.archived() || session.archiving())
+                .on_toggle(move |s: &mut Workspace| toggle_menu_for(s, "permissions", index))
+                .on_close(|s: &mut Workspace| live_mut(s).menu = None)
+                .on_choose(move |s: &mut Workspace, value, _| {
+                    let live = live_mut(s);
+                    if let Some(permissions) = CodexPermissions::from_id(value) {
+                        live.app.set_permissions(index, permissions);
+                    }
+                    live.menu = None;
+                    live.focus();
+                })
+                .build(k, layers)
+                .max_w(maximum),
+        );
+    }
     content
 }
 

@@ -14,6 +14,7 @@ fn save_as_default_on_a_vm_keeps_its_model_effort_and_favorites_off_the_laptop_a
         model: Some("on-vm".into()),
         effort: Some("high".into()),
         agent: None,
+        permissions: None,
     };
     rt.update(|s, _| {
         let app = &mut live_mut(s).app;
@@ -294,4 +295,53 @@ fn remote_provider_settings_use_the_selected_vm_without_mutating_laptop_defaults
             .iter()
             .all(|(_, command)| !matches!(command, Command::Remote(Operation::Prompt(..))))
     );
+}
+
+#[test]
+fn vm_codex_permissions_picker_updates_session_defaults_and_commands_only_on_vms() {
+    use caelum_core::application::CodexPermissions;
+    let mut local_rt = design_runtime("", (800., 620.));
+    advance(&mut local_rt, 0.2);
+    assert!(local_rt.find("permissions-trigger").is_none());
+
+    let mut rt = design_runtime("", (800., 620.));
+    rt.update(|s, _| crate::remote::scene(s, "native-connected"));
+    advance(&mut rt, 0.2);
+    let slot = live(&rt.state).app.selected.unwrap();
+    assert!(rt.find("permissions-trigger").is_some());
+
+    click(&mut rt, "permissions-trigger");
+    click(&mut rt, "option2");
+    assert_eq!(
+        live(&rt.state).app.sessions[slot].options.permissions,
+        Some(CodexPermissions::FullAccess)
+    );
+    assert_eq!(
+        live(&rt.state)
+            .app
+            .provider_options(&live(&rt.state).app.sessions[slot].scope)
+            .and_then(|o| o.permissions),
+        Some(CodexPermissions::FullAccess)
+    );
+
+    click(&mut rt, "new-session");
+    let fresh = live(&rt.state).app.selected.unwrap();
+    assert_ne!(fresh, slot);
+    assert_eq!(
+        live(&rt.state).app.sessions[fresh].options.permissions,
+        Some(CodexPermissions::FullAccess)
+    );
+
+    fill(
+        &mut rt,
+        &format!("live-draft-{fresh}"),
+        "Run build without asking",
+    );
+    let _ = live_mut(&mut rt.state).app.commands();
+    click(&mut rt, "send");
+    let commands = live_mut(&mut rt.state).app.commands();
+    let [(_, Command::Start(_, options))] = commands.as_slice() else {
+        panic!("{commands:?}")
+    };
+    assert_eq!(options.permissions, Some(CodexPermissions::FullAccess));
 }
