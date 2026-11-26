@@ -677,7 +677,10 @@ fn codex_permissions_flow_through_thread_start_and_turn_start() {
         serde_json::from_str(&fs::read_to_string(project.join("turn-request.json")).unwrap())
             .unwrap();
     assert_eq!(turn["approvalPolicy"], "never");
-    assert_eq!(turn["sandboxPolicy"], json!({ "type": "workspaceWrite" }));
+    assert_eq!(
+        turn["sandboxPolicy"],
+        json!({ "type": "workspaceWrite", "networkAccess": true })
+    );
 
     provider
         .send_prompt_with_permissions(
@@ -709,6 +712,9 @@ fn codex_permissions_flow_through_thread_start_and_turn_start() {
         serde_json::from_str(&fs::read_to_string(project.join("turn-request.json")).unwrap())
             .unwrap();
     assert_eq!(turn["approvalPolicy"], "untrusted");
-    assert_eq!(turn["sandboxPolicy"], json!({ "type": "workspaceWrite" }));
+    assert_eq!(
+        turn["sandboxPolicy"],
+        json!({ "type": "workspaceWrite", "networkAccess": true })
+    );
     provider.shutdown();
 }
