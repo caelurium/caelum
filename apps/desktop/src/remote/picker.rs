@@ -173,7 +173,8 @@ pub(crate) fn picker(s: &Workspace, k: &Kit) -> El {
             .w_full()
             .gap(8.0)
             .center_y()
-            .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted))
+            .child(icon(&ui::AGENT, 14.0).color(k.c.icon_muted).a11y_hidden())
+            .child(ui::caption("Harness", k))
             .child(harness(l.remote.form.provider, k))
             .child(rune::el().grow(1.0))
             .child(
@@ -245,7 +246,12 @@ fn repository(source: &Source, standalone: bool, existing: bool, k: &Kit) -> El 
         .key("vm-repository")
         .w_full()
         .center_y()
-        .gap(9.0)
+        .gap(10.0)
+        .px(10.0)
+        .py(8.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
         .child(
             row()
                 .size(32.0, 32.0)
@@ -297,7 +303,7 @@ pub(super) fn existing_height(s: &Workspace, source: &Source) -> Option<f32> {
         .filter(|m| m.key.account == source.account)
         .take(5)
         .count();
-    (count > 0).then_some(144. + (count as f32) * 56.)
+    (count > 0).then_some(168. + (count as f32) * 60.)
 }
 
 pub(crate) fn handoff_height(s: &Workspace) -> f32 {
@@ -309,7 +315,7 @@ pub(crate) fn handoff_height(s: &Workspace) -> f32 {
         && has_machines(s, source)
         && l.remote.form.tab == Tab::Existing
     {
-        return 296.0;
+        return 352.0;
     }
     436.0
 }
@@ -343,20 +349,43 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
         };
         let detail = blocker
             .map(str::to_owned)
-            .unwrap_or_else(|| format!("{} · {}", machine.state, machine.key.id));
+            .unwrap_or_else(|| machine.key.id.clone());
+        let state_badge = row()
+            .center_y()
+            .gap(5.0)
+            .px(7.0)
+            .py(2.0)
+            .radius(5.0)
+            .fill(k.c.layer_02)
+            .child(
+                rune::el()
+                    .size(6.0, 6.0)
+                    .radius(3.0)
+                    .fill(super::machine_dot_color(&machine.state, k))
+                    .a11y_hidden(),
+            )
+            .child(ui::caption(&machine.state, k));
         let owner = machine.clone();
         list = list.child(
             k.interactive(
                 row()
                     .w_full()
-                    .min_h(44.0)
+                    .min_h(48.0)
                     .px(10.0)
-                    .py(6.0)
+                    .py(8.0)
                     .center_y()
-                    .gap(9.0)
-                    .radius(7.0)
+                    .gap(10.0)
+                    .radius(8.0)
+                    .fill(k.c.layer_01)
                     .border(1.0, k.c.border_base)
-                    .child(icon(&ui::SERVER, 15.0).color(k.c.icon_muted))
+                    .child(
+                        row()
+                            .size(28.0, 28.0)
+                            .center()
+                            .radius(6.0)
+                            .fill(k.c.layer_02)
+                            .child(icon(&ui::SERVER, 14.0).color(k.c.icon_muted)),
+                    )
                     .child(
                         col()
                             .min_w(0.0)
@@ -368,8 +397,17 @@ fn machines(s: &Workspace, k: &Kit, source: &Source, handoff: bool) -> El {
                                     .color(k.c.text_base)
                                     .truncate(),
                             )
-                            .child(ui::caption(&detail, k).wrap()),
+                            .child(
+                                ui::caption(&detail, k)
+                                    .color(if blocker.is_some() {
+                                        k.c.warning.fg
+                                    } else {
+                                        k.c.text_muted
+                                    })
+                                    .wrap(),
+                            ),
                     )
+                    .child(state_badge)
                     .child(icon(&glyphs::ARROW_RIGHT, 13.0).color(k.c.icon_muted)),
             )
             .role("button")

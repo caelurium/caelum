@@ -170,33 +170,86 @@ pub(crate) fn removal(s: &Workspace, k: &Kit) -> El {
     } else {
         "Remove setup"
     };
-    col()
+    let target_card = col()
         .w_full()
-        .gap(12.0)
+        .gap(4.0)
+        .px(10.0)
+        .py(8.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
         .child(
             row()
                 .center_y()
                 .gap(8.0)
-                .child(icon(&ui::SERVER, 16.0).color(k.c.icon_muted))
                 .child(
-                    text(c.machine().map_or("VM setup", |m| &m.name))
-                        .font(k.ty.ui_medium)
-                        .color(k.c.text_base)
-                        .truncate(),
+                    row()
+                        .size(26.0, 26.0)
+                        .center()
+                        .radius(6.0)
+                        .fill(k.c.layer_02)
+                        .child(icon(&ui::SERVER, 14.0).color(k.c.icon_muted)),
+                )
+                .child(
+                    col()
+                        .min_w(0.0)
+                        .grow(1.0)
+                        .gap(1.0)
+                        .child(
+                            text(c.machine().map_or("VM setup", |m| &m.name))
+                                .font(k.ty.ui_medium)
+                                .color(k.c.text_base)
+                                .truncate(),
+                        )
+                        .child(
+                            ui::caption(
+                                format!(
+                                    "{} · {}",
+                                    c.source.repository,
+                                    super::status::branch(c).unwrap_or("Remote checkout")
+                                ),
+                                k,
+                            )
+                            .truncate(),
+                        ),
                 ),
         )
-        .child(ui::caption(
-            format!(
-                "{} · {}",
-                c.source.repository,
-                super::status::branch(c).unwrap_or("Remote checkout")
-            ),
-            k,
-         ).truncate())
-        .children(target.as_ref().map(|m|ui::caption(format!("Boat machine ID: {}",m.id),k).selectable(true).wrap()))
-        .child(text(if target.is_some() {"Permanently delete this VM and its disk on Boat, ending any running work. Caelum will remove its VM chats and drafts. Your local session stays here."} else {"Remove this setup and its saved drafts from Caelum. No Boat machine ID was returned for this checkout."})
-            .font(k.ty.ui).color(k.c.text_muted).w_full().wrap())
-        .children(l.app.remote.delete_errors.get(id).map(|e| ui::caption(e,k).color(k.c.danger.fg).role("alert")))
+        .children(target.as_ref().map(|m| {
+            ui::caption(format!("Boat machine ID: {}", m.id), k)
+                .selectable(true)
+                .wrap()
+        }));
+    let warning = col()
+        .w_full()
+        .px(10.0)
+        .py(8.0)
+        .radius(8.0)
+        .fill(k.alpha(k.c.danger.fg, 0.08))
+        .border(1.0, k.alpha(k.c.danger.fg, 0.25))
+        .child(
+            text(if target.is_some() {
+                "Permanently delete this VM and its disk on Boat, ending any running work. Caelum will remove its VM chats and drafts. Your local session stays here."
+            } else {
+                "Remove this setup and its saved drafts from Caelum. No Boat machine ID was returned for this checkout."
+            })
+            .font(k.ty.small)
+            .color(k.c.text_base)
+            .w_full()
+            .wrap(),
+        );
+    col()
+        .w_full()
+        .gap(10.0)
+        .child(target_card)
+        .child(warning)
+        .children(
+            l.app
+                .remote
+                .delete_errors
+                .get(id)
+                .map(|e| ui::caption(e, k).color(k.c.danger.fg).role("alert")),
+        )
+        .child(ui::divider(k))
         .child(
             row()
                 .w_full()
@@ -214,9 +267,11 @@ pub(crate) fn removal(s: &Workspace, k: &Kit) -> El {
                         .variant(ButtonVariant::Danger)
                         .disabled(!l.app.can_remove_remote(id))
                         .on_press(move |s: &mut Workspace| {
-                            let l=live_mut(s);
-                            if l.panels.removal().is_some_and(|removal| removal.checkout==owner && removal.machine==target) {
-                                l.app.remove_remote(&owner,target.as_ref());
+                            let l = live_mut(s);
+                            if l.panels.removal().is_some_and(|removal| {
+                                removal.checkout == owner && removal.machine == target
+                            }) {
+                                l.app.remove_remote(&owner, target.as_ref());
                                 l.schedule();
                             }
                         })

@@ -101,42 +101,48 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
             .wrap()
         };
     };
-    let mut body = col().w_full().h_full().min_h(0.0).gap(8.0).child(
-        row()
-            .w_full()
-            .center_y()
-            .gap(8.0)
-            .child(
-                rune::text(&h.title)
-                    .font(k.ty.ui_medium)
-                    .color(k.c.text_base)
-                    .truncate()
-                    .min_w(0.0)
-                    .grow(1.0),
-            )
-            .children((l.panels.screen == Screen::Home).then(|| {
-                ui::Button::new("Change source…")
-                    .variant(ButtonVariant::GhostMuted)
-                    .on_press(|s: &mut Workspace| live_mut(s).app.dismiss_vm_handoff())
-                    .build(k)
-            })),
-    );
+    let header_row = row()
+        .w_full()
+        .center_y()
+        .gap(8.0)
+        .child(
+            rune::text(&h.title)
+                .font(k.ty.ui_medium)
+                .color(k.c.text_base)
+                .truncate()
+                .min_w(0.0)
+                .grow(1.0),
+        )
+        .children((l.panels.screen == Screen::Home).then(|| {
+            ui::Button::new("Change source…")
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(|s: &mut Workspace| live_mut(s).app.dismiss_vm_handoff())
+                .build(k)
+        }));
+    let mut body = col().w_full().h_full().min_h(0.0).gap(10.0);
     match &h.phase {
         HandoffPhase::Reading(_) => {
-            return body.child(ui::busy_text("Reading local chat…", k.ty.ui, k).role("status"));
+            return body
+                .child(header_row)
+                .child(ui::busy_text("Reading local chat…", k.ty.ui, k).role("status"));
         }
         HandoffPhase::Checking(..) | HandoffPhase::Verified(..) => {
             return body
+                .child(header_row)
                 .child(ui::busy_text("Checking the published branch…", k.ty.ui, k).role("status"));
         }
         HandoffPhase::Failed(error) => {
             let source = h.source();
             return body
+                .child(header_row)
                 .child(ui::notice("Couldn’t prepare the handoff", error, k).role("alert"))
                 .child(
-                    ui::Button::new("Reload VM setup")
-                        .on_press(move |s: &mut Workspace| begin(s, source))
-                        .build(k),
+                    row().w_full().justify_end().child(
+                        ui::Button::new("Reload VM setup")
+                            .icon(&ui::REFRESH)
+                            .on_press(move |s: &mut Workspace| begin(s, source))
+                            .build(k),
+                    ),
                 );
         }
         HandoffPhase::Ready(chat) => {
@@ -152,7 +158,19 @@ pub(crate) fn view(s: &Workspace, k: &Kit) -> El {
                 )
             };
             body = body.child(
-                ui::caption(format!("{summary} Unpublished Git work stays local."), k).wrap(),
+                col()
+                    .w_full()
+                    .gap(4.0)
+                    .px(10.0)
+                    .py(8.0)
+                    .radius(8.0)
+                    .fill(k.c.layer_01)
+                    .border(1.0, k.c.border_base)
+                    .child(header_row)
+                    .child(
+                        ui::caption(format!("{summary} Unpublished Git work stays local."), k)
+                            .wrap(),
+                    ),
             );
         }
     }
