@@ -184,6 +184,16 @@ fn general_chat_starts_from_home_and_attaches_to_a_project_from_heading() {
     assert!(!l.app.sessions[index].unbound);
     assert_eq!(l.app.sessions[index].scope.project, target);
     assert!(rt.find("attach-project").is_none());
+
+    // Returning to Home with the attached project selected lists that session and opens it on click.
+    click(&mut rt, "nav-home");
+    rt.update(|s, _| live_mut(s).app.home_select_project(target.clone()));
+    advance(&mut rt, 0.2);
+    assert!(rt.find("home-recent-sessions").is_some());
+    click(&mut rt, &format!("home-session-{index}"));
+    advance(&mut rt, 0.2);
+    assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
+    assert_eq!(live(&rt.state).app.selected, Some(index));
 }
 
 #[test]
