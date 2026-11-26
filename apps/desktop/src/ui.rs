@@ -598,6 +598,11 @@ pub static BOOKMARK: Icon = Icon {
     view: 16.0,
     body: r#"<path d="M4 2.5h8v11L8 10.7 4 13.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>"#,
 };
+pub static PEACEFUL: Icon = Icon {
+    name: "peaceful",
+    view: 16.0,
+    body: r#"<path d="M13 3C7.5 3 3.5 6.5 3 13c6.5-.5 10-4.5 10-10ZM3 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
 
 pub fn provider_name(provider: caelum_core::application::Provider) -> &'static str {
     provider.name()
