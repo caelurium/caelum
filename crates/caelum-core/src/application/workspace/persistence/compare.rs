@@ -159,6 +159,7 @@ impl Session {
             unread,
             origin,
             pinned,
+            unbound,
             bookmarked_entries,
         } = saved;
         self.vm_link == *vm_link
@@ -183,6 +184,7 @@ impl Session {
             && self.unread == *unread
             && self.origin == *origin
             && self.pinned == *pinned
+            && self.unbound == *unbound
             && self.bookmarked_entries == *bookmarked_entries
     }
 }

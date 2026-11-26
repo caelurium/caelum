@@ -55,6 +55,8 @@ enum BadgeTone {
 #[derive(Clone)]
 enum Action {
     NewSession,
+    NewGeneralSession,
+    AttachToProject,
     Launcher,
     Home,
     Overview,
@@ -177,6 +179,13 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
     ));
     entries.extend([
         Entry::cmd(
+            "New general chat",
+            "Start a chat without a project (attach one later)",
+            None,
+            "general unbound scratch chat no project",
+            Action::NewGeneralSession,
+        ),
+        Entry::cmd(
             "Home",
             "Open the home composer and project overview",
             None,
@@ -231,6 +240,18 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
                 Action::Runner,
             ));
         }
+    }
+    if l.app
+        .selected
+        .is_some_and(|i| l.app.can_attach_to_project(i))
+    {
+        entries.push(Entry::cmd(
+            "Attach session to project",
+            "Bind this general chat to a project or worktree",
+            None,
+            "attach project bind promote general chat",
+            Action::AttachToProject,
+        ));
     }
     if l.app.selected.is_some() {
         entries.extend([

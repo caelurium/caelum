@@ -22,6 +22,7 @@ pub(crate) use heading::session_heading;
 pub(crate) use menus::archive_disabled;
 pub use menus::close_session_menu;
 pub use menus::delete_confirmation;
+pub use menus::new_general_session;
 pub use menus::overlays;
 pub(crate) use reading::Bookmark;
 pub use runtime::setup;
@@ -83,6 +84,7 @@ pub struct Live {
     patch_inputs: patches::Inputs,
     pub(crate) menu: Option<(&'static str, usize)>,
     pub session_menu: Option<usize>,
+    pub attach_menu: Option<usize>,
     pub(crate) approval_menu: Option<caelum_core::application::SessionKey>,
     delete_confirmation: Option<usize>,
     pub shell_panel: Option<crate::shells::Panel>,
@@ -143,6 +145,7 @@ impl Live {
             patch_inputs: Default::default(),
             menu: None,
             session_menu: None,
+            attach_menu: None,
             approval_menu: None,
             delete_confirmation: None,
             shell_panel: None,

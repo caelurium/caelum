@@ -21,11 +21,16 @@ pub(super) fn view(s: &Workspace, k: &Kit, index: usize, position: usize, count:
             .notice()
             .map(|n| n.message.as_str())
     });
-    let project = crate::checkouts::project_name(app, app.group_path(&session.scope.project));
-    let branch = app.session_branch(session).unwrap_or("No branch");
-    let branch = app
-        .session_worktree(session)
-        .map_or_else(|| branch.to_owned(), |tree| format!("{tree} · {branch}"));
+    let (project, branch) = if session.unbound {
+        ("General", "No project".to_owned())
+    } else {
+        let project = crate::checkouts::project_name(app, app.group_path(&session.scope.project));
+        let branch = app.session_branch(session).unwrap_or("No branch");
+        let branch = app
+            .session_worktree(session)
+            .map_or_else(|| branch.to_owned(), |tree| format!("{tree} · {branch}"));
+        (project, branch)
+    };
     let pending = app.needs_input(session);
     let activity = crate::activity::session_activity(s, index);
     let waiting = !session.archiving()

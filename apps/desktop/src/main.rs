@@ -643,6 +643,13 @@ fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if context::is_open(s) {
         return context::key(s, ev);
     }
+    if let Some(l) = s.live.as_mut().filter(|l| l.attach_menu.is_some()) {
+        if ev.key == Key::Escape {
+            l.attach_menu = None;
+            return true;
+        }
+        return false;
+    }
     if let Some(l) = s.live.as_mut().filter(|l| l.approval_menu.is_some()) {
         if ev.key == Key::Escape {
             l.approval_menu = None;

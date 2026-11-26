@@ -59,13 +59,18 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
         return base;
     };
     let path = &session.scope.project;
-    let name = checkouts::project_name(&l.app, l.app.group_path(path));
-    let project = l
-        .app
-        .session_worktree(session)
-        .map_or_else(|| name.to_owned(), |tree| format!("{name} / {tree}"));
-    let branch = l.app.session_branch(session);
-    let ink = l.feed.project_ink(&l.app, path, k);
+    let (project, branch, ink) = if session.unbound {
+        ("General".to_owned(), None, k.c.border_strong)
+    } else {
+        let name = checkouts::project_name(&l.app, l.app.group_path(path));
+        let project = l
+            .app
+            .session_worktree(session)
+            .map_or_else(|| name.to_owned(), |tree| format!("{name} / {tree}"));
+        let branch = l.app.session_branch(session);
+        let ink = l.feed.project_ink(&l.app, path, k);
+        (project, branch, ink)
+    };
     let eyebrow = row()
         .center_y()
         .min_w(0.0)
@@ -127,8 +132,30 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
             .focus_ring(1.5, 0.0, k.c.border_focus)
             .on_press(crate::commands::open_timeline)
     };
+    let attach_btn = (!split && session.unbound).then(|| {
+        let enabled = l.app.can_attach_to_project(index);
+        ui::Button::new("Attach to project")
+            .icon(&ui::FOLDER)
+            .variant(rune_kit::ButtonVariant::Outline)
+            .disabled(!enabled)
+            .on_press(move |s: &mut Workspace| {
+                let l = super::live_mut(s);
+                l.attach_menu = if l.attach_menu == Some(index) {
+                    None
+                } else {
+                    Some(index)
+                };
+            })
+            .build(k)
+            .h(26.0)
+            .px(8.0)
+            .self_center()
+            .key("attach-project")
+            .help("Attach this general chat to a project or worktree")
+    });
     base.child(el().size(3.0, 26.0).radius(1.5).fill(ink))
         .child(title)
+        .children(attach_btn)
         .children(super::approval_rules::trigger(l, index, k))
         .children(
             (!split)

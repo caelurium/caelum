@@ -201,3 +201,70 @@ fn returning_home_invalidates_an_older_project_navigation() {
     assert_eq!(app.selected, None);
     assert_eq!(app.sessions.len(), 1);
 }
+
+#[test]
+fn home_defaults_to_general_chat_and_attaches_to_project_later() {
+    let mut app = Workspace::default();
+    app.projects.push(ProjectInfo {
+        name: "Repo".into(),
+        path: "/repo".into(),
+    });
+    assert!(app.home.draft.project.is_none());
+    assert!(app.home_project_available());
+    app.home.draft.text = "Brainstorm an idea".into();
+
+    // Sending from Home without a project creates an unbound General session in a scratch dir.
+    let index = app.send_home().expect("expected General session");
+    assert!(app.sessions[index].unbound);
+    assert!(app.active_project.is_none());
+    assert!(std::path::Path::new(&app.sessions[index].scope.project).is_dir());
+    assert!(app
+        .sidebar_sessions(None, "", false)
+        .contains(&crate::application::FeedSession::Local(index)));
+    app.preferences.session_scope = crate::application::SessionScope::CurrentProject;
+    assert!(app
+        .sidebar_sessions(None, "", false)
+        .contains(&crate::application::FeedSession::Local(index)));
+    assert!(app
+        .dashboard_sessions("", false)
+        .contains(&crate::application::FeedSession::Local(index)));
+
+    // Complete the initial Start command so the thread is idle, then attach it to /repo.
+    let start_id = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Start(_, _)))
+        .expect("expected Start command")
+        .0;
+    let scope = app.sessions[index].scope.clone();
+    app.apply(Event::Completed(
+        start_id,
+        Ok(Reply::Session(crate::application::Summary {
+            key: crate::application::SessionKey {
+                scope,
+                id: "general-thread-1".into(),
+            },
+            title: "Brainstorm an idea".into(),
+            updated_at: None,
+            working: false,
+            options: Default::default(),
+        })),
+    ));
+    let send_id = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Send(_, _, _)))
+        .expect("expected Send command")
+        .0;
+    app.apply(Event::Completed(send_id, Ok(Reply::Done)));
+    app.sessions[index].conversation.set_working(false);
+    assert!(app.can_attach_to_project(index));
+    assert!(app.attach_to_project(index, "/repo".into()));
+
+    let session = &app.sessions[index];
+    assert!(!session.unbound);
+    assert_eq!(session.scope.project, "/repo");
+    assert!(session.remote_id.is_none());
+    assert_eq!(session.provider_switch.threads.len(), 1);
+    assert!(session.provider_switch.needs_context);
+}

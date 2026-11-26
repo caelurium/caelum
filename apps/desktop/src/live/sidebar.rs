@@ -227,15 +227,28 @@ fn age(at: Option<u64>, now: u64) -> (String, Option<u64>) {
 
 pub fn sidebar(s: &Workspace, k: &Kit) -> El {
     let l = live(s);
-    let rows = Rc::new(
+    let rows = Rc::new(if l.panels.screen == crate::panels::Screen::Home {
+        match l.app.home.draft.project.as_deref() {
+            Some(project) => {
+                l.app
+                    .sidebar_sessions(Some(project), &l.panels.sessions.text, l.panels.archived)
+            }
+            None => l
+                .app
+                .general_sidebar_sessions(&l.panels.sessions.text, l.panels.archived),
+        }
+    } else {
         l.app
-            .sidebar_sessions(None, &l.panels.sessions.text, l.panels.archived),
-    );
+            .sidebar_sessions(None, &l.panels.sessions.text, l.panels.archived)
+    });
     let (keys, builders, visible) = (rows.clone(), rows.clone(), rows.clone());
     let kit = k.clone();
     let sessions = if rows.is_empty() {
         ui::caption(
-            if l.app.projects.is_empty() {
+            if l.panels.screen == crate::panels::Screen::Home && l.app.home.draft.project.is_none()
+            {
+                "No general chats yet"
+            } else if l.app.projects.is_empty() {
                 "Open a project to get started"
             } else if !l.panels.sessions.text.is_empty() {
                 "No matching sessions"

@@ -10,7 +10,7 @@ impl Workspace {
             .filter(|(_, session)| {
                 !session.archived()
                     && !session.forgotten()
-                    && self.project_is_open(&session.scope.project)
+                    && (session.unbound || self.project_is_open(&session.scope.project))
             })
             .map(|(index, _)| index)
             .collect();
@@ -179,12 +179,16 @@ impl Workspace {
         let Some(session) = self.sessions.get(index) else {
             return;
         };
-        self.active_project = Some(session.scope.project.clone());
-        self.remembered.insert(session.scope.project.clone(), index);
-        self.remembered_checkouts
-            .insert(session.scope.project.clone(), index);
-        if let Some(root) = self.project_roots.get(&session.scope.project) {
-            self.remembered.insert(root.clone(), index);
+        if session.unbound {
+            self.active_project = None;
+        } else {
+            self.active_project = Some(session.scope.project.clone());
+            self.remembered.insert(session.scope.project.clone(), index);
+            self.remembered_checkouts
+                .insert(session.scope.project.clone(), index);
+            if let Some(root) = self.project_roots.get(&session.scope.project) {
+                self.remembered.insert(root.clone(), index);
+            }
         }
         self.selected = Some(index);
         if !session.loaded() || session.disconnected {

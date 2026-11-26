@@ -89,7 +89,12 @@ impl Workspace {
 
     pub fn home_scope(&self) -> Option<Scope> {
         Some(Scope {
-            project: self.home.draft.project.clone()?,
+            project: self
+                .home
+                .draft
+                .project
+                .clone()
+                .unwrap_or_else(super::scratch::home_scratch_path),
             provider: self.home_provider(),
         })
     }
@@ -127,18 +132,30 @@ impl Workspace {
     }
 
     pub fn home_project_available(&self) -> bool {
-        self.home.draft.project.as_deref().is_some_and(|path| {
-            self.projects.iter().any(|p| p.path == path)
-                && self
-                    .services
-                    .worktrees(self.group_path(path))
-                    .is_none_or(|listing| {
-                        listing
-                            .worktrees
-                            .iter()
-                            .any(|t| t.project.path == path && t.available)
-                    })
-        })
+        let Some(path) = self.home.draft.project.as_deref() else {
+            return true;
+        };
+        self.projects.iter().any(|p| p.path == path)
+            && self
+                .services
+                .worktrees(self.group_path(path))
+                .is_none_or(|listing| {
+                    listing
+                        .worktrees
+                        .iter()
+                        .any(|t| t.project.path == path && t.available)
+                })
+    }
+
+    pub fn home_select_general(&mut self) {
+        self.home.generation += 1;
+        self.home.attaching = 0;
+        self.home.target = Target::Ready;
+        self.home.error = None;
+        self.home.draft.project = None;
+        if let Some(scope) = self.home_scope() {
+            self.refresh_choices_for(scope);
+        }
     }
 
     pub fn home_select_project(&mut self, project: String) {
@@ -291,13 +308,27 @@ impl Workspace {
                 Some("Choose an available project or worktree to start a session".into());
             return None;
         }
-        let scope = self.home_scope()?;
+        let unbound = self.home.draft.project.is_none();
+        let scope = if unbound {
+            Scope {
+                project: super::scratch::new_session_dir(),
+                provider: self.home_provider(),
+            }
+        } else {
+            self.home_scope()?
+        };
         let mut session = Session::new(scope.clone());
+        session.unbound = unbound;
         session.options = self.home_options();
         if session.options.model.is_none() {
+            let choices_scope = if unbound {
+                self.home_scope().unwrap_or_else(|| scope.clone())
+            } else {
+                scope.clone()
+            };
             session.options.model = self
                 .choices
-                .get(&scope)
+                .get(&choices_scope)
                 .and_then(|c| c.default_model.clone());
         }
         session.attachments = self.home.draft.attachments.clone();

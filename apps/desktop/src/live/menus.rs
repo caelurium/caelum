@@ -6,6 +6,19 @@ use crate::{Workspace, quiet_button, ui};
 
 use super::{Live, live, live_mut};
 
+pub fn new_general_session(s: &mut Workspace) {
+    let l = live_mut(s);
+    l.schedule();
+    l.reveal_new_session();
+    let provider = l.app.preferences.default_provider;
+    let index = l.app.new_general_session(provider);
+    l.sync_editors();
+    l.drafts[index].focused = true;
+    l.menu = None;
+    l.attach_menu = None;
+    l.panels.screen = crate::panels::Screen::Conversation;
+}
+
 fn session_action_row(
     title: &str,
     detail: &str,
@@ -104,6 +117,31 @@ fn session_actions(s: &Workspace, k: &Kit) -> El {
             })
             .key("refresh-history"),
         );
+    if session.unbound {
+        let can_attach = live.app.can_attach_to_project(index);
+        content = content.child(
+            session_action_row(
+                "Attach to project…",
+                if can_attach {
+                    "Bind this general chat to a project or worktree"
+                } else {
+                    "Finish active work before attaching to a project"
+                },
+                &ui::FOLDER,
+                false,
+                !can_attach,
+                k,
+            )
+            .on_press(move |s: &mut Workspace| {
+                close_session_menu(s);
+                let l = live_mut(s);
+                l.app.select(index);
+                l.panels.screen = crate::panels::Screen::Conversation;
+                l.attach_menu = Some(index);
+            })
+            .key("attach-session-project"),
+        );
+    }
     let archive_disabled = archive_disabled(live, index);
     content = content
         .child(
@@ -293,6 +331,90 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             layers,
         );
     }
+    attach_project_overlay(s, k, layers);
+}
+
+fn attach_project_overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
+    let Some(index) = live(s).attach_menu else {
+        return;
+    };
+    let l = live(s);
+    if !l.app.sessions.get(index).is_some_and(|s| s.unbound) {
+        return;
+    }
+    let mut list = col().w_full().gap(2.0);
+    for project in &l.app.projects {
+        let path = project.path.clone();
+        let detail = l
+            .app
+            .services
+            .worktrees(l.app.group_path(&path))
+            .and_then(|listing| listing.worktrees.iter().find(|t| t.project.path == path))
+            .and_then(|t| t.branch.as_deref())
+            .map_or_else(|| path.clone(), |branch| format!("{branch} · {path}"));
+        list = list.child(
+            ui::choice(&project.name, &detail, false, k)
+                .key(format!("attach-project-{}", project.path))
+                .on_press(move |s: &mut Workspace| {
+                    let l = live_mut(s);
+                    l.attach_menu = None;
+                    if l.app.attach_to_project(index, path.clone()) {
+                        l.schedule();
+                        l.focus();
+                    }
+                }),
+        );
+    }
+    let content = col()
+        .w(320.0)
+        .gap(6.0)
+        .child(ui::popup_header(
+            "Attach to project",
+            Some("Keep this conversation and continue in a project"),
+            None,
+            k,
+        ))
+        .children((!l.app.projects.is_empty()).then(|| {
+            list.max_h(240.0).scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            })
+        }))
+        .child(
+            Button::new("Open project folder…")
+                .icon(&ui::FOLDER)
+                .variant(ButtonVariant::GhostMuted)
+                .on_press_tx(move |s: &mut Workspace, tx: &mut rune::Tx| {
+                    live_mut(s).attach_menu = None;
+                    tx.open_folder(
+                        rune::FileDialogOptions {
+                            title: "Choose a project to attach".into(),
+                            ..Default::default()
+                        },
+                        move |s: &mut Workspace, result, _| {
+                            if let Ok(Some(path)) = result {
+                                let path = path.to_string_lossy().into_owned();
+                                let l = live_mut(s);
+                                l.app.open_project(path.clone());
+                                if l.app.attach_to_project(index, path) {
+                                    l.schedule();
+                                    l.focus();
+                                }
+                            }
+                        },
+                    );
+                })
+                .build(k)
+                .key("attach-open-folder"),
+        );
+    ui::popup(
+        "attach-project-menu",
+        "attach-project",
+        content,
+        Placement::BottomStart,
+        |s: &mut Workspace| live_mut(s).attach_menu = None,
+        k,
+        layers,
+    );
 }
 
 pub fn delete_confirmation(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {

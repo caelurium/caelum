@@ -16,6 +16,8 @@ fn home_keeps_native_selection_undo_and_both_drafts_across_navigation() {
         live(&rt.state).home.editor.anchor,
         live(&rt.state).home.editor.focus,
     );
+    rt.update(|s, _| live_mut(s).app.home_select_project("/project".into()));
+    advance(&mut rt, 0.1);
     click(&mut rt, "live-session-0");
     assert_eq!(live(&rt.state).drafts[0].text, "Session draft");
     click(&mut rt, "nav-home");
@@ -81,7 +83,7 @@ fn cancelling_the_inline_project_chooser_preserves_input_and_creates_no_session(
     let mut rt = design_runtime("home-empty", (800.0, 620.0));
     let count = live(&rt.state).app.sessions.len();
     fill(&mut rt, "home-draft", "An idea before choosing a project");
-    key(&mut rt, Key::Enter, Mods::default());
+    click(&mut rt, "home-project");
     click(&mut rt, "home-open-project");
     assert!(rt.file_dialog().is_some());
     rt.resolve_file_dialog(None).unwrap();
@@ -122,6 +124,83 @@ fn cancelling_the_inline_project_chooser_preserves_input_and_creates_no_session(
         live(&rt.state).home.editor.text,
         "An idea before choosing a project"
     );
+}
+
+#[test]
+fn general_chat_starts_from_home_and_attaches_to_a_project_from_heading() {
+    let mut rt = design_runtime("home", (1280.0, 900.0));
+    // Switch Home to General (unbound) and start a chat.
+    rt.update(|s, _| live_mut(s).app.home_select_general());
+    advance(&mut rt, 0.2);
+    fill(&mut rt, "home-draft", "Quick general question");
+    key(&mut rt, Key::Enter, Mods::default());
+    advance(&mut rt, 0.2);
+
+    let index = live(&rt.state).app.selected.unwrap();
+    assert!(live(&rt.state).app.sessions[index].unbound);
+    assert!(rt.find("attach-project").is_some());
+
+    // Complete the initial Start command so the session is idle and can be attached to an open project.
+    let target = live(&rt.state).app.projects[0].path.clone();
+    rt.update(|s, _| {
+        let l = live_mut(s);
+        let start_id = l
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::Start(_, _)))
+            .expect("expected Start command")
+            .0;
+        let scope = l.app.sessions[index].scope.clone();
+        l.apply(Event::Completed(
+            start_id,
+            Ok(Reply::Session(caelum_core::application::Summary {
+                key: caelum_core::application::SessionKey {
+                    scope,
+                    id: "general-1".into(),
+                },
+                title: "Quick general question".into(),
+                updated_at: None,
+                working: false,
+                options: Default::default(),
+            })),
+        ));
+        if let Some((send_id, _)) = l
+            .app
+            .commands()
+            .into_iter()
+            .find(|(_, c)| matches!(c, Command::Send(_, _, _)))
+        {
+            l.apply(Event::Completed(send_id, Ok(Reply::Done)));
+        }
+        l.app.sessions[index].conversation.set_working(false);
+    });
+    advance(&mut rt, 0.2);
+
+    click(&mut rt, "attach-project");
+    assert!(rt.find("attach-project-menu").is_some());
+    click(&mut rt, &format!("attach-project-{target}"));
+    advance(&mut rt, 0.2);
+
+    let l = live(&rt.state);
+    assert!(!l.app.sessions[index].unbound);
+    assert_eq!(l.app.sessions[index].scope.project, target);
+    assert!(rt.find("attach-project").is_none());
+
+    // Returning to Home with General selected shows only General chats in the sidebar;
+    // selecting the attached project shows that project's sessions in the sidebar.
+    click(&mut rt, "nav-home");
+    rt.update(|s, _| live_mut(s).app.home_select_general());
+    advance(&mut rt, 0.2);
+    assert!(rt.find(&format!("live-session-{index}")).is_none());
+
+    rt.update(|s, _| live_mut(s).app.home_select_project(target.clone()));
+    advance(&mut rt, 0.2);
+    assert!(rt.find(&format!("live-session-{index}")).is_some());
+    click(&mut rt, &format!("live-session-{index}"));
+    advance(&mut rt, 0.2);
+    assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
+    assert_eq!(live(&rt.state).app.selected, Some(index));
 }
 
 #[test]
@@ -266,6 +345,9 @@ fn home_editor_restores_long_draft_scroll_after_navigation() {
     advance(&mut rt, 0.3);
     let offset = element(&rt, "home-editor").rect[1] - element(&rt, "home-draft").rect[1];
     assert!(offset > 200.0);
+    let project = live(&rt.state).app.sessions[0].scope.project.clone();
+    rt.update(|s, _| live_mut(s).app.home_select_project(project.clone()));
+    advance(&mut rt, 0.1);
     click(&mut rt, "live-session-0");
     click(&mut rt, "nav-home");
     advance(&mut rt, 0.3);

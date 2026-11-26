@@ -91,7 +91,7 @@ impl Session {
             })
     }
 
-    fn retain_thread(&mut self, key: SessionKey) {
+    pub(super) fn retain_thread(&mut self, key: SessionKey) {
         let segment = self.provider_switch.threads.len();
         let cursor = self.active_cursor().map(str::to_owned);
         let context = context(self);

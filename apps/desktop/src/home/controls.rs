@@ -14,7 +14,7 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
     let name = project
         .and_then(|p| l.app.projects.iter().find(|v| v.path == p))
         .map(|p| p.name.as_str())
-        .unwrap_or("Choose a project");
+        .unwrap_or("General");
     let expanded = l.home.menu == Menu::Projects || !l.app.home_project_available();
     let mut heading = row()
         .w_full()
@@ -31,7 +31,7 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
                 .px(8.0)
                 .key("home-project")
                 .label("Project or worktree")
-                .help(project.unwrap_or("Choose where the new session will run")),
+                .help(project.unwrap_or("General chat (no project) · Click to choose a project")),
         )
         .children(
             project
@@ -140,6 +140,21 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
                 .radius(10.0)
                 .fill(k.c.layer_01)
                 .border(1.0, k.c.border_base)
+                .child(
+                    ui::choice(
+                        "General",
+                        "Start without a project · attach one later anytime",
+                        l.app.home.draft.project.is_none(),
+                        k,
+                    )
+                    .key("home-project-general")
+                    .on_press(|s: &mut Workspace| {
+                        let l = live_mut(s);
+                        l.app.home_select_general();
+                        l.home.menu = Menu::Closed;
+                        l.focus();
+                    }),
+                )
                 .children((!l.app.projects.is_empty()).then(|| {
                     col()
                         .w_full()

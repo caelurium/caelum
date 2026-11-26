@@ -133,19 +133,6 @@ pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.home.background = Some(background);
         changed = true;
     }
-    if shown
-        && l.app.home.draft.project.is_none()
-        && !l.app.home.opening()
-        && let Some(project) = l.app.active_project.clone()
-    {
-        let project = l
-            .app
-            .native_checkout(&project)
-            .map(|c| c.source.project.clone())
-            .unwrap_or(project);
-        l.app.home_select_project(project);
-        changed = true;
-    }
     let scope = shown.then(|| l.app.home_scope()).flatten();
     if scope != l.home.catalogue {
         if let Some(scope) = &scope

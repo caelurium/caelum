@@ -15,6 +15,7 @@ mod queue;
 mod relocation;
 mod remote;
 mod review;
+mod scratch;
 mod sessions;
 mod subagents;
 mod submission;
@@ -81,6 +82,7 @@ pub struct Session {
     pub unread: bool,
     pub origin: Option<caelum_protocol::SessionOrigin>,
     pub pinned: bool,
+    pub unbound: bool,
     pub bookmarked_entries: Vec<String>,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
     shell_revision: u64,
@@ -134,6 +136,7 @@ impl Session {
             unread: false,
             origin: None,
             pinned: false,
+            unbound: false,
             bookmarked_entries: Vec::new(),
             shells: Vec::new(),
             shell_revision: 0,
