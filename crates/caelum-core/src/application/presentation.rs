@@ -57,6 +57,13 @@ pub fn entry_visible(entry: &Entry) -> bool {
         || (entry.kind() == EntryKind::User && !super::split_context(&entry.text).1.is_empty())
 }
 
+pub fn entry_visible_in_mode(entry: &Entry, peaceful: bool) -> bool {
+    if peaceful && matches!(entry.kind(), EntryKind::Tool | EntryKind::Reasoning) {
+        return false;
+    }
+    entry_visible(entry)
+}
+
 /// Byte ranges on the original text, including case-folded Unicode matches.
 pub fn search_ranges(text: &str, query: &str) -> Vec<std::ops::Range<usize>> {
     if query.trim().is_empty() {
@@ -762,4 +769,30 @@ fn timestamp(value: &str) -> Option<u64> {
         return None;
     };
     u64::try_from((days * 86400 + h * 3600 + m * 60 + s) * 1000).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peaceful_mode_hides_tools_and_reasoning_but_keeps_conversation() {
+        let user = Entry::new("u".into(), EntryKind::User, "Hello".into(), true);
+        let assistant = Entry::new("a".into(), EntryKind::Assistant, "Result".into(), true);
+        let tool = Entry::new("t".into(), EntryKind::Tool, "cargo test".into(), true);
+        let reasoning = Entry::new("r".into(), EntryKind::Reasoning, "Thinking".into(), true);
+        let compaction = Entry::new("c".into(), EntryKind::Compaction, String::new(), true);
+        let status = Entry::new("s".into(), EntryKind::Status, "Connected".into(), true);
+
+        for entry in [&user, &assistant, &tool, &reasoning, &compaction, &status] {
+            assert!(entry_visible_in_mode(entry, false));
+        }
+
+        assert!(entry_visible_in_mode(&user, true));
+        assert!(entry_visible_in_mode(&assistant, true));
+        assert!(!entry_visible_in_mode(&tool, true));
+        assert!(!entry_visible_in_mode(&reasoning, true));
+        assert!(entry_visible_in_mode(&compaction, true));
+        assert!(entry_visible_in_mode(&status, true));
+    }
 }

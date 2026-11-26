@@ -5,7 +5,10 @@ use caelum_core::remote::{
 };
 use rune::{El, ScrollSpec, col, icon, row, text};
 use rune_kit::{Kit, Markdown, ScrollBar, glyphs};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    rc::Rc,
+};
 
 enum Entry<'a> {
     User(&'a str),
@@ -18,7 +21,11 @@ fn entries(t: &Thread) -> &[Message] {
     t.continuation().map_or(&[], |c| c.chat.messages.as_slice())
 }
 
-fn entry(t: &Thread, i: usize) -> Option<Entry<'_>> {
+fn line_visible(line: &Line, peaceful: bool) -> bool {
+    !peaceful || !matches!(line.speaker, Speaker::Tool(_) | Speaker::ReasoningSummary)
+}
+
+fn entry<'a>(t: &'a Thread, i: usize, visible_lines: &[usize]) -> Option<Entry<'a>> {
     let history = entries(t);
     if let Some(message) = history.get(i) {
         return Some(match message {
@@ -29,8 +36,9 @@ fn entry(t: &Thread, i: usize) -> Option<Entry<'_>> {
     if !history.is_empty() && i == history.len() {
         return Some(Entry::Boundary);
     }
-    t.lines
+    visible_lines
         .get(i - history.len() - usize::from(!history.is_empty()))
+        .and_then(|&index| t.lines.get(index))
         .map(Entry::Line)
 }
 
@@ -42,14 +50,25 @@ pub(super) fn view(
     padding: f32,
     reduced: bool,
 ) -> El {
+    let peaceful = live(s).app.preferences.peaceful_mode;
     let owner = c.thread.editor_key(id);
     let history = entries(&c.thread).len();
-    let count = history + usize::from(history > 0) + c.thread.lines.len();
+    let visible_lines: Rc<Vec<usize>> = Rc::new(
+        c.thread
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line_visible(line, peaceful))
+            .map(|(i, _)| i)
+            .collect(),
+    );
+    let count = history + usize::from(history > 0) + visible_lines.len();
     let mut identities = DefaultHasher::new();
     owner.hash(&mut identities);
+    peaceful.hash(&mut identities);
     history.hash(&mut identities);
-    for line in &c.thread.lines {
-        line.key.hash(&mut identities);
+    for &index in visible_lines.iter() {
+        c.thread.lines[index].key.hash(&mut identities);
     }
     let following = matches!(c.phase, Phase::Ready { .. })
         && c.thread.turn().run().is_some()
@@ -69,7 +88,10 @@ pub(super) fn view(
                     .iter()
                     .rev()
                     .take_while(|l| l.speaker != Speaker::You)
-                    .any(|l| l.speaker == Speaker::Tool(ToolState::Running) || l.partial) =>
+                    .any(|l| {
+                        (!peaceful && l.speaker == Speaker::Tool(ToolState::Running))
+                            || (l.partial && line_visible(l, peaceful))
+                    }) =>
             {
                 Some("Working on VM…")
             }
@@ -129,6 +151,8 @@ pub(super) fn view(
         let position = e.reading.clone();
         viewport = viewport.on_scroll_offset(move |p| position.set(p));
     }
+    let key_lines = visible_lines.clone();
+    let row_lines = visible_lines;
     viewport
         .child(
             col()
@@ -144,7 +168,7 @@ pub(super) fn view(
                         }
                         if let Some(c) = live(s).app.remote.saved.checkouts.get(&keys)
                             && c.thread.editor_key(&keys) == thread
-                            && let Some(Entry::Line(line)) = entry(&c.thread, i)
+                            && let Some(Entry::Line(line)) = entry(&c.thread, i, &key_lines)
                             && let Some(id) = &line.key
                         {
                             return format!("remote-line-{thread}-{id}").into();
@@ -176,7 +200,7 @@ pub(super) fn view(
                                 .child(icon(&ui::CLOCK, 14.).color(kit.c.icon_muted))
                                 .child(ui::busy_text(label, kit.ty.small_medium, &kit));
                         }
-                        let Some(e) = entry(&c.thread, i) else {
+                        let Some(e) = entry(&c.thread, i, &row_lines) else {
                             return col();
                         };
                         let answer = |l: &Line, who| {
