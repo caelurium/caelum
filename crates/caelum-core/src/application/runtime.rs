@@ -362,6 +362,7 @@ impl ProviderRuntime {
                                 model: s.model,
                                 effort: s.effort,
                                 agent: s.agent,
+                                permissions: None,
                             },
                         })
                         .collect(),
@@ -406,6 +407,7 @@ impl ProviderRuntime {
                                 model: s.model,
                                 effort: s.effort,
                                 agent: s.agent,
+                                permissions: None,
                             },
                         })
                         .collect(),
@@ -438,7 +440,11 @@ impl ProviderRuntime {
                 return match scope.provider {
                     Provider::Codex => self
                         .codex
-                        .start_session_with_model(&scope.project, options.model.as_deref())
+                        .start_session_with_options(
+                            &scope.project,
+                            options.model.as_deref(),
+                            options.permissions,
+                        )
                         .map(|s| Summary {
                             key: SessionKey {
                                 scope: scope.clone(),
@@ -451,6 +457,7 @@ impl ProviderRuntime {
                                 model: s.model,
                                 effort: s.effort,
                                 agent: None,
+                                permissions: options.permissions,
                             },
                         })
                         .map_err(|e| e.to_string()),
@@ -474,6 +481,7 @@ impl ProviderRuntime {
                                 model: s.session.model,
                                 effort: s.session.effort,
                                 agent: s.session.agent,
+                                permissions: None,
                             },
                         })
                         .map_err(|e| e.to_string()),
@@ -498,6 +506,7 @@ impl ProviderRuntime {
                                 model: s.model,
                                 effort: s.effort,
                                 agent: None,
+                                permissions: None,
                             },
                         })
                         .map(Reply::Session)
@@ -529,12 +538,13 @@ impl ProviderRuntime {
             Command::Send(key, prompt, options) => match key.scope.provider {
                 Provider::Codex => self
                     .codex
-                    .send_prompt_with_options(
+                    .send_prompt_with_permissions(
                         &key.scope.project,
                         &key.id,
                         prompt,
                         options.model.as_deref(),
                         options.effort.as_deref(),
+                        options.permissions,
                     )
                     .map_err(|e| e.to_string()),
                 Provider::OpenCode => {

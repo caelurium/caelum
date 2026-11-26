@@ -51,7 +51,11 @@ for raw in sys.stdin:
         deleted.add(params['threadId'])
         result = {}
     elif method == 'thread/start':
-        assert params['approvalPolicy'] == 'untrusted' and params['sandbox'] == 'workspace-write'
+        if os.path.exists('record-start'):
+            with open('start-request.json', 'w') as start_req:
+                json.dump(params, start_req)
+        else:
+            assert params['approvalPolicy'] == 'untrusted' and params['sandbox'] == 'workspace-write'
         models['thread-new'] = params.get('model') or 'default-model'
         efforts['thread-new'] = 'medium'
         result = {'thread': {'id': 'thread-new', 'preview': '', 'name': None}, 'model': models['thread-new'], 'reasoningEffort': efforts['thread-new']}

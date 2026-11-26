@@ -1,5 +1,5 @@
 use super::{is_image, Pending, Workspace};
-use crate::application::{Attachment, Command, Provider, Task};
+use crate::application::{Attachment, CodexPermissions, Command, Provider, Task};
 
 impl Workspace {
     pub fn options_changed(&mut self, index: usize) {
@@ -12,6 +12,18 @@ impl Workspace {
         session.options.effort =
             effort.or_else(|| (session.scope.provider == Provider::OpenCode).then(String::new));
         self.options_changed(index);
+    }
+
+    pub fn set_permissions(&mut self, index: usize, permissions: CodexPermissions) {
+        let scope = self.sessions[index].scope.clone();
+        if scope.provider != Provider::Codex
+            || crate::remote::native::checkout_id(&scope.project).is_none()
+        {
+            return;
+        }
+        self.sessions[index].options.permissions = Some(permissions);
+        self.options_changed(index);
+        self.edit_provider_options(&scope, |o| o.permissions = Some(permissions));
     }
 
     pub fn attach(&mut self, index: usize, attachment: Attachment) -> bool {

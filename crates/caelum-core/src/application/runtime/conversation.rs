@@ -102,6 +102,7 @@ impl ProviderRuntime {
                         model: info.model,
                         effort: info.effort,
                         agent: None,
+                        permissions: None,
                     },
                 )
             }
@@ -127,6 +128,7 @@ impl ProviderRuntime {
                         model: s.model,
                         effort: s.effort,
                         agent: s.agent,
+                        permissions: None,
                     },
                 )
             }

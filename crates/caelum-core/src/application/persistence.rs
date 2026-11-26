@@ -138,6 +138,7 @@ impl Preferences {
                     model: option("model"),
                     effort: option("effort"),
                     agent: option("agent"),
+                    permissions: None,
                 },
             );
             let mut models: Vec<String> = value["favoriteModels"][key]

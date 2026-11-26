@@ -116,12 +116,89 @@ pub struct SessionKey {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodexPermissions {
+    #[default]
+    Ask,
+    AutoWorkspace,
+    FullAccess,
+}
+
+impl CodexPermissions {
+    pub const ALL: [Self; 3] = [Self::Ask, Self::AutoWorkspace, Self::FullAccess];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::AutoWorkspace => "auto-workspace",
+            Self::FullAccess => "full-access",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "ask" => Some(Self::Ask),
+            "auto-workspace" => Some(Self::AutoWorkspace),
+            "full-access" => Some(Self::FullAccess),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Ask => "Ask before running",
+            Self::AutoWorkspace => "Auto-approve workspace",
+            Self::FullAccess => "Full VM access",
+        }
+    }
+
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Self::Ask => "Ask",
+            Self::AutoWorkspace => "Auto (workspace)",
+            Self::FullAccess => "Full access",
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Ask => "Require approval for commands; write only in workspace",
+            Self::AutoWorkspace => "Run commands without asking; write only in workspace",
+            Self::FullAccess => "Run commands without asking or sandbox restrictions",
+        }
+    }
+
+    pub(crate) fn approval_policy(self) -> &'static str {
+        match self {
+            Self::Ask => "untrusted",
+            Self::AutoWorkspace | Self::FullAccess => "never",
+        }
+    }
+
+    pub(crate) fn sandbox(self) -> &'static str {
+        match self {
+            Self::Ask | Self::AutoWorkspace => "workspace-write",
+            Self::FullAccess => "danger-full-access",
+        }
+    }
+
+    pub(crate) fn sandbox_policy(self) -> serde_json::Value {
+        match self {
+            Self::Ask | Self::AutoWorkspace => serde_json::json!({ "type": "workspaceWrite" }),
+            Self::FullAccess => serde_json::json!({ "type": "dangerFullAccess" }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Options {
     pub model: Option<String>,
     pub effort: Option<String>,
     pub agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<CodexPermissions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

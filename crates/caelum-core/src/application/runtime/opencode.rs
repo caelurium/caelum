@@ -79,6 +79,7 @@ impl ProviderRuntime {
                         model: info.session.model,
                         effort: info.session.effort,
                         agent: info.session.agent,
+                        permissions: None,
                     },
                 },
                 page,

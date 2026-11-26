@@ -641,3 +641,74 @@ fn questions_round_trip_original_rpc_ids_and_clear_on_resolution_or_interrupt() 
     provider.shutdown();
     assert!(questions.pending().is_empty());
 }
+
+#[test]
+fn codex_permissions_flow_through_thread_start_and_turn_start() {
+    use crate::application::CodexPermissions;
+    let directory = TestDirectory::new();
+    let project = directory.project();
+    fs::write(project.join("record-start"), "").unwrap();
+    let provider = CodexProvider::with_executable(
+        Arc::new(ProcessRegistry::default()),
+        ApprovalBroker::default(),
+        QuestionBroker::default(),
+        directory.fake_codex(true),
+    );
+    let session = provider
+        .start_session_with_options(&project, Some("gpt-5"), Some(CodexPermissions::FullAccess))
+        .unwrap();
+    let start: Value =
+        serde_json::from_str(&fs::read_to_string(project.join("start-request.json")).unwrap())
+            .unwrap();
+    assert_eq!(start["approvalPolicy"], "never");
+    assert_eq!(start["sandbox"], "danger-full-access");
+
+    provider
+        .send_prompt_with_permissions(
+            &project,
+            &session.thread.id,
+            "run tests",
+            Some("gpt-5"),
+            Some("high"),
+            Some(CodexPermissions::AutoWorkspace),
+        )
+        .unwrap();
+    let turn: Value =
+        serde_json::from_str(&fs::read_to_string(project.join("turn-request.json")).unwrap())
+            .unwrap();
+    assert_eq!(turn["approvalPolicy"], "never");
+    assert_eq!(turn["sandboxPolicy"], json!({ "type": "workspaceWrite" }));
+
+    provider
+        .send_prompt_with_permissions(
+            &project,
+            &session.thread.id,
+            "full access turn",
+            None,
+            None,
+            Some(CodexPermissions::FullAccess),
+        )
+        .unwrap();
+    let turn: Value =
+        serde_json::from_str(&fs::read_to_string(project.join("turn-request.json")).unwrap())
+            .unwrap();
+    assert_eq!(turn["approvalPolicy"], "never");
+    assert_eq!(turn["sandboxPolicy"], json!({ "type": "dangerFullAccess" }));
+
+    provider
+        .send_prompt_with_permissions(
+            &project,
+            &session.thread.id,
+            "back to ask",
+            None,
+            None,
+            Some(CodexPermissions::Ask),
+        )
+        .unwrap();
+    let turn: Value =
+        serde_json::from_str(&fs::read_to_string(project.join("turn-request.json")).unwrap())
+            .unwrap();
+    assert_eq!(turn["approvalPolicy"], "untrusted");
+    assert_eq!(turn["sandboxPolicy"], json!({ "type": "workspaceWrite" }));
+    provider.shutdown();
+}

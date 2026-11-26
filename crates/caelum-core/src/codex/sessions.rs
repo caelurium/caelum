@@ -1,5 +1,8 @@
 use super::{CodexConnection, CodexError, CodexProvider, PROVIDER_NAME};
-use crate::{application::HistoryAction, projects::Project};
+use crate::{
+    application::{CodexPermissions, HistoryAction},
+    projects::Project,
+};
 use caelum_protocol::{
     CodexSessionInfo, CodexSessionList, CodexThreadInfo, LineChanges, ProviderChoice,
     ProviderChoices, ProviderModelChoice, SessionDetails, SessionHistoryPage,
@@ -308,12 +311,22 @@ impl CodexProvider {
         project_path: impl AsRef<Path>,
         model: Option<&str>,
     ) -> Result<CodexSessionInfo, CodexError> {
+        self.start_session_with_options(project_path, model, None)
+    }
+
+    pub fn start_session_with_options(
+        &self,
+        project_path: impl AsRef<Path>,
+        model: Option<&str>,
+        permissions: Option<CodexPermissions>,
+    ) -> Result<CodexSessionInfo, CodexError> {
         let project = self.project(project_path)?;
         let connection = self.connection(&project)?;
+        let policy = permissions.unwrap_or_default();
         let mut params = json!({
             "cwd": project.path().to_string_lossy(),
-            "approvalPolicy": "untrusted",
-            "sandbox": "workspace-write",
+            "approvalPolicy": policy.approval_policy(),
+            "sandbox": policy.sandbox(),
             "serviceName": "caelum",
             "model": model
         });
@@ -449,6 +462,18 @@ impl CodexProvider {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<(), CodexError> {
+        self.send_prompt_with_permissions(project_path, thread_id, prompt, model, effort, None)
+    }
+
+    pub fn send_prompt_with_permissions(
+        &self,
+        project_path: impl AsRef<Path>,
+        thread_id: &str,
+        prompt: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        permissions: Option<CodexPermissions>,
+    ) -> Result<(), CodexError> {
         if thread_id.trim().is_empty() {
             return Err(CodexError::InvalidThreadId);
         }
@@ -468,15 +493,17 @@ impl CodexProvider {
                 .iter()
                 .map(|a| json!({"type":"image","url":a.content})),
         );
-        match connection.request(
-            "turn/start",
-            json!({
-                "threadId": thread_id,
-                "model": model,
-                "effort": effort,
-                "input": input
-            }),
-        ) {
+        let mut params = json!({
+            "threadId": thread_id,
+            "model": model,
+            "effort": effort,
+            "input": input
+        });
+        if let Some(policy) = permissions {
+            params["approvalPolicy"] = policy.approval_policy().into();
+            params["sandboxPolicy"] = policy.sandbox_policy();
+        }
+        match connection.request("turn/start", params) {
             Ok(result) => connection.complete_turn_start(thread_id, &result),
             Err(error) => {
                 connection.remove_pending_turn(thread_id);
