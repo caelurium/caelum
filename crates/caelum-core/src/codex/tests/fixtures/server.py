@@ -71,6 +71,9 @@ for raw in sys.stdin:
         assert params['itemsView'] in ('full', 'notLoaded') and params['sortDirection'] == 'desc'
         if params['limit'] == 1 and params['itemsView'] == 'notLoaded':
             turn = active_turns.get(params['threadId'], {'id': 'turn-1', 'status': 'completed'})
+            if turn['id'] == 'turn-starting':
+                print(json.dumps({'id': request_id, 'error': {'code': -32601, 'message': 'list_turns is not supported yet'}}), flush=True)
+                continue
             result = {'data': [turn]}
         elif params['limit'] == 1:
             if os.path.exists('missing-details'):
@@ -98,6 +101,11 @@ for raw in sys.stdin:
             models[params['threadId']] = params['model']
         if params.get('effort'):
             efforts[params['threadId']] = params['effort']
+        if prompt == 'stop-before-history':
+            turn = {'id': 'turn-starting', 'status': 'inProgress'}
+            active_turns[params['threadId']] = turn
+            print(json.dumps({'id': request_id, 'result': {'turn': turn}}), flush=True)
+            continue
         if prompt == 'request-approval':
             print(json.dumps({'id': 'server-approval-1', 'method': 'item/commandExecution/requestApproval', 'params': {'threadId': params['threadId'], 'turnId': 'turn-approval', 'itemId': 'command-1', 'command': ['git', 'status'], 'cwd': '/project', 'availableDecisions': ['accept', 'decline']}}), flush=True)
         if prompt == 'request-question':
@@ -120,7 +128,8 @@ for raw in sys.stdin:
         result = {'turn': {'id': 'turn-1', 'status': 'inProgress'}}
     elif method == 'turn/interrupt':
         turn = active_turns.get(params['threadId'])
-        if turn is None or turn['id'] != params.get('turnId'):
+        expected = '' if turn and turn['id'] == 'turn-starting' else turn and turn['id']
+        if turn is None or expected != params.get('turnId'):
             print(json.dumps({'id': request_id, 'error': {'code': -32602, 'message': 'Expected the active turn ID'}}), flush=True)
             continue
         del active_turns[params['threadId']]
