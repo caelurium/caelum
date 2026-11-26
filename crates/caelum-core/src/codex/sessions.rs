@@ -661,7 +661,29 @@ impl CodexProvider {
         }
         let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
-        connection.request("turn/interrupt", json!({ "threadId": thread_id }))?;
+        let response = connection.request(
+            "thread/turns/list",
+            json!({ "threadId": thread_id, "limit": 1, "sortDirection": "desc", "itemsView": "notLoaded" }),
+        )?;
+        let latest = response
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CodexError::Protocol("thread/turns/list has no data array".into()))?
+            .first();
+        if let Some(turn) = latest.filter(|turn| turn["status"] == "inProgress") {
+            let turn_id = turn["id"]
+                .as_str()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| CodexError::Protocol("active Codex turn has no ID".into()))?;
+            match connection.request(
+                "turn/interrupt",
+                json!({ "threadId": thread_id, "turnId": turn_id }),
+            ) {
+                Ok(_) => {}
+                Err(CodexError::Rpc(message)) if message == "no active turn to interrupt" => {}
+                Err(error) => return Err(error),
+            }
+        }
         self.inner.questions.clear(
             PROVIDER_NAME,
             &project.path().to_string_lossy(),
