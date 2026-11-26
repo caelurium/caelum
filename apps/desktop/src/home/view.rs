@@ -51,7 +51,6 @@ pub fn view(s: &Workspace, k: &Kit, reduced_motion: bool, layers: &mut Vec<El>) 
         )
         .child(composer(s, k, layers))
         .child(controls::project(s, k))
-        .children(super::sessions::view(s, k))
         .children((l.app.home.opening()).then(|| ui::caption("Opening project…", k)))
         .children(
             l.app

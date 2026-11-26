@@ -3,7 +3,6 @@ pub(crate) mod art;
 mod attachments;
 mod controls;
 mod scenes;
-mod sessions;
 mod view;
 
 pub(crate) use scenes::scene;

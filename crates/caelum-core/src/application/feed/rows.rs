@@ -14,6 +14,9 @@ enum Feed<'a> {
         project: Option<&'a str>,
         archived: bool,
     },
+    General {
+        archived: bool,
+    },
     Overview,
     Dashboard {
         archived: bool,
@@ -60,6 +63,13 @@ impl Workspace {
         rows.into_iter().map(|(_, row)| row).collect()
     }
 
+    /// Unbound General chats ordered like the sidebar (pinned, then active, then newest).
+    pub fn general_sidebar_sessions(&self, query: &str, archived: bool) -> Vec<FeedSession> {
+        let mut rows = self.feed_rows(Feed::General { archived }, query);
+        rows.sort_unstable();
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
     /// Conversations with live work or a pending request, in stable identity order across open projects.
     pub fn overview_sessions(&self, query: &str) -> Vec<FeedSession> {
         let mut rows = self.feed_rows(Feed::Overview, query);
@@ -77,15 +87,18 @@ impl Workspace {
     fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<FeedRow> {
         let includes = |path: &str| match feed {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
+            Feed::General { .. } => false,
             Feed::Overview | Feed::Dashboard { .. } => self.project_is_open(path),
         };
         let include_unbound = match feed {
             Feed::Sidebar { project, .. } => self.feed_project(project).is_none(),
-            Feed::Overview | Feed::Dashboard { .. } => true,
+            Feed::General { .. } | Feed::Overview | Feed::Dashboard { .. } => true,
         };
         let archived = matches!(
             feed,
-            Feed::Sidebar { archived: true, .. } | Feed::Dashboard { archived: true }
+            Feed::Sidebar { archived: true, .. }
+                | Feed::General { archived: true }
+                | Feed::Dashboard { archived: true }
         );
         let active_only = matches!(feed, Feed::Overview);
         let query = query.trim().to_lowercase();
@@ -94,7 +107,8 @@ impl Workspace {
             .filter_map(|(i, s)| {
                 let active = !archived && self.overview_activity(s).is_some();
                 let pinned_order = !archived && s.pinned;
-                let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
+                let activity_order =
+                    matches!(feed, Feed::Sidebar { .. } | Feed::General { .. }) && active;
                 (!active_only || active).then_some((
                     Reverse((pinned_order, activity_order, s.last_activity)),
                     FeedSession::Local(i),

@@ -16,6 +16,8 @@ fn home_keeps_native_selection_undo_and_both_drafts_across_navigation() {
         live(&rt.state).home.editor.anchor,
         live(&rt.state).home.editor.focus,
     );
+    rt.update(|s, _| live_mut(s).app.home_select_project("/project".into()));
+    advance(&mut rt, 0.1);
     click(&mut rt, "live-session-0");
     assert_eq!(live(&rt.state).drafts[0].text, "Session draft");
     click(&mut rt, "nav-home");
@@ -185,12 +187,17 @@ fn general_chat_starts_from_home_and_attaches_to_a_project_from_heading() {
     assert_eq!(l.app.sessions[index].scope.project, target);
     assert!(rt.find("attach-project").is_none());
 
-    // Returning to Home with the attached project selected lists that session and opens it on click.
+    // Returning to Home with General selected shows only General chats in the sidebar;
+    // selecting the attached project shows that project's sessions in the sidebar.
     click(&mut rt, "nav-home");
+    rt.update(|s, _| live_mut(s).app.home_select_general());
+    advance(&mut rt, 0.2);
+    assert!(rt.find(&format!("live-session-{index}")).is_none());
+
     rt.update(|s, _| live_mut(s).app.home_select_project(target.clone()));
     advance(&mut rt, 0.2);
-    assert!(rt.find("home-recent-sessions").is_some());
-    click(&mut rt, &format!("home-session-{index}"));
+    assert!(rt.find(&format!("live-session-{index}")).is_some());
+    click(&mut rt, &format!("live-session-{index}"));
     advance(&mut rt, 0.2);
     assert_eq!(live(&rt.state).panels.screen, Screen::Conversation);
     assert_eq!(live(&rt.state).app.selected, Some(index));
@@ -338,6 +345,9 @@ fn home_editor_restores_long_draft_scroll_after_navigation() {
     advance(&mut rt, 0.3);
     let offset = element(&rt, "home-editor").rect[1] - element(&rt, "home-draft").rect[1];
     assert!(offset > 200.0);
+    let project = live(&rt.state).app.sessions[0].scope.project.clone();
+    rt.update(|s, _| live_mut(s).app.home_select_project(project.clone()));
+    advance(&mut rt, 0.1);
     click(&mut rt, "live-session-0");
     click(&mut rt, "nav-home");
     advance(&mut rt, 0.3);
