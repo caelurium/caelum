@@ -46,7 +46,7 @@ enum PendingCall {
     Prompt { session_id: String },
 }
 
-/// Manages project-scoped Antigravity ACP (`agy acp --stdio`) connections.
+/// Manages a single shared Antigravity ACP (`agy acp --stdio`) connection multiplexed across projects.
 #[derive(Clone)]
 pub struct AntigravityProvider {
     inner: Arc<ProviderInner>,
@@ -57,7 +57,8 @@ struct ProviderInner {
     processes: Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
     questions: QuestionBroker,
-    connections: Mutex<HashMap<PathBuf, Arc<AcpConnection>>>,
+    connect_lock: Mutex<()>,
+    connection: Mutex<Option<Arc<AcpConnection>>>,
     subscribers: EventSubscribers,
     metadata: Mutex<metadata::SessionMetadataStore>,
     closed: AtomicBool,
@@ -77,6 +78,7 @@ struct AcpConnection {
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
     session_titles: Arc<Mutex<HashMap<String, String>>>,
+    session_projects: Arc<Mutex<HashMap<String, String>>>,
     session_changes: Mutex<HashMap<String, LineChanges>>,
     transcripts: Arc<Mutex<titles::TranscriptStore>>,
 }
@@ -96,12 +98,13 @@ struct ReaderContext {
     subscribers: EventSubscribers,
     approvals: ApprovalBroker,
     questions: QuestionBroker,
-    project_path: PathBuf,
+    default_project: PathBuf,
     progress: Arc<Mutex<progress::SessionProgressTracker>>,
     replays: ReplayBuffers,
     commands: Arc<Mutex<Vec<OpenCodeCommandInfo>>>,
     session_options: Arc<Mutex<HashMap<String, SessionOptionState>>>,
     session_titles: Arc<Mutex<HashMap<String, String>>>,
+    session_projects: Arc<Mutex<HashMap<String, String>>>,
     transcripts: Arc<Mutex<titles::TranscriptStore>>,
 }
 
@@ -126,7 +129,8 @@ impl AntigravityProvider {
                 processes,
                 approvals,
                 questions,
-                connections: Mutex::new(HashMap::new()),
+                connect_lock: Mutex::new(()),
+                connection: Mutex::new(None),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
                 metadata: Mutex::new(metadata::SessionMetadataStore::default()),
                 closed: AtomicBool::new(false),
@@ -146,12 +150,15 @@ impl AntigravityProvider {
 
     pub fn shutdown(&self) {
         self.inner.closed.store(true, Ordering::Release);
-        let connections: Vec<_> = lock(&self.inner.connections).drain().collect();
-        for (path, connection) in connections {
+        if let Some(connection) = lock(&self.inner.connection).take() {
             connection.alive.store(false, Ordering::Release);
-            self.inner
-                .questions
-                .clear(PROVIDER_NAME, &path.to_string_lossy(), None);
+            let projects: HashSet<String> = lock(&connection.session_projects)
+                .values()
+                .cloned()
+                .collect();
+            for path in projects {
+                self.inner.questions.clear(PROVIDER_NAME, &path, None);
+            }
             let _ = self.inner.processes.terminate(connection.process_id);
         }
     }
@@ -183,6 +190,7 @@ impl AntigravityProvider {
         let options = lock(&connection.session_options).clone();
         let metadata = lock(&self.inner.metadata);
         let mut titles_cache = lock(&connection.session_titles);
+        let mut projects_cache = lock(&connection.session_projects);
         let sessions = protocol::parse_session_list(&result, project.path(), &working, &options)
             .into_iter()
             .filter(|s| {
@@ -190,6 +198,7 @@ impl AntigravityProvider {
                     && metadata.is_archived(project.path(), &s.id) == archived
             })
             .map(|mut s| {
+                projects_cache.insert(s.id.clone(), cwd.clone());
                 if !s.title.is_empty() {
                     titles_cache.insert(s.id.clone(), s.title.clone());
                 }
@@ -258,8 +267,8 @@ impl AntigravityProvider {
             .ok_or_else(|| {
                 AntigravityError::Protocol("Antigravity /usage response has no usage data".into())
             })?;
-        let tier = lock(&self.inner.connections)
-            .get(project.path())
+        let tier = lock(&self.inner.connection)
+            .as_ref()
             .and_then(|conn| lock(&conn.tier).clone());
         let mut usage = data.clone();
         if let Some(obj) = usage.as_object_mut() {
@@ -312,6 +321,7 @@ impl AntigravityProvider {
         let mut opts = protocol::parse_current_options(&result);
         self.apply_options(&connection, &session_id, &mut opts, model, effort, agent)?;
         lock(&connection.loaded_sessions).insert(session_id.clone());
+        lock(&connection.session_projects).insert(session_id.clone(), cwd);
         lock(&connection.session_options).insert(session_id.clone(), opts.clone());
         Ok(AntigravitySessionInfo {
             project: project.info(),
@@ -454,9 +464,9 @@ impl AntigravityProvider {
         project_path: impl AsRef<Path>,
         session_id: &str,
     ) -> Result<SessionDetails, AntigravityError> {
-        let project = Project::open(project_path)?;
-        let changes = lock(&self.inner.connections)
-            .get(project.path())
+        let _project = Project::open(project_path)?;
+        let changes = lock(&self.inner.connection)
+            .as_ref()
             .and_then(|conn| lock(&conn.session_changes).get(session_id).cloned());
         Ok(SessionDetails {
             branch: None,
@@ -572,6 +582,10 @@ impl AntigravityProvider {
     ) -> Result<(), AntigravityError> {
         let project = Project::open(project_path)?;
         let connection = self.connection(&project)?;
+        lock(&connection.session_projects).insert(
+            session_id.to_owned(),
+            project.path().to_string_lossy().into_owned(),
+        );
         if !lock(&connection.loaded_sessions).contains(session_id) {
             let (result, _) = self.load_session(&connection, project.path(), session_id)?;
             let opts = protocol::parse_current_options(&result);
@@ -643,8 +657,9 @@ impl AntigravityProvider {
         project_path: &Path,
         session_id: &str,
     ) -> Result<(Value, Vec<Value>), AntigravityError> {
-        lock(&connection.replays).insert(session_id.to_owned(), Vec::new());
         let cwd = project_path.to_string_lossy().into_owned();
+        lock(&connection.session_projects).insert(session_id.to_owned(), cwd.clone());
+        lock(&connection.replays).insert(session_id.to_owned(), Vec::new());
         let result = connection.request(
             "session/load",
             json!({
@@ -707,52 +722,6 @@ impl AntigravityProvider {
             }
         }
         Ok(())
-    }
-
-    fn connection(&self, project: &Project) -> Result<Arc<AcpConnection>, AntigravityError> {
-        if self.inner.closed.load(Ordering::Acquire) {
-            return Err(AntigravityError::ConnectionClosed);
-        }
-        let path = project.path().to_path_buf();
-        if let Some(existing) = lock(&self.inner.connections).get(&path).cloned() {
-            if existing.alive.load(Ordering::Acquire) {
-                return Ok(existing);
-            }
-        }
-        let connection = transport::spawn_connection(
-            self.executable(),
-            &path,
-            &self.inner.processes,
-            self.inner.approvals.clone(),
-            self.inner.questions.clone(),
-            self.inner.subscribers.clone(),
-        )?;
-        let mut connections = lock(&self.inner.connections);
-        if self.inner.closed.load(Ordering::Acquire) {
-            connection.alive.store(false, Ordering::Release);
-            let _ = self.inner.processes.terminate(connection.process_id);
-            return Err(AntigravityError::ConnectionClosed);
-        }
-        connections.insert(path, connection.clone());
-        Ok(connection)
-    }
-
-    pub(super) fn executable(&self) -> Result<PathBuf, AntigravityError> {
-        if let Some(path) = &self.inner.executable {
-            return Ok(path.clone());
-        }
-        if let Some(env_path) = std::env::var_os("CAELUM_ANTIGRAVITY_BIN") {
-            let path = PathBuf::from(env_path);
-            if !path.as_os_str().is_empty() {
-                return Ok(path);
-            }
-        }
-        crate::executable::find("agy").ok_or_else(|| {
-            AntigravityError::Launch(
-                "Could not find `agy` on PATH. Install Antigravity CLI or set CAELUM_ANTIGRAVITY_BIN."
-                    .into(),
-            )
-        })
     }
 }
 
