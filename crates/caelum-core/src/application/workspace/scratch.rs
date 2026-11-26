@@ -47,6 +47,7 @@ impl Workspace {
         };
         let mut session = Session::new(scope.clone());
         session.unbound = true;
+        session.record_activity(crate::application::presentation::now());
         session.options = self.provider_options(&scope).cloned().unwrap_or_default();
         if session.options.model.is_none() {
             session.options.model = self

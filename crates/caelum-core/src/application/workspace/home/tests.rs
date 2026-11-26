@@ -216,7 +216,12 @@ fn home_defaults_to_general_chat_and_attaches_to_project_later() {
     // Sending from Home without a project creates an unbound General session in a scratch dir.
     let index = app.send_home().expect("expected General session");
     assert!(app.sessions[index].unbound);
+    assert!(app.active_project.is_none());
     assert!(std::path::Path::new(&app.sessions[index].scope.project).is_dir());
+    assert!(app
+        .sidebar_sessions(None, "", false)
+        .contains(&crate::application::FeedSession::Local(index)));
+    app.preferences.session_scope = crate::application::SessionScope::CurrentProject;
     assert!(app
         .sidebar_sessions(None, "", false)
         .contains(&crate::application::FeedSession::Local(index)));
