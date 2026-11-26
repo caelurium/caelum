@@ -349,3 +349,23 @@ fn request_shortcut_leads_to_the_actual_input_and_the_title_browses_prompts() {
     assert_eq!(live(&rt.state).commands.owner, Some(0));
     assert_eq!(live(&rt.state).drafts[0].text, before);
 }
+
+#[test]
+fn overview_status_filter_badges_toggle_bucket_filtering() {
+    use caelum_core::application::SessionBucket;
+    let mut rt = design_runtime("conversation-overview", (1280., 1000.));
+    assert!(rt.find("overview-filter-running").is_some());
+    assert!(rt.find("overview-filter-settled").is_some());
+    click(&mut rt, "overview-filter-running");
+    assert_eq!(
+        live(&rt.state).overview.bucket_filter,
+        Some(SessionBucket::Running)
+    );
+    click(&mut rt, "overview-filter-settled");
+    assert_eq!(
+        live(&rt.state).overview.bucket_filter,
+        Some(SessionBucket::Settled)
+    );
+    click(&mut rt, "overview-filter-settled");
+    assert_eq!(live(&rt.state).overview.bucket_filter, None);
+}
