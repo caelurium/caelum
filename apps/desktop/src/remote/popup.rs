@@ -145,7 +145,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         let Some(id) = owner(l) else {
             return;
         };
-        ("Machine stats", machine(s, k, id), 368.0)
+        ("Machine stats", machine(s, k, id), 404.0)
     } else {
         (
             "Continue on VM",
@@ -169,7 +169,7 @@ pub(crate) fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         .w((window[2] - 16.0).clamp(1.0, 420.0))
         .h(height.min((window[3] - 16.0).max(1.0)))
         .min_h(0.0)
-        .padding(8.0)
+        .padding(10.0)
         .gap(8.0)
         .child(ui::popup_header(title, None, None, k))
         .child(body.px(4.0).min_h(0.0).grow(1.0));

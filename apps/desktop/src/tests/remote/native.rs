@@ -287,6 +287,19 @@ fn remote_provider_settings_use_the_selected_vm_without_mutating_laptop_defaults
     let preferences = live(&rt.state).app.preferences.clone();
     assert!(rt.find("settings-provider-codex").is_some());
     assert!(rt.find("default-provider-opencode").is_none());
+    assert!(rt.find("Default VM permissions-trigger").is_some());
+    click(&mut rt, "Default VM permissions-trigger");
+    click(&mut rt, "option2");
+    assert_eq!(
+        live(&rt.state)
+            .app
+            .provider_options(&caelum_core::application::Scope {
+                project: caelum_core::remote::native::project_key("checkout-example"),
+                provider: Provider::Codex,
+            })
+            .and_then(|o| o.permissions),
+        Some(caelum_core::application::CodexPermissions::FullAccess)
+    );
     click(&mut rt, "settings-provider-codex");
     let app = &mut live_mut(&mut rt.state).app;
     assert_eq!(app.preferences, preferences);
@@ -309,9 +322,11 @@ fn vm_codex_permissions_picker_updates_session_defaults_and_commands_only_on_vms
     advance(&mut rt, 0.2);
     let slot = live(&rt.state).app.selected.unwrap();
     assert!(rt.find("permissions-trigger").is_some());
+    assert!(rt.find("session-vm-permissions").is_none());
 
     click(&mut rt, "permissions-trigger");
     click(&mut rt, "option2");
+    assert!(rt.find("session-vm-permissions").is_some());
     assert_eq!(
         live(&rt.state).app.sessions[slot].options.permissions,
         Some(CodexPermissions::FullAccess)

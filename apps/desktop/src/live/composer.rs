@@ -118,7 +118,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             .help("Stop generation and pause the queue · Escape")
         }))
         .child(submit);
-    let pickers = pickers(s, k, index, layers).min_w(0.0);
+    let pickers = pickers(s, k, index, wide, layers).min_w(0.0);
     let usage_label = wide || rune::memo::window_layout("main-pane").is_some_and(|r| r[2] > 440.0);
     let usage = row()
         .center_y()
@@ -179,9 +179,10 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
     )
 }
 
-fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
+fn pickers(s: &Workspace, k: &Kit, index: usize, wide: bool, layers: &mut Vec<El>) -> El {
     let live = live(s);
-    let maximum = rune::memo::window_layout("composer-options").map_or(220.0, |r| r[2].max(80.0));
+    let maximum = rune::memo::window_layout("composer-options").map_or(200.0, |r| r[2].max(80.0));
+    let secondary_max = maximum.min(if wide { 148.0 } else { 136.0 });
     let mut content = row()
         .key("composer-options")
         .flex_wrap()
@@ -253,7 +254,7 @@ fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
             )
             .on_toggle(|s: &mut Workspace| crate::models::open(s, None))
             .trigger(k)
-            .max_w(maximum.min(220.0))
+            .max_w(maximum.min(if wide { 196.0 } else { 172.0 }))
             .min_w(0.0),
     );
     if let Some(choices) = choices {
@@ -309,7 +310,7 @@ fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                         live.focus();
                     })
                     .build(k, layers)
-                    .max_w(maximum),
+                    .max_w(secondary_max),
             );
         }
         if !choices.agents.is_empty() {
@@ -341,7 +342,7 @@ fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                         live.focus();
                     })
                     .build(k, layers)
-                    .max_w(maximum),
+                    .max_w(secondary_max),
             );
         }
     }
@@ -375,7 +376,7 @@ fn pickers(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) -> El {
                     live.focus();
                 })
                 .build(k, layers)
-                .max_w(maximum),
+                .max_w(secondary_max),
         );
     }
     content

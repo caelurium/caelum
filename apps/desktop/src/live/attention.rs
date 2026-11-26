@@ -14,29 +14,40 @@ pub(crate) fn session_attention(s: &Workspace, k: &Kit) -> Option<El> {
     let session = &l.app.sessions[index];
     if l.app.needs_input(session) {
         return Some(
-            row()
-                .center_y()
-                .gap(5.0)
-                .px(8.0)
-                .h(24.0)
-                .radius(6.0)
-                .fill(k.alpha(k.c.warning.fg, 0.12))
-                .border(1.0, k.alpha(k.c.warning.fg, 0.28))
-                .child(
-                    rune::el()
-                        .size(6.0, 6.0)
-                        .radius(3.0)
-                        .fill(k.c.warning.fg)
-                        .a11y_hidden(),
-                )
-                .child(
-                    ui::caption("Needs input", k)
-                        .font(k.ty.small_medium)
-                        .color(k.c.warning.fg)
-                        .role("status")
-                        .label("Needs input")
-                        .key("session-title-input"),
-                ),
+            k.interactive(
+                row()
+                    .center_y()
+                    .gap(5.0)
+                    .px(8.0)
+                    .h(24.0)
+                    .radius(6.0)
+                    .fill(k.alpha(k.c.warning.fg, 0.12))
+                    .border(1.0, k.alpha(k.c.warning.fg, 0.28))
+                    .child(
+                        rune::el()
+                            .size(6.0, 6.0)
+                            .radius(3.0)
+                            .fill(k.c.warning.fg)
+                            .a11y_hidden(),
+                    )
+                    .child(
+                        ui::caption("Needs input", k)
+                            .font(k.ty.small_medium)
+                            .color(k.c.warning.fg)
+                            .role("status")
+                            .label("Needs input")
+                            .key("session-title-input"),
+                    ),
+            )
+            .key("session-title-input-button")
+            .role("button")
+            .label("Needs input")
+            .help("Jump to pending approval or question")
+            .focusable(true)
+            .focus_ring(1.5, 0.0, k.c.border_focus)
+            .on_press_tx(move |_: &mut Workspace, tx: &mut rune::Tx| {
+                tx.scroll_to_bottom_instant(format!("live-transcript-{index}"));
+            }),
         );
     }
     let pr = l.app.requested_changes(session)?;

@@ -283,9 +283,9 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
                     .delete_errors
                     .contains_key(&removal.checkout)
             }) {
-                292.0
+                320.0
             } else {
-                242.0
+                276.0
             },
         ),
         Screen::CreateWorktree => (500.0, 330.0),

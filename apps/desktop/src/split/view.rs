@@ -105,6 +105,14 @@ pub fn toolbar_heading(
     let primary_slot = row()
         .min_w(0.0)
         .gap(6.0)
+        .px(6.0)
+        .py(2.0)
+        .radius(6.0)
+        .fill(if primary_active {
+            k.c.layer_01
+        } else {
+            rune::Color::TRANSPARENT
+        })
         .center_y()
         .opacity(if primary_active { 1.0 } else { 0.62 })
         .on_press(|s: &mut Workspace| {
@@ -124,6 +132,14 @@ pub fn toolbar_heading(
     let secondary_slot = row()
         .min_w(0.0)
         .gap(6.0)
+        .px(6.0)
+        .py(2.0)
+        .radius(6.0)
+        .fill(if !primary_active {
+            k.c.layer_01
+        } else {
+            rune::Color::TRANSPARENT
+        })
         .center_y()
         .opacity(if !primary_active { 1.0 } else { 0.62 })
         .on_press(|s: &mut Workspace| {

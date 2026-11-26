@@ -148,35 +148,53 @@ fn info(label: &str, value: impl Into<String>, k: &Kit) -> El {
 pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
     let r = &live(s).app.remote;
     let machine = c.machine().unwrap();
-    let mut box_ = col()
+    let state_pill = row()
+        .center_y()
+        .gap(5.0)
+        .px(7.0)
+        .py(2.0)
+        .radius(5.0)
+        .fill(k.c.layer_02)
+        .child(
+            rune::el()
+                .size(6.0, 6.0)
+                .radius(3.0)
+                .fill(super::machine_dot_color(&machine.state, k))
+                .a11y_hidden(),
+        )
+        .child(ui::caption(&machine.state, k));
+    let header = row()
         .w_full()
-        .gap(8.0)
-        .pb(8.0)
-        .key("remote-machine-details")
+        .center_y()
+        .gap(10.0)
         .child(
             row()
-                .w_full()
-                .center_y()
-                .gap(8.0)
-                .child(icon(&ui::SERVER, 18.0).color(k.c.icon_accent))
-                .child(
-                    col()
-                        .min_w(0.0)
-                        .grow(1.0)
-                        .gap(2.0)
-                        .child(
-                            text(&machine.name)
-                                .font(k.ty.ui_medium)
-                                .color(k.c.text_base)
-                                .truncate(),
-                        )
-                        .child(
-                            ui::caption(format!("{} · {}", c.source.repository, machine.state), k)
-                                .truncate(),
-                        ),
-                ),
+                .size(30.0, 30.0)
+                .center()
+                .radius(7.0)
+                .fill(k.c.layer_02)
+                .child(icon(&ui::SERVER, 15.0).color(k.c.icon_accent)),
         )
-        .child(ui::divider(k));
+        .child(
+            col()
+                .min_w(0.0)
+                .grow(1.0)
+                .gap(2.0)
+                .child(
+                    text(&machine.name)
+                        .font(k.ty.ui_medium)
+                        .color(k.c.text_base)
+                        .truncate(),
+                )
+                .child(ui::caption(&c.source.repository, k).truncate()),
+        )
+        .child(state_pill);
+    let mut box_ = col()
+        .w_full()
+        .gap(10.0)
+        .pb(4.0)
+        .key("remote-machine-details")
+        .child(header);
     let resume = matches!(machine.state.as_str(), "stopped" | "archived");
     let ttl = if resume {
         "Stopped".into()
@@ -198,14 +216,23 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             },
         )
     };
-    box_ = box_.child(info("Auto-stop", ttl, k)).child(info(
-        "Active thread",
-        super::status::status(r, id, c).label,
-        k,
-    ));
+    let mut metrics = col()
+        .w_full()
+        .gap(6.0)
+        .px(10.0)
+        .py(8.0)
+        .radius(8.0)
+        .fill(k.c.layer_01)
+        .border(1.0, k.c.border_base)
+        .child(info("Auto-stop", ttl, k))
+        .child(info(
+            "Active thread",
+            super::status::status(r, id, c).label,
+            k,
+        ));
     if let Some(sample) = r.monitor.sample(id) {
         if let (Some(cpu), Some(ram)) = (sample.vcpu, sample.memory_gb) {
-            box_ = box_.child(info("Capacity", format!("{cpu} vCPU · {ram} GB RAM"), k));
+            metrics = metrics.child(info("Capacity", format!("{cpu} vCPU · {ram} GB RAM"), k));
         }
         let (label, p) = match &sample.activity {
             Activity::Live(p) => ("Busy now", p.as_ref()),
@@ -220,24 +247,20 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
                     .map_or(cpu.clone(), |ram| format!("{cpu} · {ram:.0} MB RAM"))
             },
         );
-        box_ = box_.child(info(label, value, k));
+        metrics = metrics.child(info(label, value, k));
     } else if let Monitor::Failed { owner, error } = &r.monitor
         && owner == id
     {
-        box_ = box_.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
+        metrics = metrics.child(ui::caption(error, k).wrap().color(k.c.danger.fg));
     } else if matches!(c.phase, Phase::Ready { .. }) {
-        box_ = box_.child(ui::caption("Reading machine stats…", k));
+        metrics = metrics.child(ui::caption("Reading machine stats…", k));
     }
+    box_ = box_.child(metrics);
     let a = id.to_owned();
     let b = a.clone();
     let owner = a.clone();
     if !resume {
-        let mut choices = row()
-            .w_full()
-            .flex_wrap()
-            .center_y()
-            .gap(4.0)
-            .child(ui::caption("Set from now", k));
+        let mut choices = row().w_full().flex_wrap().center_y().gap(4.0);
         for time in [
             Lifetime::TwoHours,
             Lifetime::EightHours,
@@ -245,9 +268,14 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             Lifetime::UntilStopped,
         ] {
             let owner = id.to_owned();
+            let active = c.lifetime == time;
             choices = choices.child(
                 ui::Button::new(time.label())
-                    .variant(ButtonVariant::GhostMuted)
+                    .variant(if active {
+                        ButtonVariant::Outline
+                    } else {
+                        ButtonVariant::GhostMuted
+                    })
                     .disabled(!live(s).app.can_set_vm_lifetime(id))
                     .on_press(move |s: &mut Workspace| {
                         live_mut(s).app.set_vm_lifetime(&owner, time)
@@ -256,12 +284,23 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
                     .key(format!("set-vm-lifetime-{}", time.label())),
             );
         }
-        box_ = box_.child(ui::divider(k)).child(choices).child(
-            ui::caption(
-                "Active native Codex turns renew auto-stop using the saved lifetime.",
-                k,
-            )
-            .wrap(),
+        box_ = box_.child(
+            col()
+                .w_full()
+                .gap(5.0)
+                .child(
+                    text("Set auto-stop from now")
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_base),
+                )
+                .child(choices)
+                .child(
+                    ui::caption(
+                        "Active native Codex turns renew auto-stop using the saved lifetime.",
+                        k,
+                    )
+                    .wrap(),
+                ),
         );
     }
     if let Some(job) = r.lifetimes.get(id) {
@@ -273,31 +312,39 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
                 },
                 k,
             )
+            .color(if matches!(job, Job::Failed(_)) {
+                k.c.danger.fg
+            } else {
+                k.c.text_muted
+            })
             .wrap(),
         );
     }
-    box_.child(
-        ui::Button::new(if c.pinned_stats {
-            "Unpin stats"
-        } else {
-            "Pin stats to VM composer"
-        })
-        .variant(ButtonVariant::GhostMuted)
-        .on_press(move |s: &mut Workspace| {
-            if let Some(c) = live_mut(s).app.remote.saved.checkouts.get_mut(&owner) {
-                c.pinned_stats = !c.pinned_stats;
-            }
-        })
-        .build(k)
-        .key("remote-pin-stats"),
-    )
-    .child(
+    box_.child(ui::divider(k)).child(
         row()
             .w_full()
             .flex_wrap()
-            .gap(4.0)
+            .center_y()
+            .gap(6.0)
+            .child(
+                ui::Button::new(if c.pinned_stats {
+                    "Unpin stats"
+                } else {
+                    "Pin stats"
+                })
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(move |s: &mut Workspace| {
+                    if let Some(c) = live_mut(s).app.remote.saved.checkouts.get_mut(&owner) {
+                        c.pinned_stats = !c.pinned_stats;
+                    }
+                })
+                .build(k)
+                .key("remote-pin-stats"),
+            )
+            .child(rune::el().grow(1.0))
             .children((live(s).panels.screen == Screen::Remote).then(|| {
                 ui::Button::new("Changes")
+                    .variant(ButtonVariant::GhostMuted)
                     .on_press(|s: &mut Workspace| {
                         live_mut(s).panels.set_overlay(None);
                         super::open_changes(s);
@@ -306,6 +353,8 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             }))
             .child(
                 ui::Button::new("Refresh")
+                    .icon(&ui::REFRESH)
+                    .variant(ButtonVariant::GhostMuted)
                     .on_press(move |s: &mut Workspace| {
                         let l = live_mut(s);
                         l.app.remote.monitor = Monitor::Off;
@@ -315,6 +364,11 @@ pub(super) fn details(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             )
             .child(
                 ui::Button::new(if resume { "Resume" } else { "Stop machine" })
+                    .variant(if resume {
+                        ButtonVariant::Contrast
+                    } else {
+                        ButtonVariant::Outline
+                    })
                     .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&b, resume))
                     .build(k),
             ),
