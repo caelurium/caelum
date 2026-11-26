@@ -56,6 +56,16 @@ impl QuestionBroker {
         }
     }
 
+    pub fn has_pending(&self, provider: &str, project: &str, session: &str) -> bool {
+        match &*self.lock() {
+            State::Disabled => false,
+            State::Active(active) => active
+                .pending
+                .keys()
+                .any(|(p, proj, sess, _)| p == provider && proj == project && sess == session),
+        }
+    }
+
     pub fn subscribe(&self) -> mpsc::Receiver<Vec<QuestionPrompt>> {
         let (sender, receiver) = mpsc::channel();
         let mut state = self.lock();
