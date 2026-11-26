@@ -315,7 +315,7 @@ pub(crate) fn handoff_height(s: &Workspace) -> f32 {
         && has_machines(s, source)
         && l.remote.form.tab == Tab::Existing
     {
-        return 296.0;
+        return 352.0;
     }
     436.0
 }
