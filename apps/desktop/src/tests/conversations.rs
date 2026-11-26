@@ -369,3 +369,83 @@ fn overview_status_filter_badges_toggle_bucket_filtering() {
     click(&mut rt, "overview-filter-settled");
     assert_eq!(live(&rt.state).overview.bucket_filter, None);
 }
+
+#[test]
+fn peaceful_mode_hides_tool_calls_and_reasoning_via_toolbar_settings_and_palette() {
+    let mut rt = design_runtime("session-feed", (1024.0, 720.0));
+    rt.update(|s, _| {
+        let session = &mut live_mut(s).app.sessions[0];
+        session.conversation.entries = vec![
+            Entry::new("u1".into(), EntryKind::User, "Run the build".into(), true),
+            Entry::new(
+                "r1".into(),
+                EntryKind::Reasoning,
+                "Checking workspace".into(),
+                true,
+            ),
+            Entry::new("t1".into(), EntryKind::Tool, "cargo check".into(), true),
+            Entry::new(
+                "a1".into(),
+                EntryKind::Assistant,
+                "The build succeeded.".into(),
+                true,
+            ),
+        ];
+    });
+    advance(&mut rt, 0.2);
+
+    assert!(!live(&rt.state).app.preferences.peaceful_mode);
+    assert!(rt.find("live-entry-0-u1").is_some());
+    assert!(rt.find("live-entry-0-r1").is_some());
+    assert!(rt.find("live-entry-0-t1").is_some());
+    assert!(rt.find("live-entry-0-a1").is_some());
+
+    click(&mut rt, "peaceful-mode-toggle");
+    advance(&mut rt, 0.2);
+    assert!(live(&rt.state).app.preferences.peaceful_mode);
+    assert!(rt.find("live-entry-0-u1").is_some());
+    assert!(rt.find("live-entry-0-r1").is_none());
+    assert!(rt.find("live-entry-0-t1").is_none());
+    assert!(rt.find("live-entry-0-a1").is_some());
+
+    click(&mut rt, "peaceful-mode-toggle");
+    advance(&mut rt, 0.2);
+    assert!(!live(&rt.state).app.preferences.peaceful_mode);
+    assert!(rt.find("live-entry-0-r1").is_some());
+    assert!(rt.find("live-entry-0-t1").is_some());
+
+    key(
+        &mut rt,
+        Key::Command(','),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    advance(&mut rt, 0.2);
+    assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::Settings));
+    reveal(&mut rt, "peaceful-mode-switch");
+    click(&mut rt, "peaceful-mode-switch");
+    advance(&mut rt, 0.2);
+    assert!(live(&rt.state).app.preferences.peaceful_mode);
+    key(&mut rt, Key::Escape, Mods::default());
+    advance(&mut rt, 0.2);
+    assert!(rt.find("live-entry-0-t1").is_none());
+
+    key(
+        &mut rt,
+        Key::Command('k'),
+        Mods {
+            cmd: true,
+            ..Default::default()
+        },
+    );
+    advance(&mut rt, 0.2);
+    assert_eq!(live(&rt.state).panels.overlay(), Some(Screen::Palette));
+    rt.paste("peaceful");
+    advance(&mut rt, 0.1);
+    key(&mut rt, Key::Enter, Mods::default());
+    advance(&mut rt, 0.2);
+    assert!(!live(&rt.state).app.preferences.peaceful_mode);
+    assert!(rt.find("live-entry-0-t1").is_some());
+}

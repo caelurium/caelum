@@ -1,5 +1,5 @@
 use rune::{El, col, row};
-use rune_kit::Kit;
+use rune_kit::{Kit, Switch};
 
 use crate::live::{live, live_mut};
 use crate::{Workspace, theme, ui};
@@ -181,6 +181,17 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
             .key(format!("home-bg-{id}")),
         );
     }
+    let peaceful = row().justify_end().child(
+        Switch::new(preferences.peaceful_mode)
+            .label("Peaceful mode")
+            .hide_label()
+            .on_toggle(|s: &mut Workspace| {
+                let p = &mut live_mut(s).app.preferences;
+                p.peaceful_mode = !p.peaceful_mode;
+            })
+            .build(k)
+            .key("peaceful-mode-switch"),
+    );
     content
         .child(ui::divider(k).mt(8.0))
         .child(ui::caption("Home background", k).pt(8.0))
@@ -191,6 +202,14 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
             "Session scope",
             "All projects or the current project.",
             scopes,
+            k,
+        ))
+        .child(ui::divider(k).mt(8.0))
+        .child(ui::caption("Conversation", k).pt(8.0))
+        .child(crate::settings::setting_row(
+            "Peaceful mode",
+            "Hide tool calls and reasoning in conversations.",
+            peaceful,
             k,
         ))
 }

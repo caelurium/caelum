@@ -65,6 +65,7 @@ fn every_persisted_field_participates_in_change_detection() {
         ("theme", json!("dark")),
         ("themeFamily", json!("nord")),
         ("accentColor", json!("teal")),
+        ("peacefulMode", json!(true)),
         ("sessionScope", json!("currentProject")),
         ("defaultProvider", json!("opencode")),
         ("worktreeDirectory", json!("checkouts")),
