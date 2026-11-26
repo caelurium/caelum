@@ -56,13 +56,8 @@ impl State {
     pub fn poll(&self) -> bool {
         self.changed.swap(false, Ordering::AcqRel)
     }
-    pub(crate) fn home_background(&self, dark: bool) -> Image {
-        let bytes = if dark {
-            include_bytes!("../assets/black-hole-ascii.png").as_slice()
-        } else {
-            include_bytes!("../assets/clouds-sunlit-ascii.png").as_slice()
-        };
-        self.cache.load(bytes)
+    pub(crate) fn home_background(&self, id: &str, dark: bool) -> Image {
+        self.cache.load(crate::home::backgrounds::bytes(id, dark))
     }
     fn image(&self, data: &str, fixture: bool) -> Result<Option<Image>, String> {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
