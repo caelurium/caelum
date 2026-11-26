@@ -24,7 +24,11 @@ pub(super) fn project(s: &Workspace, k: &Kit) -> El {
         .child(
             ui::Button::new(name)
                 .icon(&ui::FOLDER)
-                .variant(ButtonVariant::GhostMuted)
+                .variant(if expanded {
+                    ButtonVariant::Outline
+                } else {
+                    ButtonVariant::GhostMuted
+                })
                 .on_press(|s| toggle_menu(s, Menu::Projects))
                 .build(k)
                 .h(28.0)
