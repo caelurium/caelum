@@ -1,11 +1,13 @@
-use rune::{El, TextEdit, col, row, text};
-use rune_kit::{ButtonVariant, Kit, glyphs};
+use rune::{El, ScrollSpec, TextEdit, col, icon, row, text};
+use rune_kit::{ButtonVariant, Kit, Placement, ScrollBar, glyphs};
 
 use crate::live::{live, live_mut};
 use crate::ui::Button;
 use crate::{Workspace, quiet_button, ui};
 
 use super::label;
+
+const QUEUE_MENU: &str = "queue";
 
 pub fn queue_summary(s: &Workspace, k: &Kit, index: usize) -> El {
     let l = live(s);
@@ -20,9 +22,10 @@ pub fn queue_summary(s: &Workspace, k: &Kit, index: usize) -> El {
         .iter()
         .any(|item| item.error().is_some())
         || (!session.queue.is_empty() && session.error.is_some());
+    let paused = session.queue_paused && !session.queue.is_empty();
     let status = if failed {
         " · Needs attention"
-    } else if session.queue_paused && !session.queue.is_empty() {
+    } else if paused {
         " · Paused"
     } else if session.inbox.items.iter().any(|item| item.pending()) {
         " · Saving…"
@@ -30,53 +33,97 @@ pub fn queue_summary(s: &Workspace, k: &Kit, index: usize) -> El {
         ""
     };
     let title = format!("{count} queued{status}");
-    let expanded = l.expanded_queues.contains(&index);
+    let open = l.menu == Some((QUEUE_MENU, index));
+    let (fill, border, fg, icon_fg) = if failed {
+        (
+            k.alpha(k.c.danger.fg, 0.12),
+            k.alpha(k.c.danger.fg, 0.28),
+            k.c.danger.fg,
+            k.c.danger.fg,
+        )
+    } else if paused {
+        (
+            k.alpha(k.c.warning.fg, 0.12),
+            k.alpha(k.c.warning.fg, 0.28),
+            k.c.warning.fg,
+            k.c.warning.fg,
+        )
+    } else if open {
+        (k.c.hover, k.c.border_strong, k.c.text_base, k.c.text_base)
+    } else {
+        (
+            k.c.layer_01,
+            k.c.border_base,
+            k.c.text_muted,
+            k.c.icon_muted,
+        )
+    };
     k.interactive(
         row()
             .center_y()
-            .gap(6.0)
+            .gap(5.0)
             .h(24.0)
-            .px(6.0)
-            .radius(6.0)
+            .px(8.0)
+            .radius(999.0)
+            .fill(fill)
+            .border(1.0, border)
+            .child(icon(&ui::QUEUE, 12.0).color(icon_fg).a11y_hidden())
             .child(
-                ui::caption(&title, k)
-                    .color(if failed {
-                        k.c.danger.fg
-                    } else {
-                        k.c.text_muted
-                    })
+                text(&title)
+                    .font(k.ty.small_medium)
+                    .color(fg)
                     .truncate()
                     .min_w(0.0),
             )
-            .child(ui::disclosure(expanded, k)),
+            .child(ui::disclosure(open, k)),
     )
     .key("toggle-queued-messages")
     .role("button")
     .label(&title)
-    .help(if expanded {
+    .help(if open {
         "Hide queued messages"
     } else {
         "Show queued messages"
     })
-    .expanded(expanded)
+    .expanded(open)
     .focusable(true)
     .focus_ring(1.5, 0.0, k.c.border_focus)
     .on_press(move |s: &mut Workspace| {
-        let expanded = &mut live_mut(s).expanded_queues;
-        if !expanded.remove(&index) {
-            expanded.insert(index);
-        }
+        let l = live_mut(s);
+        let next = Some((QUEUE_MENU, index));
+        l.menu = if l.menu == next { None } else { next };
     })
 }
 
-pub fn composer_context(s: &Workspace, k: &Kit, index: usize) -> El {
-    let session = &live(s).app.sessions[index];
-    let mut context = col().w_full().gap(4.0);
-    if live(s).expanded_queues.contains(&index)
-        && (!session.queue.is_empty() || !session.inbox.items.is_empty())
-    {
-        context = context.child(queued_messages(s, k, index));
+pub fn queue_popover(s: &Workspace, k: &Kit, index: usize, layers: &mut Vec<El>) {
+    let l = live(s);
+    if l.menu != Some((QUEUE_MENU, index)) {
+        return;
     }
+    let session = &l.app.sessions[index];
+    if session.queue.is_empty() && session.inbox.items.is_empty() {
+        return;
+    }
+    let width = rune::memo::window_layout("message-composer")
+        .map_or(420.0, |r| (r[2] - 16.0).clamp(280.0, 460.0));
+    ui::popup(
+        "queued-messages",
+        "toggle-queued-messages",
+        queued_messages(s, k, index).w(width),
+        Placement::TopEnd,
+        |s: &mut Workspace| {
+            let l = live_mut(s);
+            if l.menu.is_some_and(|(name, _)| name == QUEUE_MENU) {
+                l.menu = None;
+            }
+        },
+        k,
+        layers,
+    );
+}
+
+pub fn composer_context(s: &Workspace, k: &Kit, index: usize) -> El {
+    let mut context = col().w_full().gap(4.0);
     if let Some(error) = live(s).app.persistence_error() {
         context = context.child(label(error, k));
     }
@@ -93,64 +140,48 @@ pub(crate) fn queued_preview(text: &str) -> &str {
 fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
     let session = &live(s).app.sessions[index];
     let total = session.queue.len() + session.inbox.items.len();
-    let mut header = row()
-        .w_full()
-        .center_y()
-        .gap(6.0)
-        .child(text("Queued").font(k.ty.small_medium).color(k.c.text_base))
-        .child(ui::caption(format!("{total}"), k))
-        .children(
-            (session.queue_paused && !session.queue.is_empty()).then(|| {
-                text("Paused")
-                    .font(k.ty.small)
-                    .color(k.c.warning.fg)
-                    .px(6.0)
-                    .py(1.0)
-                    .radius(4.0)
-                    .fill(k.alpha(k.c.warning.fg, 0.14))
-            }),
-        )
-        .child(rune::el().grow(1.0));
-    if session.queue_paused && !session.queue.is_empty() {
-        header = header.child(
-            Button::new("Resume queued messages")
+    let paused = session.queue_paused && !session.queue.is_empty();
+    let subtitle = if paused {
+        "Paused — resume to send queued messages"
+    } else {
+        "Runs in order after the current turn"
+    };
+    let trailing = if paused {
+        Some(
+            Button::new("Resume")
                 .variant(ButtonVariant::Outline)
                 .on_press(move |s: &mut Workspace| live_mut(s).app.resume_queue(index))
                 .build(k)
                 .h(24.0)
                 .px(8.0)
+                .label("Resume queued messages")
                 .key("resume-queued-messages"),
-        );
+        )
     } else if !session.queue.is_empty() {
-        header = header.child(
-            Button::new("Pause queue")
+        Some(
+            Button::new("Pause")
                 .variant(ButtonVariant::Outline)
                 .on_press(move |s: &mut Workspace| {
-                    live_mut(s).app.sessions[index].queue_paused = true
+                    live_mut(s).app.sessions[index].queue_paused = true;
                 })
                 .build(k)
                 .h(24.0)
                 .px(8.0)
+                .label("Pause queue")
                 .key("pause-queued-messages"),
-        );
-    }
-    let mut context = col()
-        .key("queued-messages")
-        .w_full()
-        .gap(4.0)
-        .padding(6.0)
-        .radius(8.0)
-        .fill(k.c.layer_01)
-        .border(1.0, k.c.border_base);
-    if !session.queue.is_empty() {
-        context = context.child(header);
-    }
+        )
+    } else {
+        None
+    };
+
+    let mut list = col().w_full().gap(4.0);
     for item in &session.inbox.items {
         let id = item.id.clone();
         let retry = id.clone();
         let mut entry = row()
             .w_full()
             .gap(4.0)
+            .px(4.0)
             .center_y()
             .child(
                 label(
@@ -174,7 +205,14 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                 Button::new("Remove")
                     .variant(ButtonVariant::GhostMuted)
                     .disabled(item.pending())
-                    .on_press(move |s: &mut Workspace| live_mut(s).app.remove_queued(index, &id))
+                    .on_press(move |s: &mut Workspace| {
+                        let l = live_mut(s);
+                        l.app.remove_queued(index, &id);
+                        let session = &l.app.sessions[index];
+                        if session.queue.is_empty() && session.inbox.items.is_empty() {
+                            l.menu = None;
+                        }
+                    })
                     .build(k)
                     .h(24.0)
                     .px(6.0)
@@ -192,23 +230,24 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                     .px(8.0)
                     .key(format!("retry-queued-{}", item.id)),
             );
-            item_view = item_view.child(label(error, k).color(k.c.danger.fg).wrap());
+            item_view = item_view.child(label(error, k).color(k.c.danger.fg).px(4.0).wrap());
         }
-        context = context.child(item_view.child(entry));
+        list = list.child(item_view.child(entry));
     }
     if !session.queue.is_empty()
         && let Some(error) = &session.error
     {
-        context = context.child(label(error, k).color(k.c.danger.fg));
+        list = list.child(label(error, k).color(k.c.danger.fg).px(4.0).wrap());
     }
     let count = session.queue.len();
     for (position, queued) in session.queue.iter().enumerate() {
-        context = context.child(
+        list = list.child(
             row()
                 .w_full()
                 .center_y()
                 .gap(4.0)
                 .px(4.0)
+                .py(2.0)
                 .radius(6.0)
                 .child(
                     text(format!("{}", position + 1))
@@ -270,6 +309,7 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                                 live.app.sessions[index].attachments = attachments;
                                 live.app.sessions[index].options = queued.options;
                                 live.app.options_changed(index);
+                                live.menu = None;
                                 live.drafts[index].focused = true;
                             }
                         })
@@ -282,9 +322,14 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                     Button::new("Remove")
                         .variant(ButtonVariant::GhostMuted)
                         .on_press(move |s: &mut Workspace| {
-                            let queue = &mut live_mut(s).app.sessions[index].queue;
+                            let live = live_mut(s);
+                            let queue = &mut live.app.sessions[index].queue;
                             if position < queue.len() {
                                 queue.remove(position);
+                            }
+                            let session = &live.app.sessions[index];
+                            if session.queue.is_empty() && session.inbox.items.is_empty() {
+                                live.menu = None;
                             }
                         })
                         .build(k)
@@ -294,5 +339,21 @@ fn queued_messages(s: &Workspace, k: &Kit, index: usize) -> El {
                 ),
         );
     }
-    context
+
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(ui::popup_header(
+            format!("Queued · {total}"),
+            Some(subtitle),
+            trailing,
+            k,
+        ))
+        .child(
+            list.max_h(260.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .scroll_bar(k),
+        )
 }
