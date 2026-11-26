@@ -136,7 +136,7 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
         let enabled = l.app.can_attach_to_project(index);
         ui::Button::new("Attach to project")
             .icon(&ui::FOLDER)
-            .variant(rune_kit::ButtonVariant::GhostMuted)
+            .variant(rune_kit::ButtonVariant::Outline)
             .disabled(!enabled)
             .on_press(move |s: &mut Workspace| {
                 let l = super::live_mut(s);
@@ -149,6 +149,7 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
             .build(k)
             .h(26.0)
             .px(8.0)
+            .self_center()
             .key("attach-project")
             .help("Attach this general chat to a project or worktree")
     });

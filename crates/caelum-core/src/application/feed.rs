@@ -116,9 +116,11 @@ impl Workspace {
     /// A temporary project filter overrides the saved scope without changing it.
     pub fn session_feed(&self, project: Option<&str>, query: &str, archived: bool) -> Vec<usize> {
         let query = query.trim().to_lowercase();
+        let include_unbound = self.feed_project(project).is_none();
         let mut indices: Vec<_> = self
             .matching_local_sessions(
                 |path| self.feed_includes_project(path, project),
+                include_unbound,
                 &query,
                 archived,
             )
@@ -137,6 +139,7 @@ impl Workspace {
     fn matching_local_sessions<'a>(
         &'a self,
         includes: impl Fn(&str) -> bool + 'a,
+        include_unbound: bool,
         query: &'a str,
         archived: bool,
     ) -> impl Iterator<Item = (usize, &'a Session)> + 'a {
@@ -146,17 +149,21 @@ impl Workspace {
             .filter(move |(_, session)| {
                 !session.forgotten()
                     && session.archived() == archived
-                    && includes(&session.scope.project)
+                    && ((session.unbound && include_unbound) || includes(&session.scope.project))
                     && (query.is_empty()
                         || format!(
                             "{} {} {} {} {} {}",
                             session.title,
                             session.scope.provider.as_str(),
                             session.scope.project,
-                            self.projects
-                                .iter()
-                                .find(|p| p.path == self.group_path(&session.scope.project))
-                                .map_or("", |p| &p.name),
+                            if session.unbound {
+                                "General"
+                            } else {
+                                self.projects
+                                    .iter()
+                                    .find(|p| p.path == self.group_path(&session.scope.project))
+                                    .map_or("", |p| &p.name)
+                            },
                             self.session_branch(session).unwrap_or_default(),
                             self.session_worktree(session).unwrap_or_default(),
                         )

@@ -217,6 +217,12 @@ fn home_defaults_to_general_chat_and_attaches_to_project_later() {
     let index = app.send_home().expect("expected General session");
     assert!(app.sessions[index].unbound);
     assert!(std::path::Path::new(&app.sessions[index].scope.project).is_dir());
+    assert!(app
+        .sidebar_sessions(None, "", false)
+        .contains(&crate::application::FeedSession::Local(index)));
+    assert!(app
+        .dashboard_sessions("", false)
+        .contains(&crate::application::FeedSession::Local(index)));
 
     // Complete the initial Start command so the thread is idle, then attach it to /repo.
     let start_id = app

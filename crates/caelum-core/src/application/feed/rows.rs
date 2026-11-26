@@ -79,6 +79,10 @@ impl Workspace {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
             Feed::Overview | Feed::Dashboard { .. } => self.project_is_open(path),
         };
+        let include_unbound = match feed {
+            Feed::Sidebar { project, .. } => self.feed_project(project).is_none(),
+            Feed::Overview | Feed::Dashboard { .. } => true,
+        };
         let archived = matches!(
             feed,
             Feed::Sidebar { archived: true, .. } | Feed::Dashboard { archived: true }
@@ -86,7 +90,7 @@ impl Workspace {
         let active_only = matches!(feed, Feed::Overview);
         let query = query.trim().to_lowercase();
         let mut rows: Vec<_> = self
-            .matching_local_sessions(&includes, &query, archived)
+            .matching_local_sessions(&includes, include_unbound, &query, archived)
             .filter_map(|(i, s)| {
                 let active = !archived && self.overview_activity(s).is_some();
                 let pinned_order = !archived && s.pinned;
