@@ -68,6 +68,7 @@ impl Workspace {
             theme,
             theme_family,
             accent_color,
+            home_background,
             session_scope,
             default_provider,
             worktree_directory,
@@ -83,6 +84,7 @@ impl Workspace {
         if *theme != saved.theme
             || *theme_family != saved.theme_family
             || *accent_color != saved.accent_color
+            || *home_background != saved.home_background
             || *session_scope != saved.session_scope
             || *default_provider != saved.default_provider
             || *worktree_directory != saved.worktree_directory

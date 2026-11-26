@@ -1,6 +1,7 @@
 //! Home owns its native editor and UI state independently of every session.
 pub(crate) mod art;
 mod attachments;
+pub(crate) mod backgrounds;
 mod controls;
 mod scenes;
 mod view;
@@ -26,6 +27,7 @@ enum Menu {
 }
 
 pub(crate) struct Background {
+    pub id: &'static str,
     pub dark: Image,
     pub light: Image,
 }
@@ -121,10 +123,21 @@ pub fn send(s: &mut Workspace, tx: &mut Tx) {
 pub fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let shown = l.panels.screen == Screen::Home;
     let mut changed = false;
-    if shown && l.home.background.is_none() {
-        let background = Background {
-            dark: l.media.home_background(true),
-            light: l.media.home_background(false),
+    let desired = backgrounds::normalized(&l.app.preferences.home_background);
+    if shown && l.home.background.as_ref().is_none_or(|b| b.id != desired) {
+        let background = if desired == backgrounds::DEFAULT {
+            Background {
+                id: desired,
+                dark: l.media.home_background(desired, true),
+                light: l.media.home_background(desired, false),
+            }
+        } else {
+            let image = l.media.home_background(desired, true);
+            Background {
+                id: desired,
+                dark: image.clone(),
+                light: image,
+            }
         };
         if l.fixture {
             let _ = background.dark.wait();
