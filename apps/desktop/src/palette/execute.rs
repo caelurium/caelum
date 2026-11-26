@@ -13,6 +13,12 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
     live_mut(s).panels.set_overlay(None);
     match action {
         Action::NewSession => live_mut(s).new_session(),
+        Action::NewGeneralSession => crate::live::new_general_session(s),
+        Action::AttachToProject => {
+            if let Some(i) = live(s).app.selected {
+                live_mut(s).attach_menu = Some(i);
+            }
+        }
         Action::Launcher => panels::open_launcher(s),
         Action::Home => crate::home::open(s),
         Action::Overview => crate::overview::open(s, tx),

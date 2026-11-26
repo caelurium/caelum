@@ -334,6 +334,7 @@ impl Workspace {
                                 session.unread = saved.unread;
                                 session.origin = saved.origin;
                                 session.pinned = saved.pinned;
+                                session.unbound = saved.unbound;
                                 session.bookmarked_entries = saved.bookmarked_entries;
                                 session
                             })

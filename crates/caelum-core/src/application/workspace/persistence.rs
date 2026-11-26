@@ -306,6 +306,7 @@ impl Workspace {
                     unread: s.unread,
                     origin: s.origin.clone(),
                     pinned: s.pinned,
+                    unbound: s.unbound,
                     bookmarked_entries: s.bookmarked_entries.clone(),
                 })
             })

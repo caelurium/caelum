@@ -190,6 +190,8 @@ pub struct SavedSession {
     pub origin: Option<caelum_protocol::SessionOrigin>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pinned: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unbound: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bookmarked_entries: Vec<String>,
 }
