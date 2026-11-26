@@ -41,7 +41,7 @@ impl Workspace {
         if !matches!(c.phase, Phase::Ready { .. })
             || self.remote.jobs.contains_key(id)
             || self.publishing(id)
-            || (mutation && c.thread.turn != Turn::Idle)
+            || (mutation && c.thread.turn() != &Turn::Idle)
         {
             return;
         }

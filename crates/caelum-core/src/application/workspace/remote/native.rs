@@ -39,18 +39,15 @@ impl Workspace {
         }
         let ready = self.can_open_vm_session(id);
         let project = project_key(id);
-        if intent == SessionIntent::Reopen && checkout.thread.awaiting_native {
+        if intent == SessionIntent::Reopen && checkout.thread.awaiting_native() {
             if !ready || self.remote.jobs.contains_key(id) {
                 return None;
             }
             let c = self.remote.saved.checkouts.get_mut(id)?;
-            if c.thread.conversation.is_some() || c.thread.continued.is_none() {
-                return None;
-            }
             let provider = c.thread.provider.native()?;
+            let h = c.thread.take_native_continuation()?;
             let previous = c.other_threads.pop().unwrap_or_default();
             let thread = std::mem::replace(&mut c.thread, previous);
-            let h = thread.continued?;
             let i = self.new_session_slot(Scope { project, provider });
             let s = &mut self.sessions[i];
             if thread.model.is_some() {

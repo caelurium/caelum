@@ -15,9 +15,7 @@ enum Entry<'a> {
 }
 
 fn entries(t: &Thread) -> &[Message] {
-    t.continued
-        .as_ref()
-        .map_or(&[], |c| c.chat.messages.as_slice())
+    t.continuation().map_or(&[], |c| c.chat.messages.as_slice())
 }
 
 fn entry(t: &Thread, i: usize) -> Option<Entry<'_>> {
@@ -54,13 +52,13 @@ pub(super) fn view(
         line.key.hash(&mut identities);
     }
     let following = matches!(c.phase, Phase::Ready { .. })
-        && c.thread.turn.run().is_some()
+        && c.thread.turn().run().is_some()
         && matches!(
             live(s).app.remote.feeds.get(id),
             Some(Job::Busy(_) | Job::Wait(_))
         );
     let pending = following
-        .then(|| match &c.thread.turn {
+        .then(|| match c.thread.turn() {
             Turn::Queued(_) => Some("Queued on Boat…"),
             Turn::Stopping(_) => Some("Stopping turn…"),
             Turn::Finishing(_) => Some("Receiving final updates…"),
