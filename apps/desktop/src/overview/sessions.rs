@@ -33,6 +33,7 @@ enum ListRow {
 }
 
 pub(super) fn ordered_sessions(l: &Live) -> Vec<FeedSession> {
+    let filter = l.overview.bucket_filter;
     let all = l
         .app
         .dashboard_sessions(&l.overview.search.text, l.overview.archived);
@@ -40,7 +41,11 @@ pub(super) fn ordered_sessions(l: &Live) -> Vec<FeedSession> {
     let mut running = Vec::new();
     let mut settled = Vec::new();
     for id in all {
-        match l.app.session_bucket(&id) {
+        let bucket = l.app.session_bucket(&id);
+        if filter.is_some_and(|only| only != bucket) {
+            continue;
+        }
+        match bucket {
             SessionBucket::Waiting => waiting.push(id),
             SessionBucket::Running => running.push(id),
             SessionBucket::Settled => settled.push(id),
@@ -61,11 +66,30 @@ pub(super) fn ordered_sessions(l: &Live) -> Vec<FeedSession> {
 
 pub(super) fn view(s: &Workspace, compact: bool, k: &Kit) -> El {
     let l = live(s);
-    let all = l
+    let filter = l.overview.bucket_filter;
+    let all: Vec<_> = l
         .app
-        .dashboard_sessions(&l.overview.search.text, l.overview.archived);
+        .dashboard_sessions(&l.overview.search.text, l.overview.archived)
+        .into_iter()
+        .filter(|id| filter.is_none_or(|only| l.app.session_bucket(id) == only))
+        .collect();
     if all.is_empty() {
-        let (title, detail) = if !l.overview.search.text.trim().is_empty() {
+        let (title, detail) = if let Some(bucket) = filter {
+            match bucket {
+                SessionBucket::Running => (
+                    "No running sessions",
+                    "Click the Running filter again to show all sessions.",
+                ),
+                SessionBucket::Settled => (
+                    "No settled sessions",
+                    "Click the Settled filter again to show all sessions.",
+                ),
+                SessionBucket::Waiting => (
+                    "No waiting sessions",
+                    "Click the Waiting filter again to show all sessions.",
+                ),
+            }
+        } else if !l.overview.search.text.trim().is_empty() {
             (
                 "No matching sessions",
                 "Try a different title, project, provider, or branch.",

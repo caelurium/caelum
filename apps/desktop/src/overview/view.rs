@@ -64,7 +64,7 @@ pub fn view(s: &Workspace, k: &Kit, _layers: &mut Vec<El>) -> El {
                     "Highlight the next session waiting for you",
                     k,
                 ))
-                .child(status_badge(
+                .child(status_filter_badge(
                     running_spinner(
                         13.0,
                         if running > 0 {
@@ -75,11 +75,19 @@ pub fn view(s: &Workspace, k: &Kit, _layers: &mut Vec<El>) -> El {
                         running > 0,
                     ),
                     format!("{running} running"),
+                    SessionBucket::Running,
+                    l.overview.bucket_filter == Some(SessionBucket::Running),
+                    "overview-filter-running",
+                    "Filter to running sessions",
                     k,
                 ))
-                .child(status_badge(
+                .child(status_filter_badge(
                     icon(&SETTLED, 13.0).color(k.c.success.fg).a11y_hidden(),
                     format!("{settled} settled"),
+                    SessionBucket::Settled,
+                    l.overview.bucket_filter == Some(SessionBucket::Settled),
+                    "overview-filter-settled",
+                    "Filter to settled sessions",
                     k,
                 )),
         );
@@ -152,13 +160,59 @@ fn status_counter(
     .on_press_tx(next_waiting)
 }
 
-fn status_badge(lead: El, label: String, k: &Kit) -> El {
-    row()
-        .center_y()
-        .gap(5.0)
-        .h(26.0)
-        .child(lead)
-        .child(text(label).font(k.ty.small_medium).color(k.c.text_muted))
+fn status_filter_badge(
+    lead: El,
+    label: String,
+    bucket: SessionBucket,
+    active: bool,
+    key: &'static str,
+    help: &'static str,
+    k: &Kit,
+) -> El {
+    k.interactive(
+        row()
+            .center_y()
+            .gap(5.0)
+            .h(26.0)
+            .px(7.0)
+            .radius(6.0)
+            .fill(if active {
+                k.c.layer_02
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .border(
+                1.0,
+                if active {
+                    k.c.border_strong
+                } else {
+                    rune::Color::TRANSPARENT
+                },
+            )
+            .child(lead)
+            .child(text(&label).font(k.ty.small_medium).color(if active {
+                k.c.text_base
+            } else {
+                k.c.text_muted
+            })),
+    )
+    .key(key)
+    .role("button")
+    .label(label)
+    .help(help)
+    .focusable(true)
+    .focus_selected(active)
+    .focus_ring(1.5, 0.0, k.c.border_focus)
+    .on_press(move |s: &mut Workspace| {
+        let o = &mut live_mut(s).overview;
+        o.tab = Tab::Sessions;
+        o.bucket_filter = if o.bucket_filter == Some(bucket) {
+            None
+        } else {
+            Some(bucket)
+        };
+        o.cursor = None;
+    })
 }
 
 fn tab_pill(

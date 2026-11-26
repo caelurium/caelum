@@ -244,22 +244,31 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
     let (keys, builders, visible) = (rows.clone(), rows.clone(), rows.clone());
     let kit = k.clone();
     let sessions = if rows.is_empty() {
-        ui::caption(
-            if l.panels.screen == crate::panels::Screen::Home && l.app.home.draft.project.is_none()
-            {
-                "No general chats yet"
-            } else if l.app.projects.is_empty() {
-                "Open a project to get started"
-            } else if !l.panels.sessions.text.is_empty() {
-                "No matching sessions"
-            } else if l.panels.archived {
-                "No archived sessions"
-            } else {
-                "No sessions in this project"
-            },
-            k,
-        )
-        .padding(12.0)
+        let (title, hint) = if l.panels.screen == crate::panels::Screen::Home
+            && l.app.home.draft.project.is_none()
+        {
+            (
+                "No general chats yet",
+                Some("Start typing on Home to begin one."),
+            )
+        } else if l.app.projects.is_empty() {
+            ("Open a project to get started", None)
+        } else if !l.panels.sessions.text.is_empty() {
+            ("No matching sessions", Some("Try a different search term."))
+        } else if l.panels.archived {
+            ("No archived sessions", None)
+        } else {
+            (
+                "No sessions in this project",
+                Some("Press ⌘N to start one."),
+            )
+        };
+        col()
+            .w_full()
+            .padding(12.0)
+            .gap(4.0)
+            .child(ui::caption(title, k).color(k.c.text_muted))
+            .children(hint.map(|h| ui::caption(h, k).color(k.c.text_faint).wrap()))
     } else {
         col()
             .w_full()
