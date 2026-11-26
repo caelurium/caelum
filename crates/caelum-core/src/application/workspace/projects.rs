@@ -1,5 +1,5 @@
 use super::{Pending, Workspace};
-use crate::application::{Command, Provider, Scope, Task};
+use crate::application::{Command, Provider, Reply, Scope, Task};
 
 #[derive(Clone, Copy)]
 pub enum ProjectMove {
@@ -37,21 +37,84 @@ impl Workspace {
         }
     }
 
+    pub fn opening_project(&self) -> bool {
+        self.project_open.is_some()
+    }
+
     pub fn open_project(&mut self, path: String) {
-        self.notifications.cancel();
-        self.opening = true;
-        self.error = None;
-        self.latest_open = self.request(Command::Open(path), Pending::Open(None, self.navigation));
+        self.begin_project_open(path, None);
     }
 
     pub fn launch_project(&mut self, path: String, provider: Provider) {
+        self.begin_project_open(path, Some(provider));
+    }
+
+    fn begin_project_open(&mut self, path: String, provider: Option<Provider>) {
         self.notifications.cancel();
-        self.opening = true;
         self.error = None;
-        self.latest_open = self.request(
+        self.project_open = Some(self.request(
             Command::Open(path),
-            Pending::Open(Some(provider), self.navigation),
-        );
+            Pending::Open(provider, self.navigation),
+        ));
+    }
+
+    pub(super) fn complete_project_open(
+        &mut self,
+        request: u64,
+        provider: Option<Provider>,
+        navigation: u64,
+        result: Result<Reply, String>,
+    ) {
+        let current = self.project_open == Some(request);
+        if current {
+            self.project_open = None;
+        }
+        let project = match result {
+            Ok(Reply::Project(project)) => project,
+            result => {
+                if current {
+                    self.error = Some(
+                        result
+                            .err()
+                            .unwrap_or_else(|| "Unexpected project response".into()),
+                    );
+                }
+                return;
+            }
+        };
+        if self.closed_since(&project.path, request) {
+            return;
+        }
+        if !self.projects.iter().any(|p| p.path == project.path) {
+            self.projects.push(project.clone());
+        }
+        let details = self
+            .sessions
+            .iter()
+            .enumerate()
+            .filter(|(i, s)| {
+                self.group_path(&s.scope.project) == self.group_path(&project.path)
+                    && s.remote_id.is_some()
+                    && s.details.is_none()
+                    && !self.detail_queue.contains(i)
+                    && !self
+                        .pending
+                        .values()
+                        .any(|p| matches!(p, Pending::Details(index) if index == i))
+            })
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        self.detail_queue.extend(details);
+        if current && navigation == self.navigation {
+            self.select_project(&project.path);
+            if let Some(provider) = provider {
+                self.project_draft(Scope {
+                    project: project.path,
+                    provider,
+                });
+            }
+            self.refresh_project();
+        }
     }
 
     /// Restore this project's conversation, including its linked worktrees. Existing

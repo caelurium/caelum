@@ -27,15 +27,17 @@ state machine; types cannot establish that an external event is current.
 | [Desktop preview](../apps/desktop/src/state.rs) | A streaming response owns its clock and visible text; stopping consumes that phase. Only turns with tools have disclosure state. |
 | [Conversation activity](../crates/caelum-core/src/application/conversation.rs) and [entries](../crates/caelum-core/src/application/conversation/entry.rs) | Idle cannot also be retrying. Only a user prompt can be awaiting its provider echo; only a tool can run in the background. Provider status labels remain display data, independent of the typed progress phase. |
 | [Review snapshots](../crates/caelum-core/src/application/services/review.rs) and [service requests](../crates/caelum-core/src/application/services/requests.rs) | Cached or live details own file pages for that base and head. Pagination accepts only the expected next page. A running slot owns its request and revision pin; a failed slot has no active request, and read invalidation does not release a mutation lock. |
+| [Side questions](../crates/caelum-core/src/application/workspace/side_question.rs) | Only an active streaming request owns a cancellation handle and receives deltas. Editing, a partial answer after failure, and a completed answer are distinct. Disconnect preserves the partial answer and retires the request. |
+| [Project opening](../crates/caelum-core/src/application/workspace/projects.rs) | The loading indicator belongs to the most recent request. Older validated projects may still register, while selection requires the current request and navigation generation. |
+| [Provider connection ownership](../crates/caelum-core/src/codex.rs), [OpenCode](../crates/caelum-core/src/opencode.rs), and [Antigravity](../crates/caelum-core/src/antigravity.rs) | Closed providers cannot retain registered checkout connections or admit a new one. Connection attempts that finish after shutdown retire their own resources. |
+| [Antigravity turn progress](../crates/caelum-core/src/antigravity/progress.rs) and [saved visibility](../crates/caelum-core/src/antigravity/metadata.rs) | A prompt reply must match the active ACP request. Background work owns at least one tool. Settling owns a generation and has no active tools. A deleted session cannot also be archived. The metadata file keeps its existing fields. |
+| [Image and attachment previews](../apps/desktop/src/panels/overlays.rs) | Each overlay owns the preview it displays, and the VM stats popup owns its inspection target. Image zoom and drag state belong to that image. Composer scroll restoration retains only the original editor and its offset. |
+| [Runtime shutdown](../crates/caelum-core/src/application/runtime.rs) | The worker pool and its event inbox move out of the running state together. Shutdown releases blocked senders before joining workers. |
 
 ## Scope boundaries
 
-The candidates identified by this audit are covered above. Independent choices
-and measurements, such as sidebar visibility or token counts, are not combined
-into a phase enum merely because they appear on the same screen.
-
-Updates, OpenCode connection slots, conversation controls, relocation, and remote
-checkout and turn lifecycles already use phase enums. Review their event
-admission separately from representation changes. Persisted snapshots and
-provider protocol structs are compatibility boundaries, not authoritative
-runtime state.
+Independent choices and measurements, such as sidebar visibility and token
+counts, can coexist. Persisted snapshots and provider protocol values retain
+their compatibility shapes and enter runtime state through conversion or
+validation. The types encode which fields can coexist. Tests still cover
+ordering, ownership, retry, and stale completions at asynchronous boundaries.

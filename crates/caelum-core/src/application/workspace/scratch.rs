@@ -82,7 +82,7 @@ impl Workspace {
         s.can_send()
             && !s.commanding()
             && !s.control_busy()
-            && !s.generating
+            && !s.generating_side_answer()
             && !s.deleting()
             && s.queue.is_empty()
             && s.inbox.items.is_empty()
