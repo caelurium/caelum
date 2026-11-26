@@ -445,8 +445,9 @@ impl Workspace {
                         None
                     }
                 });
-            if let Some(title) =
-                title.filter(|title| !title.is_empty() && !session.title_state.manual())
+            if let Some(title) = title
+                .and_then(|title| title.lines().map(str::trim).find(|line| !line.is_empty()))
+                .filter(|_| !session.title_state.manual())
             {
                 session.title = title.into();
                 session.title_state.note_live_rename(self.next_request);
