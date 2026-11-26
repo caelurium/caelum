@@ -64,6 +64,7 @@ enum Action {
     Worktrees,
     ToggleSidebar,
     ToggleInspector,
+    TogglePeacefulMode,
     Files,
     Changes,
     Runner,
@@ -403,6 +404,22 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         None,
         "toggle inspector panel",
         Action::ToggleInspector,
+    ));
+    entries.push(Entry::new(
+        Section::Commands,
+        if l.app.preferences.peaceful_mode {
+            "Disable peaceful mode"
+        } else {
+            "Enable peaceful mode"
+        },
+        "Hide tool calls and reasoning in conversations",
+        None,
+        l.app
+            .preferences
+            .peaceful_mode
+            .then_some(("On", BadgeTone::Accent)),
+        "peaceful quiet focus hide tool calls reasoning clean",
+        Action::TogglePeacefulMode,
     ));
     entries.push(Entry::new(
         Section::Commands,
