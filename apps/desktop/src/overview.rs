@@ -23,12 +23,6 @@ use crate::{
     panels::Screen,
 };
 
-pub(crate) static NAV_ICON: Icon = Icon {
-    name: "overview-nav",
-    view: 16.0,
-    body: r#"<path d="M3 13V8M8 13V3M13 13V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
-};
-
 pub(super) static WAITING: Icon = Icon {
     name: "overview-waiting",
     view: 16.0,
