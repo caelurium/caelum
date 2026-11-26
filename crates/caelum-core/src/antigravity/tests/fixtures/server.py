@@ -463,6 +463,15 @@ for raw in sys.stdin:
         if info is None:
             send({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32002, "message": f"Session not found: {sid}"}})
             continue
+        if info.pop("pending_question", None) == "call-ask":
+            info["history"].append({
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "call-ask",
+                "name": "ask_question",
+                "status": "failed",
+                "rawOutput": {"error": "Tool execution was canceled"},
+            })
+            save_state()
         for update in info["history"]:
             notify(sid, update)
         send({

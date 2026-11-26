@@ -645,6 +645,7 @@ impl AntigravityProvider {
                     effect,
                     &self.inner.subscribers,
                     &connection.progress,
+                    &self.inner.questions,
                 );
             }
         }
