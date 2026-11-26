@@ -191,6 +191,63 @@ fn image_context_matching_preserves_older_messages_and_distinct_captures() {
 }
 
 #[test]
+fn antigravity_text_only_history_adopts_optimistic_image_prompts_in_order() {
+    let first_image = Attachment::image("first.png".into(), b"\x89PNG\r\n\x1a\nfirst").unwrap();
+    let second_image = Attachment::image("second.png".into(), b"\x89PNG\r\n\x1a\nsecond").unwrap();
+    let first_prompt =
+        super::super::composer::with_context("First fix", std::slice::from_ref(&first_image));
+    let second_prompt =
+        super::super::composer::with_context("Second fix", std::slice::from_ref(&second_image));
+
+    let mut conversation = Conversation::default();
+    conversation.optimistic("local-1".into(), first_prompt);
+    conversation.history(
+        Provider::Antigravity,
+        &[
+            json!({"id":"acp-user-1","type":"user","text":"First fix"}),
+            json!({"id":"acp-assistant-1","type":"assistant","text":"Fixed first"}),
+        ],
+        false,
+    );
+    assert!(conversation.entries.iter().all(|e| !e.optimistic()));
+    assert_eq!(conversation.entries.len(), 2);
+    assert_eq!(
+        split_context(&conversation.entries[0].text).1[0].content,
+        first_image.content
+    );
+
+    conversation.optimistic("local-2".into(), second_prompt);
+    conversation.history(
+        Provider::Antigravity,
+        &[
+            json!({"id":"acp-user-1","type":"user","text":"First fix"}),
+            json!({"id":"acp-assistant-1","type":"assistant","text":"Fixed first"}),
+            json!({"id":"acp-user-2","type":"user","text":"Second fix"}),
+            json!({"id":"acp-assistant-2","type":"assistant","text":"Fixed second"}),
+        ],
+        false,
+    );
+    assert!(conversation.entries.iter().all(|e| !e.optimistic()));
+    assert_eq!(
+        conversation
+            .entries
+            .iter()
+            .map(|e| e.kind())
+            .collect::<Vec<_>>(),
+        vec![
+            EntryKind::User,
+            EntryKind::Assistant,
+            EntryKind::User,
+            EntryKind::Assistant,
+        ]
+    );
+    assert_eq!(
+        split_context(&conversation.entries[2].text).1[0].content,
+        second_image.content
+    );
+}
+
+#[test]
 fn delayed_history_preserves_live_tool_output_snapshots() {
     let mut conversation = Conversation::default();
     let history = vec![json!({"id":"message","type":"assistant","content":[{

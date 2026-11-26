@@ -149,7 +149,13 @@ fn optimistic_matches(history: &Entry, optimistic: &Entry) -> bool {
     }
     let (history_text, history_attachments) = super::super::split_context(&history.text);
     let (optimistic_text, attachments) = super::super::split_context(&optimistic.text);
-    if history_text != optimistic_text
+    let text_only_acp_replay = history.id.starts_with("acp-user-")
+        && history.started_at.is_none()
+        && history_attachments.is_empty()
+        && history.media.is_empty();
+    let text_matches = history_text == optimistic_text
+        || (text_only_acp_replay && history_text.trim() == optimistic_text.trim());
+    if !text_matches
         || !attachments
             .iter()
             .any(|attachment| attachment.kind == AttachmentKind::Image)
@@ -171,7 +177,7 @@ fn optimistic_matches(history: &Entry, optimistic: &Entry) -> bool {
                 .iter()
                 .any(|media| media.source == attachment.content || media.name == attachment.path)
         });
-    recent || (history.started_at.is_none() && image_matches)
+    recent || (history.started_at.is_none() && image_matches) || text_only_acp_replay
 }
 
 fn preserve_optimistic_context(history: &mut Entry, optimistic: &Entry) {
