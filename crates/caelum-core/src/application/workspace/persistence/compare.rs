@@ -68,6 +68,7 @@ impl Workspace {
             theme,
             theme_family,
             accent_color,
+            home_background,
             peaceful_mode,
             session_scope,
             default_provider,
@@ -84,6 +85,7 @@ impl Workspace {
         if *theme != saved.theme
             || *theme_family != saved.theme_family
             || *accent_color != saved.accent_color
+            || *home_background != saved.home_background
             || *peaceful_mode != saved.peaceful_mode
             || *session_scope != saved.session_scope
             || *default_provider != saved.default_provider
