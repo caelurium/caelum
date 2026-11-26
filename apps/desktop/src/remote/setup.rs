@@ -69,7 +69,14 @@ pub(super) fn view(s: &Workspace, k: &Kit, id: &str, c: &Checkout, padding: f32)
                 .w_full()
                 .center_y()
                 .gap(10.0)
-                .child(icon(&ui::SERVER, 18.0).color(k.c.icon_accent))
+                .child(
+                    row()
+                        .size(32.0, 32.0)
+                        .center()
+                        .radius(7.0)
+                        .fill(k.c.layer_02)
+                        .child(icon(&ui::SERVER, 16.0).color(k.c.icon_accent)),
+                )
                 .child(
                     col()
                         .min_w(0.0)
@@ -127,7 +134,11 @@ fn actions(s: &Workspace, k: &Kit, id: &str, c: &Checkout) -> El {
             } else {
                 "Stop machine"
             })
-            .variant(ButtonVariant::GhostMuted)
+            .variant(if resume {
+                ButtonVariant::Contrast
+            } else {
+                ButtonVariant::GhostMuted
+            })
             .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, resume))
             .build(k),
         );

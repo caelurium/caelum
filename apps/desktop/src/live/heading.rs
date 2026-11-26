@@ -71,6 +71,11 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
         let ink = l.feed.project_ink(&l.app, path, k);
         (project, branch, ink)
     };
+    let vm_permissions = (session.scope.provider == caelum_core::application::Provider::Codex
+        && caelum_core::remote::native::checkout_id(path).is_some())
+    .then_some(session.options.permissions)
+    .flatten()
+    .filter(|p| *p != caelum_core::application::CodexPermissions::Ask);
     let eyebrow = row()
         .center_y()
         .min_w(0.0)
@@ -95,6 +100,25 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
                         .font(rune::TextStyle::new(10.5, 450.0))
                         .color(k.c.text_muted)
                         .truncate(),
+                )
+        }))
+        .children(vm_permissions.map(|permissions| {
+            let full = permissions == caelum_core::application::CodexPermissions::FullAccess;
+            row()
+                .key("session-vm-permissions")
+                .center_y()
+                .px(5.0)
+                .py(1.0)
+                .radius(4.0)
+                .fill(if full {
+                    k.alpha(k.c.warning.fg, 0.14)
+                } else {
+                    k.c.layer_02
+                })
+                .child(
+                    text(permissions.short_label())
+                        .font(rune::TextStyle::new(10.5, 500.0))
+                        .color(if full { k.c.warning.fg } else { k.c.text_muted }),
                 )
         }));
     let session_title = session
