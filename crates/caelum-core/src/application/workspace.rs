@@ -422,8 +422,15 @@ fn update_summary(session: &mut Session, summary: Summary, request: u64) {
             session.record_activity(at);
         }
     }
-    if session.title_state.allows_snapshot(request) && !summary.title.trim().is_empty() {
-        session.title = summary.title;
+    if session.title_state.allows_snapshot(request) {
+        if let Some(title) = summary
+            .title
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+        {
+            session.title = title.to_owned();
+        }
     }
     if summary.options.model.is_some() && !session.options_dirty {
         session.options.model = summary.options.model;

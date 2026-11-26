@@ -542,3 +542,34 @@ fn session_pinning_and_timeline_bookmark_filter_work_end_to_end() {
     advance(&mut rt, 0.2);
     assert!(rt.find(&format!("timeline-{target_id}")).is_some());
 }
+
+#[test]
+fn sidebar_cards_keep_multiline_session_titles_within_their_row() {
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        l.app.sessions[0].title =
+            "Review all of these thingss\n\nfind all implicit state machines in this repo".into();
+    });
+    advance(&mut rt, 0.2);
+    let card = element(&rt, "live-session-0").rect;
+    let title = rt
+        .elements()
+        .iter()
+        .find(|e| {
+            e.text.as_deref() == Some("Review all of these thingss")
+                && e.rect[0] >= card[0]
+                && e.rect[0] < card[0] + card[2]
+        })
+        .expect("missing sidebar session title")
+        .rect;
+    let actions = element(&rt, "session-actions-0").rect;
+    assert!(
+        title[1] >= card[1] && title[1] + title[3] <= card[1] + card[3],
+        "sidebar title overflowed card: card={card:?} title={title:?}"
+    );
+    assert!(
+        actions[1] + actions[3] <= card[1] + card[3] + 1.0,
+        "sidebar card bottom row overflowed onto following rows: card={card:?} actions={actions:?}"
+    );
+}

@@ -178,11 +178,12 @@ pub fn composer_target_bar(s: &Workspace, k: &Kit) -> Option<El> {
                 offscreen: bool,
                 on_click: Box<dyn Fn(&mut Workspace)>| {
         let session = &l.app.sessions[index];
-        let title = if session.title.trim().is_empty() {
-            "Untitled session"
-        } else {
-            session.title.as_str()
-        };
+        let title = session
+            .title
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or("Untitled session");
         k.interactive(
             row()
                 .h(24.0)
@@ -238,6 +239,7 @@ pub fn composer_target_bar(s: &Workspace, k: &Kit) -> Option<El> {
     };
 
     let mut track = ui::segmented_track(k)
+        .min_w(0.0)
         .child(pill(
             "split-target-primary".into(),
             "Send to primary pane",

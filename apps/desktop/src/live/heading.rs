@@ -97,6 +97,12 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
                         .truncate(),
                 )
         }));
+    let session_title = session
+        .title
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_else(|| session.title.trim());
     let title_body = col()
         .min_w(0.0)
         .shrink()
@@ -109,7 +115,7 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
                 .min_w(0.0)
                 .gap(6.0)
                 .child(
-                    text(&session.title)
+                    text(session_title)
                         .font(TextStyle::new(15.0, 570.0).lh(20.0))
                         .color(k.c.text_base)
                         .min_w(0.0)
@@ -126,7 +132,7 @@ pub(crate) fn session_heading(s: &Workspace, k: &Kit, index: usize, split: bool)
         k.interactive(title_body)
             .key("conversation-heading")
             .role("button")
-            .label(format!("{} · Browse prompts", session.title))
+            .label(format!("{session_title} · Browse prompts"))
             .help("Browse the prompts in this conversation")
             .focusable(true)
             .focus_ring(1.5, 0.0, k.c.border_focus)
