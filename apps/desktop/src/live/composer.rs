@@ -158,6 +158,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
             .children(activity.as_ref().map(|a| {
                 crate::activity::indicator(a, session.options.agent.as_deref(), k).grow(1.0)
             }))
+            .children((activity.is_none() && has_queue).then(|| rune::el().grow(1.0)))
             .children(has_queue.then(|| crate::panels::queue_summary(s, k, index)));
     let context = col()
         .key(format!("composer-context-{index}"))
@@ -168,6 +169,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .children((activity.is_some() || has_queue).then_some(status))
         .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
         .child(crate::panels::composer_context(s, k, index));
+    crate::panels::queue_popover(s, k, index, layers);
     ui::composer(
         crate::composer::editor(s, index, input),
         controls,

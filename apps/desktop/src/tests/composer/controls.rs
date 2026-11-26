@@ -275,8 +275,14 @@ fn composer_queue_disclosure_preserves_ownership_and_restores_saved_options() {
         Some("2 queued")
     );
     assert!(rt.find("queued-messages").is_none());
+    let composer_before = element(&rt, "message-composer").rect;
     click(&mut rt, "toggle-queued-messages");
     assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(true));
+    assert!(rt.find("queued-messages").is_some());
+    assert!(
+        (element(&rt, "message-composer").rect[3] - composer_before[3]).abs() < 1.0,
+        "opening the queue popover must not grow the composer"
+    );
     assert!(
         !element(&rt, "edit-queued-0-0").focusable,
         "editing must not overwrite a newer draft"
@@ -291,18 +297,23 @@ fn composer_queue_disclosure_preserves_ownership_and_restores_saved_options() {
         element(&rt, "toggle-queued-messages").label.as_deref(),
         Some("2 queued · Paused")
     );
-    click(&mut rt, "live-session-1");
+    rt.update(|s, _| s.live.as_mut().unwrap().app.select(1));
+    advance(&mut rt, 0.3);
     assert!(rt.find("toggle-queued-messages").is_none());
+    assert!(rt.find("queued-messages").is_none());
     click(&mut rt, "live-session-0");
-    assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(true));
+    assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(false));
     assert_eq!(rt.state.live.as_ref().unwrap().drafts[0].text, draft);
     fill(&mut rt, "live-draft-0", "");
+    click(&mut rt, "toggle-queued-messages");
     click(&mut rt, "edit-queued-0-0");
+    assert!(rt.find("queued-messages").is_none());
     assert!(element(&rt, "live-draft-0").focused);
     let l = rt.state.live.as_ref().unwrap();
     assert_eq!(l.drafts[0].text, "Check attachments and multiline drafts.");
     assert_eq!(l.app.sessions[0].options, options);
     assert_eq!(l.app.sessions[0].queue.len(), 1);
+    click(&mut rt, "toggle-queued-messages");
     click(&mut rt, "remove-local-queued-0-0");
     assert!(rt.find("toggle-queued-messages").is_none());
     assert!(rt.find("queued-messages").is_none());
@@ -352,9 +363,11 @@ fn composer_inbox_errors_stay_visible_when_collapsed_and_retry_the_same_message(
     );
     assert!(rt.find("queued-messages").is_none());
     click(&mut rt, "toggle-queued-messages");
-    key(&mut rt, Key::Text(" ".into()), Mods::default());
+    assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(true));
+    key(&mut rt, Key::Escape, Mods::default());
     assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(false));
     key(&mut rt, Key::Text(" ".into()), Mods::default());
+    assert_eq!(element(&rt, "toggle-queued-messages").expanded, Some(true));
     click(&mut rt, &format!("retry-queued-{id}"));
     let (retry, command) = rt
         .state

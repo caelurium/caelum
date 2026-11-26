@@ -28,7 +28,7 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
                         options: Default::default(),
                     })
                     .collect();
-                l.expanded_queues.insert(0);
+                l.menu = Some(("queue", 0));
             });
             advance(&mut rt, 0.4);
             let transcript = element(&rt, "live-transcript-0").rect;
@@ -57,9 +57,12 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
                 );
             }
             assert!(rt.find("expand-composer").is_none());
+            assert!(rt.find("queued-messages").is_some());
             assert!(element(&rt, "composer-context-0").rect[3] <= 180.1);
             let grown = element(&rt, "composer-editor").rect[3];
 
+            key(&mut rt, Key::Escape, Mods::default());
+            assert!(rt.find("queued-messages").is_none());
             click(&mut rt, "composer-editor");
             key(
                 &mut rt,
