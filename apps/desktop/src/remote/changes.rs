@@ -111,7 +111,7 @@ pub(crate) fn inspector(s: &Workspace, k: &Kit) -> El {
         None => return body.child(ui::caption("Refresh to inspect this checkout.", k)),
     };
     let idle = matches!(c.phase, caelum_core::remote::Phase::Ready { .. })
-        && c.thread.turn == Turn::Idle
+        && c.thread.turn() == &Turn::Idle
         && !l.app.remote.jobs.contains_key(id);
     let a = id.clone();
     let b = id.clone();

@@ -611,6 +611,8 @@ fn relocation_keeps_repository_subdirectory_scopes() {
             .provider
             .inner
             .lock_servers()
+            .as_mut()
+            .unwrap()
             .insert(source.canonicalize().unwrap(), slot);
         service.configure(json!({"directory": if same_subpath { destination.0.join("src") } else { destination.0.clone() }}));
         let Ok(Reply::SessionMoved(change)) = resume_reply(&service, &source) else {

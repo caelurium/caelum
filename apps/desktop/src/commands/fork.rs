@@ -343,7 +343,7 @@ pub fn fork_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ => return false,
     };
     let chosen = points[new].boundary.clone();
-    tx.scroll_center_in_instant("fork-rows", row_key(&chosen));
+    tx.scroll_center_in_instant("fork-points", row_key(&chosen));
     live_mut(s).commands.fork_selected = Some(chosen);
     true
 }

@@ -18,6 +18,8 @@ mod requests;
 mod sessions;
 #[cfg(all(test, unix))]
 mod tests;
+mod titles;
+pub(crate) use titles::thread_title;
 mod transport;
 mod websocket;
 
@@ -50,9 +52,8 @@ struct ProviderInner {
     processes: Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
     questions: QuestionBroker,
-    connections: Mutex<HashMap<PathBuf, Arc<ConnectionSlot>>>,
+    connections: Mutex<Option<HashMap<PathBuf, Arc<ConnectionSlot>>>>,
     subscribers: EventSubscribers,
-    closed: AtomicBool,
 }
 
 /// One checkout's connection attempt. The provider map is never locked during I/O.
@@ -219,9 +220,8 @@ impl CodexProvider {
                 processes,
                 approvals,
                 questions,
-                connections: Mutex::new(HashMap::new()),
+                connections: Mutex::new(Some(HashMap::new())),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
-                closed: AtomicBool::new(false),
             }),
         }
     }
@@ -237,7 +237,8 @@ impl CodexProvider {
     /// Subscribe to Codex thread, turn, item, and process events.
     pub fn subscribe(&self) -> Receiver<CodexEvent> {
         let (sender, receiver) = mpsc::channel();
-        if !self.inner.closed.load(Ordering::Acquire) {
+        let connections = self.inner.lock_connections();
+        if connections.is_some() {
             self.inner.lock_subscribers().push(sender);
         }
         receiver
@@ -247,7 +248,9 @@ impl CodexProvider {
         let slots: Vec<_> = self
             .inner
             .lock_connections()
-            .iter()
+            .as_ref()
+            .into_iter()
+            .flatten()
             .filter(|(path, _)| path.starts_with(checkout))
             .map(|(path, slot)| (path.clone(), Arc::clone(slot)))
             .collect();
@@ -276,7 +279,10 @@ impl CodexProvider {
 
     pub fn release_checkout(&self, checkout: &Path) {
         let removed = {
-            let mut connections = self.inner.lock_connections();
+            let mut registry = self.inner.lock_connections();
+            let Some(connections) = registry.as_mut() else {
+                return;
+            };
             let paths: Vec<_> = connections
                 .keys()
                 .filter(|path| path.starts_with(checkout))
@@ -300,12 +306,8 @@ impl CodexProvider {
 
     /// Terminate every app-server process owned by this provider.
     pub fn shutdown(&self) {
-        if self.inner.closed.swap(true, Ordering::AcqRel) {
+        let Some(connections) = self.inner.lock_connections().take() else {
             return;
-        }
-        let connections = {
-            let mut connections = self.inner.lock_connections();
-            std::mem::take(&mut *connections)
         };
         for (path, slot) in connections {
             self.inner
@@ -320,11 +322,10 @@ impl CodexProvider {
 
     fn connection(&self, project: &Project) -> Result<Arc<CodexConnection>, CodexError> {
         let slot = {
-            let mut connections = self.inner.lock_connections();
-            if self.inner.closed.load(Ordering::Acquire) {
-                return Err(CodexError::Closed);
-            }
-            connections
+            let mut registry = self.inner.lock_connections();
+            registry
+                .as_mut()
+                .ok_or(CodexError::Closed)?
                 .entry(project.path().to_path_buf())
                 .or_default()
                 .clone()
@@ -484,12 +485,15 @@ impl CodexProvider {
 
 impl Drop for ProviderInner {
     fn drop(&mut self) {
-        self.closed.store(true, Ordering::Release);
-        let connections = self
+        let Some(connections) = self
             .connections
             .get_mut()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        for (path, slot) in std::mem::take(connections) {
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        else {
+            return;
+        };
+        for (path, slot) in connections {
             if let Some(connection) = slot.retire() {
                 connection.close(&self.processes);
             }
@@ -599,7 +603,7 @@ pub enum CodexError {
 }
 
 impl ProviderInner {
-    fn lock_connections(&self) -> MutexGuard<'_, HashMap<PathBuf, Arc<ConnectionSlot>>> {
+    fn lock_connections(&self) -> MutexGuard<'_, Option<HashMap<PathBuf, Arc<ConnectionSlot>>>> {
         self.connections.lock().unwrap_or_else(|p| p.into_inner())
     }
 

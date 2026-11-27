@@ -49,7 +49,7 @@ impl Capture {
         Some(&self.owner) == EditorOwner::current(l).as_ref()
             && self.owner.editor(l).is_some_and(|editor| {
                 editor.focused
-                    && editor.preedit.is_none()
+                    && editor.preedit().is_none()
                     && self.text == editor.text
                     && self.anchor == editor.anchor
                     && self.focus == editor.focus
@@ -108,7 +108,7 @@ pub fn token(s: &Workspace) -> Option<Completion> {
     let owner = EditorOwner::current(l)?;
     let editor = owner.editor(l)?;
     if !editor.focused
-        || editor.preedit.is_some()
+        || editor.preedit().is_some()
         || l.panels.overlay().is_some()
         || l.models.is_open()
     {
@@ -232,7 +232,7 @@ fn dismiss(s: &mut Workspace) {
 fn choose(s: &mut Workspace, choice: Choice, token: Completion, execute: bool, tx: &mut Tx) {
     if live(s).panels.overlay().is_some()
         || editor(s).is_none_or(|editor| {
-            editor.preedit.is_some()
+            editor.preedit().is_some()
                 || Completion::at(&editor.text, editor.anchor, editor.focus).as_ref()
                     != Some(&token)
         })
@@ -311,7 +311,7 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
     let Some(editor) = editor(s) else {
         return false;
     };
-    if !editor.focused || editor.preedit.is_some() || live(s).panels.overlay().is_some() {
+    if !editor.focused || editor.preedit().is_some() || live(s).panels.overlay().is_some() {
         return false;
     }
     let active = token(s);

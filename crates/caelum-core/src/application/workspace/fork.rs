@@ -263,7 +263,7 @@ impl Workspace {
             || s.stopping()
             || s.commanding()
             || s.control_busy()
-            || s.generating
+            || s.generating_side_answer()
             || !s.shells.is_empty()
             || crate::application::subagents::running(&s.conversation.entries) > 0
             || !s.queue.is_empty()

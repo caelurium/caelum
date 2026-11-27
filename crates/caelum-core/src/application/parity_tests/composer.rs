@@ -163,10 +163,7 @@ fn mention_status_clears_on_cancel_and_stale_failure_does_not_touch_new_context(
     let id = app.commands().pop().unwrap().0;
     app.apply(Event::Completed(id, Err("Side context failure".into())));
     assert!(app.sessions[0].attachment_errors.is_empty());
-    assert_eq!(
-        app.sessions[0].side_error.as_deref(),
-        Some("Side context failure")
-    );
+    assert_eq!(app.sessions[0].side_error(), Some("Side context failure"));
 }
 
 #[test]
@@ -222,9 +219,9 @@ fn side_questions_keep_main_context_and_reject_a_dismissed_generation() {
         id,
         Ok(Reply::Generated("Old answer".into())),
     ));
-    assert!(app.sessions[0].generating);
+    assert!(app.sessions[0].generating_side_answer());
     app.apply(Event::Completed(new, Err("offline".into())));
-    assert_eq!(app.sessions[0].side_error.as_deref(), Some("offline"));
+    assert_eq!(app.sessions[0].side_error(), Some("offline"));
     assert_eq!(app.sessions[0].draft, "Main draft");
     assert_eq!(app.sessions[0].attachments.len(), 1);
 }
@@ -283,4 +280,36 @@ fn context_serialization_keeps_file_snapshots_images_and_command_arguments_separ
     assert!(!text.contains("caelum-image-context"));
     assert!(text.contains("fn café"));
     assert_eq!(images, vec![image]);
+}
+
+#[test]
+fn a_disconnected_side_question_keeps_its_partial_answer_and_ignores_late_replies() {
+    let mut app = workspace();
+    app.select(1);
+    app.commands();
+    let key = app.sessions[1].key().unwrap();
+    assert!(app.ask(1, "Why?".into()));
+    let (request, command) = app.commands().pop().unwrap();
+    let Command::SideTurn(_, turn) = command else {
+        panic!("expected a streaming side question");
+    };
+    app.apply(Event::SideAnswer(key.clone(), request, "Partial".into()));
+    assert_eq!(app.sessions[1].side_exchange(), Some(("Why?", "Partial")));
+
+    app.apply(Event::Codex(caelum_protocol::CodexEvent {
+        project_path: key.scope.project.clone(),
+        method: "codex/processExited".into(),
+        params: json!({}),
+        request_id: None,
+    }));
+    assert!(turn.until.has_changed().is_err());
+    app.apply(Event::SideAnswer(key, request, "Late delta".into()));
+    app.apply(Event::Completed(
+        request,
+        Ok(Reply::Generated("Late reply".into())),
+    ));
+    let session = &app.sessions[1];
+    assert!(!session.generating_side_answer());
+    assert_eq!(session.side_exchange(), Some(("Why?", "Partial")));
+    assert_eq!(session.side_error(), Some("Provider disconnected."));
 }
