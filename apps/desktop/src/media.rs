@@ -307,8 +307,7 @@ pub(crate) fn view(
     let Some(data) = data(s, project, source) else {
         return ui::caption("Image unavailable", k);
     };
-    let source_key = (!media.source.starts_with("data:image/"))
-        .then_some((project.as_ref(), media.source.as_str()));
+    let source_key = (!source.starts_with("data:image/")).then_some((project, source));
     let image = match live(s).media.image(data, source_key, live(s).fixture) {
         Ok(Some(image)) => image,
         Ok(None) => return ui::skeleton("Loading image", 3, k),
