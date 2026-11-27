@@ -7,9 +7,7 @@ mod vm;
 
 use std::rc::Rc;
 
-use caelum_core::application::{
-    FeedSession, SessionBucket, SessionScope, Workspace as Application,
-};
+use caelum_core::application::{FeedSession, SessionScope, Workspace as Application};
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, icon, row, text, text_input};
 use rune_kit::{Kit, ScrollBar, glyphs, shell::SidebarHeader};
 
@@ -289,16 +287,12 @@ pub fn sidebar(s: &Workspace, k: &Kit) -> El {
             )
             .virtual_rows_version(rows.as_ref())
             .on_visible_rows(move |s: &mut Workspace, range| {
-                live_mut(s).feed.visible = range.filter_map(|i| visible.get(i).cloned()).collect();
+                s.live.as_mut().unwrap().feed.visible =
+                    range.filter_map(|i| visible.get(i).cloned()).collect();
                 false
             })
     };
-    let waiting = l
-        .app
-        .dashboard_sessions("", false)
-        .iter()
-        .filter(|id| l.app.session_bucket(id) == SessionBucket::Waiting)
-        .count();
+    let waiting = l.app.waiting_session_count();
     let overview_selected = l.panels.screen == crate::panels::Screen::Overview;
     let overview_nav = k
         .interactive(
