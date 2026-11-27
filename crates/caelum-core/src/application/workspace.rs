@@ -17,6 +17,7 @@ mod remote;
 mod review;
 mod scratch;
 mod sessions;
+mod side_question;
 mod subagents;
 mod submission;
 mod tasks;
@@ -87,19 +88,43 @@ pub struct Session {
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
     shell_revision: u64,
     pub details: Option<caelum_protocol::SessionDetails>,
-    pub side_question: Option<(String, String)>,
+    side_question: side_question::State,
     pub side_draft: String,
     pub side_attachments: Vec<Attachment>,
-    pub side_error: Option<String>,
-    pub side_generation: u64,
-    side_cancel: Option<tokio::sync::watch::Sender<()>>,
     pub side_completion_caret: Option<usize>,
-    pub generating: bool,
     pub disconnected: bool,
     options_dirty: bool,
     revision: u64,
-    seen_events: std::collections::VecDeque<String>,
+    seen_events: SeenEvents,
     usage: crate::telemetry::Tracking,
+}
+
+#[derive(Default)]
+struct SeenEvents {
+    order: std::collections::VecDeque<String>,
+    ids: std::collections::HashSet<String>,
+}
+
+impl SeenEvents {
+    fn insert(&mut self, id: &str) -> bool {
+        if self.ids.contains(id) {
+            return false;
+        }
+        let owned = id.to_owned();
+        self.ids.insert(owned.clone());
+        self.order.push_back(owned);
+        if self.order.len() > 512 {
+            if let Some(evicted) = self.order.pop_front() {
+                self.ids.remove(&evicted);
+            }
+        }
+        true
+    }
+
+    fn clear(&mut self) {
+        self.order.clear();
+        self.ids.clear();
+    }
 }
 
 impl Session {
@@ -141,14 +166,10 @@ impl Session {
             shells: Vec::new(),
             shell_revision: 0,
             details: None,
-            side_question: None,
+            side_question: Default::default(),
             side_draft: String::new(),
             side_attachments: Vec::new(),
-            side_error: None,
-            side_generation: 0,
-            side_cancel: None,
             side_completion_caret: None,
-            generating: false,
             disconnected: false,
             options_dirty: false,
             revision: 0,
@@ -235,7 +256,7 @@ enum Pending {
     Enqueue(usize, String),
     RemoveQueued(usize, String),
     Control(usize),
-    Generate(usize, String, u64),
+    Generate(usize),
     RegenerateTitle(usize),
     Notify,
     Load,
@@ -298,7 +319,6 @@ pub struct Workspace {
     pub approvals: Vec<ApprovalPrompt>,
     pub questions: Vec<QuestionPrompt>,
     pub error: Option<String>,
-    pub opening: bool,
     pub services: Services,
     pub runner: crate::runner::WorkspaceRunner,
     pub preferences: Preferences,
@@ -315,7 +335,7 @@ pub struct Workspace {
     pending: HashMap<u64, Pending>,
     outgoing: Vec<(u64, Command)>,
     next_request: u64,
-    latest_open: u64,
+    project_open: Option<u64>,
     launches: HashMap<u64, (Provider, u64)>,
     pending_ci_fixes: HashMap<u64, review::PendingCiFix>,
     remembered: HashMap<String, usize>,
@@ -399,20 +419,28 @@ impl Workspace {
             .push((self.next_request, Command::RecordUsage(row)));
     }
 
-    fn request(&mut self, mut command: Command, pending: Pending) -> u64 {
+    fn request(&mut self, command: Command, pending: Pending) -> u64 {
         if matches!(command, Command::Notify(..)) && self.preferences.sound_volume > 0 {
             self.request(
                 Command::Sound(self.preferences.sound_volume),
                 Pending::Notify,
             );
         }
+        let id = self.next_request_id();
+        self.queue_request(id, command, pending);
+        id
+    }
+
+    fn next_request_id(&mut self) -> u64 {
         self.next_request += 1;
-        let id = self.next_request;
+        self.next_request
+    }
+
+    fn queue_request(&mut self, id: u64, mut command: Command, pending: Pending) {
         self.track_native_request(id, &mut command, &pending);
         crate::diagnostics::command("created", id, &command);
         self.pending.insert(id, pending);
         self.outgoing.push((id, command));
-        id
     }
 }
 

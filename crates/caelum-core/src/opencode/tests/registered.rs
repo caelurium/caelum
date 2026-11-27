@@ -66,6 +66,8 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
         let server = provider
             .inner
             .lock_servers()
+            .as_ref()
+            .unwrap()
             .values()
             .next()
             .unwrap()
@@ -123,7 +125,7 @@ fn registered_service_streams_external_work_and_survives_provider_shutdown() {
         );
         provider.ensure_checkout_idle(&checkout).unwrap();
         provider.release_checkout(&checkout);
-        assert!(provider.inner.lock_servers().is_empty());
+        assert!(provider.inner.lock_servers().as_ref().unwrap().is_empty());
         assert!(!server.alive.load(Ordering::Acquire));
         provider.shutdown();
         assert!(external.0.try_wait().unwrap().is_none());

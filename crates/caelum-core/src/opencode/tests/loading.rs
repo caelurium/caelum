@@ -148,6 +148,8 @@ fn retired_startup_cannot_replace_a_new_connection_or_restore_stale_questions() 
         let slot = provider
             .inner
             .lock_servers()
+            .as_ref()
+            .unwrap()
             .get(project.path())
             .unwrap()
             .clone();
@@ -181,7 +183,7 @@ fn retired_startup_cannot_replace_a_new_connection_or_restore_stale_questions() 
             assert_eq!(questions[0].request_id, "frm_attempt_2");
         } else {
             assert!(provider.inner.questions.pending().is_empty());
-            assert!(provider.inner.lock_servers().is_empty());
+            assert!(provider.inner.lock_servers().is_none());
         }
         provider.shutdown();
     }

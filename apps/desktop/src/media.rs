@@ -2,32 +2,89 @@ use crate::ui::Button;
 use crate::{
     Workspace,
     live::{live, live_mut},
-    panels::Screen,
     ui,
 };
 use caelum_core::application::{Attachment, Task, presentation::Media};
 use rune::{El, Image, ImageCache, ScrollSpec, SurfaceFit, Waker, col, row};
 use rune_kit::{ButtonVariant, Kit};
 use std::{
+    cell::Cell,
     collections::HashMap,
     hash::{Hash, Hasher},
+    rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
 
+const MAX_DECODED_ENTRIES: usize = 32;
+const MAX_DECODED_BYTES: usize = 64 * 1024 * 1024;
+
 type Decoded = HashMap<u64, (u64, Option<Result<Image, String>>)>;
+
+fn cache_key(data: &str, source_key: Option<(&str, &str)>) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    if let Some((project, source)) = source_key {
+        0u8.hash(&mut hash);
+        project.hash(&mut hash);
+        source.hash(&mut hash);
+        data.len().hash(&mut hash);
+    } else {
+        1u8.hash(&mut hash);
+        let bytes = data.as_bytes();
+        bytes.len().hash(&mut hash);
+        if bytes.len() <= 1024 {
+            bytes.hash(&mut hash);
+        } else {
+            let mid = bytes.len() / 2;
+            bytes[..256].hash(&mut hash);
+            bytes[mid - 128..mid + 128].hash(&mut hash);
+            bytes[bytes.len() - 256..].hash(&mut hash);
+        }
+    }
+    hash.finish()
+}
+
+fn decoded_bytes(entry: &Option<Result<Image, String>>) -> usize {
+    entry
+        .as_ref()
+        .and_then(|res| res.as_ref().ok())
+        .and_then(|img| img.size())
+        .map_or(0, |[w, h]| (w as usize) * (h as usize) * 4)
+}
 
 pub struct State {
     cache: Arc<ImageCache>,
     decoded: Arc<Mutex<Decoded>>,
     changed: Arc<AtomicBool>,
     wake: Waker,
-    pub selected: Option<(String, Media)>,
-    pub zoom: Option<f32>,
-    offset: std::rc::Rc<std::cell::Cell<[f32; 2]>>,
-    drag_start: [f32; 2],
+}
+
+pub(crate) struct Preview {
+    pub project: String,
+    pub media: Media,
+    pub viewport: Viewport,
+}
+
+impl Preview {
+    pub(crate) fn new(project: String, media: Media) -> Self {
+        Self {
+            project,
+            media,
+            viewport: Viewport::default(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Viewport(Rc<ViewportState>);
+
+#[derive(Default)]
+struct ViewportState {
+    zoom: Cell<Option<f32>>,
+    offset: Cell<[f32; 2]>,
+    drag_start: Cell<Option<[f32; 2]>>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -47,10 +104,6 @@ impl State {
             decoded: Default::default(),
             changed,
             wake,
-            selected: None,
-            zoom: None,
-            offset: Default::default(),
-            drag_start: [0.0; 2],
         }
     }
     pub fn poll(&self) -> bool {
@@ -59,10 +112,13 @@ impl State {
     pub(crate) fn home_background(&self, id: &str, dark: bool) -> Image {
         self.cache.load(crate::home::backgrounds::bytes(id, dark))
     }
-    fn image(&self, data: &str, fixture: bool) -> Result<Option<Image>, String> {
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        data.hash(&mut hash);
-        let id = hash.finish();
+    fn image(
+        &self,
+        data: &str,
+        source_key: Option<(&str, &str)>,
+        fixture: bool,
+    ) -> Result<Option<Image>, String> {
+        let id = cache_key(data, source_key);
         let generation = rune::runtime::commit_generation();
         let mut decoded = self.decoded.lock().unwrap();
         if let Some((used, result)) = decoded.get_mut(&id) {
@@ -70,13 +126,20 @@ impl State {
             return result.clone().transpose();
         }
 
-        if decoded.len() >= 32
-            && let Some(oldest) = decoded
+        let mut total_bytes: usize = decoded.values().map(|(_, res)| decoded_bytes(res)).sum();
+        while decoded.len() >= MAX_DECODED_ENTRIES
+            || (total_bytes >= MAX_DECODED_BYTES && !decoded.is_empty())
+        {
+            let Some(oldest) = decoded
                 .iter()
                 .min_by_key(|(_, (used, _))| used)
                 .map(|(id, _)| *id)
-        {
-            decoded.remove(&oldest);
+            else {
+                break;
+            };
+            if let Some((_, evicted)) = decoded.remove(&oldest) {
+                total_bytes = total_bytes.saturating_sub(decoded_bytes(&evicted));
+            }
         }
         decoded.insert(id, (generation, None));
         drop(decoded);
@@ -161,7 +224,9 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
         .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
         .build(k);
     };
-    let image = match live(s).media.image(data, live(s).fixture) {
+    let source_key =
+        (!media.source.starts_with("data:image/")).then_some((project, media.source.as_str()));
+    let image = match live(s).media.image(data, source_key, live(s).fixture) {
         Ok(Some(image)) => image,
         Ok(None) => return ui::skeleton("Loading image", 2, k),
         Err(error) => return ui::notice("Image unavailable", &error, k),
@@ -186,14 +251,14 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
         .role("img")
         .focusable(true)
         .on_press(move |s: &mut Workspace| {
-            let l = live_mut(s);
-            l.media.selected = Some((owner.clone(), media.clone()));
-            l.media.zoom = None;
-            l.panels.set_overlay(Some(Screen::Image));
+            live_mut(s).panels.open_image(owner.clone(), media.clone());
         })
 }
 pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> El {
-    let image = match live(s).media.image(&attachment.content, live(s).fixture) {
+    let image = match live(s)
+        .media
+        .image(&attachment.content, None, live(s).fixture)
+    {
         Ok(Some(image)) => image,
         Ok(None) => {
             return ui::caption("…", k)
@@ -231,14 +296,19 @@ pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> 
         .role("img")
 }
 
-pub fn view(s: &Workspace, k: &Kit) -> El {
-    let Some((project, media)) = &live(s).media.selected else {
-        return col();
-    };
-    let Some(data) = data(s, project, &media.source) else {
+pub(crate) fn view(
+    s: &Workspace,
+    k: &Kit,
+    project: &str,
+    name: &str,
+    source: &str,
+    viewport: &Viewport,
+) -> El {
+    let Some(data) = data(s, project, source) else {
         return ui::caption("Image unavailable", k);
     };
-    let image = match live(s).media.image(data, live(s).fixture) {
+    let source_key = (!source.starts_with("data:image/")).then_some((project, source));
+    let image = match live(s).media.image(data, source_key, live(s).fixture) {
         Ok(Some(image)) => image,
         Ok(None) => return ui::skeleton("Loading image", 3, k),
         Err(error) => return ui::notice("Image unavailable", &error, k),
@@ -257,7 +327,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
     let fit = (canvas[2] / width as f32)
         .min(canvas[3] / height as f32)
         .min(1.0);
-    let zoom = live(s).media.zoom.unwrap_or(fit);
+    let zoom = viewport.0.zoom.get().unwrap_or(fit);
     let mut actions = row().w_full().center_y().gap(6.0);
     for (name, value) in [
         ("Fit", None),
@@ -265,20 +335,22 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
         ("−", Some((zoom / 1.4).max(0.1))),
         ("+", Some((zoom * 1.4).min(8.0))),
     ] {
+        let viewport = viewport.clone();
         actions = actions.child(
             Button::new(name)
                 .variant(ButtonVariant::Outline)
-                .on_press(move |s: &mut Workspace| live_mut(s).media.zoom = value)
+                .on_press(move |_: &mut Workspace| viewport.0.zoom.set(value))
                 .build(k),
         );
     }
-    let offset = live(s).media.offset.clone();
+    let scroll = viewport.clone();
+    let drag_viewport = viewport.clone();
     col()
         .w_full()
         .h_full()
         .min_h(0.0)
         .gap(8.0)
-        .child(ui::caption(&media.name, k).truncate())
+        .child(ui::caption(name, k).truncate())
         .child(actions.child(ui::caption(
             format!("{:.0}% · {width} × {height}", zoom * 100.0),
             k,
@@ -297,20 +369,23 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .on_scroll_offset(move |pos| offset.set(pos.offset))
-                .on_drag(|s: &mut Workspace, drag, tx| {
-                    let m = &mut live_mut(s).media;
+                .on_scroll_offset(move |pos| scroll.0.offset.set(pos.offset))
+                .on_drag(move |_: &mut Workspace, drag, tx| {
+                    let state = &drag_viewport.0;
                     if drag.phase == rune::Phase::Down {
-                        m.drag_start = m.offset.get();
+                        state.drag_start.set(Some(state.offset.get()));
                     }
-                    let at = if drag.cancelled() {
-                        m.drag_start
-                    } else {
-                        [
-                            (m.drag_start[0] - drag.dx).max(0.0),
-                            (m.drag_start[1] - drag.dy).max(0.0),
-                        ]
+                    let Some(start) = state.drag_start.get() else {
+                        return;
                     };
+                    let at = if drag.cancelled() {
+                        start
+                    } else {
+                        [(start[0] - drag.dx).max(0.0), (start[1] - drag.dy).max(0.0)]
+                    };
+                    if drag.phase == rune::Phase::Up || drag.cancelled() {
+                        state.drag_start.set(None);
+                    }
                     tx.scroll_to("image-canvas", at[0], at[1]);
                 })
                 .items_center()
@@ -318,7 +393,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                     rune::el()
                         .size(width as f32 * zoom, height as f32 * zoom)
                         .pixels(image.pixels())
-                        .label(&media.name)
+                        .label(name)
                         .role("img"),
                 ),
         )

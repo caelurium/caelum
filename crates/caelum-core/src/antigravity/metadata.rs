@@ -10,11 +10,50 @@ use serde::{Deserialize, Serialize};
 use super::AntigravityError;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(from = "SavedRecord", into = "SavedRecord")]
 struct SessionRecord {
+    visibility: Visibility,
+    title: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Visibility {
+    #[default]
+    Open,
+    Archived,
+    Deleted,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct SavedRecord {
     archived: bool,
     deleted: bool,
     title: Option<String>,
+}
+
+impl From<SavedRecord> for SessionRecord {
+    fn from(saved: SavedRecord) -> Self {
+        let visibility = match (saved.deleted, saved.archived) {
+            (true, _) => Visibility::Deleted,
+            (false, true) => Visibility::Archived,
+            (false, false) => Visibility::Open,
+        };
+        Self {
+            visibility,
+            title: saved.title,
+        }
+    }
+}
+
+impl From<SessionRecord> for SavedRecord {
+    fn from(record: SessionRecord) -> Self {
+        Self {
+            archived: record.visibility == Visibility::Archived,
+            deleted: record.visibility == Visibility::Deleted,
+            title: record.title,
+        }
+    }
 }
 
 /// Persists archive, delete, and custom title metadata for Antigravity ACP sessions,
@@ -51,11 +90,13 @@ impl SessionMetadataStore {
     }
 
     pub(crate) fn is_archived(&self, project: &Path, session_id: &str) -> bool {
-        self.record(project, session_id).is_some_and(|r| r.archived)
+        self.record(project, session_id)
+            .is_some_and(|r| r.visibility == Visibility::Archived)
     }
 
     pub(crate) fn is_deleted(&self, project: &Path, session_id: &str) -> bool {
-        self.record(project, session_id).is_some_and(|r| r.deleted)
+        self.record(project, session_id)
+            .is_some_and(|r| r.visibility == Visibility::Deleted)
     }
 
     pub(crate) fn title(&self, project: &Path, session_id: &str) -> Option<String> {
@@ -71,7 +112,16 @@ impl SessionMetadataStore {
         archived: bool,
     ) -> Result<(), AntigravityError> {
         let record = self.entry_mut(project, session_id);
-        record.archived = archived;
+        if record.visibility == Visibility::Deleted {
+            return Err(AntigravityError::Protocol(
+                "Antigravity session has been deleted".into(),
+            ));
+        }
+        record.visibility = if archived {
+            Visibility::Archived
+        } else {
+            Visibility::Open
+        };
         self.save()
     }
 
@@ -81,8 +131,7 @@ impl SessionMetadataStore {
         session_id: &str,
     ) -> Result<(), AntigravityError> {
         let record = self.entry_mut(project, session_id);
-        record.archived = false;
-        record.deleted = true;
+        record.visibility = Visibility::Deleted;
         self.save()
     }
 

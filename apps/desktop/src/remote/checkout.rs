@@ -57,7 +57,7 @@ pub(crate) fn enter(s: &mut Workspace) {
     if let Some(id) = live(s).app.remote.saved.selected.clone()
         && live(s).app.remote.saved.checkouts[&id]
             .thread
-            .awaiting_native
+            .awaiting_native()
     {
         session(s, &id, SessionIntent::Reopen);
         return;
@@ -70,7 +70,7 @@ pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
     if live_mut(s).app.open_vm_thread(link) {
         if live(s).app.remote.saved.checkouts[&link.checkout]
             .thread
-            .awaiting_native
+            .awaiting_native()
         {
             session(s, &link.checkout, SessionIntent::Reopen);
             return;
@@ -85,7 +85,6 @@ fn show(s: &mut Workspace, focus_draft: bool) {
     l.panels.set_overlay(None);
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
-    l.remote.inspection = None;
     super::conversation::sync_editor(l);
     super::conversation::set_focus(l, focus_draft);
     l.schedule();
@@ -139,25 +138,15 @@ pub(super) fn launch_pi(s: &mut Workspace, id: &str) {
     }
 }
 
-pub(crate) fn manage(s: &mut Workspace, id: &str) {
-    live_mut(s).app.dismiss_vm_destination(id);
-    dismiss_wait(live_mut(s));
-    live_mut(s).app.select_remote(id);
-    show(s, true);
-}
-
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let mut changed = false;
     if l.panels.overlay() == Some(Screen::VmStats) && super::popup::owner(l).is_none() {
         l.panels.set_overlay(None);
         changed = true;
     }
-    if l.panels.overlay() != Some(Screen::VmStats) {
-        l.remote.inspection = None;
-    }
     if !l.remote.restored && l.app.restored() {
         l.remote.restored = true;
-        if !l.app.opening
+        if !l.app.opening_project()
             && l.app.selected.is_none()
             && let Some(id) = l.app.remote.saved.selected.clone()
         {
@@ -165,7 +154,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
             l.panels.screen = Screen::Remote;
             let thread = &l.app.remote.saved.checkouts[&id].thread;
             if (thread.is_blank() && thread.provider == caelum_core::remote::VmProvider::Codex)
-                || thread.awaiting_native
+                || thread.awaiting_native()
             {
                 l.remote.open_when_ready = Some((id, Open::Native(SessionIntent::Reopen)));
             }

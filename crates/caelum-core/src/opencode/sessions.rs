@@ -272,7 +272,12 @@ impl OpenCodeProvider {
     }
 
     pub(crate) fn forget_previous_location(&self, project: &str, session_id: &str) {
-        if let Some(slot) = self.inner.lock_servers().get(Path::new(project)) {
+        if let Some(slot) = self
+            .inner
+            .lock_servers()
+            .as_ref()
+            .and_then(|servers| servers.get(Path::new(project)))
+        {
             slot.forget_session_if_connected(session_id);
         }
     }

@@ -159,7 +159,7 @@ pub fn transcript_for(
                 let positions: Vec<_> = range
                     .filter_map(|row| row.checked_sub(1).and_then(|i| visible.get(i).copied()))
                     .collect();
-                let l = live_mut(s);
+                let l = s.live.as_mut().unwrap();
                 let entries = &l.app.sessions[index].conversation.entries;
                 let next: HashSet<_> = positions
                     .iter()
@@ -181,7 +181,11 @@ pub fn transcript_for(
                         .map(|e| e.id.clone());
                 }
 
-                crate::media::request(s, index, &positions)
+                let requested = crate::media::request(s, index, &positions);
+                if requested {
+                    s.live.as_mut().unwrap().schedule();
+                }
+                requested
             }),
     )
 }
@@ -525,8 +529,8 @@ pub(super) fn timeline_row(
         }
         return content.child(crate::context::message(
             item,
-            caelum_core::application::presentation::entry_text(entry),
             index,
+            row_index - 1,
             format!("live-entry-{index}-{row_id}"),
             (entry.kind() == EntryKind::User
                 && !entry.optimistic()

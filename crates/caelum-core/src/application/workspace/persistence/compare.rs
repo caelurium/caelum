@@ -23,28 +23,42 @@ impl Workspace {
             project_roots,
         } = snapshot;
         let retained = || self.sessions.iter().filter(|s| !s.forgotten());
-        let saved_index = |index: usize| {
-            self.sessions
+        let saved_indices: Option<Vec<Option<usize>>> = (self.sessions.len() != sessions.len())
+            .then(|| {
+                let mut next = 0usize;
+                self.sessions
+                    .iter()
+                    .map(|s| {
+                        if s.forgotten() {
+                            None
+                        } else {
+                            let idx = next;
+                            next += 1;
+                            Some(idx)
+                        }
+                    })
+                    .collect()
+            });
+        let saved_index = |index: usize| match &saved_indices {
+            Some(map) => map.get(index).copied().flatten(),
+            None => self
+                .sessions
                 .get(index)
                 .filter(|s| !s.forgotten())
-                .map(|_| {
-                    if self.sessions.len() == sessions.len() {
-                        index
-                    } else {
-                        self.sessions[..index]
-                            .iter()
-                            .filter(|s| !s.forgotten())
-                            .count()
-                    }
-                })
+                .map(|_| index),
         };
         let remembered_matches =
             |current: &HashMap<String, usize>, saved: &BTreeMap<String, usize>| {
-                let mut projected = current
-                    .iter()
-                    .filter_map(|(key, index)| saved_index(*index).map(|index| (key, index)));
-                projected.clone().count() == saved.len()
-                    && projected.all(|(key, index)| saved.get(key) == Some(&index))
+                let mut count = 0usize;
+                for (key, &index) in current {
+                    if let Some(mapped) = saved_index(index) {
+                        if saved.get(key) != Some(&mapped) {
+                            return false;
+                        }
+                        count += 1;
+                    }
+                }
+                count == saved.len()
             };
         *version == 1
             && self.remote.saved == *remote
@@ -167,7 +181,8 @@ impl Session {
             bookmarked_entries,
         } = saved;
         self.vm_link == *vm_link
-            && self.provider_switch.threads == *previous_threads
+            && (std::sync::Arc::ptr_eq(&self.provider_switch.threads, previous_threads)
+                || self.provider_switch.threads == *previous_threads)
             && self.provider_switch.needs_context == *needs_context
             && self.native_handoff == *native_handoff
             && self.last_activity == *last_activity

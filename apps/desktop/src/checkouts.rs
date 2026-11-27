@@ -15,10 +15,29 @@ use rune_kit::{ButtonVariant, Kit, ScrollBar};
 #[derive(Default)]
 pub struct State {
     requested: HashSet<String>,
+    watched: Vec<String>,
     pub project: Option<String>,
 }
 
 impl State {
+    pub fn sync_runtime(
+        &mut self,
+        app: &mut Application,
+        runtime: &mut caelum_core::application::Runtime,
+    ) -> bool {
+        if app
+            .projects
+            .iter()
+            .map(|p| p.path.as_str())
+            .eq(self.watched.iter().map(String::as_str))
+        {
+            return false;
+        }
+        self.watched = app.projects.iter().map(|p| p.path.clone()).collect();
+        runtime.watch_checkouts(self.watched.clone());
+        self.sync(app)
+    }
+
     pub fn sync(&mut self, app: &mut Application) -> bool {
         self.requested.retain(|path| app.project_is_open(path));
         let roots: Vec<_> = app

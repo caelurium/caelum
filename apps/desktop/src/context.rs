@@ -287,8 +287,8 @@ fn selection(tx: &Tx, origin: &str) -> Option<String> {
 
 pub fn message(
     el: El,
-    text: String,
     index: usize,
+    entry_index: usize,
     origin: String,
     user_entry: Option<String>,
     bookmark_entry: Option<String>,
@@ -296,7 +296,13 @@ pub fn message(
     el.focusable(true)
         .tab_index(-1)
         .on_secondary_press(move |s: &mut Workspace, at, tx| {
-            let text = text.clone();
+            let text = live(s)
+                .app
+                .sessions
+                .get(index)
+                .and_then(|session| session.conversation.entries.get(entry_index))
+                .map(caelum_core::application::presentation::entry_text)
+                .unwrap_or_default();
             let selected = selection(tx, &origin);
             let mut menu = Menu::new();
             if selected.is_some() {
