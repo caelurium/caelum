@@ -179,6 +179,7 @@ impl Session {
             pinned,
             unbound,
             bookmarked_entries,
+            checkpoints,
         } = saved;
         self.vm_link == *vm_link
             && (std::sync::Arc::ptr_eq(&self.provider_switch.threads, previous_threads)
@@ -205,5 +206,6 @@ impl Session {
             && self.pinned == *pinned
             && self.unbound == *unbound
             && self.bookmarked_entries == *bookmarked_entries
+            && self.checkpoints == *checkpoints
     }
 }

@@ -209,6 +209,7 @@ pub(super) enum Request {
     Rewind {
         index: usize,
         source: SessionKey,
+        restore_tree: Option<String>,
     },
 }
 
@@ -223,6 +224,25 @@ impl Workspace {
 
     pub fn dismiss_fork(&mut self) {
         self.fork = None;
+    }
+
+    fn matching_git_checkpoint(&self, index: usize, prompt_label: &str) -> Option<String> {
+        let session = self.sessions.get(index)?;
+        let needle = prompt_label.trim();
+        if needle.is_empty() {
+            return None;
+        }
+        session
+            .checkpoints
+            .iter()
+            .rev()
+            .find(|cp| {
+                !cp.prompt_excerpt.is_empty()
+                    && (cp.prompt_excerpt == needle
+                        || needle.starts_with(&cp.prompt_excerpt)
+                        || cp.prompt_excerpt.starts_with(needle))
+            })
+            .map(|cp| cp.tree_oid.clone())
     }
 
     pub fn reload_history_action(&mut self, index: usize) {
@@ -359,6 +379,12 @@ impl Workspace {
             }
         };
         if action == HistoryAction::Rewind {
+            let point_label = picker
+                .points
+                .iter()
+                .find(|p| &p.boundary == boundary)
+                .map(|p| p.label.clone())
+                .unwrap_or_default();
             let files = match boundary {
                 ForkBoundary::OpenCodeBefore(id) => {
                     let latest = self
@@ -372,6 +398,16 @@ impl Workspace {
                         Command::CheckpointFiles(source, id.clone(), latest),
                         Pending::Fork(Request::Files),
                     ))
+                }
+                ForkBoundary::CodexBefore(_) => {
+                    if let Some(tree_oid) = self.matching_git_checkpoint(index, &point_label) {
+                        FilePreview::Loading(self.request(
+                            Command::CheckpointFiles(source, tree_oid, String::new()),
+                            Pending::Fork(Request::Files),
+                        ))
+                    } else {
+                        FilePreview::ConversationOnly
+                    }
                 }
                 _ => FilePreview::ConversationOnly,
             };
@@ -418,9 +454,19 @@ impl Workspace {
         {
             return;
         }
-        let before = match &point.boundary {
-            ForkBoundary::CodexBefore(id) if !files => id.clone(),
-            ForkBoundary::OpenCodeBefore(id) => id.clone(),
+        let (before, provider_files, restore_tree) = match &point.boundary {
+            ForkBoundary::CodexBefore(id) => {
+                let tree = if files {
+                    self.matching_git_checkpoint(p.index, &point.label)
+                } else {
+                    None
+                };
+                if files && tree.is_none() {
+                    return;
+                }
+                (id.clone(), false, tree)
+            }
+            ForkBoundary::OpenCodeBefore(id) => (id.clone(), files, None),
             _ => return,
         };
         let index = p.index;
@@ -445,9 +491,13 @@ impl Workspace {
                 key: source.clone(),
                 before,
                 tip,
-                files,
+                files: provider_files,
             },
-            Pending::Fork(Request::Rewind { index, source }),
+            Pending::Fork(Request::Rewind {
+                index,
+                source,
+                restore_tree,
+            }),
         );
         let p = self.fork.as_mut().unwrap();
         p.error = None;
@@ -507,7 +557,11 @@ impl Workspace {
                     }
                 }
             }
-            Request::Rewind { index, source } => {
+            Request::Rewind {
+                index,
+                source,
+                restore_tree,
+            } => {
                 if self.sessions[index].key().as_ref() != Some(&source)
                     || self.sessions[index].forgotten()
                 {
@@ -532,6 +586,12 @@ impl Workspace {
                             super::controls::Status::Finished("Conversation rewound.".into());
                         if foreground {
                             self.dismiss_fork();
+                        }
+                        if let Some(tree_oid) = restore_tree {
+                            self.task(crate::application::Task::RestoreCheckpoint {
+                                project: source.scope.project.clone(),
+                                tree_oid,
+                            });
                         }
                         self.refresh(index);
                     }

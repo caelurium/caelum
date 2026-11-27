@@ -110,6 +110,8 @@ impl Workspace {
                             Task::Shell { .. }
                                 | Task::Git { .. }
                                 | Task::Diff { .. }
+                                | Task::CheckpointDiff { .. }
+                                | Task::RestoreCheckpoint { .. }
                                 | Task::File { .. }
                                 | Task::Directory { .. }
                         )
@@ -308,6 +310,7 @@ impl Workspace {
                     pinned: s.pinned,
                     unbound: s.unbound,
                     bookmarked_entries: s.bookmarked_entries.clone(),
+                    checkpoints: s.checkpoints.clone(),
                 })
             })
             .collect();

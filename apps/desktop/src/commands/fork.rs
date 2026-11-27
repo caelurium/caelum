@@ -49,7 +49,7 @@ pub(crate) fn header(s: &Workspace) -> (&'static str, &'static str) {
         ),
         (Some(HistoryAction::Rewind), Some(Provider::Codex)) => (
             "Rewind conversation",
-            "Codex 0.148+ paginated threads: remove history from a chosen turn. Checkout files stay unchanged.",
+            "Codex 0.148+ paginated threads: remove history from a chosen turn. File restoration uses Caelum Git checkpoints when available.",
         ),
         (Some(HistoryAction::Rewind), _) => (
             "Rewind conversation",
@@ -97,8 +97,17 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
         let mut actions = row().w_full().justify_end().gap(8.0);
         match picker.file_preview() {
             Some(FilePreview::Available(paths)) if !paths.is_empty() => {
+                let source = if l
+                    .app
+                    .selected
+                    .is_some_and(|i| l.app.sessions[i].scope.provider == Provider::OpenCode)
+                {
+                    "OpenCode"
+                } else {
+                    "This Git checkpoint"
+                };
                 let description = format!(
-                    "OpenCode reports {} changed paths. Restoring its snapshot can also affect later edits in this checkout.",
+                    "{source} reports {} changed paths. Restoring this snapshot can also affect later edits in this checkout.",
                     paths.len()
                 );
                 let names = paths

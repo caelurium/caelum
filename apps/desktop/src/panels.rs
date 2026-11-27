@@ -71,6 +71,7 @@ pub enum Screen {
     Fork,
     Rename,
     Timeline,
+    Checkpoints,
     Usage,
     Stats,
     Image,

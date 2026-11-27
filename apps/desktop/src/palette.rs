@@ -77,6 +77,7 @@ enum Action {
     OpenProject,
     ChooseModel,
     Timeline,
+    Checkpoints,
     Usage,
     Stats,
     ProviderSessions,
@@ -233,6 +234,13 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
                 None,
                 "diff status review",
                 Action::Changes,
+            ),
+            Entry::cmd(
+                "Git checkpoints",
+                "Inspect per-turn Git snapshots and restore checkout files",
+                None,
+                "checkpoint snapshot rewind restore undo diff",
+                Action::Checkpoints,
             ),
         ]);
         if crate::runner::active_project(s).is_some() {

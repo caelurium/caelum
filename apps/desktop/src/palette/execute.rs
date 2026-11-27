@@ -70,6 +70,7 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
                 crate::commands::open_timeline(s);
             }
         }
+        Action::Checkpoints => crate::commands::open_checkpoints(s),
         Action::Usage => {
             if let Some(index) = live(s).app.selected {
                 let l = live_mut(s);

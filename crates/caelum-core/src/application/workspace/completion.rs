@@ -331,6 +331,7 @@ impl Workspace {
                                 session.pinned = saved.pinned;
                                 session.unbound = saved.unbound;
                                 session.bookmarked_entries = saved.bookmarked_entries;
+                                session.checkpoints = saved.checkpoints;
                                 session
                             })
                             .collect();
@@ -463,6 +464,12 @@ impl Workspace {
                     _ => Err("Unexpected session creation response".into()),
                 };
                 self.complete_creation(index, request, result);
+            }
+            (Pending::Send(index), Reply::Sent(checkpoint)) => {
+                if let Some(cp) = checkpoint {
+                    self.sessions[index].record_checkpoint(cp);
+                }
+                self.complete_admission(index, request, Ok(()));
             }
             (Pending::Send(index), reply) => self.complete_admission(index, request, done(reply)),
             (Pending::Cancel(index), reply) => self.complete_stop(index, request, done(reply)),

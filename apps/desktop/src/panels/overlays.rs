@@ -42,6 +42,7 @@ macro_rules! standard_overlays {
 }
 
 standard_overlays!(
+    Checkpoints,
     CreateVm,
     Fork,
     Launcher,
@@ -256,6 +257,11 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Find and reveal an earlier prompt.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
+        Screen::Checkpoints => (
+            "Git checkpoints",
+            "Inspect per-turn working-tree diffs and restore files to any pre-turn snapshot.",
+            crate::commands::checkpoints_view(s, k),
+        ),
         Screen::Fork => {
             let (title, description) = crate::commands::history_header(s);
             (
@@ -354,6 +360,7 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::CreateWorktree => (500.0, 330.0),
         Screen::CreateVm | Screen::RemotePicker => (556.0, crate::remote::create_height(s)),
         Screen::Timeline => (620.0, 480.0),
+        Screen::Checkpoints => (760.0, 520.0),
         Screen::Sessions | Screen::Fork => (580.0, 420.0),
         Screen::VmThreads => {
             let saved = &live(s).app.remote.saved;

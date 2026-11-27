@@ -162,6 +162,7 @@ pub(super) fn saved(scope: Scope, remote_id: Option<String>) -> SavedSession {
         pinned: false,
         unbound: false,
         bookmarked_entries: vec![],
+        checkpoints: vec![],
     }
 }
 

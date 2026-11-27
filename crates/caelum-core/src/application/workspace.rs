@@ -85,6 +85,7 @@ pub struct Session {
     pub pinned: bool,
     pub unbound: bool,
     pub bookmarked_entries: Vec<String>,
+    pub checkpoints: Vec<crate::checkpoints::TurnCheckpoint>,
     pub shells: Vec<caelum_protocol::OpenCodeBackgroundShell>,
     shell_revision: u64,
     pub details: Option<caelum_protocol::SessionDetails>,
@@ -163,6 +164,7 @@ impl Session {
             pinned: false,
             unbound: false,
             bookmarked_entries: Vec::new(),
+            checkpoints: Vec::new(),
             shells: Vec::new(),
             shell_revision: 0,
             details: None,
@@ -191,6 +193,13 @@ impl Session {
 
     pub fn is_bookmarked(&self, entry_id: &str) -> bool {
         self.bookmarked_entries.iter().any(|id| id == entry_id)
+    }
+
+    pub(crate) fn record_checkpoint(&mut self, checkpoint: crate::checkpoints::TurnCheckpoint) {
+        self.checkpoints.push(checkpoint);
+        if self.checkpoints.len() > crate::checkpoints::MAX_SESSION_CHECKPOINTS {
+            self.checkpoints.remove(0);
+        }
     }
 
     fn record_activity(&mut self, at: u64) {

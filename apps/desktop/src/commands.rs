@@ -1,4 +1,5 @@
 //! Native surfaces for local commands; provider requests and results stay in core.
+mod checkpoints;
 mod controls;
 mod dispatch;
 mod fork;
@@ -6,6 +7,8 @@ mod sessions;
 mod timeline;
 mod usage;
 
+pub(crate) use checkpoints::open as open_checkpoints;
+pub(crate) use checkpoints::view as checkpoints_view;
 pub(crate) use controls::{export, history, rename};
 pub use dispatch::dispatch;
 pub use fork::fork_key;
@@ -49,6 +52,7 @@ pub struct State {
     pub side_owner: Option<usize>,
     pub side_editor: TextEdit,
     pub previous_drafts: Vec<String>,
+    pub checkpoint_selected: Option<String>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -72,6 +76,7 @@ impl Default for State {
             side_owner: None,
             side_editor: TextEdit::new(""),
             previous_drafts: Vec::new(),
+            checkpoint_selected: None,
         }
     }
 }
