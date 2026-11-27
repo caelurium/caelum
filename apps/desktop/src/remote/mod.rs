@@ -29,6 +29,7 @@ pub(crate) use create::view as create_view;
 pub(crate) use handoff::button as handoff_button;
 pub(crate) use launcher::group as launcher_group;
 pub(crate) use picker::{open, picker};
+pub(crate) use popup::Inspection;
 pub(crate) use popup::clear as close_popup;
 pub(crate) use popup::view as popup;
 pub(crate) use scene::scene;
@@ -56,7 +57,6 @@ pub(crate) struct State {
     editors: std::collections::HashMap<String, conversation::Editors>,
     mounted: Option<(String, setup::Dock)>,
     menu: Option<provider::Menu>,
-    inspection: Option<popup::Inspection>,
     review: changes::Panel,
     checked_deadlines: std::collections::HashSet<(caelum_core::remote::MachineId, i64)>,
 }

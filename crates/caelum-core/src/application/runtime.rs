@@ -612,15 +612,14 @@ type Execute = Arc<dyn Fn(&Command) -> Result<Reply, String> + Send + Sync>;
 /// event arrival wakes it, so idle windows need no polling timer.
 pub struct Runtime {
     usage: crate::telemetry::Store,
-    checkout_watch: Option<mpsc::Sender<Vec<String>>>,
+    checkout_watch: Option<tokio::sync::watch::Sender<Vec<String>>>,
     watched_projects: Vec<String>,
     providers: Option<ProviderRuntime>,
     mailboxes: worker::Mailboxes,
-    inbox: Option<Receiver<Event>>,
+    running: Option<(Receiver<Event>, worker::Workers)>,
     sender: SyncSender<Event>,
     wake: Arc<dyn Fn() + Send + Sync>,
     closed: Arc<AtomicBool>,
-    workers: Option<worker::Workers>,
     forwarders: Vec<JoinHandle<()>>,
 }
 
@@ -698,11 +697,10 @@ impl Runtime {
             watched_projects: Vec::new(),
             providers: None,
             mailboxes,
-            inbox: Some(inbox),
+            running: Some((inbox, workers)),
             sender,
             wake,
             closed,
-            workers: Some(workers),
             forwarders: Vec::new(),
         }
     }
@@ -760,7 +758,7 @@ impl Runtime {
         projects.dedup();
         if projects != self.watched_projects {
             if let Some(watch) = &self.checkout_watch {
-                let _ = watch.send(projects.clone());
+                watch.send_replace(projects.clone());
             }
             self.watched_projects = projects;
         }
@@ -768,9 +766,9 @@ impl Runtime {
 
     pub fn drain(&self) -> Vec<Event> {
         let events: Vec<_> = self
-            .inbox
+            .running
             .iter()
-            .flat_map(|inbox| inbox.try_iter())
+            .flat_map(|(inbox, _)| inbox.try_iter())
             .take(256)
             .collect();
         if events.len() == 256 {
@@ -784,12 +782,15 @@ impl Drop for Runtime {
     fn drop(&mut self) {
         self.closed.store(true, Ordering::Release);
         self.checkout_watch.take();
-        self.inbox.take(); // Release any producers waiting on a full inbox.
-        let workers = self.workers.take().map(worker::Workers::stop);
+        let Some((inbox, workers)) = self.running.take() else {
+            return;
+        };
+        drop(inbox); // Release any producers waiting on a full inbox.
+        let workers = workers.stop();
         if let Some(providers) = &self.providers {
             providers.shutdown();
         }
-        for worker in self.forwarders.drain(..).chain(workers) {
+        for worker in self.forwarders.drain(..).chain([workers]) {
             let _ = worker.join();
         }
     }

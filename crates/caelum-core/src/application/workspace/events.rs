@@ -6,16 +6,14 @@ impl Workspace {
     pub fn apply(&mut self, event: Event) {
         let _trace = crate::diagnostics::event(&event).map(|mark| mark.span());
         match event {
-            Event::SideAnswer(key, generation, text) => {
-                if let Some(s) = self.sessions.iter_mut().find(|s| {
-                    s.generating
-                        && !s.forgotten()
-                        && s.side_generation == generation
-                        && s.scope == key.scope
-                        && s.remote_id.as_ref() == Some(&key.id)
-                }) {
-                    if let Some((_, answer)) = &mut s.side_question {
-                        *answer = text;
+            Event::SideAnswer(key, request, text) => {
+                if let Some(Pending::Generate(index)) = self.pending.get(&request) {
+                    let session = &mut self.sessions[*index];
+                    if !session.forgotten()
+                        && session.scope == key.scope
+                        && session.remote_id.as_ref() == Some(&key.id)
+                    {
+                        session.update_side_answer(request, text);
                     }
                 }
             }
@@ -249,7 +247,7 @@ impl Workspace {
             }
             if disconnected {
                 session.usage = Default::default();
-                session.side_cancel = None;
+                session.interrupt_side_question("Provider disconnected.");
                 let first_disconnect = !session.disconnected;
                 let recover =
                     first_disconnect && (session.working() || self.selected == Some(index));

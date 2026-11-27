@@ -2,13 +2,14 @@ use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use caelum_protocol::{PersistedProject, ProjectInfo, WorkspaceSnapshot};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use thiserror::Error;
+
+use crate::blocking_actor::BlockingActor;
 
 mod migrations;
 use migrations::migrate;
@@ -24,10 +25,11 @@ pub struct SessionBranchHistory {
 }
 
 /// Thread-safe access to Caelum's app-owned workspace metadata database.
+/// A dedicated worker owns the SQLite connection. Calls wait for completion.
 /// Provider conversation history is deliberately never stored here.
 #[derive(Clone)]
 pub struct WorkspaceDatabase {
-    connection: Arc<Mutex<Connection>>,
+    connection: BlockingActor<Connection>,
 }
 
 impl WorkspaceDatabase {
@@ -48,104 +50,108 @@ impl WorkspaceDatabase {
         migrate(&mut connection)?;
 
         Ok(Self {
-            connection: Arc::new(Mutex::new(connection)),
+            connection: BlockingActor::spawn("caelum-workspace-db", connection),
         })
     }
 
     pub fn restore(&self) -> Result<WorkspaceSnapshot, DatabaseError> {
-        let connection = self.lock();
-        let mut statement = connection.prepare(
-            "SELECT path, name, provider, root_path, selected_worktree_path
-             FROM projects
-             WHERE is_open = 1
-             ORDER BY open_order ASC, last_opened_at DESC, path ASC",
-        )?;
-        let rows = statement.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
-            ))
-        })?;
-
-        let mut projects = Vec::new();
-        for row in rows {
-            let (path, name, provider, root_path, selected_worktree_path) = row?;
-            validate_provider(&provider)?;
-            let mut provider_statement = connection.prepare(
-                "SELECT provider, selected_session_id
-                 FROM project_provider_state
-                 WHERE project_path = ?1",
+        self.call(move |connection| {
+            let mut statement = connection.prepare(
+                "SELECT path, name, provider, root_path, selected_worktree_path
+                 FROM projects
+                 WHERE is_open = 1
+                 ORDER BY open_order ASC, last_opened_at DESC, path ASC",
             )?;
-            let provider_rows = provider_statement.query_map([&path], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            let rows = statement.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
             })?;
 
-            let (mut codex_session_id, mut opencode_session_id) = (None, None);
-            for provider_row in provider_rows {
-                let (provider, session_id) = provider_row?;
-                match provider.as_str() {
-                    "codex" => codex_session_id = session_id,
-                    "opencode" => opencode_session_id = session_id,
-                    _ => return Err(DatabaseError::UnsupportedProvider(provider)),
+            let mut projects = Vec::new();
+            for row in rows {
+                let (path, name, provider, root_path, selected_worktree_path) = row?;
+                validate_provider(&provider)?;
+                let mut provider_statement = connection.prepare(
+                    "SELECT provider, selected_session_id
+                     FROM project_provider_state
+                     WHERE project_path = ?1",
+                )?;
+                let provider_rows = provider_statement.query_map([&path], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })?;
+
+                let (mut codex_session_id, mut opencode_session_id) = (None, None);
+                for provider_row in provider_rows {
+                    let (provider, session_id) = provider_row?;
+                    match provider.as_str() {
+                        "codex" => codex_session_id = session_id,
+                        "opencode" => opencode_session_id = session_id,
+                        _ => return Err(DatabaseError::UnsupportedProvider(provider)),
+                    }
                 }
+
+                let mut session_statement = connection.prepare(
+                    "SELECT provider, session_id
+                     FROM sessions
+                     WHERE project_path = ?1
+                     ORDER BY COALESCE(last_opened_at, 0) DESC, first_seen_at DESC, session_id ASC",
+                )?;
+                let session_rows = session_statement.query_map([&path], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?;
+                let (mut codex_session_ids, mut opencode_session_ids) = (Vec::new(), Vec::new());
+                for session_row in session_rows {
+                    let (provider, session_id) = session_row?;
+                    match provider.as_str() {
+                        "codex" => codex_session_ids.push(session_id),
+                        "opencode" => opencode_session_ids.push(session_id),
+                        _ => return Err(DatabaseError::UnsupportedProvider(provider)),
+                    }
+                }
+
+                projects.push(PersistedProject {
+                    project: ProjectInfo { name, path },
+                    root_path,
+                    selected_worktree_path,
+                    provider,
+                    codex_session_id,
+                    opencode_session_id,
+                    codex_session_ids,
+                    opencode_session_ids,
+                });
             }
 
-            let mut session_statement = connection.prepare(
-                "SELECT provider, session_id
-                 FROM sessions
-                 WHERE project_path = ?1
-                 ORDER BY COALESCE(last_opened_at, 0) DESC, first_seen_at DESC, session_id ASC",
-            )?;
-            let session_rows = session_statement.query_map([&path], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?;
-            let (mut codex_session_ids, mut opencode_session_ids) = (Vec::new(), Vec::new());
-            for session_row in session_rows {
-                let (provider, session_id) = session_row?;
-                match provider.as_str() {
-                    "codex" => codex_session_ids.push(session_id),
-                    "opencode" => opencode_session_ids.push(session_id),
-                    _ => return Err(DatabaseError::UnsupportedProvider(provider)),
-                }
-            }
+            let active_project_path = connection
+                .query_row(
+                    "SELECT value FROM app_metadata WHERE key = 'active_project_path'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+                .filter(|path| projects.iter().any(|project| project.project.path == *path));
 
-            projects.push(PersistedProject {
-                project: ProjectInfo { name, path },
-                root_path,
-                selected_worktree_path,
-                provider,
-                codex_session_id,
-                opencode_session_id,
-                codex_session_ids,
-                opencode_session_ids,
-            });
-        }
-
-        let active_project_path = connection
-            .query_row(
-                "SELECT value FROM app_metadata WHERE key = 'active_project_path'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
-            .filter(|path| projects.iter().any(|project| project.project.path == *path));
-
-        Ok(WorkspaceSnapshot {
-            projects,
-            active_project_path,
+            Ok(WorkspaceSnapshot {
+                projects,
+                active_project_path,
+            })
         })
     }
 
     /// Record a project as open and move it to the front of the restore order.
     pub fn remember_project(&self, project: &ProjectInfo) -> Result<(), DatabaseError> {
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        remember_project_in_transaction(&transaction, project)?;
-        transaction.commit()?;
-        Ok(())
+        let project = project.clone();
+        self.call(move |connection| {
+            let project = &project;
+            let transaction = connection.transaction()?;
+            remember_project_in_transaction(&transaction, project)?;
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     /// Keep provider metadata keyed by the checkout directory while grouping it
@@ -155,55 +161,63 @@ impl WorkspaceDatabase {
         root: &ProjectInfo,
         checkout: &ProjectInfo,
     ) -> Result<(), DatabaseError> {
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        remember_project_in_transaction(&transaction, root)?;
-        if root.path != checkout.path {
-            remember_project_in_transaction(&transaction, checkout)?;
-            transaction.execute(
-                "UPDATE projects SET root_path = ?2 WHERE path = ?1",
-                params![checkout.path, root.path],
-            )?;
-            transaction.execute(
-                "UPDATE projects SET selected_worktree_path = ?1 WHERE path = ?2
-                 AND EXISTS(SELECT 1 FROM app_metadata WHERE key = 'active_project_path' AND value = ?1)",
-                params![checkout.path, root.path],
-            )?;
-        }
-        transaction.commit()?;
-        Ok(())
+        let root = root.clone();
+        let checkout = checkout.clone();
+        self.call(move |connection| {
+            let root = &root;
+            let checkout = &checkout;
+            let transaction = connection.transaction()?;
+            remember_project_in_transaction(&transaction, root)?;
+            if root.path != checkout.path {
+                remember_project_in_transaction(&transaction, checkout)?;
+                transaction.execute(
+                    "UPDATE projects SET root_path = ?2 WHERE path = ?1",
+                    params![checkout.path, root.path],
+                )?;
+                transaction.execute(
+                    "UPDATE projects SET selected_worktree_path = ?1 WHERE path = ?2
+                     AND EXISTS(SELECT 1 FROM app_metadata WHERE key = 'active_project_path' AND value = ?1)",
+                    params![checkout.path, root.path],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     pub fn remove_worktree(&self, checkout: &str) -> Result<(), DatabaseError> {
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        let directories = {
-            let mut statement = transaction.prepare("SELECT path, root_path FROM projects")?;
-            let rows = statement.query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-            })?;
-            rows.collect::<Result<Vec<_>, _>>()?
-        };
-        for (path, root) in directories
-            .into_iter()
-            .filter(|(path, _)| Path::new(path).starts_with(checkout))
-        {
-            transaction.execute(
-                "UPDATE projects SET is_open = 0, root_path = NULL WHERE path = ?1",
-                [&path],
-            )?;
-            transaction.execute("UPDATE projects SET selected_worktree_path = NULL WHERE selected_worktree_path = ?1", [&path])?;
-            if let Some(root) = root {
-                transaction.execute("UPDATE app_metadata SET value = ?2 WHERE key = 'active_project_path' AND value = ?1", params![path, root])?;
-            } else {
+        let checkout = checkout.to_owned();
+        self.call(move |connection| {
+            let checkout = &checkout;
+            let transaction = connection.transaction()?;
+            let directories = {
+                let mut statement = transaction.prepare("SELECT path, root_path FROM projects")?;
+                let rows = statement.query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })?;
+                rows.collect::<Result<Vec<_>, _>>()?
+            };
+            for (path, root) in directories
+                .into_iter()
+                .filter(|(path, _)| Path::new(path).starts_with(checkout))
+            {
                 transaction.execute(
-                    "DELETE FROM app_metadata WHERE key = 'active_project_path' AND value = ?1",
+                    "UPDATE projects SET is_open = 0, root_path = NULL WHERE path = ?1",
                     [&path],
                 )?;
+                transaction.execute("UPDATE projects SET selected_worktree_path = NULL WHERE selected_worktree_path = ?1", [&path])?;
+                if let Some(root) = root {
+                    transaction.execute("UPDATE app_metadata SET value = ?2 WHERE key = 'active_project_path' AND value = ?1", params![path, root])?;
+                } else {
+                    transaction.execute(
+                        "DELETE FROM app_metadata WHERE key = 'active_project_path' AND value = ?1",
+                        [&path],
+                    )?;
+                }
             }
-        }
-        transaction.commit()?;
-        Ok(())
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     /// Close a project in the restored workspace without discarding its session metadata.
@@ -213,37 +227,50 @@ impl WorkspaceDatabase {
         next_active_project_path: Option<&str>,
     ) -> Result<(), DatabaseError> {
         validate_nonempty("project path", path)?;
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        transaction.execute(
-            "UPDATE projects SET is_open = 0 WHERE path = ?1 OR root_path = ?1",
-            [path],
-        )?;
-        set_active_project_in_transaction(&transaction, next_active_project_path)?;
-        transaction.commit()?;
-        Ok(())
+        let path = path.to_owned();
+        let next_active_project_path = next_active_project_path.map(str::to_owned);
+        self.call(move |connection| {
+            let path = &path;
+            let next_active_project_path = next_active_project_path.as_deref();
+            let transaction = connection.transaction()?;
+            transaction.execute(
+                "UPDATE projects SET is_open = 0 WHERE path = ?1 OR root_path = ?1",
+                [path],
+            )?;
+            set_active_project_in_transaction(&transaction, next_active_project_path)?;
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     pub fn set_active_project(&self, path: Option<&str>) -> Result<(), DatabaseError> {
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        set_active_project_in_transaction(&transaction, path)?;
-        transaction.commit()?;
-        Ok(())
+        let path = path.map(str::to_owned);
+        self.call(move |connection| {
+            let path = path.as_deref();
+            let transaction = connection.transaction()?;
+            set_active_project_in_transaction(&transaction, path)?;
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     pub fn set_provider(&self, path: &str, provider: &str) -> Result<(), DatabaseError> {
         validate_nonempty("project path", path)?;
         validate_provider(provider)?;
-        let connection = self.lock();
-        let changed = connection.execute(
-            "UPDATE projects SET provider = ?2 WHERE path = ?1",
-            params![path, provider],
-        )?;
-        if changed == 0 {
-            return Err(DatabaseError::UnknownProject(path.to_owned()));
-        }
-        Ok(())
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let changed = connection.execute(
+                "UPDATE projects SET provider = ?2 WHERE path = ?1",
+                params![path, provider],
+            )?;
+            if changed == 0 {
+                return Err(DatabaseError::UnknownProject(path.to_owned()));
+            }
+            Ok(())
+        })
     }
 
     pub fn select_session(
@@ -261,36 +288,43 @@ impl WorkspaceDatabase {
             }
         }
 
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        let exists = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE path = ?1)",
-            [path],
-            |row| row.get::<_, bool>(0),
-        )?;
-        if !exists {
-            return Err(DatabaseError::UnknownProject(path.to_owned()));
-        }
-
-        transaction.execute(
-            "INSERT INTO project_provider_state (project_path, provider, selected_session_id)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(project_path, provider) DO UPDATE SET
-                 selected_session_id = excluded.selected_session_id",
-            params![path, provider, session_id],
-        )?;
-
-        if let Some(session_id) = session_id {
-            transaction.execute(
-                "INSERT INTO sessions (project_path, provider, session_id, first_seen_at, last_opened_at)
-                 VALUES (?1, ?2, ?3, ?4, ?4)
-                 ON CONFLICT(project_path, provider, session_id) DO UPDATE SET
-                     last_opened_at = excluded.last_opened_at",
-                params![path, provider, session_id, unix_timestamp()],
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        let session_id = session_id.map(str::to_owned);
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let session_id = session_id.as_deref();
+            let transaction = connection.transaction()?;
+            let exists = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE path = ?1)",
+                [path],
+                |row| row.get::<_, bool>(0),
             )?;
-        }
-        transaction.commit()?;
-        Ok(())
+            if !exists {
+                return Err(DatabaseError::UnknownProject(path.to_owned()));
+            }
+
+            transaction.execute(
+                "INSERT INTO project_provider_state (project_path, provider, selected_session_id)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(project_path, provider) DO UPDATE SET
+                     selected_session_id = excluded.selected_session_id",
+                params![path, provider, session_id],
+            )?;
+
+            if let Some(session_id) = session_id {
+                transaction.execute(
+                    "INSERT INTO sessions (project_path, provider, session_id, first_seen_at, last_opened_at)
+                     VALUES (?1, ?2, ?3, ?4, ?4)
+                     ON CONFLICT(project_path, provider, session_id) DO UPDATE SET
+                         last_opened_at = excluded.last_opened_at",
+                    params![path, provider, session_id, unix_timestamp()],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     /// Forget one archived session and clear its selection atomically.
@@ -303,18 +337,25 @@ impl WorkspaceDatabase {
         validate_nonempty("project path", path)?;
         validate_provider(provider)?;
         validate_nonempty("session ID", session_id)?;
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        transaction.execute(
-            "DELETE FROM sessions WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
-            params![path, provider, session_id],
-        )?;
-        transaction.execute(
-            "UPDATE project_provider_state SET selected_session_id = NULL WHERE project_path = ?1 AND provider = ?2 AND selected_session_id = ?3",
-            params![path, provider, session_id],
-        )?;
-        transaction.commit()?;
-        Ok(())
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        let session_id = session_id.to_owned();
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let session_id = &session_id;
+            let transaction = connection.transaction()?;
+            transaction.execute(
+                "DELETE FROM sessions WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
+                params![path, provider, session_id],
+            )?;
+            transaction.execute(
+                "UPDATE project_provider_state SET selected_session_id = NULL WHERE project_path = ?1 AND provider = ?2 AND selected_session_id = ?3",
+                params![path, provider, session_id],
+            )?;
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     /// Record provider-owned session identifiers without copying provider history or content.
@@ -333,50 +374,57 @@ impl WorkspaceDatabase {
             }
         }
 
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        let exists = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE path = ?1)",
-            [path],
-            |row| row.get::<_, bool>(0),
-        )?;
-        if !exists {
-            return Err(DatabaseError::UnknownProject(path.to_owned()));
-        }
-
-        let retained = session_ids
-            .iter()
-            .map(String::as_str)
-            .collect::<HashSet<_>>();
-        let stale_sessions = {
-            let mut statement = transaction.prepare(
-                "SELECT session_id FROM sessions WHERE project_path = ?1 AND provider = ?2",
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        let session_ids = session_ids.to_vec();
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let session_ids = &session_ids;
+            let transaction = connection.transaction()?;
+            let exists = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE path = ?1)",
+                [path],
+                |row| row.get::<_, bool>(0),
             )?;
-            let rows =
-                statement.query_map(params![path, provider], |row| row.get::<_, String>(0))?;
-            rows.collect::<Result<Vec<_>, _>>()?
-        };
-        for session_id in stale_sessions {
-            if !retained.contains(session_id.as_str()) {
+            if !exists {
+                return Err(DatabaseError::UnknownProject(path.to_owned()));
+            }
+
+            let retained = session_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<HashSet<_>>();
+            let stale_sessions = {
+                let mut statement = transaction.prepare(
+                    "SELECT session_id FROM sessions WHERE project_path = ?1 AND provider = ?2",
+                )?;
+                let rows =
+                    statement.query_map(params![path, provider], |row| row.get::<_, String>(0))?;
+                rows.collect::<Result<Vec<_>, _>>()?
+            };
+            for session_id in stale_sessions {
+                if !retained.contains(session_id.as_str()) {
+                    transaction.execute(
+                        "DELETE FROM sessions
+                         WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
+                        params![path, provider, session_id],
+                    )?;
+                }
+            }
+
+            let now = unix_timestamp();
+            for session_id in session_ids {
                 transaction.execute(
-                    "DELETE FROM sessions
-                     WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
-                    params![path, provider, session_id],
+                    "INSERT INTO sessions (project_path, provider, session_id, first_seen_at)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(project_path, provider, session_id) DO NOTHING",
+                    params![path, provider, session_id, now],
                 )?;
             }
-        }
-
-        let now = unix_timestamp();
-        for session_id in session_ids {
-            transaction.execute(
-                "INSERT INTO sessions (project_path, provider, session_id, first_seen_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(project_path, provider, session_id) DO NOTHING",
-                params![path, provider, session_id, now],
-            )?;
-        }
-        transaction.commit()?;
-        Ok(())
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
     /// Branches observed while a session executes survive listing, archive/undo,
@@ -388,23 +436,30 @@ impl WorkspaceDatabase {
         session_id: &str,
     ) -> Result<Option<SessionBranchHistory>, DatabaseError> {
         validate_branch_provider(provider)?;
-        let connection = self.lock();
-        let branch: Option<Option<String>> = connection.query_row(
-            "SELECT branch FROM session_branches WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
-            params![path, provider, session_id],
-            |row| row.get(0),
-        ).optional()?;
-        let Some(branch) = branch else {
-            return Ok(None);
-        };
-        let mut statement = connection.prepare(
-            "SELECT branch FROM session_branch_history
-             WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3 ORDER BY rowid",
-        )?;
-        let branches = statement
-            .query_map(params![path, provider, session_id], |row| row.get(0))?
-            .collect::<Result<Vec<String>, _>>()?;
-        Ok(Some(SessionBranchHistory { branch, branches }))
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        let session_id = session_id.to_owned();
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let session_id = &session_id;
+            let branch: Option<Option<String>> = connection.query_row(
+                "SELECT branch FROM session_branches WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3",
+                params![path, provider, session_id],
+                |row| row.get(0),
+            ).optional()?;
+            let Some(branch) = branch else {
+                return Ok(None);
+            };
+            let mut statement = connection.prepare(
+                "SELECT branch FROM session_branch_history
+                 WHERE project_path = ?1 AND provider = ?2 AND session_id = ?3 ORDER BY rowid",
+            )?;
+            let branches = statement
+                .query_map(params![path, provider, session_id], |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            Ok(Some(SessionBranchHistory { branch, branches }))
+        })
     }
 
     pub fn record_session_branch(
@@ -417,29 +472,41 @@ impl WorkspaceDatabase {
         validate_nonempty("project path", path)?;
         validate_branch_provider(provider)?;
         validate_nonempty("session ID", session_id)?;
-        let mut connection = self.lock();
-        let transaction = connection.transaction()?;
-        transaction.execute(
-            "INSERT INTO session_branches (project_path, provider, session_id, branch)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(project_path, provider, session_id) DO UPDATE SET branch = excluded.branch",
-            params![path, provider, session_id, branch],
-        )?;
-        if let Some(branch) = branch {
+        let path = path.to_owned();
+        let provider = provider.to_owned();
+        let session_id = session_id.to_owned();
+        let branch = branch.map(str::to_owned);
+        self.call(move |connection| {
+            let path = &path;
+            let provider = &provider;
+            let session_id = &session_id;
+            let branch = branch.as_deref();
+            let transaction = connection.transaction()?;
             transaction.execute(
-                "INSERT INTO session_branch_history (project_path, provider, session_id, branch)
-                 VALUES (?1, ?2, ?3, ?4) ON CONFLICT DO NOTHING",
+                "INSERT INTO session_branches (project_path, provider, session_id, branch)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(project_path, provider, session_id) DO UPDATE SET branch = excluded.branch",
                 params![path, provider, session_id, branch],
             )?;
-        }
-        transaction.commit()?;
-        Ok(())
+            if let Some(branch) = branch {
+                transaction.execute(
+                    "INSERT INTO session_branch_history (project_path, provider, session_id, branch)
+                     VALUES (?1, ?2, ?3, ?4) ON CONFLICT DO NOTHING",
+                    params![path, provider, session_id, branch],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(())
+        })
     }
 
-    fn lock(&self) -> MutexGuard<'_, Connection> {
+    fn call<T: Send + 'static>(
+        &self,
+        job: impl FnOnce(&mut Connection) -> Result<T, DatabaseError> + Send + 'static,
+    ) -> Result<T, DatabaseError> {
         self.connection
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .call(job)
+            .ok_or(DatabaseError::WorkerClosed)?
     }
 }
 
@@ -539,6 +606,8 @@ pub enum DatabaseError {
         #[source]
         source: std::io::Error,
     },
+    #[error("workspace database worker has stopped")]
+    WorkerClosed,
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
     #[error("workspace database schema version {0} is newer than this application supports")]
@@ -660,8 +729,11 @@ mod tests {
                 .unwrap();
         }
         database
-            .lock()
-            .execute_batch("DROP TABLE session_branch_history; PRAGMA user_version = 5;")
+            .call(|connection| {
+                connection
+                    .execute_batch("DROP TABLE session_branch_history; PRAGMA user_version = 5;")?;
+                Ok(())
+            })
             .unwrap();
         drop(database);
 
@@ -868,8 +940,7 @@ mod tests {
             .select_session("/work/kept", "opencode", Some("ses_kept"))
             .unwrap();
         database.set_active_project(Some("/work/kept")).unwrap();
-        database.lock().execute_batch(
-            "DROP TABLE session_branch_history;
+        let legacy_schema = "DROP TABLE session_branch_history;
              DROP TABLE session_branches;
              DROP TABLE sessions;
              CREATE TABLE sessions (
@@ -886,8 +957,13 @@ mod tests {
              DROP INDEX project_root_idx;
              ALTER TABLE projects DROP COLUMN root_path;
              ALTER TABLE projects DROP COLUMN selected_worktree_path;
-             PRAGMA user_version = 2;",
-        ).unwrap();
+             PRAGMA user_version = 2;";
+        database
+            .call(move |connection| {
+                connection.execute_batch(legacy_schema)?;
+                Ok(())
+            })
+            .unwrap();
         assert!(database
             .sync_sessions(
                 "/work/kept",
@@ -911,13 +987,13 @@ mod tests {
             snapshot.projects[0].opencode_session_id.as_deref(),
             Some("ses_kept")
         );
-        let kept: (i64, i64, String) = database.lock().query_row(
+        let kept: (i64, i64, String) = Connection::open(&path).unwrap().query_row(
             "SELECT first_seen_at, last_opened_at, local_label FROM sessions WHERE session_id = 'ses_kept'", [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         ).unwrap();
         assert_eq!(kept, (10, 20, "Keep this label".into()));
-        let opened: Option<i64> = database
-            .lock()
+        let opened: Option<i64> = Connection::open(&path)
+            .unwrap()
             .query_row(
                 "SELECT last_opened_at FROM sessions WHERE session_id = 'ses_new'",
                 [],
@@ -971,7 +1047,7 @@ mod tests {
         assert_eq!(first.codex_session_ids, ["thread-1"]);
         assert_eq!(first.opencode_session_ids, ["session-1"]);
 
-        let connection = database.lock();
+        let connection = Connection::open(directory.database_path()).unwrap();
         let history_table_exists = connection
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'conversation_history')",
@@ -1005,7 +1081,7 @@ mod tests {
         assert_eq!(snapshot.projects.len(), 1);
         assert_eq!(snapshot.projects[0].project.path, "/work/two");
         assert_eq!(snapshot.active_project_path.as_deref(), Some("/work/two"));
-        let connection = database.lock();
+        let connection = Connection::open(directory.database_path()).unwrap();
         let session_count = connection
             .query_row(
                 "SELECT COUNT(*) FROM sessions WHERE project_path = '/work/one'",
@@ -1043,7 +1119,7 @@ mod tests {
             ["thread-2"]
         );
 
-        let connection = database.lock();
+        let connection = Connection::open(directory.database_path()).unwrap();
         let (count, opened_count): (i64, i64) = connection
             .query_row(
                 "SELECT COUNT(*), COUNT(last_opened_at)
