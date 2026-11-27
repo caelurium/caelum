@@ -54,7 +54,7 @@ pub enum Command {
     #[serde(skip)]
     Load(Store),
     #[serde(skip)]
-    Save(Store, Box<Snapshot>),
+    Save(Store, std::sync::Arc<Snapshot>),
     Commands(Scope),
     Shells(SessionKey),
     Archive(SessionKey, bool),

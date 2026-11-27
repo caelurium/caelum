@@ -251,7 +251,8 @@ pub(super) fn view(
                 .key("refresh-remote-checkout"),
         );
     }
-    if c.thread.turn.run().is_some() && matches!(l.app.remote.feeds.get(id), Some(Job::Failed(_))) {
+    if c.thread.turn().run().is_some() && matches!(l.app.remote.feeds.get(id), Some(Job::Failed(_)))
+    {
         let owner = id.to_owned();
         context = context.child(
             ui::Button::new("Reconnect to turn")
@@ -262,7 +263,7 @@ pub(super) fn view(
                 .key("remote-reconnect"),
         );
     }
-    if c.thread.turn == Turn::Submitting && !busy {
+    if c.thread.turn() == &Turn::Submitting && !busy {
         let a = key.to_owned();
         let recovery = a.clone();
         let b = id.to_owned();
@@ -395,15 +396,15 @@ pub(super) fn view(
                 .on_press(move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true))
                 .build(k),
         );
-    } else if c.thread.turn.run().is_some() {
+    } else if c.thread.turn().run().is_some() {
         let a = id.to_owned();
-        let stopping =
-            l.app.remote.interrupts.contains_key(id) || matches!(c.thread.turn, Turn::Stopping(_));
+        let stopping = l.app.remote.interrupts.contains_key(id)
+            || matches!(c.thread.turn(), Turn::Stopping(_));
         controls = controls.child(
             ui::Button::new(if stopping { "Stopping…" } else { "Stop" })
                 .icon(&crate::STOP)
                 .variant(ButtonVariant::GhostMuted)
-                .disabled(stopping || matches!(c.thread.turn, Turn::Finishing(_)))
+                .disabled(stopping || matches!(c.thread.turn(), Turn::Finishing(_)))
                 .on_press(move |s: &mut Workspace| live_mut(s).app.interrupt_remote(&a))
                 .build(k)
                 .key("remote-stop")
@@ -413,7 +414,7 @@ pub(super) fn view(
     } else {
         let owner = key.to_owned();
         controls = controls.child(
-            ui::Button::new(if c.thread.turn == Turn::Submitting {
+            ui::Button::new(if c.thread.turn() == &Turn::Submitting {
                 "Sending…"
             } else {
                 "Send"
@@ -421,7 +422,7 @@ pub(super) fn view(
             .variant(ButtonVariant::Contrast)
             .icon(&crate::SEND)
             .disabled(
-                c.thread.turn != Turn::Idle
+                c.thread.turn() != &Turn::Idle
                     || !c.thread.can_prompt_provider()
                     || editors.draft.text.trim().is_empty()
                     || too_long

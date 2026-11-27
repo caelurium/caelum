@@ -155,19 +155,18 @@ and `apps/desktop/profile-results/navigation-{before,after}.json` (ignored).
 
 ### Focus lookup and background redraws
 
-The desktop now uses `Runtime::presented_focus_key()` instead of collecting
+The desktop uses `Runtime::presented_focus_key()` instead of collecting
 `Runtime::elements()` to observe focus. The query returns the same non-exiting
 presented element key or link ID, including pointer, Tab and accessibility focus.
-Unmounted virtual editors and unkeyed controls return no presented key. Caelum
-pins `ch55secake/rune` at `e5e9ea9a`, a small patch on its previous `ddf1414`
-revision. The corresponding current-Rune proposal is in
-[fork PR #1](https://github.com/ch55secake/rune/pull/1). Only a changed focus key
-is copied into application state.
+Unmounted virtual editors and unkeyed controls return no presented key. Only a
+changed focus key is copied into application state.
 
-[Rune #833](https://github.com/anomalyco/rune/issues/833) requests the upstream
-API. [Caelum #167](https://github.com/caelurium/caelum/issues/167) tracks both
-keeping the temporary fork current with relevant upstream fixes and returning
-both dependencies to an upstream revision once the API is available.
+Upstream Rune added `Runtime::presented_focus_key()` in
+[Rune #1976](https://github.com/anomalyco/rune/pull/1976) (resolving
+[Rune #833](https://github.com/anomalyco/rune/issues/833)). Caelum now pins
+upstream `anomalyco/rune` at `9396dcb898b906c9b542fa28e728738f882cdfd7`
+(closing [Caelum #167](https://github.com/caelurium/caelum/issues/167)). The
+before/after numbers below are from the original `e5e9ea9a` measurement pass.
 
 Provider batches still apply every event synchronously and in order. A known
 text/reasoning delta for a uniquely owned, unselected session can skip view

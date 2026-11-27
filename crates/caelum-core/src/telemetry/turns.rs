@@ -178,7 +178,7 @@ pub(crate) fn boat(
     model: Option<String>,
     timestamp: u64,
 ) -> Option<Record> {
-    let run = t.turn.run()?;
+    let run = t.turn().run()?;
     Some(Record {
         project: native::project_key(checkout),
         provider: StatsProvider::Boat,
