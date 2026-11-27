@@ -356,7 +356,13 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                             );
                         }
                         let effect = lock(&progress).on_prompt_replied(&session_id, result);
-                        dispatch_progress_effect(&project, effect, &subscribers, &progress);
+                        dispatch_progress_effect(
+                            &project,
+                            effect,
+                            &subscribers,
+                            &progress,
+                            &questions,
+                        );
                     }
                     None => {}
                 }
@@ -452,7 +458,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 | ProgressEffect::TurnCompleted { session_id, .. } => Some(session_id.as_str()),
             };
             let project = resolve_project(&session_projects, sid, &default_project);
-            dispatch_progress_effect(&project, effect, &subscribers, &progress);
+            dispatch_progress_effect(&project, effect, &subscribers, &progress, &questions);
         }
         for project in affected_projects {
             publish_event(
@@ -581,7 +587,7 @@ fn handle_session_update(
     }
 
     if let Some(effect) = effect {
-        dispatch_progress_effect(project, effect, subscribers, progress);
+        dispatch_progress_effect(project, effect, subscribers, progress, questions);
     }
 }
 
@@ -590,6 +596,7 @@ pub(super) fn dispatch_progress_effect(
     effect: ProgressEffect,
     subscribers: &EventSubscribers,
     progress: &Arc<Mutex<SessionProgressTracker>>,
+    questions: &QuestionBroker,
 ) {
     match effect {
         ProgressEffect::TurnYielded { session_id } => {
@@ -608,7 +615,9 @@ pub(super) fn dispatch_progress_effect(
             stop_reason,
             error,
         } => {
-            let params = match error {
+            let awaiting_question =
+                error.is_none() && questions.has_pending(PROVIDER_NAME, project, &session_id);
+            let mut params = match error {
                 Some(error) => json!({
                     "sessionId": session_id,
                     "stopReason": stop_reason,
@@ -619,6 +628,9 @@ pub(super) fn dispatch_progress_effect(
                     "stopReason": stop_reason,
                 }),
             };
+            if awaiting_question {
+                params["awaitingQuestion"] = json!(true);
+            }
             publish_event(
                 subscribers,
                 AntigravityEvent {
@@ -636,11 +648,12 @@ pub(super) fn dispatch_progress_effect(
             let project = project.to_owned();
             let subscribers = subscribers.clone();
             let progress = progress.clone();
+            let questions = questions.clone();
             thread::spawn(move || {
                 thread::sleep(REACTIVE_SETTLE_DELAY);
                 let completed = lock(&progress).on_settle_timer(&session_id, generation);
                 if let Some(effect) = completed {
-                    dispatch_progress_effect(&project, effect, &subscribers, &progress);
+                    dispatch_progress_effect(&project, effect, &subscribers, &progress, &questions);
                 }
             });
         }
