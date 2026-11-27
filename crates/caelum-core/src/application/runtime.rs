@@ -612,7 +612,7 @@ type Execute = Arc<dyn Fn(&Command) -> Result<Reply, String> + Send + Sync>;
 /// event arrival wakes it, so idle windows need no polling timer.
 pub struct Runtime {
     usage: crate::telemetry::Store,
-    checkout_watch: Option<mpsc::Sender<Vec<String>>>,
+    checkout_watch: Option<tokio::sync::watch::Sender<Vec<String>>>,
     watched_projects: Vec<String>,
     providers: Option<ProviderRuntime>,
     mailboxes: worker::Mailboxes,
@@ -760,7 +760,7 @@ impl Runtime {
         projects.dedup();
         if projects != self.watched_projects {
             if let Some(watch) = &self.checkout_watch {
-                let _ = watch.send(projects.clone());
+                watch.send_replace(projects.clone());
             }
             self.watched_projects = projects;
         }
