@@ -187,7 +187,12 @@ fn shutdown_terminates_and_unregisters_the_owned_server_process() {
     });
     let slot = Arc::new(ServerSlot::default());
     slot.connect(&processes, |_| Ok(server.clone())).unwrap();
-    provider.inner.lock_servers().insert(project_path, slot);
+    provider
+        .inner
+        .lock_servers()
+        .as_mut()
+        .unwrap()
+        .insert(project_path, slot);
 
     provider.shutdown();
 

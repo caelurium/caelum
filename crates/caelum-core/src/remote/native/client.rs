@@ -17,8 +17,10 @@ pub enum Notice {
 
 type Link = mpsc::Sender<(u64, Command)>;
 enum Message {
+    Connecting,
     Connected(Link),
-    Notice(Notice),
+    Disconnected(String),
+    Event(Box<Event>),
 }
 struct ActiveAttempt {
     pending: BTreeSet<u64>,
@@ -68,8 +70,8 @@ struct Output {
     wake: Arc<dyn Fn() + Send + Sync>,
 }
 impl Output {
-    async fn send(&self, n: Notice) {
-        self.publish(Message::Notice(n)).await;
+    async fn event(&self, event: Event) {
+        self.publish(Message::Event(Box::new(event))).await;
     }
     async fn publish(&self, message: Message) {
         if self.tx.send(message).await.is_ok() {
@@ -147,9 +149,7 @@ impl Client {
                         }
                     }),
                     Err(e) => {
-                        let _ = out.tx.blocking_send(Message::Notice(Notice::Status(
-                            Status::Disconnected(e.to_string()),
-                        )));
+                        let _ = out.tx.blocking_send(Message::Disconnected(e.to_string()));
                         (out.wake)();
                     }
                 }
@@ -187,12 +187,15 @@ impl Client {
                     self.link = Some(link);
                     Notice::Status(Status::Connected)
                 }
-                Message::Notice(n) => {
-                    if matches!(n, Notice::Status(_)) {
-                        self.link = None;
-                    }
-                    n
+                Message::Connecting => {
+                    self.link = None;
+                    Notice::Status(Status::Connecting)
                 }
+                Message::Disconnected(error) => {
+                    self.link = None;
+                    Notice::Status(Status::Disconnected(error))
+                }
+                Message::Event(event) => Notice::Event(event),
             })
             .collect();
         if notices.len() == 256 {
@@ -217,20 +220,15 @@ async fn supervise(
     out: &Output,
 ) {
     loop {
-        out.send(Notice::Status(Status::Connecting)).await;
+        out.publish(Message::Connecting).await;
         let mut attempt = Attempt::new();
         let problem = connect(&mut attempt, out).await;
         let retired = attempt.retire();
-        out.send(Notice::Status(Status::Disconnected(problem)))
-            .await;
+        out.publish(Message::Disconnected(problem)).await;
         if let Some(pending) = retired {
             for id in pending {
                 let error = "VM connection lost. Delivery is unconfirmed; check the session history before retrying.";
-                out.send(Notice::Event(Box::new(Event::Completed(
-                    id,
-                    Err(error.into()),
-                ))))
-                .await;
+                out.event(Event::Completed(id, Err(error.into()))).await;
             }
             // Try a fresh, independently authenticated connection once; a stopped VM or revoked
             // credential then waits for the user's Reconnect action rather than polling Boat.
@@ -261,7 +259,7 @@ async fn deliver(pending: &mut BTreeSet<u64>, out: &Output, event: Event) {
     } else {
         None
     };
-    out.send(Notice::Event(Box::new(event))).await;
+    out.event(event).await;
     if let Some(id) = completion {
         pending.remove(&id);
     }
@@ -306,10 +304,10 @@ async fn session(access: Arc<super::Access>, attempt: &mut Attempt, out: &Output
             req = active.requests.recv() => match req {
                 Some((id, cmd)) => {
                     if active.pending.len() >= 512 || !active.pending.insert(id) {
-                        out.send(Notice::Event(Box::new(Event::Completed(
+                        out.event(Event::Completed(
                             id,
                             Err("Too many pending native workspace requests.".into()),
-                        ))))
+                        ))
                         .await;
                     } else if let Err(e) = rt.submit(id, cmd) {
                         deliver(&mut active.pending, out, Event::Completed(id, Err(e))).await;

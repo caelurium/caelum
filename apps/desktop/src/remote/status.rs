@@ -112,7 +112,7 @@ pub(super) fn status(r: &State, id: &str, c: &Checkout) -> Status {
         return Status::new(Attention, "Stopping turn…");
     }
     let feed = r.feeds.get(id);
-    match &c.thread.turn {
+    match c.thread.turn() {
         Turn::Submitting if matches!(feed, Some(Job::Busy(_))) => {
             Status::new(Busy, "Waiting for Boat to confirm…")
         }

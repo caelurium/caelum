@@ -248,17 +248,18 @@ fn store_persists_deduplicates_filters_and_merges_opencode_history() {
 
 #[test]
 fn boat_managed_turn_creates_estimated_record() {
-    let mut thread = Thread {
-        last_activity: Some(1000),
-        model: Some("claude-sonnet-4-6".into()),
-        turn: BoatTurn::Following(Run {
+    let mut thread = Thread::with_saved_turn(
+        VmProvider::Codex,
+        None,
+        BoatTurn::Following(Run {
             id: "run-1".into(),
             provider: VmProvider::Codex,
             conversation: "conv-1".into(),
             prompt: "hi".into(),
         }),
-        ..Default::default()
-    };
+    );
+    thread.last_activity = Some(1000);
+    thread.model = Some("claude-sonnet-4-6".into());
     thread.lines.push(Line::new(Speaker::You, "hello world!"));
     thread.lines.push(Line::new(Speaker::Codex, "all done"));
     let row = boat("chk-1", &thread, None, 3500).unwrap();

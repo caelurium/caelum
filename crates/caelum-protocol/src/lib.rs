@@ -12,20 +12,6 @@ pub use github_review::GitHubReviewWrite;
 pub use github_review::GitHubReviewWriteResult;
 pub use stats::*;
 
-/// Stable, serializable application metadata shared across Caelum interfaces.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AppInfo {
-    pub name: String,
-    pub version: String,
-    pub platform: String,
-    pub architecture: String,
-    pub repository_url: String,
-    pub releases_url: String,
-    pub license: String,
-    pub license_url: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum UpdateStatus {
@@ -324,16 +310,6 @@ pub struct GitFileDiff {
     pub untracked: String,
 }
 
-/// Bounded before/working-tree text for the side-by-side diff viewer.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitFileVersions {
-    pub path: String,
-    pub original: String,
-    pub modified: String,
-    pub truncated: bool,
-}
-
 /// Kind of an entry in the selected project's filesystem tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -519,14 +495,6 @@ pub struct CodexSessionInfo {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
-}
-
-/// Session discovery distinguishes an optional, uninstalled provider from a failed listing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "message", rename_all = "camelCase")]
-pub enum SessionListError {
-    NotInstalled(String),
-    Failed(String),
 }
 
 /// Recent Codex-owned threads scoped to one project.

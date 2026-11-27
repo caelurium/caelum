@@ -327,7 +327,7 @@ fn closed_projects_reject_late_open_and_worktree_discovery_without_changing_navi
     })).unwrap())))));
     assert_eq!(app.projects.len(), 1);
     assert_eq!(app.projects[0].path, "/other");
-    assert!(!app.opening);
+    assert!(!app.opening_project());
     assert_eq!(app.active_project.as_deref(), Some("/other"));
     assert_eq!(app.selected, Some(1));
     assert!(!app
@@ -431,4 +431,24 @@ fn latest_project_selection_wins_when_validations_complete_out_of_order() {
     }
     assert_eq!(workspace.active_project.as_deref(), Some("/b"));
     assert_eq!(workspace.projects.len(), 2);
+}
+
+#[test]
+fn a_stale_project_reply_cannot_clear_the_current_open_and_a_wrong_reply_ends_it() {
+    let mut workspace = Workspace::default();
+    workspace.open_project("/first".into());
+    let (first, _) = workspace.commands().pop().unwrap();
+    workspace.open_project("/second".into());
+    let (second, _) = workspace.commands().pop().unwrap();
+
+    workspace.apply(Event::Completed(first, Err("Old error".into())));
+    assert!(workspace.opening_project());
+    assert!(workspace.error.is_none());
+
+    workspace.apply(Event::Completed(second, Ok(Reply::Done)));
+    assert!(!workspace.opening_project());
+    assert_eq!(
+        workspace.error.as_deref(),
+        Some("Unexpected project response")
+    );
 }

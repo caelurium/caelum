@@ -318,12 +318,9 @@ fn saved_opencode_handoff_keeps_its_owner_settings_and_draft_during_codex_discov
         provider: Provider::OpenCode,
         ..Default::default()
     });
-    checkout.thread = Thread {
-        awaiting_native: true,
-        provider: VmProvider::OpenCode,
-        model: Some("earlier/model".into()),
-        draft: "unsent".into(),
-        continued: Some(Continuation {
+    checkout.thread = Thread::with_continuation(
+        VmProvider::OpenCode,
+        Continuation {
             id: "handoff-before-upgrade".into(),
             title: "Original handoff".into(),
             chat: Chat {
@@ -331,9 +328,11 @@ fn saved_opencode_handoff_keeps_its_owner_settings_and_draft_during_codex_discov
                 clipped: false,
             },
             base: None,
-        }),
-        ..Default::default()
-    };
+        },
+        "unsent".into(),
+    );
+    checkout.thread.model = Some("earlier/model".into());
+    checkout.thread.await_native();
     let slot = app.open_vm_session(&id, SessionIntent::Reopen).unwrap();
     let scope = app.sessions[slot].scope.clone();
     assert_eq!(scope.provider, Provider::OpenCode);

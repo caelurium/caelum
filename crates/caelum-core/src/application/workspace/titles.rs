@@ -7,6 +7,7 @@ const TURN_INTERVAL: u8 = 3;
 pub(super) struct Automatic {
     turns: u8,
     barrier: u64,
+    generated: bool,
     update: Option<Update>,
 }
 
@@ -56,6 +57,21 @@ impl TitleState {
     pub(super) fn note_live_rename(&mut self, request: u64) {
         if let Self::Automatic(state) = self {
             state.barrier = request;
+            state.generated = true;
+        }
+    }
+
+    fn due(&self, provider: Provider) -> bool {
+        match self {
+            Self::Automatic(state) => {
+                let threshold = if provider == Provider::Codex && !state.generated {
+                    1
+                } else {
+                    TURN_INTERVAL
+                };
+                state.turns >= threshold
+            }
+            Self::Manual => false,
         }
     }
 
@@ -73,10 +89,7 @@ impl TitleState {
 impl Workspace {
     pub(super) fn refresh_title(&mut self, index: usize) {
         let session = &mut self.sessions[index];
-        if !matches!(
-            session.scope.provider,
-            Provider::OpenCode | Provider::Antigravity
-        ) || session.title_state.turns() < TURN_INTERVAL
+        if !session.title_state.due(session.scope.provider)
             || session.archived()
             || session.archiving()
             || session.forgotten()
@@ -102,6 +115,7 @@ impl Workspace {
         );
         if let TitleState::Automatic(state) = &mut self.sessions[index].title_state {
             state.turns = 0;
+            state.generated = true;
             state.update = Some(Update {
                 request,
                 owner: key,

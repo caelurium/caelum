@@ -227,7 +227,7 @@ pub fn key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             };
             live_mut(s).models.selected = items.get(next).map(|m| m.id.clone());
             live_mut(s).models.query.focused = true;
-            tx.scroll_center_in_instant("model-list", format!("option{next}"));
+            tx.scroll_center_in_instant("model-scroll", format!("option{next}"));
             true
         }
         Key::Enter => {

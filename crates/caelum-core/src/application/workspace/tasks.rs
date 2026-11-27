@@ -65,7 +65,7 @@ impl Workspace {
                     && !s.forgotten()
                     && (s.working()
                         || s.attaching > 0
-                        || s.generating
+                        || s.generating_side_answer()
                         || s.archiving()
                         || !s.queue.is_empty()
                         || !s.draft.is_empty()
