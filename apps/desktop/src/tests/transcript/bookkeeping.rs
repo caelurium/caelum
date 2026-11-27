@@ -63,7 +63,7 @@ fn scrolling_still_loads_patch_previews_and_image_request_state() {
             .contains_key(&(0, "opencode-tool-lazy".into()))
     );
     rt.update_if(|_, tx| {
-        tx.scroll_center_in_instant("live-rows-0", "live-entry-0-opencode-tool-lazy");
+        tx.scroll_center_in_instant("live-transcript-0", "live-entry-0-opencode-tool-lazy");
         false
     });
     advance(&mut rt, 0.3);
@@ -78,7 +78,7 @@ fn scrolling_still_loads_patch_previews_and_image_request_state() {
     );
 
     rt.update_if(|_, tx| {
-        tx.scroll_center_in_instant("live-rows-0", "live-entry-0-opencode-image");
+        tx.scroll_center_in_instant("live-transcript-0", "live-entry-0-opencode-image");
         false
     });
     advance(&mut rt, 0.3);

@@ -140,11 +140,10 @@ impl ServerSlot {
 impl OpenCodeProvider {
     pub(super) fn server(&self, project: &Project) -> Result<Arc<OpenCodeServer>, OpenCodeError> {
         let slot = {
-            let mut servers = self.inner.lock_servers();
-            if self.inner.closed.load(Ordering::Acquire) {
-                return Err(OpenCodeError::Closed);
-            }
-            servers
+            let mut registry = self.inner.lock_servers();
+            registry
+                .as_mut()
+                .ok_or(OpenCodeError::Closed)?
                 .entry(project.path().to_path_buf())
                 .or_default()
                 .clone()
@@ -275,18 +274,18 @@ impl OpenCodeProvider {
     }
 
     fn listen(&self, server: &Arc<OpenCodeServer>, project: &Project) -> Result<(), OpenCodeError> {
-        let result =
-            if self.inner.closed.load(Ordering::Acquire) || !server.alive.load(Ordering::Acquire) {
-                Err(OpenCodeError::Closed)
-            } else {
-                spawn_event_listener(
-                    Arc::clone(server),
-                    project.path().to_path_buf(),
-                    self.inner.approvals.clone(),
-                    self.inner.questions.clone(),
-                    Arc::clone(&self.inner.subscribers),
-                )
-            };
+        let result = if self.inner.lock_servers().is_none() || !server.alive.load(Ordering::Acquire)
+        {
+            Err(OpenCodeError::Closed)
+        } else {
+            spawn_event_listener(
+                Arc::clone(server),
+                project.path().to_path_buf(),
+                self.inner.approvals.clone(),
+                self.inner.questions.clone(),
+                Arc::clone(&self.inner.subscribers),
+            )
+        };
         if result.is_err() {
             server.close(&self.inner.processes);
         } else {

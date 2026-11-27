@@ -395,16 +395,8 @@ fn home_handoff_uses_the_selected_drafts_project_after_connecting_and_creates_on
             if p.branch == "feature/session" && p.lifetime == caelum_core::remote::Lifetime::Day));
     assert_eq!(c.thread.draft, "My Home idea");
     assert_eq!(c.thread.provider, VmProvider::Pi);
-    assert!(!c.thread.awaiting_native);
-    assert!(
-        c.thread
-            .continued
-            .as_ref()
-            .unwrap()
-            .chat
-            .messages
-            .is_empty()
-    );
+    assert!(!c.thread.awaiting_native());
+    assert!(c.thread.continuation().unwrap().chat.messages.is_empty());
     assert_eq!(l.home.editor.text, c.thread.draft);
     assert_eq!(
         l.app.sessions.len(),
@@ -434,13 +426,13 @@ fn choosing_a_recent_session_on_home_loads_its_chat_and_its_own_editor() {
     let thread =
         &l.app.remote.saved.checkouts[l.app.remote.saved.selected.as_ref().unwrap()].thread;
     assert_eq!(thread.draft, "Session draft");
-    assert_eq!(thread.continued.as_ref().unwrap().chat.messages.len(), 2);
+    assert_eq!(thread.continuation().unwrap().chat.messages.len(), 2);
     assert_eq!(l.home.editor.text, "Home draft");
 }
 
 #[test]
 fn switching_threads_on_the_same_vm_restores_the_native_draft_and_undo_owner() {
-    use caelum_core::remote::{Continuation, Thread};
+    use caelum_core::remote::{Continuation, Thread, VmProvider};
     let mut rt = design_runtime("", (1280., 900.));
     rt.update(|s, _| {
         crate::remote::scene(s, "remote-machine");
@@ -451,16 +443,16 @@ fn switching_threads_on_the_same_vm_restores_the_native_draft_and_undo_owner() {
             .checkouts
             .get_mut("checkout-example")
             .unwrap();
-        c.other_threads.push(Thread {
-            continued: Some(Continuation {
+        c.other_threads.push(Thread::with_continuation(
+            VmProvider::Codex,
+            Continuation {
                 base: None,
                 id: "other-editor".into(),
                 title: "Local session".into(),
                 chat: Chat::default(),
-            }),
-            draft: "Local draft".into(),
-            ..Default::default()
-        });
+            },
+            "Local draft".into(),
+        ));
     });
     advance(&mut rt, 0.2);
     key(&mut rt, Key::Escape, Mods::default());
@@ -480,7 +472,7 @@ fn switching_threads_on_the_same_vm_restores_the_native_draft_and_undo_owner() {
         },
     );
     let c = &live(&rt.state).app.remote.saved.checkouts["checkout-example"];
-    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert_eq!(c.thread.conversation(), Some("thread-example"));
     assert!(c.thread.draft.is_empty());
     assert_eq!(c.other_threads[0].draft, "New edit");
 }

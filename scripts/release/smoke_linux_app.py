@@ -62,7 +62,8 @@ def run(image: Path, backend: str, output: Path, root: Path) -> None:
                     subprocess.run([*command, "--design-fixture", "--scene", scene, "--theme", theme, "--size", "1280x1000", "--scale", "1", "--at", "1", "--snap", str(output / f"{name}.png")], env=environment, check=True, timeout=60, stdout=log, stderr=log)
                     if (output / f"{name}.png").stat().st_size < 1000:
                         raise RuntimeError("Empty Linux preview")
-            subprocess.run([*command, "--design-fixture", "--scene", "home", "--native", "--frames", "3", "--trace", str(output / "native.json")], env=environment, check=True, timeout=60, stdout=log, stderr=log)
+            trace_environment = {**environment, "RUNE_CPU_FIRST": "off"}
+            subprocess.run([*command, "--design-fixture", "--scene", "home", "--native", "--frames", "3", "--trace", str(output / "native.json")], env=trace_environment, check=True, timeout=60, stdout=log, stderr=log)
             if not (output / "native.json").is_file():
                 raise RuntimeError("Native renderer did not produce its trace")
             subprocess.run([*command, "--install"], env=environment, check=True, timeout=30, stdout=log, stderr=log)

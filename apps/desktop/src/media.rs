@@ -2,15 +2,16 @@ use crate::ui::Button;
 use crate::{
     Workspace,
     live::{live, live_mut},
-    panels::Screen,
     ui,
 };
 use caelum_core::application::{Attachment, Task, presentation::Media};
 use rune::{El, Image, ImageCache, ScrollSpec, SurfaceFit, Waker, col, row};
 use rune_kit::{ButtonVariant, Kit};
 use std::{
+    cell::Cell,
     collections::HashMap,
     hash::{Hash, Hasher},
+    rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -24,10 +25,32 @@ pub struct State {
     decoded: Arc<Mutex<Decoded>>,
     changed: Arc<AtomicBool>,
     wake: Waker,
-    pub selected: Option<(String, Media)>,
-    pub zoom: Option<f32>,
-    offset: std::rc::Rc<std::cell::Cell<[f32; 2]>>,
-    drag_start: [f32; 2],
+}
+
+pub(crate) struct Preview {
+    pub project: String,
+    pub media: Media,
+    pub viewport: Viewport,
+}
+
+impl Preview {
+    pub(crate) fn new(project: String, media: Media) -> Self {
+        Self {
+            project,
+            media,
+            viewport: Viewport::default(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Viewport(Rc<ViewportState>);
+
+#[derive(Default)]
+struct ViewportState {
+    zoom: Cell<Option<f32>>,
+    offset: Cell<[f32; 2]>,
+    drag_start: Cell<Option<[f32; 2]>>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -47,10 +70,6 @@ impl State {
             decoded: Default::default(),
             changed,
             wake,
-            selected: None,
-            zoom: None,
-            offset: Default::default(),
-            drag_start: [0.0; 2],
         }
     }
     pub fn poll(&self) -> bool {
@@ -186,10 +205,7 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
         .role("img")
         .focusable(true)
         .on_press(move |s: &mut Workspace| {
-            let l = live_mut(s);
-            l.media.selected = Some((owner.clone(), media.clone()));
-            l.media.zoom = None;
-            l.panels.set_overlay(Some(Screen::Image));
+            live_mut(s).panels.open_image(owner.clone(), media.clone());
         })
 }
 pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> El {
@@ -231,11 +247,15 @@ pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> 
         .role("img")
 }
 
-pub fn view(s: &Workspace, k: &Kit) -> El {
-    let Some((project, media)) = &live(s).media.selected else {
-        return col();
-    };
-    let Some(data) = data(s, project, &media.source) else {
+pub(crate) fn view(
+    s: &Workspace,
+    k: &Kit,
+    project: &str,
+    name: &str,
+    source: &str,
+    viewport: &Viewport,
+) -> El {
+    let Some(data) = data(s, project, source) else {
         return ui::caption("Image unavailable", k);
     };
     let image = match live(s).media.image(data, live(s).fixture) {
@@ -257,7 +277,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
     let fit = (canvas[2] / width as f32)
         .min(canvas[3] / height as f32)
         .min(1.0);
-    let zoom = live(s).media.zoom.unwrap_or(fit);
+    let zoom = viewport.0.zoom.get().unwrap_or(fit);
     let mut actions = row().w_full().center_y().gap(6.0);
     for (name, value) in [
         ("Fit", None),
@@ -265,20 +285,22 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
         ("−", Some((zoom / 1.4).max(0.1))),
         ("+", Some((zoom * 1.4).min(8.0))),
     ] {
+        let viewport = viewport.clone();
         actions = actions.child(
             Button::new(name)
                 .variant(ButtonVariant::Outline)
-                .on_press(move |s: &mut Workspace| live_mut(s).media.zoom = value)
+                .on_press(move |_: &mut Workspace| viewport.0.zoom.set(value))
                 .build(k),
         );
     }
-    let offset = live(s).media.offset.clone();
+    let scroll = viewport.clone();
+    let drag_viewport = viewport.clone();
     col()
         .w_full()
         .h_full()
         .min_h(0.0)
         .gap(8.0)
-        .child(ui::caption(&media.name, k).truncate())
+        .child(ui::caption(name, k).truncate())
         .child(actions.child(ui::caption(
             format!("{:.0}% · {width} × {height}", zoom * 100.0),
             k,
@@ -297,20 +319,23 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .on_scroll_offset(move |pos| offset.set(pos.offset))
-                .on_drag(|s: &mut Workspace, drag, tx| {
-                    let m = &mut live_mut(s).media;
+                .on_scroll_offset(move |pos| scroll.0.offset.set(pos.offset))
+                .on_drag(move |_: &mut Workspace, drag, tx| {
+                    let state = &drag_viewport.0;
                     if drag.phase == rune::Phase::Down {
-                        m.drag_start = m.offset.get();
+                        state.drag_start.set(Some(state.offset.get()));
                     }
-                    let at = if drag.cancelled() {
-                        m.drag_start
-                    } else {
-                        [
-                            (m.drag_start[0] - drag.dx).max(0.0),
-                            (m.drag_start[1] - drag.dy).max(0.0),
-                        ]
+                    let Some(start) = state.drag_start.get() else {
+                        return;
                     };
+                    let at = if drag.cancelled() {
+                        start
+                    } else {
+                        [(start[0] - drag.dx).max(0.0), (start[1] - drag.dy).max(0.0)]
+                    };
+                    if drag.phase == rune::Phase::Up || drag.cancelled() {
+                        state.drag_start.set(None);
+                    }
                     tx.scroll_to("image-canvas", at[0], at[1]);
                 })
                 .items_center()
@@ -318,7 +343,7 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
                     rune::el()
                         .size(width as f32 * zoom, height as f32 * zoom)
                         .pixels(image.pixels())
-                        .label(&media.name)
+                        .label(name)
                         .role("img"),
                 ),
         )
