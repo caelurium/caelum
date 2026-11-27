@@ -193,10 +193,6 @@ impl WorkspaceRunner {
         self.checkouts.get(project)
     }
 
-    pub fn any_running(&self) -> bool {
-        self.checkouts.values().any(|c| c.state.running())
-    }
-
     pub fn start(&mut self, project: &str, command: String) -> Option<(u64, String)> {
         let trimmed = command.trim().to_owned();
         if trimmed.is_empty() || trimmed.len() > COMMAND_LIMIT {
@@ -315,13 +311,6 @@ impl WorkspaceRunner {
                 true
             }
         }
-    }
-
-    pub fn remove_checkout(&mut self, project: &str) -> Option<u64> {
-        self.checkouts.remove(project).and_then(|c| match c.state {
-            RunState::Running { run_id, .. } => Some(run_id),
-            _ => None,
-        })
     }
 }
 

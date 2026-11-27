@@ -51,7 +51,7 @@ impl Workspace {
                 }
             }
             FeedSession::Vm(link) => match link.resolve(&self.remote.saved) {
-                Some((_, thread)) if thread.turn != Turn::Idle => SessionBucket::Running,
+                Some((_, thread)) if thread.turn() != &Turn::Idle => SessionBucket::Running,
                 _ => SessionBucket::Settled,
             },
         }
@@ -87,7 +87,7 @@ impl Session {
         if self.commanding() {
             return Some(OverviewActivity::Command);
         }
-        if self.generating {
+        if self.generating_side_answer() {
             return Some(OverviewActivity::SideQuestion);
         }
         self.inbox

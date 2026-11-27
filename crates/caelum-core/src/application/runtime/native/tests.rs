@@ -72,7 +72,7 @@ fn offline_drafts_and_options_survive_restart_without_loading_a_laptop_provider_
     assert!(request(
         &mut writer,
         1,
-        Command::Save(store.clone(), Box::new(app.snapshot()))
+        Command::Save(store.clone(), std::sync::Arc::new(app.snapshot()))
     )
     .is_ok());
     assert!(request(&mut writer, 2, Command::Load(Store(parent.clone()))).is_err());

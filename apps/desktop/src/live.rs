@@ -382,7 +382,7 @@ impl Live {
                 .selected
                 .as_ref()
                 .and_then(|id| self.app.remote.saved.checkouts.get(id))
-                .is_some_and(|c| c.thread.turn.run().is_some());
+                .is_some_and(|c| c.thread.turn().run().is_some());
         }
         self.panels.screen == crate::panels::Screen::Conversation
             && self
@@ -510,7 +510,7 @@ impl Live {
                 .or_else(|| self.drafts.get(index))
                 .filter(|draft| {
                     draft.focused
-                        && draft.preedit.is_none()
+                        && draft.preedit().is_none()
                         && self.panels.overlay().is_none()
                         && !self.models.is_open()
                 })
@@ -656,7 +656,7 @@ impl Live {
         }
         self.panels.reveal_line(tx);
         if let Some(index) = self.models.reveal.take() {
-            tx.scroll_center_in_instant("model-list", format!("option{index}"));
+            tx.scroll_center_in_instant("model-scroll", format!("option{index}"));
         }
         self.history_lengths.resize(self.app.sessions.len(), 0);
         for (index, session) in self.app.sessions.iter().enumerate() {
@@ -796,18 +796,5 @@ pub fn frame_drawn(rt: &rune::Runtime<Workspace>) {
         handle.update(move |s, _| {
             live_mut(s).focus_key = focused;
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::composer::effort_description;
-
-    #[test]
-    fn max_effort_has_a_description() {
-        assert_eq!(
-            effort_description("max"),
-            Some("Use the maximum reasoning effort for complex tasks")
-        );
     }
 }

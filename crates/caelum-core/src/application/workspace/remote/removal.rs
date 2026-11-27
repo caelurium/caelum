@@ -7,7 +7,7 @@ use crate::{
 impl Workspace {
     pub fn can_remove_remote(&self, id: &str) -> bool {
         self.remote.saved.checkouts.get(id).is_some_and(|c| {
-            !(c.thread.turn == Turn::Submitting
+            !(c.thread.turn() == &Turn::Submitting
                 && matches!(self.remote.feeds.get(id), Some(Job::Busy(_))))
         }) && !matches!(
             self.remote.jobs.get(id),

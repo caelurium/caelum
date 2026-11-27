@@ -316,7 +316,11 @@ impl Store {
             options.mode(0o600);
         }
         let mut file = options.open(&temporary)?;
-        file.write_all(&serde_json::to_vec(state)?)?;
+        {
+            let mut writer = std::io::BufWriter::new(&mut file);
+            serde_json::to_writer(&mut writer, state)?;
+            writer.flush()?;
+        }
         file.sync_all()?;
         fs::rename(&temporary, &self.0)?;
         fs::File::open(parent)?.sync_all()?;
