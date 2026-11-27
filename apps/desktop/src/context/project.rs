@@ -57,6 +57,15 @@ pub(crate) fn project(el: El, project: String) -> El {
         let origin = crate::code_view::source_key(&project, "project");
         let app = &live(s).app;
         let menu = Menu::new()
+            .item(
+                Item::new("split-vertical", "Open in split right")
+                    .icon(&rune_kit::shell::INSPECTOR),
+            )
+            .item(
+                Item::new("split-horizontal", "Open in split below")
+                    .icon(&rune_kit::shell::INSPECTOR),
+            )
+            .separator()
             .item(Item::new("new", "New session").icon(&crate::PLUS))
             .item(Item::new("worktree", "Create worktree…").icon(&ui::BRANCH))
             .item(Item::new("remote", "Open on remote machine…").icon(&ui::SERVER))
@@ -81,6 +90,12 @@ pub(crate) fn project(el: El, project: String) -> El {
                     .danger(true),
             );
         show(s, at, origin.clone(), menu, move |s, pick, tx| match pick {
+            "split-vertical" => {
+                crate::split::open_project(s, &project, crate::split::SplitOrientation::Vertical);
+            }
+            "split-horizontal" => {
+                crate::split::open_project(s, &project, crate::split::SplitOrientation::Horizontal);
+            }
             "up" | "down" => {
                 let direction = if pick == "up" {
                     ProjectMove::Up

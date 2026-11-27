@@ -1,5 +1,5 @@
 use rune::{El, col, row};
-use rune_kit::Kit;
+use rune_kit::{Kit, Switch};
 
 use crate::live::{live, live_mut};
 use crate::{Workspace, theme, ui};
@@ -139,13 +139,77 @@ pub(crate) fn appearance_settings(s: &Workspace, k: &Kit) -> El {
                 }),
         );
     }
+    let mut backgrounds = row().w_full().flex_wrap().gap(8.0);
+    let selected_bg = crate::home::backgrounds::normalized(&preferences.home_background);
+    for preset in crate::home::backgrounds::PRESETS {
+        let top = rune::color::hex(preset.swatch[0]).unwrap();
+        let bottom = rune::color::hex(preset.swatch[1]).unwrap();
+        let id = preset.id;
+        backgrounds = backgrounds.child(
+            k.interactive(
+                col()
+                    .grow(1.0)
+                    .min_w(104.0)
+                    .gap(6.0)
+                    .padding(8.0)
+                    .radius(6.0)
+                    .fill(k.c.bg_base)
+                    .border(
+                        1.0,
+                        if selected_bg == id {
+                            k.c.border_focus
+                        } else {
+                            k.c.border_base
+                        },
+                    )
+                    .child(
+                        rune::el()
+                            .w_full()
+                            .h(30.0)
+                            .radius(5.0)
+                            .gradient(top, bottom),
+                    )
+                    .child(ui::caption(preset.name, k)),
+            )
+            .role("button")
+            .label(preset.name)
+            .focusable(true)
+            .focus_ring(1.0, 0.0, k.c.border_focus)
+            .on_press(move |s: &mut Workspace| {
+                live_mut(s).app.preferences.home_background = id.into();
+            })
+            .key(format!("home-bg-{id}")),
+        );
+    }
+    let peaceful = row().justify_end().child(
+        Switch::new(preferences.peaceful_mode)
+            .label("Peaceful mode")
+            .hide_label()
+            .on_toggle(|s: &mut Workspace| {
+                let p = &mut live_mut(s).app.preferences;
+                p.peaceful_mode = !p.peaceful_mode;
+            })
+            .build(k)
+            .key("peaceful-mode-switch"),
+    );
     content
+        .child(ui::divider(k).mt(8.0))
+        .child(ui::caption("Home background", k).pt(8.0))
+        .child(backgrounds)
         .child(ui::divider(k).mt(8.0))
         .child(ui::caption("Sidebar", k).pt(8.0))
         .child(crate::settings::setting_row(
             "Session scope",
             "All projects or the current project.",
             scopes,
+            k,
+        ))
+        .child(ui::divider(k).mt(8.0))
+        .child(ui::caption("Conversation", k).pt(8.0))
+        .child(crate::settings::setting_row(
+            "Peaceful mode",
+            "Hide tool calls and reasoning in conversations.",
+            peaceful,
             k,
         ))
 }

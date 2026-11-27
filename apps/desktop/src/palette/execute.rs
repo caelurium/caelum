@@ -35,6 +35,11 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
             s.inspector.toggle();
             live_mut(s).focus();
         }
+        Action::TogglePeacefulMode => {
+            let l = live_mut(s);
+            l.app.preferences.peaceful_mode = !l.app.preferences.peaceful_mode;
+            l.focus();
+        }
         Action::Files => panels::show(s, Screen::Files),
         Action::Changes => panels::show(s, Screen::Changes),
         Action::Runner => crate::runner::open(s),
@@ -118,5 +123,11 @@ pub(super) fn execute(s: &mut Workspace, tx: &mut Tx, action: Action) {
         }
         Action::SelectProject(path) => crate::checkouts::select_project(s, &path),
         Action::SelectWorktree(path) => crate::checkouts::select(s, &path),
+        Action::SplitProject(path) => {
+            crate::split::open_project(s, &path, crate::split::SplitOrientation::Vertical);
+        }
+        Action::SplitWorktree(path) => {
+            crate::split::open_checkout(s, &path, crate::split::SplitOrientation::Vertical);
+        }
     }
 }

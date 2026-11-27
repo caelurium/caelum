@@ -160,6 +160,36 @@ pub fn open_session(s: &mut Workspace, index: usize, orientation: SplitOrientati
     focus_pane(s, ActivePane::Secondary);
 }
 
+pub fn open_project(s: &mut Workspace, project: &str, orientation: SplitOrientation) {
+    let index = {
+        let l = live_mut(s);
+        let Some(index) = l.app.project_session_for_split(project) else {
+            return;
+        };
+        l.sync_editors();
+        if l.panels.screen != crate::panels::Screen::Conversation {
+            l.panels.screen = crate::panels::Screen::Conversation;
+        }
+        index
+    };
+    open_session(s, index, orientation);
+}
+
+pub fn open_checkout(s: &mut Workspace, path: &str, orientation: SplitOrientation) {
+    let index = {
+        let l = live_mut(s);
+        let Some(index) = l.app.checkout_session_for_split(path) else {
+            return;
+        };
+        l.sync_editors();
+        if l.panels.screen != crate::panels::Screen::Conversation {
+            l.panels.screen = crate::panels::Screen::Conversation;
+        }
+        index
+    };
+    open_session(s, index, orientation);
+}
+
 pub fn open_review(s: &mut Workspace, project: String, url: String) {
     let l = live_mut(s);
     l.panels.review = Some((project.clone(), url.clone()));
@@ -288,19 +318,25 @@ pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
     }
     match pane {
         ActivePane::Primary => {
-            if let Some(i) = l.app.selected
-                && let Some(draft) = l.drafts.get_mut(i)
-            {
-                draft.focused = true;
-                l.focus_key = Some(format!("live-draft-{i}"));
+            if let Some(i) = l.app.selected {
+                if let Some(project) = l.app.sessions.get(i).map(|s| s.scope.project.clone()) {
+                    l.app.focus_project_context(&project);
+                }
+                if let Some(draft) = l.drafts.get_mut(i) {
+                    draft.focused = true;
+                    l.focus_key = Some(format!("live-draft-{i}"));
+                }
             }
         }
         ActivePane::Secondary => {
-            if let Some(SecondaryPane::Session(i)) = l.split.visible_secondary().cloned()
-                && let Some(draft) = l.drafts.get_mut(i)
-            {
-                draft.focused = true;
-                l.focus_key = Some(format!("live-draft-{i}"));
+            if let Some(SecondaryPane::Session(i)) = l.split.visible_secondary().cloned() {
+                if let Some(project) = l.app.sessions.get(i).map(|s| s.scope.project.clone()) {
+                    l.app.focus_project_context(&project);
+                }
+                if let Some(draft) = l.drafts.get_mut(i) {
+                    draft.focused = true;
+                    l.focus_key = Some(format!("live-draft-{i}"));
+                }
             }
         }
     }

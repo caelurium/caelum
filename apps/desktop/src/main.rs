@@ -395,6 +395,51 @@ fn inspector(s: &Workspace, k: &Kit) -> El {
         .child(DiffView::new(|s: &Workspace| &s.diff, |s: &mut Workspace| &mut s.diff).build(s, k))
 }
 
+fn peaceful_toggle(s: &Workspace, k: &Kit) -> Option<El> {
+    let l = live::live(s);
+    if !matches!(
+        l.panels.screen,
+        panels::Screen::Conversation | panels::Screen::Remote
+    ) {
+        return None;
+    }
+    let active = l.app.preferences.peaceful_mode;
+    let button = if active {
+        k.interactive(
+            row()
+                .h(28.0)
+                .px(8.0)
+                .gap(5.0)
+                .center_y()
+                .radius(6.0)
+                .fill(k.alpha(k.c.bg_accent, 0.14))
+                .border(1.0, k.alpha(k.c.text_accent, 0.25))
+                .child(icon(&ui::PEACEFUL, 13.0).color(k.c.text_accent))
+                .child(
+                    text("Peaceful")
+                        .font(k.ty.small_medium)
+                        .color(k.c.text_accent),
+                ),
+        )
+        .role("button")
+        .label("Disable peaceful mode")
+        .help("Show tool calls and reasoning")
+        .focusable(true)
+        .focus_ring(1.5, 0.0, k.c.border_focus)
+        .on_press(|s: &mut Workspace| {
+            live::live_mut(s).app.preferences.peaceful_mode = false;
+        })
+    } else {
+        quiet_button(&ui::PEACEFUL, "Enable peaceful mode")
+            .on_press(|s: &mut Workspace| {
+                live::live_mut(s).app.preferences.peaceful_mode = true;
+            })
+            .build(k)
+            .help("Hide tool calls and reasoning")
+    };
+    Some(button.key("peaceful-mode-toggle"))
+}
+
 fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let dark = match s.live.as_ref().map(|l| l.app.preferences.theme.as_str()) {
         Some("dark") => true,
@@ -567,7 +612,11 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
     let toolbar = Toolbar::new()
         .leading(split::toolbar_heading(s, &k, cx, window_width, pane_border))
         .trailing(if s.live.is_some() {
-            context::workspace_button(s, &k)
+            row()
+                .center_y()
+                .gap(4.0)
+                .children(peaceful_toggle(s, &k))
+                .child(context::workspace_button(s, &k))
         } else {
             quiet_button(
                 &shell::INSPECTOR,
