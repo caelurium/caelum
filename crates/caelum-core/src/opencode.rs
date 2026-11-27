@@ -147,12 +147,34 @@ impl OpenCodeProvider {
             "location[directory]",
             project.path().to_string_lossy().into_owned(),
         )];
-        let models = server.request_json(Method::GET, "/api/model", &query, None)?;
-        let agents = server.request_json(Method::GET, "/api/agent", &query, None)?;
-
-        let providers = server
-            .request_json(Method::GET, "/api/provider", &query, None)
-            .ok();
+        let (models, agents, providers, default_model) = std::thread::scope(|scope| {
+            let agents =
+                scope.spawn(|| server.request_json(Method::GET, "/api/agent", &query, None));
+            let providers = scope.spawn(|| {
+                server
+                    .request_json(Method::GET, "/api/provider", &query, None)
+                    .ok()
+            });
+            let default_model = scope.spawn(|| {
+                server
+                    .request_json(Method::GET, "/api/model/default", &query, None)
+                    .ok()
+                    .and_then(|response| model_id(response.get("data")?))
+            });
+            let models = server.request_json(Method::GET, "/api/model", &query, None);
+            (
+                models,
+                agents.join().expect("opencode agents worker panicked"),
+                providers
+                    .join()
+                    .expect("opencode providers worker panicked"),
+                default_model
+                    .join()
+                    .expect("opencode default model worker panicked"),
+            )
+        });
+        let models = models?;
+        let agents = agents?;
         let provider_names: HashMap<&str, &str> = providers
             .as_ref()
             .and_then(|response| response.get("data"))
@@ -165,10 +187,6 @@ impl OpenCodeProvider {
                 (!name.trim().is_empty()).then_some((id, name))
             })
             .collect();
-        let default_model = server
-            .request_json(Method::GET, "/api/model/default", &query, None)
-            .ok()
-            .and_then(|response| model_id(response.get("data")?));
         let models = models
             .get("data")
             .and_then(Value::as_array)
