@@ -272,6 +272,14 @@ fn native_pending_approval_over_openssh() {
         .unwrap_or_else(|| desktop.until(pending));
     assert_eq!(after.session_id.as_deref(), Some(s.key.id.as_str()));
     assert_eq!(after.summary, before.summary);
+    assert!(matches!(
+        desktop.request(Command::Cancel(s.key.clone())),
+        Reply::Done
+    ));
+    let Reply::History(history) = desktop.request(Command::History(s.key, None)) else {
+        panic!("could not read the interrupted turn");
+    };
+    assert_eq!(history.data.last().unwrap()["status"], "interrupted");
     assert!(!fixture.join("approval-fixture").exists());
 }
 

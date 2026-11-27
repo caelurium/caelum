@@ -479,12 +479,18 @@ fn asks_questions_through_broker_and_reads_usage_limits() {
     assert_eq!(prompt.fields[0]["title"], "Which color do you prefer?");
 
     // Wait for the initial turn to finish cleanly (ask_question is NOT a background tool).
+    let mut initial_completed = None;
     for _ in 0..30 {
         let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
         if event.method == "antigravity/turnCompleted" {
+            initial_completed = Some(event);
             break;
         }
     }
+    assert_eq!(
+        initial_completed.unwrap().params["awaitingQuestion"],
+        serde_json::json!(true)
+    );
     assert!(!provider.list_sessions(&fixture.project).unwrap().sessions[0].is_working);
 
     let answer = serde_json::json!({ "q0": "Blue" })
@@ -502,19 +508,82 @@ fn asks_questions_through_broker_and_reads_usage_limits() {
         .unwrap();
 
     let mut reply = String::new();
+    let mut final_completed = None;
     for _ in 0..30 {
         let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
         if event.method == "agent_message_chunk" {
             reply.push_str(event.params["content"]["text"].as_str().unwrap_or_default());
         }
         if event.method == "antigravity/turnCompleted" {
+            final_completed = Some(event);
             break;
         }
     }
     assert_eq!(reply, "answered:Blue");
+    assert!(final_completed.unwrap().params["awaitingQuestion"].is_null());
     assert!(questions.pending().is_empty());
 
     provider.shutdown();
+}
+
+#[test]
+fn workspace_skips_refresh_while_antigravity_question_is_pending() {
+    use crate::application::{Command, Event, Provider, Scope, Workspace};
+    use caelum_protocol::AntigravityEvent;
+
+    let mut app = Workspace::default();
+    let scope = Scope {
+        project: "/project".into(),
+        provider: Provider::Antigravity,
+    };
+    let index = app.new_session(scope);
+    app.sessions[index].remote_id = Some("s1".into());
+    app.sessions[index].conversation.set_working(true);
+    let _ = app.commands();
+
+    // Even before Event::Questions arrives, awaitingQuestion prevents post-turn Resume/session/load.
+    app.apply(Event::Antigravity(AntigravityEvent {
+        project_path: "/project".into(),
+        session_id: Some("s1".into()),
+        method: "antigravity/turnCompleted".into(),
+        params: serde_json::json!({
+            "sessionId": "s1",
+            "stopReason": "end_turn",
+            "awaitingQuestion": true,
+        }),
+    }));
+    assert!(!app.sessions[index].working());
+    let commands = app.commands();
+    assert!(
+        !commands
+            .iter()
+            .any(|(_, cmd)| matches!(cmd, Command::Resume(_) | Command::Notify(_))),
+        "unexpected commands while awaiting question: {commands:?}"
+    );
+
+    // Once the pending question is recorded in Workspace, explicit refresh also skips session/load.
+    app.apply(Event::Questions(vec![caelum_protocol::QuestionPrompt {
+        provider: "antigravity".into(),
+        project_path: "/project".into(),
+        session_id: "s1".into(),
+        request_id: "call-ask".into(),
+        title: "Question".into(),
+        fields: vec![serde_json::json!({
+            "key": "q0",
+            "type": "string",
+            "title": "Pick one",
+            "required": true,
+            "options": [{ "value": "A", "label": "A" }],
+        })],
+    }]));
+    let _ = app.commands();
+    app.refresh(index);
+    assert!(
+        !app.commands()
+            .iter()
+            .any(|(_, cmd)| matches!(cmd, Command::Resume(_))),
+        "refresh must not send session/load while an Antigravity question is pending"
+    );
 }
 
 #[test]

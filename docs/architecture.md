@@ -47,6 +47,12 @@ cannot occupy their capacity.
 The shared `ProviderRuntime` owns providers, brokers, process registration and
 session-branch attribution.
 
+The process registry and managed command runner each own their state behind a
+bounded Tokio mailbox. The runner merges stdout and stderr into a bounded ring
+on a single worker. The local checkout watcher owns watch registrations and
+coalesces changes before waking the UI. A saturated notification mailbox
+invalidates every registered checkout so an overflow cannot hide an edit.
+
 Remote checkouts live in `caelum-core::remote`, outside the local project and
 filesystem registries. Settings owns the Boat connection; a checkout captures
 its account, machine ID, GitHub repository and branch. The local project path
@@ -112,6 +118,8 @@ Restored native OpenCode sessions retain their IDs and drafts without connecting
 a provider. Existing managed Boat chats retain their own conversation IDs.
 
 Local Codex uses one `codex app-server --listen stdio://` JSONL connection per project.
+The Codex and Antigravity stdio transports give each child input pipe a
+dedicated writer so concurrent requests and replies preserve JSONL framing.
 OpenCode uses its verified local registered service or an owned loopback server.
 Connection attempts are shared within a checkout; startup and question recovery
 for one checkout do not lock other checkouts. Release/shutdown retires in-flight
@@ -202,6 +210,8 @@ metadata can seed Codex history; idle sessions keep their historical association
 Session branch tracking and worktree mutations each have a single owner behind a
 bounded Tokio mailbox. Their blocking Git and SQLite operations run on dedicated
 threads; worktree listings do not have to wait for the mutation queue.
+Each workspace metadata database connection also has a single mailbox owner.
+Cloned handles submit whole transactions to that owner.
 
 GitHub operations use authenticated `gh` through bounded subprocesses. Discovery
 follows recorded branches and stacked bases, deduplicating canonical PR URLs.

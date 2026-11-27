@@ -28,6 +28,7 @@ mod transport;
 
 use crate::{
     approvals::ApprovalBroker,
+    json_lines::JsonLines,
     processes::{ProcessId, ProcessRegistry},
     projects::{Project, ProjectError},
     questions::QuestionBroker,
@@ -66,7 +67,7 @@ struct ProviderInner {
 
 struct AcpConnection {
     process_id: ProcessId,
-    writer: Arc<Mutex<std::process::ChildStdin>>,
+    writer: JsonLines,
     pending: PendingRequests,
     next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
@@ -92,7 +93,7 @@ struct SessionOptionState {
 
 struct ReaderContext {
     pending: PendingRequests,
-    writer: Arc<Mutex<std::process::ChildStdin>>,
+    writer: JsonLines,
     next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
     subscribers: EventSubscribers,
@@ -645,6 +646,7 @@ impl AntigravityProvider {
                     effect,
                     &self.inner.subscribers,
                     &connection.progress,
+                    &self.inner.questions,
                 );
             }
         }

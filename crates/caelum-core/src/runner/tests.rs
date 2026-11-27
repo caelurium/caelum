@@ -116,3 +116,37 @@ fn backend_runs_streams_and_cancels_commands_cleanly() {
     };
     assert!(cancelled);
 }
+
+#[cfg(unix)]
+#[test]
+fn concurrent_starts_leave_one_owned_run_and_shutdown_retires_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().to_str().unwrap();
+    let backend = Backend::new(Arc::new(ProcessRegistry::default()));
+    let (tx, rx) = mpsc::sync_channel(16);
+    backend.observe(tx, Arc::new(|| {}));
+    let ready = std::sync::Barrier::new(2);
+    thread::scope(|scope| {
+        for run_id in [1, 2] {
+            let backend = &backend;
+            let ready = &ready;
+            scope.spawn(move || {
+                ready.wait();
+                backend.start(project, run_id, "sleep 30 & wait").unwrap();
+            });
+        }
+    });
+    let cancelled = || loop {
+        if let Event::Runner(RunnerEvent::Finished {
+            run_id, cancelled, ..
+        }) = rx.recv_timeout(Duration::from_secs(5)).unwrap()
+        {
+            assert!(cancelled);
+            return run_id;
+        }
+    };
+    let replaced = cancelled();
+    backend.shutdown();
+    assert_ne!(cancelled(), replaced);
+    assert!(backend.start(project, 3, "true").is_err());
+}

@@ -14,6 +14,7 @@ pub mod git;
 pub mod github;
 pub mod host_stats;
 mod images;
+mod json_lines;
 pub mod opencode;
 pub mod processes;
 pub mod projects;
