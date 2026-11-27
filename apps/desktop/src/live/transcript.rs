@@ -466,7 +466,8 @@ pub(super) fn timeline_row(
                             .on_link_secondary(move |s: &mut Workspace, url, at, tx| {
                                 crate::context::link(s, index, url, at, tx)
                             })
-                            .render(&theme::markdown(k)),
+                            .render(&theme::markdown(k))
+                            .key(format!("response-md-{index}-{row_id}")),
                     );
                 if entry.complete() {
                     let agent = entry.metadata["agent"].as_str().map(|id| {
@@ -496,10 +497,10 @@ pub(super) fn timeline_row(
                 }
             }
             EntryKind::Tool | EntryKind::Reasoning => {
-                item = item.child(crate::activity::tool(s, k, index, entry));
+                item = item.child(crate::activity::tool(s, k, reduced, index, entry));
             }
             EntryKind::Compaction => {
-                item = item.child(crate::activity::compaction(s, k, index, entry));
+                item = item.child(crate::activity::compaction(s, k, reduced, index, entry));
             }
             EntryKind::Status => {
                 if entry.name == "session-approval" {
