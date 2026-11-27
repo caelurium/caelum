@@ -79,8 +79,32 @@ impl Connection {
     }
 }
 
+struct NeutralDir(PathBuf);
+
+impl NeutralDir {
+    fn create() -> Result<Self, AntigravityError> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "caelum-antigravity-acp-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).map_err(|error| {
+            AntigravityError::Launch(format!("Could not prepare `{}`: {error}", dir.display()))
+        })?;
+        Ok(Self(dir))
+    }
+}
+
+impl Drop for NeutralDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
 struct AcpConnection {
     process_id: ProcessId,
+    _launch_dir: NeutralDir,
     writer: JsonLines,
     pending: PendingRequests,
     next_id: Arc<AtomicU64>,

@@ -52,6 +52,9 @@ if "--print" in sys.argv:
     sys.exit(0)
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake-agy-state.json")
+LAUNCH_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "launch-info.jsonl")
+with open(LAUNCH_LOG, "a", encoding="utf-8") as f:
+    f.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd()}) + "\n")
 
 
 def load_state():

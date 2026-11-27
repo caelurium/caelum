@@ -692,3 +692,67 @@ fn regenerates_title_checks_ownership_persists_and_streams_session_info_update()
     assert_eq!(resumed.session.title, "Regenerated Antigravity Title");
     reopened.shutdown();
 }
+
+#[test]
+fn spawns_shared_acp_with_process_per_session_in_neutral_directory() {
+    let fixture = Fixture::new();
+    let project_a = fixture.root.join("project-a");
+    let project_b = fixture.root.join("project-b");
+    fs::create_dir_all(&project_a).unwrap();
+    fs::create_dir_all(&project_b).unwrap();
+
+    let processes = Arc::new(ProcessRegistry::default());
+    let provider = AntigravityProvider::with_executable(
+        Some(fixture.server.clone()),
+        processes,
+        ApprovalBroker::default(),
+        QuestionBroker::default(),
+    );
+
+    assert!(provider
+        .list_sessions(&project_a)
+        .unwrap()
+        .sessions
+        .is_empty());
+    let started = provider
+        .start_session_with_options(&project_b, None, None, None)
+        .unwrap();
+    assert!(!started.session.id.is_empty());
+
+    let launches: Vec<serde_json::Value> =
+        fs::read_to_string(fixture.root.join("launch-info.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+    assert_eq!(
+        launches.len(),
+        1,
+        "expected one shared ACP front-end launch"
+    );
+
+    let argv: Vec<&str> = launches[0]["argv"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert_eq!(argv, vec!["acp", "--stdio", "--process-per-session"]);
+
+    let launch_cwd = PathBuf::from(launches[0]["cwd"].as_str().unwrap())
+        .canonicalize()
+        .unwrap();
+    let root_canon = fixture.root.canonicalize().unwrap();
+    assert!(
+        !launch_cwd.starts_with(&root_canon),
+        "shared ACP front-end must not launch inside a user project: {}",
+        launch_cwd.display()
+    );
+    assert!(launch_cwd.exists());
+
+    provider.shutdown();
+    assert!(
+        !launch_cwd.exists(),
+        "neutral ACP launch directory should be cleaned up on shutdown"
+    );
+}
