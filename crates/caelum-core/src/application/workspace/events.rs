@@ -280,12 +280,8 @@ impl Workspace {
                 continue;
             }
             if let Some(id) = data["_event_id"].as_str() {
-                if session.seen_events.iter().any(|seen| seen == id) {
+                if !session.seen_events.insert(id) {
                     continue;
-                }
-                session.seen_events.push_back(id.into());
-                if session.seen_events.len() > 512 {
-                    session.seen_events.pop_front();
                 }
             }
             let was_working = session.working();
@@ -396,6 +392,13 @@ impl Workspace {
                 && data["awaitingQuestion"].as_bool().unwrap_or(false);
             let turn_succeeded = (provider == Provider::OpenCode
                 && method == "session.execution.succeeded")
+                || (provider == Provider::Codex
+                    && method == "turn/completed"
+                    && data["turn"]["error"].is_null()
+                    && !matches!(
+                        data["turn"]["status"].as_str(),
+                        Some("failed" | "interrupted" | "cancelled")
+                    ))
                 || (provider == Provider::Antigravity
                     && method == "antigravity/turnCompleted"
                     && !awaiting_question

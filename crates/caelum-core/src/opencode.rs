@@ -32,6 +32,7 @@ mod tests;
 mod transport;
 
 use permissions::deny_pending_approvals;
+#[cfg(test)]
 use questions::sync_questions;
 use server::service_file;
 use server::ServerSlot;
@@ -462,7 +463,11 @@ impl OpenCodeProvider {
         crate::images::data_url(response).map_err(OpenCodeError::Protocol)
     }
 
-    pub fn refresh_questions(&self, project_path: impl AsRef<Path>) -> Result<(), OpenCodeError> {
+    #[cfg(test)]
+    pub(crate) fn refresh_questions(
+        &self,
+        project_path: impl AsRef<Path>,
+    ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         sync_questions(&server, &self.inner.questions, project.path())
@@ -607,9 +612,11 @@ fn model_id(model: &Value) -> Option<String> {
 }
 
 fn directory_matches(directory: &str, project_path: &Path) -> bool {
-    Path::new(directory)
-        .canonicalize()
-        .is_ok_and(|canonical| canonical == project_path)
+    let path = Path::new(directory);
+    path == project_path
+        || path
+            .canonicalize()
+            .is_ok_and(|canonical| canonical == project_path)
 }
 
 fn valid_session_id(value: &str) -> bool {

@@ -18,6 +18,8 @@ mod requests;
 mod sessions;
 #[cfg(all(test, unix))]
 mod tests;
+mod titles;
+pub(crate) use titles::thread_title;
 mod transport;
 mod websocket;
 

@@ -689,7 +689,7 @@ fn jump(s: &mut Workspace, index: usize, id: &str, tx: &mut Tx) {
     l.panels.set_overlay(None);
     l.panels.screen = Screen::Conversation;
     l.commands.search.focused = false;
-    tx.scroll_center_in_instant(format!("live-rows-{index}"), target);
+    tx.scroll_center_in_instant(format!("live-transcript-{index}"), target);
 }
 
 pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -727,7 +727,7 @@ pub fn timeline_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
     live_mut(s).commands.timeline_selected = ids.get(at).cloned();
     live_mut(s).commands.search.focused = true;
     if let Some(id) = ids.get(at) {
-        tx.scroll_center_in_instant("timeline-rows", format!("timeline-{id}"));
+        tx.scroll_center_in_instant("timeline-scroll", format!("timeline-{id}"));
     }
     true
 }

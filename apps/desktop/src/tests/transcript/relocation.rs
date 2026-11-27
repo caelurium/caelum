@@ -25,7 +25,7 @@ fn moved_session_keeps_native_draft_selection_undo_and_reading_position() {
     rt.frame(1.0 / 60.0);
     rt.update(|s, tx| {
         s.live.as_mut().unwrap().drafts[0].set_selection(2, 8);
-        tx.scroll_center_in_instant("live-rows-0", "live-entry-0-opencode-prompt-25");
+        tx.scroll_center_in_instant("live-transcript-0", "live-entry-0-opencode-prompt-25");
     });
     advance(&mut rt, 0.3);
     let anchor = element(&rt, "live-entry-0-opencode-prompt-25").rect[1];

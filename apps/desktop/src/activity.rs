@@ -536,7 +536,7 @@ fn tool_output(
         .then(|| std::path::Path::new(&tool.paths[0]).extension()?.to_str())
         .flatten();
     let spans = syntax::SyntaxTheme::from_kit(k).spans(&syntax::highlight(language, displayed), 0);
-    let copy = value.clone();
+    let entry_id = entry.id.clone();
     let mut body = col().w_full().gap(4.0).child(
         col()
             .w_full()
@@ -567,7 +567,13 @@ fn tool_output(
             )
             .child(
                 quiet_button(&glyphs::COPY, &format!("Copy {}", name.to_lowercase()))
-                    .on_press_tx(move |_: &mut Workspace, tx| tx.copy(copy.clone()))
+                    .on_press_tx(move |s: &mut Workspace, tx| {
+                        let entries = &live(s).app.sessions[index].conversation.entries;
+                        if let Some(e) = entries.iter().rev().find(|e| e.id == entry_id) {
+                            let t = Tool::from_entry(e, 0);
+                            tx.copy(if error { t.error } else { t.output });
+                        }
+                    })
                     .build(k)
                     .key(format!("{key}-copy"))
                     .pin(None, Some(0.0), Some(0.0), None),

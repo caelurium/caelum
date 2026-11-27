@@ -84,6 +84,39 @@ impl Workspace {
         rows.into_iter().map(|(_, row)| row).collect()
     }
 
+    /// Count of non-archived dashboard sessions currently waiting for input.
+    pub fn waiting_session_count(&self) -> usize {
+        let includes = |path: &str| self.project_is_open(path);
+        let local = self
+            .matching_local_sessions(&includes, true, "", false)
+            .filter(|(i, _)| {
+                self.session_bucket(&FeedSession::Local(*i)) == super::SessionBucket::Waiting
+            })
+            .count();
+        let mut vm = 0;
+        for (id, c) in &self.remote.saved.checkouts {
+            if !includes(&c.source.project) {
+                continue;
+            }
+            for t in c.threads() {
+                if t.is_blank()
+                    && t.local_id.is_none()
+                    && self.sessions.iter().any(|s| {
+                        !s.forgotten()
+                            && crate::remote::native::checkout_id(&s.scope.project)
+                                == Some(id.as_str())
+                    })
+                {
+                    continue;
+                }
+                if self.session_bucket(&FeedSession::vm(id, t)) == super::SessionBucket::Waiting {
+                    vm += 1;
+                }
+            }
+        }
+        local + vm
+    }
+
     fn feed_rows(&self, feed: Feed<'_>, query: &str) -> Vec<FeedRow> {
         let includes = |path: &str| match feed {
             Feed::Sidebar { project, .. } => self.feed_includes_project(path, project),
