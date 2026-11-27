@@ -5,6 +5,13 @@ separate: a session can fetch history while the provider is still executing.
 Keep request identity checks at the point where asynchronous results enter the
 state machine; types cannot establish that an external event is current.
 
+## VM sessions
+
+| Owner | Typed invariant |
+| --- | --- |
+| [Managed VM threads](../crates/caelum-core/src/remote/harness/state.rs) | A native handoff requires continuation data. A managed run and its cursor require a bound Boat conversation. Snapshot compatibility is handled when loading the thread. |
+| [Native VM connection notices](../crates/caelum-core/src/remote/native/client.rs) | Only a message carrying a command channel can announce that the SSH connection is ready. |
+
 ## Converted
 
 | Owner | Typed invariant |
