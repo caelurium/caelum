@@ -10,12 +10,15 @@ use super::{
     lock, progress::SessionProgressTracker, transport, EventSubscribers, PendingRequests,
     PROVIDER_NAME,
 };
-use crate::questions::{Answer, QuestionBroker};
+use crate::{
+    json_lines::JsonLines,
+    questions::{Answer, QuestionBroker},
+};
 
 pub(super) struct QuestionReplyContext {
     pub project_path: String,
     pub session_id: String,
-    pub writer: Arc<Mutex<std::process::ChildStdin>>,
+    pub writer: JsonLines,
     pub pending: PendingRequests,
     pub next_id: Arc<AtomicU64>,
     pub alive: Arc<AtomicBool>,

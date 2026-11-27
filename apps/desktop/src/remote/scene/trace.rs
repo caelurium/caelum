@@ -22,7 +22,7 @@ pub(super) fn setup(c: &mut Checkout) {
             key: Some("test-call".into()),
             tool_detail: Some("cargo".into()),
             tool_source: Some(Box::new(ToolSource {
-                conversation: c.thread.conversation.clone().unwrap(),
+                conversation: c.thread.conversation().unwrap().to_owned(),
                 prompt: "prompt-example".into(),
                 event: "response-example".into(),
                 before: None,

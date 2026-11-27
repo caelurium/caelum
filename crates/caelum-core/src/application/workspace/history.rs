@@ -94,6 +94,9 @@ impl Session {
 
 impl Workspace {
     pub fn refresh(&mut self, index: usize) {
+        let awaiting_antigravity_question = self.sessions[index].scope.provider
+            == Provider::Antigravity
+            && self.has_question(&self.sessions[index]);
         let session = &mut self.sessions[index];
         if !session.scope.provider_available()
             || session.loading()
@@ -101,6 +104,7 @@ impl Workspace {
             || session.relocation.pending()
             || session.rewinding()
             || session.forgotten()
+            || awaiting_antigravity_question
         {
             return;
         }

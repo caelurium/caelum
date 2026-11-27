@@ -410,6 +410,10 @@ fn project_sessions_can_be_listed_started_resumed_and_cancelled() {
         .cancel_turn(&project_path, "thread-existing")
         .unwrap();
     provider
+        .send_prompt(&project_path, "thread-new", "stop-before-history")
+        .unwrap();
+    provider.cancel_turn(&project_path, "thread-new").unwrap();
+    provider
         .send_prompt_with_options(
             &project_path,
             "thread-existing",

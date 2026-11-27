@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -20,7 +20,10 @@ use super::{
     EventSubscribers, PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME,
     REQUEST_TIMEOUT,
 };
-use crate::{approvals::ApprovalBroker, processes::ProcessRegistry, questions::QuestionBroker};
+use crate::{
+    approvals::ApprovalBroker, json_lines::JsonLines, processes::ProcessRegistry,
+    questions::QuestionBroker,
+};
 
 impl AntigravityProvider {
     /// Whether the Antigravity CLI executable is available on this machine.
@@ -103,10 +106,10 @@ impl AcpConnection {
         let id_key = id.to_string();
         let (sender, receiver) = mpsc::channel();
         lock(&self.pending).insert(id_key.clone(), PendingCall::Reply(sender));
-        if let Err(error) = write_message(
-            &self.writer,
-            &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
-        ) {
+        if let Err(error) = self
+            .writer
+            .send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+        {
             lock(&self.pending).remove(&id_key);
             return Err(AntigravityError::Transport(error));
         }
@@ -142,16 +145,14 @@ impl AcpConnection {
         if !self.alive.load(Ordering::Acquire) {
             return Err(AntigravityError::ConnectionClosed);
         }
-        write_message(
-            &self.writer,
-            &json!({ "jsonrpc": "2.0", "method": method, "params": params }),
-        )
-        .map_err(AntigravityError::Transport)
+        self.writer
+            .send(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+            .map_err(AntigravityError::Transport)
     }
 }
 
 pub(super) fn send_prompt_parts(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     pending: &PendingRequests,
     request: u64,
     alive: &Arc<AtomicBool>,
@@ -169,8 +170,7 @@ pub(super) fn send_prompt_parts(
             request,
         },
     );
-    if let Err(error) = write_message(
-        writer,
+    if let Err(error) = writer.send(
         &json!({ "jsonrpc": "2.0", "id": request, "method": "session/prompt", "params": params }),
     ) {
         lock(pending).remove(&id_key);
@@ -215,7 +215,7 @@ pub(super) fn spawn_connection(
         .register(child)
         .map_err(|e| AntigravityError::Launch(e.to_string()))?;
 
-    let writer = Arc::new(Mutex::new(stdin));
+    let writer = JsonLines::new(stdin);
     let pending = Arc::new(Mutex::new(HashMap::new()));
     let next_id = Arc::new(AtomicU64::new(1));
     let alive = Arc::new(AtomicBool::new(true));
@@ -366,7 +366,13 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                                 },
                             );
                         }
-                        dispatch_progress_effect(&project, effect, &subscribers, &progress);
+                        dispatch_progress_effect(
+                            &project,
+                            effect,
+                            &subscribers,
+                            &progress,
+                            &questions,
+                        );
                     }
                     None => {}
                 }
@@ -469,7 +475,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 | ProgressEffect::TurnCompleted { session_id, .. } => Some(session_id.as_str()),
             };
             let project = resolve_project(&session_projects, sid, &default_project);
-            dispatch_progress_effect(&project, effect, &subscribers, &progress);
+            dispatch_progress_effect(&project, effect, &subscribers, &progress, &questions);
         }
         for project in affected_projects {
             publish_event(
@@ -489,7 +495,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
 fn handle_session_update(
     project: &str,
     params: &Value,
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     pending: &PendingRequests,
     next_id: &Arc<AtomicU64>,
     alive: &Arc<AtomicBool>,
@@ -598,7 +604,7 @@ fn handle_session_update(
     }
 
     if let Some(effect) = effect {
-        dispatch_progress_effect(project, effect, subscribers, progress);
+        dispatch_progress_effect(project, effect, subscribers, progress, questions);
     }
 }
 
@@ -607,6 +613,7 @@ pub(super) fn dispatch_progress_effect(
     effect: ProgressEffect,
     subscribers: &EventSubscribers,
     progress: &Arc<Mutex<SessionProgressTracker>>,
+    questions: &QuestionBroker,
 ) {
     match effect {
         ProgressEffect::TurnYielded { session_id } => {
@@ -625,7 +632,9 @@ pub(super) fn dispatch_progress_effect(
             stop_reason,
             error,
         } => {
-            let params = match error {
+            let awaiting_question =
+                error.is_none() && questions.has_pending(PROVIDER_NAME, project, &session_id);
+            let mut params = match error {
                 Some(error) => json!({
                     "sessionId": session_id,
                     "stopReason": stop_reason,
@@ -636,6 +645,9 @@ pub(super) fn dispatch_progress_effect(
                     "stopReason": stop_reason,
                 }),
             };
+            if awaiting_question {
+                params["awaitingQuestion"] = json!(true);
+            }
             publish_event(
                 subscribers,
                 AntigravityEvent {
@@ -653,11 +665,12 @@ pub(super) fn dispatch_progress_effect(
             let project = project.to_owned();
             let subscribers = subscribers.clone();
             let progress = progress.clone();
+            let questions = questions.clone();
             thread::spawn(move || {
                 thread::sleep(REACTIVE_SETTLE_DELAY);
                 let completed = lock(&progress).on_settle_timer(&session_id, generation);
                 if let Some(effect) = completed {
-                    dispatch_progress_effect(&project, effect, &subscribers, &progress);
+                    dispatch_progress_effect(&project, effect, &subscribers, &progress, &questions);
                 }
             });
         }
@@ -665,7 +678,7 @@ pub(super) fn dispatch_progress_effect(
 }
 
 fn handle_server_request(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     approvals: &ApprovalBroker,
     project: &str,
     id: Value,
@@ -673,14 +686,11 @@ fn handle_server_request(
     params: &Value,
 ) {
     if method != "session/request_permission" {
-        let _ = write_message(
-            writer,
-            &json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": { "code": -32601, "message": format!("Method not supported: {method}") }
-            }),
-        );
+        let _ = writer.send(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": { "code": -32601, "message": format!("Method not supported: {method}") }
+        }));
         return;
     }
 
@@ -714,31 +724,15 @@ fn handle_server_request(
         .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
         .unwrap_or_else(|| json!({ "outcome": "cancelled" }));
 
-    let _ = write_message(
-        writer,
-        &json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": { "outcome": outcome }
-        }),
-    );
+    let _ = writer.send(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": { "outcome": outcome }
+    }));
 }
 
 pub(super) fn publish_event(subscribers: &EventSubscribers, event: AntigravityEvent) {
     lock(subscribers).retain(|subscriber| subscriber.send(event.clone()).is_ok());
-}
-
-fn write_message(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
-    value: &Value,
-) -> Result<(), String> {
-    let mut encoded = serde_json::to_string(value).map_err(|e| e.to_string())?;
-    encoded.push('\n');
-    let mut stdin = lock(writer);
-    stdin
-        .write_all(encoded.as_bytes())
-        .and_then(|()| stdin.flush())
-        .map_err(|e| e.to_string())
 }
 
 fn id_to_key(id: &Value) -> String {

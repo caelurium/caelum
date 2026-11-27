@@ -82,11 +82,11 @@ impl Boat {
         if !valid_id(prompt) {
             return Err("Enter the Boat prompt ID for this turn".into());
         }
-        let status = self
-            .client
-            .prompt_status(&target.machine.id, prompt)
-            .await
-            .map_err(api)?;
+        let (status, list) = tokio::join!(
+            self.client.prompt_status(&target.machine.id, prompt),
+            self.client.conversations(&target.machine.id),
+        );
+        let status = status.map_err(api)?;
         let run = status.prompt_run;
         if status.id != target.machine.id || !owned(target, &run, prompt, conversation) {
             return Err("That turn belongs to a different checkout or conversation".into());
@@ -94,11 +94,7 @@ impl Boat {
         let conv = run
             .conversation_id
             .ok_or("Boat did not return a conversation for this prompt")?;
-        let list = self
-            .client
-            .conversations(&target.machine.id)
-            .await
-            .map_err(api)?;
+        let list = list.map_err(api)?;
         let Some(chat) = list.conversations.iter().find(|c| c.id == conv) else {
             return Err("Boat did not list this prompt’s conversation.".into());
         };

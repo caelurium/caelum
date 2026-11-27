@@ -519,9 +519,9 @@ fn session_row(
                 Some(b) => format!("{project} · VM {} · {b}", checkout.title()),
                 None => format!("{project} · VM {}", checkout.title()),
             };
-            let detail = if thread.turn != Turn::Idle {
+            let detail = if thread.turn() != &Turn::Idle {
                 TurnPreview::managed(thread).map(|p| {
-                    let tone = if matches!(thread.turn, Turn::Queued(_)) {
+                    let tone = if matches!(thread.turn(), Turn::Queued(_)) {
                         k.c.text_muted
                     } else {
                         k.c.text_accent
@@ -550,9 +550,9 @@ fn session_row(
                     move |s: &mut Workspace| live_mut(s).app.power_remote(&owner, true),
                     k,
                 ))
-            } else if thread.turn.run().is_some() {
+            } else if thread.turn().run().is_some() {
                 let stopping = app.remote.interrupts.contains_key(&checkout_id)
-                    || matches!(thread.turn, Turn::Stopping(_));
+                    || matches!(thread.turn(), Turn::Stopping(_));
                 let owner = checkout_id.clone();
                 Some(action_pill(
                     if stopping { "Stopping…" } else { "Stop" },

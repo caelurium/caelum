@@ -51,7 +51,7 @@ impl Workspace {
                 }
             }
             FeedSession::Vm(link) => match link.resolve(&self.remote.saved) {
-                Some((_, thread)) if thread.turn != Turn::Idle => SessionBucket::Running,
+                Some((_, thread)) if thread.turn() != &Turn::Idle => SessionBucket::Running,
                 _ => SessionBucket::Settled,
             },
         }
