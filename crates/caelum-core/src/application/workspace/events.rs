@@ -393,10 +393,14 @@ impl Workspace {
                         .unwrap_or_else(crate::application::presentation::now),
                 );
             }
+            let awaiting_question = provider == Provider::Antigravity
+                && method == "antigravity/turnCompleted"
+                && data["awaitingQuestion"].as_bool().unwrap_or(false);
             let turn_succeeded = (provider == Provider::OpenCode
                 && method == "session.execution.succeeded")
                 || (provider == Provider::Antigravity
                     && method == "antigravity/turnCompleted"
+                    && !awaiting_question
                     && data["error"].is_null()
                     && !matches!(
                         data["stopReason"].as_str(),
@@ -415,7 +419,7 @@ impl Workspace {
             {
                 session.queue_paused = true;
             }
-            if was_working && !session.working() && session.loaded() {
+            if was_working && !session.working() && session.loaded() && !awaiting_question {
                 completed.push(index);
             }
             if method == "error" || method == "permission.reply.failed" {

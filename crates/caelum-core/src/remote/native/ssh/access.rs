@@ -174,42 +174,47 @@ impl Access {
         tokio::select! {
             _ = closing.changed() => Err("The VM connection closed.".into()),
             result = tokio::time::timeout(Duration::from_secs(35), async {
-            let mut data = Vec::new();
-            let mut stdout = stdout.take(limit as u64 + 1);
-            let diagnostics = tokio::spawn(read_diagnostic(stderr));
-            let mut stdin = child.stdin.take();
-            let send = async move {
-                if let (Some(pipe), Some(bytes)) = (&mut stdin, input) {
-                    pipe.write_all(bytes).await?;
-                }
-                Ok(())
-            };
-            if let Err(error) = tokio::try_join!(send, stdout.read_to_end(&mut data)) {
-                let _ = child.kill().await;
-                return Err(error.to_string());
-            }
-            if data.len() > limit {
-                let _ = child.kill().await;
-                return Err("VM output exceeds the preview limit.".into());
-            }
-            let (diagnostics, status) = tokio::try_join!(
-                async {
-                    diagnostics
+                let mut stdin = child.stdin.take();
+                let send = async move {
+                    if let (Some(pipe), Some(bytes)) = (&mut stdin, input) {
+                        pipe.write_all(bytes).await.map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                };
+                let read_stdout = async {
+                    let mut data = Vec::new();
+                    stdout
+                        .take(limit as u64 + 1)
+                        .read_to_end(&mut data)
                         .await
-                        .map_err(|e| e.to_string())?
-                        .map_err(|e| e.to_string())
-                },
-                async { child.wait().await.map_err(|e| e.to_string()) },
-            )?;
-            if !status.code().is_some_and(|c| codes.contains(&c)) {
-                let detail = diagnostic(&diagnostics);
-                return Err(if detail.is_empty() {
-                    format!("VM command failed ({status}).")
-                } else {
-                    format!("VM command failed ({status}): {detail}")
-                });
-            }
-            Ok(data)
+                        .map_err(|e| e.to_string())?;
+                    if data.len() > limit {
+                        return Err("VM output exceeds the preview limit.".into());
+                    }
+                    Ok(data)
+                };
+                let result = tokio::try_join!(
+                    send,
+                    read_stdout,
+                    async { read_diagnostic(stderr).await.map_err(|e| e.to_string()) },
+                    async { child.wait().await.map_err(|e| e.to_string()) },
+                );
+                let ((), data, diagnostics, status) = match result {
+                    Ok(output) => output,
+                    Err(error) => {
+                        let _ = child.kill().await;
+                        return Err(error);
+                    }
+                };
+                if !status.code().is_some_and(|c| codes.contains(&c)) {
+                    let detail = diagnostic(&diagnostics);
+                    return Err(if detail.is_empty() {
+                        format!("VM command failed ({status}).")
+                    } else {
+                        format!("VM command failed ({status}): {detail}")
+                    });
+                }
+                Ok(data)
             }) => result.map_err(|_| String::from("VM command timed out."))?
         }
     }

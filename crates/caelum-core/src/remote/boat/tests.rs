@@ -483,6 +483,62 @@ async fn a_mismatched_receipt_is_uncertain_and_recovery_checks_the_latest_harnes
 }
 
 #[tokio::test]
+async fn recovery_requests_prompt_status_and_conversations_concurrently() {
+    use std::time::Duration;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::TcpListener,
+    };
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = boat_sdk::Config::new("fixture-key")
+        .unwrap()
+        .with_base_url(&format!("http://{}", listener.local_addr().unwrap()))
+        .unwrap();
+    let boat = Boat {
+        client: Client::from_config(config).unwrap(),
+        account: "user-1".into(),
+    };
+    let target = agent_target();
+    let serve = async {
+        let mut responses = Vec::new();
+        for _ in 0..2 {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(stream);
+            let mut headers = (&mut stream).lines();
+            let request = headers.next_line().await.unwrap().unwrap();
+            while !headers.next_line().await.unwrap().unwrap().is_empty() {}
+            let body = if request.starts_with("GET /sandboxes/vm-1/prompts/p ") {
+                json!({"ok":true,"type":"status","id":"vm-1","promptRun":{
+                    "id":"run-p","promptId":"p","sandboxId":"vm-1","conversationId":"c",
+                    "status":"finished","done":true
+                }})
+            } else {
+                assert!(request.starts_with("GET /sandboxes/vm-1/conversations "));
+                json!({"ok":true,"type":"conversations","id":"vm-1","conversations":[
+                    {"id":"c","lastHarness":"codex","prompts":1,"running":false,"current":true}
+                ]})
+            };
+            responses.push((stream.into_inner(), body.to_string()));
+        }
+        for (mut stream, body) in responses {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    };
+    let recover = boat.recover(&target, VmProvider::Codex, None, "p");
+    let ((), result) = tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::join!(serve, recover)
+    })
+    .await
+    .expect("Both requests must arrive before the server responds");
+    assert_eq!(result.unwrap().id, "run-p");
+}
+
+#[tokio::test]
 async fn live_and_historical_process_samples_never_expose_command_arguments() {
     use crate::remote::Activity;
     let (server, boat) = fixture().await;

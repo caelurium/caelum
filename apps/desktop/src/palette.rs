@@ -1,5 +1,6 @@
 //! Global command palette (`⌘K`) for jumping to sessions, projects, worktrees, settings, and actions.
 mod execute;
+mod projects;
 
 use execute::execute;
 
@@ -85,6 +86,8 @@ enum Action {
     SelectSession(usize),
     SelectProject(String),
     SelectWorktree(String),
+    SplitProject(String),
+    SplitWorktree(String),
 }
 
 struct Entry {
@@ -478,36 +481,7 @@ fn build_entries(s: &Workspace, query: &str) -> Vec<Entry> {
         ));
     }
 
-    // Projects & Worktrees
-    for project in &l.app.projects {
-        if l.app.group_path(&project.path) != project.path {
-            continue;
-        }
-        let is_active = l.app.active_project.as_deref() == Some(project.path.as_str());
-        entries.push(Entry::new(
-            Section::Projects,
-            &project.name,
-            &project.path,
-            None,
-            is_active.then_some(("Active", BadgeTone::Muted)),
-            "project repository",
-            Action::SelectProject(project.path.clone()),
-        ));
-        for tree in l.app.managed_worktrees(&project.path) {
-            let tree_name = tree.path.rsplit('/').next().unwrap_or(&tree.path);
-            let branch = tree.branch.as_deref().unwrap_or("detached");
-            let is_active_tree = l.app.active_project.as_deref() == Some(tree.path.as_str());
-            entries.push(Entry::new(
-                Section::Projects,
-                format!("{} / {}", project.name, tree_name),
-                format!("Worktree · {branch}"),
-                None,
-                is_active_tree.then_some(("Active", BadgeTone::Muted)),
-                &format!("{} {} worktree", tree.path, branch),
-                Action::SelectWorktree(tree.path.clone()),
-            ));
-        }
-    }
+    projects::append_entries(&l.app, &mut entries);
 
     // Settings pages
     let pages = [

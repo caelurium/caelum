@@ -54,15 +54,9 @@ impl Workspace {
         );
     }
 
-    /// Restore this project's conversation, including its linked worktrees. Existing
-    /// context takes precedence over an empty placeholder created before discovery.
-    pub fn select_project(&mut self, path: &str) -> bool {
-        if !self.projects.iter().any(|project| project.path == path) {
-            return false;
-        }
+    fn best_project_session(&self, path: &str) -> Option<usize> {
         let remembered = self.remembered.get(path).copied();
-        if let Some(index) = self
-            .sessions
+        self.sessions
             .iter()
             .enumerate()
             .filter(|(_, session)| {
@@ -83,7 +77,24 @@ impl Workspace {
                 )
             })
             .map(|(index, _)| index)
-        {
+    }
+
+    fn new_background_session(&mut self, scope: Scope) -> usize {
+        let previous_selected = self.selected;
+        let previous_project = self.active_project.clone();
+        let index = self.new_session(scope);
+        self.selected = previous_selected;
+        self.active_project = previous_project;
+        index
+    }
+
+    /// Restore this project's conversation, including its linked worktrees. Existing
+    /// context takes precedence over an empty placeholder created before discovery.
+    pub fn select_project(&mut self, path: &str) -> bool {
+        if !self.projects.iter().any(|project| project.path == path) {
+            return false;
+        }
+        if let Some(index) = self.best_project_session(path) {
             self.select(index);
         } else {
             self.new_session(Scope {
@@ -92,6 +103,72 @@ impl Workspace {
             });
         }
         true
+    }
+
+    /// Resolve (or create) a session for `path` to display in a split pane without
+    /// replacing the primary pane's selected session.
+    pub fn project_session_for_split(&mut self, path: &str) -> Option<usize> {
+        if !self.projects.iter().any(|project| project.path == path) {
+            return None;
+        }
+        let index = self.best_project_session(path).unwrap_or_else(|| {
+            self.new_background_session(Scope {
+                project: path.into(),
+                provider: self.preferences.default_provider,
+            })
+        });
+        if !self.sessions[index].loaded() {
+            self.refresh(index);
+        }
+        Some(index)
+    }
+
+    /// Resolve (or create) a session for an exact checkout/worktree `path` to display
+    /// in a split pane without replacing the primary pane's selected session.
+    pub fn checkout_session_for_split(&mut self, path: &str) -> Option<usize> {
+        if !self.projects.iter().any(|project| project.path == path)
+            || self
+                .services
+                .worktrees(self.group_path(path))
+                .is_some_and(|listing| {
+                    !listing
+                        .worktrees
+                        .iter()
+                        .any(|tree| tree.project.path == path && tree.available)
+                })
+        {
+            return None;
+        }
+        let usable = |i: usize| {
+            let session = &self.sessions[i];
+            session.scope.project == path && !session.archived() && !session.forgotten()
+        };
+        let index = self
+            .remembered_checkouts
+            .get(path)
+            .or(self.remembered.get(path))
+            .copied()
+            .filter(|&i| usable(i))
+            .or_else(|| (0..self.sessions.len()).rev().find(|&i| usable(i)))
+            .unwrap_or_else(|| {
+                self.new_background_session(Scope {
+                    project: path.into(),
+                    provider: self.preferences.default_provider,
+                })
+            });
+        if !self.sessions[index].loaded() {
+            self.refresh(index);
+        }
+        Some(index)
+    }
+
+    /// Update `active_project` to match a focused split pane without changing `selected`.
+    pub fn focus_project_context(&mut self, path: &str) {
+        if self.active_project.as_deref() != Some(path)
+            && self.projects.iter().any(|project| project.path == path)
+        {
+            self.active_project = Some(path.to_owned());
+        }
     }
 
     pub(super) fn select_open_session_or_new(&mut self, preferred_project: &str, fallback: Scope) {

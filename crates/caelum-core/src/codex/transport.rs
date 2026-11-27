@@ -105,6 +105,48 @@ impl CodexConnection {
         }
     }
 
+    pub(super) fn interrupt_turn(&self, thread_id: &str) -> Result<(), CodexError> {
+        let response = self.request(
+            "thread/turns/list",
+            json!({ "threadId": thread_id, "limit": 1, "sortDirection": "desc", "itemsView": "notLoaded" }),
+        );
+        let turn_id =
+            match response {
+                Ok(ref response) => {
+                    let data = response["data"].as_array().ok_or_else(|| {
+                        CodexError::Protocol("thread/turns/list has no data array".into())
+                    })?;
+                    match data.first() {
+                        Some(turn) if turn["status"] == "inProgress" => {
+                            Some(turn["id"].as_str().filter(|id| !id.is_empty()).ok_or_else(
+                                || CodexError::Protocol("active Codex turn has no ID".into()),
+                            )?)
+                        }
+                        _ => None,
+                    }
+                }
+                Err(CodexError::Rpc(message))
+                    if message == "list_turns is not supported yet"
+                        || message.ends_with("unavailable before first user message") =>
+                {
+                    // Codex uses an empty turn ID to interrupt before it records the first turn.
+                    Some("")
+                }
+                Err(error) => return Err(error),
+            };
+        if let Some(turn_id) = turn_id {
+            match self.request(
+                "turn/interrupt",
+                json!({ "threadId": thread_id, "turnId": turn_id }),
+            ) {
+                Ok(_) => {}
+                Err(CodexError::Rpc(message)) if message == "no active turn to interrupt" => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn notify(&self, method: &str, params: Value) -> Result<(), CodexError> {
         write_message(&self.writer, &json!({ "method": method, "params": params }))
             .map_err(CodexError::Transport)

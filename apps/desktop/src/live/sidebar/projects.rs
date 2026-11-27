@@ -24,6 +24,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
             .active_project
             .as_ref()
             .is_some_and(|p| app.group_path(p) == path);
+        let split_key = crate::code_view::source_key(&path, "split-project");
         let create_key = crate::code_view::source_key(&path, "create-worktree");
         let close_key = crate::code_view::source_key(&path, "close-project");
         let mut group = col()
@@ -54,6 +55,23 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
                                 .grow(1.0)
                                 .min_w(0.0),
                         )
+                        .children((!selected).then(|| {
+                            quiet_button(&rune_kit::shell::INSPECTOR, "Open in split pane")
+                                .on_press({
+                                    let path = path.clone();
+                                    move |s: &mut Workspace| {
+                                        crate::split::open_project(
+                                            s,
+                                            &path,
+                                            crate::split::SplitOrientation::Vertical,
+                                        );
+                                    }
+                                })
+                                .build(k)
+                                .size(22.0, 24.0)
+                                .key(split_key)
+                                .label(format!("Open {} in split pane", project.name))
+                        }))
                         .child(
                             quiet_button(&ui::BRANCH, "Create worktree")
                                 .on_press({
