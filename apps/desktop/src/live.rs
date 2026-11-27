@@ -446,6 +446,7 @@ impl Live {
     }
 
     pub fn poll(&mut self, tx: &mut Tx) -> bool {
+        let stream = self.stream_snapshot();
         approval_rules::sync(self);
         self.app.conversation_hidden = self.panels.screen != crate::panels::Screen::Conversation
             || self.panels.overlay().is_some();
@@ -658,17 +659,7 @@ impl Live {
         if let Some(index) = self.models.reveal.take() {
             tx.scroll_center_in_instant("model-scroll", format!("option{index}"));
         }
-        self.history_lengths.resize(self.app.sessions.len(), 0);
-        for (index, session) in self.app.sessions.iter().enumerate() {
-            let length = session.conversation.entries.len();
-            if length != self.history_lengths[index]
-                && !session.working()
-                && self.app.selected == Some(index)
-            {
-                tx.instant();
-            }
-            self.history_lengths[index] = length;
-        }
+        self.finish_stream_poll(&stream, tx);
         if self.last_selected != self.app.selected
             || (self.panels.screen == crate::panels::Screen::Conversation
                 && self.last_screen != self.panels.screen)

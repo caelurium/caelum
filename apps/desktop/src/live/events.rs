@@ -1,6 +1,15 @@
 use super::Live;
 use crate::panels::Screen;
 use caelum_core::application::{Event, Provider, Session, Workspace, presentation::TurnPreview};
+use rune::Tx;
+
+pub(crate) struct StreamSnapshot {
+    screen: Screen,
+    overlay: bool,
+    selected: Option<usize>,
+    sessions: Vec<(usize, u64, bool)>,
+    remote: Option<(String, usize, usize, bool)>,
+}
 
 /// Text deltas can change these visible session properties even while their
 /// transcript is hidden (for example, the first delta can mark a session busy).
@@ -188,5 +197,105 @@ impl Live {
             Preview::Hidden
         };
         Some((index, Summary::new(session, preview)))
+    }
+
+    pub(crate) fn stream_snapshot(&self) -> StreamSnapshot {
+        let overlay = self.panels.overlay().is_some();
+        let mut sessions = Vec::with_capacity(2);
+        if self.panels.screen == Screen::Conversation && !overlay {
+            let mut push = |index: usize| {
+                if let Some(session) = self.app.sessions.get(index)
+                    && !sessions.iter().any(|(seen, _, _)| *seen == index)
+                {
+                    sessions.push((index, session.conversation.activity, session.working()));
+                }
+            };
+            if let Some(index) = self.app.selected {
+                push(index);
+            }
+            if self.split.is_visible(self.window_width.get())
+                && let Some(crate::split::SecondaryPane::Session(index)) =
+                    self.split.visible_secondary()
+            {
+                push(*index);
+            }
+        }
+        let remote = (self.panels.screen == Screen::Remote && !overlay)
+            .then(|| {
+                let id = self.app.remote.saved.selected.as_deref()?;
+                let checkout = self.app.remote.saved.checkouts.get(id)?;
+                Some((
+                    id.to_owned(),
+                    checkout.thread.lines.len(),
+                    checkout.thread.lines.last().map_or(0, |l| l.text.len()),
+                    checkout.thread.lines.iter().any(|l| l.partial),
+                ))
+            })
+            .flatten();
+        StreamSnapshot {
+            screen: self.panels.screen,
+            overlay,
+            selected: self.app.selected,
+            sessions,
+            remote,
+        }
+    }
+
+    pub(crate) fn stream_progressed(&self, before: &StreamSnapshot, history_loaded: bool) -> bool {
+        if history_loaded
+            || before.overlay
+            || self.panels.overlay().is_some()
+            || before.screen != self.panels.screen
+            || self.last_screen != self.panels.screen
+        {
+            return false;
+        }
+        match self.panels.screen {
+            Screen::Conversation => {
+                before.selected == self.app.selected
+                    && self.last_selected == self.app.selected
+                    && before
+                        .sessions
+                        .iter()
+                        .any(|&(index, activity, was_working)| {
+                            self.app.sessions.get(index).is_some_and(|session| {
+                                session.conversation.activity != activity
+                                    && (was_working || session.working())
+                            })
+                        })
+            }
+            Screen::Remote => before.remote.as_ref().is_some_and(
+                |(id, prev_lines, prev_last_len, was_partial)| {
+                    self.app.remote.saved.selected.as_deref() == Some(id.as_str())
+                        && self.app.remote.saved.checkouts.get(id).is_some_and(|c| {
+                            let lines = c.thread.lines.len();
+                            let last_len = c.thread.lines.last().map_or(0, |l| l.text.len());
+                            let is_partial = c.thread.lines.iter().any(|l| l.partial);
+                            (lines != *prev_lines || last_len != *prev_last_len)
+                                && (*was_partial || is_partial)
+                        })
+                },
+            ),
+            _ => false,
+        }
+    }
+
+    pub(super) fn finish_stream_poll(&mut self, before: &StreamSnapshot, tx: &mut Tx) {
+        let mut history_loaded = false;
+        self.history_lengths.resize(self.app.sessions.len(), 0);
+        for (index, session) in self.app.sessions.iter().enumerate() {
+            let length = session.conversation.entries.len();
+            if length != self.history_lengths[index]
+                && !session.working()
+                && self.app.selected == Some(index)
+            {
+                tx.instant();
+                history_loaded = true;
+            }
+            self.history_lengths[index] = length;
+        }
+        if self.stream_progressed(before, history_loaded) {
+            tx.animated();
+        }
     }
 }
