@@ -451,7 +451,13 @@ impl Live {
             || self.panels.overlay().is_some();
         let mut changed = self.media.poll();
         changed |= crate::home::sync(self, tx);
-        self.app.home.draft.text.clone_from(&self.home.editor.text);
+        let sync_text = |dst: &mut String, src: &str| {
+            if dst != src {
+                dst.clear();
+                dst.push_str(src);
+            }
+        };
+        sync_text(&mut self.app.home.draft.text, &self.home.editor.text);
         changed |= self.feed.poll(
             &mut self.app,
             &self.panels.sessions.text,
@@ -476,7 +482,7 @@ impl Live {
             tx.wake_after(std::time::Duration::from_millis(16));
         }
         for (i, editor) in self.drafts.iter().enumerate() {
-            self.app.sessions[i].draft.clone_from(&editor.text);
+            sync_text(&mut self.app.sessions[i].draft, &editor.text);
             let position = self.reading_position(i);
             self.app.sessions[i].reading = if position.offset[1] >= position.max[1] - 1.0 {
                 -1.0
@@ -489,9 +495,10 @@ impl Live {
                 self.app.dismiss_side_question(index);
                 self.commands.side_owner = None;
             } else {
-                self.app.sessions[index]
-                    .side_draft
-                    .clone_from(&self.commands.side_editor.text);
+                sync_text(
+                    &mut self.app.sessions[index].side_draft,
+                    &self.commands.side_editor.text,
+                );
             }
         }
         crate::completion::sync(self);
@@ -521,11 +528,14 @@ impl Live {
             }
         }
         let mut events = self.runtime.as_ref().map_or_else(Vec::new, Runtime::drain);
+        let had_events = !events.is_empty();
         for event in &mut events {
             self.app.merge_broker_event(None, event);
         }
         changed |= self.apply_events(events);
-        crate::completion::sync(self);
+        if had_events {
+            crate::completion::sync(self);
+        }
         changed |= crate::remote::sync(self, tx);
         changed |= crate::remote::native::poll(self);
         changed |= self.app.acknowledge();
@@ -547,11 +557,9 @@ impl Live {
             changed |= crate::notifications::dispatch(self);
             let connected = crate::remote::native::ready(self);
             self.feed.discover(&mut self.app);
-            changed |= self.checkouts.sync(&mut self.app);
-            self.runtime
-                .as_mut()
-                .unwrap()
-                .watch_checkouts(self.app.projects.iter().map(|p| p.path.clone()).collect());
+            changed |= self
+                .checkouts
+                .sync_runtime(&mut self.app, self.runtime.as_mut().unwrap());
             if let Some(index) = self
                 .shell_panel
                 .as_ref()
