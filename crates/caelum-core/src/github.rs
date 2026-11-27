@@ -262,46 +262,51 @@ fn checked_output(command: Command, timeout: Duration) -> Result<Output, GitHubE
 }
 
 fn gh_executable() -> PathBuf {
-    let name = if cfg!(windows) { "gh.exe" } else { "gh" };
-    let mut candidates: Vec<PathBuf> = env::var_os("PATH")
-        .map(|paths| {
-            env::split_paths(&paths)
-                .map(|path| path.join(name))
-                .collect()
+    static CACHED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    CACHED
+        .get_or_init(|| {
+            let name = if cfg!(windows) { "gh.exe" } else { "gh" };
+            let mut candidates: Vec<PathBuf> = env::var_os("PATH")
+                .map(|paths| {
+                    env::split_paths(&paths)
+                        .map(|path| path.join(name))
+                        .collect()
+                })
+                .unwrap_or_default();
+            if let Some(home) = env::var_os("HOME") {
+                for directory in [".local/bin", ".nix-profile/bin"] {
+                    candidates.push(PathBuf::from(&home).join(directory).join(name));
+                }
+            }
+            for directory in [
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/run/current-system/sw/bin",
+            ] {
+                candidates.push(PathBuf::from(directory).join(name));
+            }
+            candidates
+                .into_iter()
+                .find(|path| {
+                    let Ok(metadata) = fs::metadata(path) else {
+                        return false;
+                    };
+                    if !metadata.is_file() {
+                        return false;
+                    }
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        metadata.permissions().mode() & 0o111 != 0
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        true
+                    }
+                })
+                .unwrap_or_else(|| PathBuf::from(name))
         })
-        .unwrap_or_default();
-    if let Some(home) = env::var_os("HOME") {
-        for directory in [".local/bin", ".nix-profile/bin"] {
-            candidates.push(PathBuf::from(&home).join(directory).join(name));
-        }
-    }
-    for directory in [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/run/current-system/sw/bin",
-    ] {
-        candidates.push(PathBuf::from(directory).join(name));
-    }
-    candidates
-        .into_iter()
-        .find(|path| {
-            let Ok(metadata) = fs::metadata(path) else {
-                return false;
-            };
-            if !metadata.is_file() {
-                return false;
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                metadata.permissions().mode() & 0o111 != 0
-            }
-            #[cfg(not(unix))]
-            {
-                true
-            }
-        })
-        .unwrap_or_else(|| PathBuf::from(name))
+        .clone()
 }
 
 fn bounded_output(mut command: Command, timeout: Duration) -> io::Result<Output> {

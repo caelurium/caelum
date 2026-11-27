@@ -143,34 +143,48 @@ impl WorktreePaths {
             path_id(&common)
         ));
         let storage_directory = resolved_directory(&storage_directory);
-        let branches = checked(
-            project.path(),
-            &[
-                "for-each-ref",
-                "--format=%(refname:short)",
-                "refs/heads",
-                "refs/remotes",
-            ],
-        )?;
+        let (branches, head, remote_head) = std::thread::scope(|scope| {
+            let head = scope.spawn(|| git(project.path(), &["rev-parse", "--verify", "HEAD"]));
+            let remote_head = scope.spawn(|| {
+                git(
+                    project.path(),
+                    &[
+                        "symbolic-ref",
+                        "--quiet",
+                        "--short",
+                        "refs/remotes/origin/HEAD",
+                    ],
+                )
+            });
+            let branches = checked(
+                project.path(),
+                &[
+                    "for-each-ref",
+                    "--format=%(refname:short)",
+                    "refs/heads",
+                    "refs/remotes",
+                ],
+            );
+            (
+                branches,
+                head.join().expect("worktree HEAD worker panicked"),
+                remote_head
+                    .join()
+                    .expect("worktree remote HEAD worker panicked"),
+            )
+        });
+        let branches = branches?;
+        let head = head?;
+        let remote_head = remote_head?;
         let branches: Vec<String> = text(&branches)
             .lines()
             .filter(|name| !name.ends_with("/HEAD"))
             .map(str::to_owned)
             .collect();
-        let head = git(project.path(), &["rev-parse", "--verify", "HEAD"])?;
         let current_branch = worktrees
             .iter()
             .find(|entry| Path::new(&entry.path) == root)
             .and_then(|entry| entry.branch.clone());
-        let remote_head = git(
-            project.path(),
-            &[
-                "symbolic-ref",
-                "--quiet",
-                "--short",
-                "refs/remotes/origin/HEAD",
-            ],
-        )?;
         let remote_base = remote_head
             .status
             .success()
