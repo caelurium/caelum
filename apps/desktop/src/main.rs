@@ -178,7 +178,13 @@ fn transcript(
     if s.live.is_some() {
         return live::transcript(s, k, reduced_motion, padding, layers);
     }
-    let mut content = col().w_full().max_w(840.0).px(padding).py(28.0).gap(28.0);
+    let mut content = col()
+        .w_full()
+        .max_w(840.0)
+        .px(padding)
+        .pt(28.0)
+        .pb(28.0 + composer::CLEARANCE)
+        .gap(28.0);
     if s.active().turns.is_empty() {
         content = content.child(
             col()
@@ -526,7 +532,13 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                     transcript_padding,
                     &mut layers,
                 ))
-                .child(composer(s, &k, padding, width > 760.0, &mut layers))
+                .child(composer::overlay(composer(
+                    s,
+                    &k,
+                    padding,
+                    width > 760.0,
+                    &mut layers,
+                )))
                 .child(
                     col()
                         .pin(Some(0.0), Some(1.0), Some(0.0), Some(0.0))
@@ -582,14 +594,25 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
                 .w_full()
                 .h_full()
                 .min_h(0.0)
-                .items_center()
                 .child(panes.grow(1.0).min_h(0.0))
-                .child(composer(s, &k, padding, composer_wide, &mut layers))
+                .child(composer::overlay(composer(
+                    s,
+                    &k,
+                    padding,
+                    composer_wide,
+                    &mut layers,
+                )))
         } else {
             panes
         }
     } else if has_composer {
-        main.child(composer(s, &k, padding, composer_wide, &mut layers))
+        main.child(composer::overlay(composer(
+            s,
+            &k,
+            padding,
+            composer_wide,
+            &mut layers,
+        )))
     } else {
         main
     };

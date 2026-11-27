@@ -206,7 +206,9 @@ pub(super) fn view(
         )
         .child(super::transcript::view(s, k, id, c, padding, reduced));
     if dock == Dock::Setup {
-        return body.child(super::setup::view(s, k, id, c, padding));
+        return body.child(crate::composer::overlay(super::setup::view(
+            s, k, id, c, padding,
+        )));
     }
     let Some(editors) = l.remote.editors.get(key) else {
         return body;
@@ -455,7 +457,7 @@ pub(super) fn view(
         .is_some_and(|(owner, dock)| owner == key && *dock == Dock::Draft);
     let height =
         rune::memo::window_layout("main-pane").map_or(220.0, |r| (r[3] * 0.35).clamp(96.0, 360.0));
-    body.child(ui::composer(
+    body.child(crate::composer::overlay(ui::composer(
         ui::composer_editor(input, 56.0, height).on_scroll_offset(move |p| {
             if mounted {
                 draft_scroll.set(p);
@@ -465,5 +467,5 @@ pub(super) fn view(
         context,
         padding,
         k,
-    ))
+    )))
 }

@@ -766,7 +766,8 @@ pub fn composer_dock(content: El, padding: f32, k: &Kit) -> El {
                 6.0,
                 24.0,
                 k.alpha(rune::Color::BLACK, if k.dark { 0.2 } else { 0.07 }),
-            ),
+            )
+            .on_press(|_: &mut crate::Workspace| {}),
     )
 }
 
