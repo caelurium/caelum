@@ -42,10 +42,15 @@ pub fn search_project(
     if query.trim().is_empty() && mode == ProjectSearchMode::Content {
         return Ok(result);
     }
-    let pattern = regex::RegexBuilder::new(&regex::escape(query))
-        .case_insensitive(true)
-        .build()
-        .map_err(|_| FileBrowserError::QueryTooLong)?;
+    let pattern = (mode == ProjectSearchMode::Content)
+        .then(|| {
+            regex::RegexBuilder::new(&regex::escape(query))
+                .case_insensitive(true)
+                .build()
+                .map_err(|_| FileBrowserError::QueryTooLong)
+        })
+        .transpose()?;
+    let query_lower = (mode == ProjectSearchMode::Files).then(|| query.to_lowercase());
     let mut walker = ignore::WalkBuilder::new(project.path());
     walker
         .hidden(false)
@@ -86,14 +91,19 @@ pub fn search_project(
             result.skipped += 1;
             continue;
         };
-        let path = path.replace(std::path::MAIN_SEPARATOR, "/");
+        let path: std::borrow::Cow<'_, str> = if std::path::MAIN_SEPARATOR == '/' {
+            std::borrow::Cow::Borrowed(path)
+        } else {
+            std::borrow::Cow::Owned(path.replace(std::path::MAIN_SEPARATOR, "/"))
+        };
         if mode == ProjectSearchMode::Files {
-            if let Some(score) = path_score(&path, query) {
-                ranked.push((score, path));
+            if let Some(score) = path_score_lower(&path, query_lower.as_deref().unwrap_or_default())
+            {
+                ranked.push((score, path.into_owned()));
             }
             continue;
         }
-        let file = match read_text_file(project.path(), &path) {
+        let file = match read_bounded_text_file(entry.path(), &path) {
             Ok(file) => file,
             Err(FileBrowserError::NotTextFile(_)) => continue,
             Err(_) => {
@@ -103,6 +113,7 @@ pub fn search_project(
         };
         bytes_read += file.content.len();
         result.truncated |= file.truncated;
+        let pattern = pattern.as_ref().expect("content mode builds regex");
         for (index, line) in file.content.lines().enumerate() {
             if let Some(found) = pattern.find(line) {
                 if result.matches.len() == MAX_RESULTS {
@@ -111,7 +122,7 @@ pub fn search_project(
                 }
                 let before = &line[..found.start()];
                 result.matches.push(ProjectSearchMatch {
-                    path: path.clone(),
+                    path: path.as_ref().to_owned(),
                     line: Some(index + 1),
                     column: Some(before.encode_utf16().count() + 1),
                     preview: Some(
@@ -142,8 +153,11 @@ pub fn search_project(
 }
 
 pub(crate) fn path_score(path: &str, query: &str) -> Option<i64> {
+    path_score_lower(path, &query.to_lowercase())
+}
+
+fn path_score_lower(path: &str, query: &str) -> Option<i64> {
     let path = path.to_lowercase();
-    let query = query.to_lowercase();
     let mut remaining = path.chars().enumerate();
     let mut gaps = 0;
     let mut previous = None;
@@ -156,9 +170,9 @@ pub(crate) fn path_score(path: &str, query: &str) -> Option<i64> {
     Some(
         if name == query {
             10_000
-        } else if name.starts_with(&query) {
+        } else if name.starts_with(query) {
             5_000
-        } else if name.contains(&query) {
+        } else if name.contains(query) {
             2_000
         } else {
             0
@@ -317,7 +331,8 @@ fn read_bounded_text_file(
         path: path.to_path_buf(),
         source,
     })?;
-    let mut bytes = Vec::with_capacity(MAX_TEXT_FILE_BYTES + 1);
+    let capacity = (metadata.len() as usize).min(MAX_TEXT_FILE_BYTES) + 1;
+    let mut bytes = Vec::with_capacity(capacity);
     let mut limited = file.take((MAX_TEXT_FILE_BYTES + 1) as u64);
     read_preview(&mut limited, path, &mut bytes)?;
 
