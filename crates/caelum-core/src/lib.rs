@@ -4,6 +4,7 @@ pub mod antigravity;
 pub mod application;
 pub mod approvals;
 mod blocking_actor;
+pub mod checkpoints;
 pub mod codex;
 pub mod database;
 pub mod desktop;

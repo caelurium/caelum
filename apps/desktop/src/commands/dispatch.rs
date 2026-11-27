@@ -68,6 +68,7 @@ pub fn dispatch(s: &mut Workspace, tx: &mut Tx) -> bool {
         LocalCommand::Changes => panels::show(s, Screen::Changes),
         LocalCommand::Settings => panels::show(s, Screen::Settings),
         LocalCommand::Timeline => super::open_timeline(s),
+        LocalCommand::Checkpoints => super::open_checkpoints(s),
         LocalCommand::Usage => {
             l.commands.usage_target = None;
             l.panels.set_overlay(Some(Screen::Usage));

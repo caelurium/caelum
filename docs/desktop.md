@@ -302,9 +302,16 @@ Other conversation controls are available from the same `/` menu:
 - **`/rewind`** previews which prompt and subsequent history will be removed
   from the **current session**. Escape cancels; selecting the prompt alone
   changes nothing. **Rewind conversation only** leaves the checkout untouched.
-  OpenCode can also show snapshot paths and offer **Rewind and restore files**,
-  which changes the shared checkout. Codex does not restore files. Resolve
-  running work, pending input and queued prompts first.
+  OpenCode uses its snapshot paths and Codex uses Caelum's pre-turn Git
+  checkpoints when available to offer **Rewind and restore files**, which
+  updates the shared checkout. Resolve running work, pending input and queued
+  prompts first.
+- **`/checkpoints`** opens the Git checkpoints viewer for any provider (Codex,
+  OpenCode and Antigravity). Before each turn in a local Git repository, Caelum
+  captures a hidden working-tree snapshot under `refs/caelum/checkpoints/` using
+  a temporary index (leaving your real Git index, HEAD and stash untouched).
+  Select any checkpoint to inspect its unified diff against the current checkout
+  or restore files back to that point.
 - **`/export md`** (or `/export`) saves a readable transcript: visible messages,
   reported tool input/output and attachment references. **`/export json`** saves
   the structured provider records, including stored attachment data. Both

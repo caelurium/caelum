@@ -85,6 +85,14 @@ pub enum Task {
         project: String,
         path: String,
     },
+    CheckpointDiff {
+        project: String,
+        tree_oid: String,
+    },
+    RestoreCheckpoint {
+        project: String,
+        tree_oid: String,
+    },
     Worktrees {
         project: String,
         directory: String,
@@ -191,6 +199,8 @@ pub enum TaskReply {
     Search(ProjectSearchResults),
     Git(GitRepositoryStatus, Vec<SessionBranchUpdate>),
     Diff(GitFileDiff),
+    CheckpointDiff(crate::checkpoints::CheckpointDiff),
+    CheckpointRestored(Vec<String>),
     Worktrees(Option<GitWorktrees>),
     Worktree(GitWorktree),
     Discovered(Option<GitHubPullRequest>),
@@ -224,6 +234,8 @@ macro_rules! project_field {
             | Task::Search { project, .. }
             | Task::Git { project }
             | Task::Diff { project, .. }
+            | Task::CheckpointDiff { project, .. }
+            | Task::RestoreCheckpoint { project, .. }
             | Task::Worktrees { project, .. }
             | Task::CreateWorktree { project, .. }
             | Task::RemoveWorktree { project, .. }
@@ -299,6 +311,8 @@ impl Task {
             Self::Search { .. } => "search".into(),
             Self::Git { .. } => "git".into(),
             Self::Diff { path, .. } => format!("diff:{path}"),
+            Self::CheckpointDiff { tree_oid, .. } => format!("checkpoint-diff:{tree_oid}"),
+            Self::RestoreCheckpoint { tree_oid, .. } => format!("checkpoint-restore:{tree_oid}"),
             Self::Worktrees { .. } => "worktrees".into(),
             Self::CreateWorktree { .. } => "worktree-create".into(),
             Self::RemoveWorktree { path, .. } => format!("worktree-remove:{path}"),
@@ -473,6 +487,12 @@ impl Task {
                 Ok(TaskReply::Git(status, branches))
             }
             Self::Diff { project, path } => reply!(git.file_diff(project, path), Diff),
+            Self::CheckpointDiff { project, tree_oid } => {
+                crate::checkpoints::diff_since(project, tree_oid).map(TaskReply::CheckpointDiff)
+            }
+            Self::RestoreCheckpoint { project, tree_oid } => {
+                crate::checkpoints::restore(project, tree_oid).map(TaskReply::CheckpointRestored)
+            }
             Self::Worktrees { project, directory } => {
                 reply!(worktrees.list(project, directory), Worktrees)
             }
@@ -612,6 +632,8 @@ pub struct Checkout {
     pub search_query: String,
     pub git: Option<GitRepositoryStatus>,
     pub diffs: BTreeMap<String, GitFileDiff>,
+    pub checkpoint_diff: Option<(String, crate::checkpoints::CheckpointDiff)>,
+    pub checkpoint_restored: Option<(String, Vec<String>)>,
     pub worktrees: Option<GitWorktrees>,
     worktrees_revision: u64,
     pub pull_requests: Vec<GitHubPullRequest>,

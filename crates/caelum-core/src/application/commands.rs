@@ -8,6 +8,7 @@ pub enum LocalCommand {
     Export,
     Rename,
     Rewind,
+    Checkpoints,
     Sessions,
     Models,
     Variants,
@@ -77,6 +78,11 @@ pub const COMMANDS: &[(&str, &str, LocalCommand)] = &[
         "rewind",
         "Preview a checkpoint before rewinding",
         LocalCommand::Rewind,
+    ),
+    (
+        "checkpoints",
+        "Inspect and restore pre-turn Git checkpoints",
+        LocalCommand::Checkpoints,
     ),
     (
         "export",

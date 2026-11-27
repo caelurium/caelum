@@ -201,6 +201,8 @@ pub struct SavedSession {
     pub unbound: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bookmarked_entries: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checkpoints: Vec<crate::checkpoints::TurnCheckpoint>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -160,6 +160,24 @@ impl Services {
             {
                 checkout.diffs.insert(path.clone(), diff);
             }
+            (Task::CheckpointDiff { tree_oid, .. }, TaskReply::CheckpointDiff(diff)) => {
+                checkout.checkpoint_diff = Some((tree_oid.clone(), diff));
+            }
+            (
+                Task::RestoreCheckpoint {
+                    project, tree_oid, ..
+                },
+                TaskReply::CheckpointRestored(paths),
+            ) => {
+                checkout.checkpoint_restored = Some((tree_oid.clone(), paths));
+                checkout.checkpoint_diff = Some((
+                    tree_oid.clone(),
+                    crate::checkpoints::CheckpointDiff::default(),
+                ));
+                next.push(Task::Git {
+                    project: project.clone(),
+                });
+            }
             (_, TaskReply::Worktrees(listing)) => {
                 checkout.worktrees = listing;
                 checkout.worktrees_revision = id;

@@ -127,6 +127,8 @@ pub enum Reply {
     Choices(ProviderChoices),
     History(SessionHistoryPage),
     HandoffChat(crate::remote::Chat),
+    #[serde(skip)]
+    Sent(Option<crate::checkpoints::TurnCheckpoint>),
     Done,
 }
 
