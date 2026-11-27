@@ -153,6 +153,7 @@ pub(super) fn view(
     }
     let key_lines = visible_lines.clone();
     let row_lines = visible_lines;
+    let tail = count + usize::from(pending.is_some());
     viewport
         .child(
             col()
@@ -160,9 +161,12 @@ pub(super) fn view(
                 .max_w(840.0)
                 .growth(rune::GrowthSpec::default())
                 .virtual_rows(
-                    count + usize::from(pending.is_some()),
+                    tail + 1,
                     92.0,
                     move |s: &Workspace, i| {
+                        if i == tail {
+                            return format!("remote-tail-{thread}").into();
+                        }
                         if i == count {
                             return format!("remote-progress-{thread}").into();
                         }
@@ -176,6 +180,12 @@ pub(super) fn view(
                         format!("remote-row-{thread}-{i}").into()
                     },
                     move |s: &Workspace, i| {
+                        if i == tail {
+                            return rune::el()
+                                .w_full()
+                                .h(crate::composer::CLEARANCE)
+                                .a11y_hidden();
+                        }
                         let Some(c) = live(s)
                             .app
                             .remote

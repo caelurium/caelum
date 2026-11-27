@@ -62,7 +62,8 @@ fn composer_typing_during_streaming_preserves_transcript_reading_position() {
     );
     assert!(rt.state.live.as_ref().unwrap().app.sessions[0].reading >= 0.0);
     let transcript = element(&rt, "live-transcript-0").rect;
-    assert!(transcript[1] + transcript[3] <= element(&rt, "message-composer").rect[1] + 1.0);
+    let composer = element(&rt, "message-composer").rect;
+    assert!(transcript[1] + transcript[3] >= composer[1] + composer[3] - 1.0);
 }
 
 #[test]
@@ -112,8 +113,11 @@ fn composer_content_stays_docked_and_bounded_in_both_themes() {
             }
             let composer = element(&rt, "message-composer").rect;
             let transcript = element(&rt, "live-transcript-0").rect;
-            assert!(transcript[3] > 40.0, "{scene}: {transcript:?}");
-            assert!(transcript[1] + transcript[3] <= composer[1] + 1.0);
+            assert!(
+                composer[1] - transcript[1] > 40.0,
+                "{scene}: {transcript:?} vs {composer:?}"
+            );
+            assert!(transcript[1] + transcript[3] >= composer[1] + composer[3] - 1.0);
             assert!(element(&rt, "composer-editor").rect[3] <= 420.1);
         }
     }
@@ -158,8 +162,8 @@ fn long_drafts_and_crowded_sidebar_keep_controls_in_bounds() {
     let transcript = element(&rt, "live-transcript-0");
     let composer = element(&rt, "message-composer");
     assert!(editor.rect[3] <= 420.1);
-    assert!(transcript.rect[3] >= 140.0);
-    assert!(transcript.rect[1] + transcript.rect[3] <= composer.rect[1] + 1.0);
+    assert!(composer.rect[1] - transcript.rect[1] >= 140.0);
+    assert!(transcript.rect[1] + transcript.rect[3] >= composer.rect[1] + composer.rect[3] - 1.0);
     assert!(editor.rect[1] + editor.rect[3] <= send.rect[1] + 1.0);
     assert!(
         rt.state.live.as_ref().unwrap().drafts[0]
@@ -245,5 +249,61 @@ fn native_mentions_replace_only_the_caret_token_and_escape_cancels_pending_reads
         rt.state.live.as_ref().unwrap().app.sessions[0]
             .attachments
             .is_empty()
+    );
+}
+
+#[test]
+fn growing_composer_floats_over_transcript_without_shrinking_panes() {
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let scope = l.app.sessions[0].scope.clone();
+        l.app.project_draft(scope);
+        l.sync_editors();
+        l.app.select(0);
+    });
+    advance(&mut rt, 0.2);
+
+    let single_transcript_before = element(&rt, "live-transcript-0").rect;
+    let single_composer_before = element(&rt, "message-composer").rect;
+    fill(
+        &mut rt,
+        "live-draft-0",
+        &"Multiline draft line\n".repeat(12),
+    );
+    advance(&mut rt, 0.2);
+    let single_transcript_after = element(&rt, "live-transcript-0").rect;
+    let single_composer_after = element(&rt, "message-composer").rect;
+    assert_eq!(single_transcript_before, single_transcript_after);
+    assert!(single_composer_after[3] > single_composer_before[3] + 80.0);
+    assert!(
+        single_transcript_after[1] + single_transcript_after[3]
+            >= single_composer_after[1] + single_composer_after[3] - 1.0
+    );
+
+    rt.update(|s, _| {
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+    let left_before = element(&rt, "live-transcript-0").rect;
+    let right_before = element(&rt, "split-transcript-1").rect;
+    let split_composer_before = element(&rt, "message-composer").rect;
+    fill(
+        &mut rt,
+        "live-draft-1",
+        &"Split multiline draft\n".repeat(12),
+    );
+    advance(&mut rt, 0.2);
+    let left_after = element(&rt, "live-transcript-0").rect;
+    let right_after = element(&rt, "split-transcript-1").rect;
+    let split_composer_after = element(&rt, "message-composer").rect;
+    assert_eq!(left_before, left_after);
+    assert_eq!(right_before, right_after);
+    assert!(split_composer_after[3] > split_composer_before[3] + 80.0);
+    assert!(
+        left_after[1] + left_after[3] >= split_composer_after[1] + split_composer_after[3] - 1.0
+    );
+    assert!(
+        right_after[1] + right_after[3] >= split_composer_after[1] + split_composer_after[3] - 1.0
     );
 }

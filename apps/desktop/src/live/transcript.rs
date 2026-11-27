@@ -693,7 +693,7 @@ pub(super) fn timeline_row(
                 .child(super::approval_rules::actions(live, prompt, k)),
         );
     }
-    content
+    content.pb(12.0 + crate::composer::CLEARANCE)
 }
 
 fn dismissible_notice(

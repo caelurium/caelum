@@ -34,10 +34,13 @@ fn growing_composer_leaves_transcript_space_and_all_controls_reachable() {
             let transcript = element(&rt, "live-transcript-0").rect;
             let composer = element(&rt, "message-composer").rect;
             assert!(
-                transcript[3] >= 90.0,
-                "{size:?}, inspector={inspector}: {transcript:?}"
+                composer[1] - transcript[1] >= 90.0,
+                "{size:?}, inspector={inspector}: transcript={transcript:?}, composer={composer:?}"
             );
-            assert!(transcript[1] + transcript[3] <= composer[1] + 1.0);
+            assert!(
+                transcript[1] + transcript[3] >= composer[1] + composer[3] - 1.0,
+                "{size:?}, inspector={inspector}: transcript={transcript:?}, composer={composer:?}"
+            );
             for name in [
                 "message-composer",
                 "composer-editor",
