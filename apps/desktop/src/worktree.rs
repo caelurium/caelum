@@ -123,6 +123,7 @@ pub fn open(s: &mut Workspace, project: String, provider: Provider) {
         phase: Phase::Loading,
     };
     form.sync(&l.app);
+    l.app.refresh_project_config(&project);
     l.app.task(Task::Worktrees {
         project,
         directory: l.app.preferences.worktree_directory.clone(),
@@ -366,6 +367,53 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 .selectable(true)
                 .key("worktree-location"),
             );
+        if let Some(cfg) = l
+            .app
+            .project_config(&form.project)
+            .filter(|c| !c.worktree.setup.is_empty())
+        {
+            let trusted = l.app.is_worktree_setup_trusted(&form.project);
+            let mut setup = col()
+                .w_full()
+                .gap(4.0)
+                .padding(10.0)
+                .radius(8.0)
+                .fill(k.c.layer_01)
+                .border(1.0, k.c.border_base)
+                .child(
+                    row()
+                        .w_full()
+                        .center_y()
+                        .justify_between()
+                        .child(
+                            text("Worktree setup (.caelum/config.toml)")
+                                .font(k.ty.small_medium)
+                                .color(k.c.text_base),
+                        )
+                        .child(
+                            text(if trusted {
+                                "Trusted · auto-runs"
+                            } else {
+                                "Prompts before running"
+                            })
+                            .font(k.ty.small)
+                            .color(if trusted {
+                                k.c.success.fg
+                            } else {
+                                k.c.text_muted
+                            }),
+                        ),
+                );
+            for cmd in &cfg.worktree.setup {
+                setup = setup.child(
+                    text(format!("$ {cmd}"))
+                        .font(k.ty.mono)
+                        .color(k.c.text_muted)
+                        .wrap(),
+                );
+            }
+            fields = fields.child(setup.key("worktree-setup-preview"));
+        }
     } else if l.app.services.busy(&refresh) {
         fields = fields.child(ui::skeleton("Loading branches", 3, k));
     } else {
@@ -428,4 +476,88 @@ pub fn view(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                     .key("create-worktree"),
                 ),
         )
+}
+
+pub(crate) fn setup_banner(s: &Workspace, k: &Kit, project: &str) -> Option<El> {
+    let pending = live(s).app.pending_worktree_setup(project)?;
+    let worktree_trust = pending.worktree.clone();
+    let worktree_once = pending.worktree.clone();
+    let worktree_dismiss = pending.worktree.clone();
+    let commands = pending.commands.join(" && ");
+    Some(
+        col()
+            .key("worktree-setup-banner")
+            .w_full()
+            .gap(6.0)
+            .padding(10.0)
+            .radius(8.0)
+            .fill(k.c.layer_01)
+            .border(1.0, k.c.border_strong)
+            .child(
+                row()
+                    .w_full()
+                    .center_y()
+                    .justify_between()
+                    .gap(8.0)
+                    .child(
+                        text("Run worktree setup commands from .caelum/config.toml?")
+                            .font(k.ty.small_medium)
+                            .color(k.c.text_base)
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .truncate(),
+                    )
+                    .child(
+                        row()
+                            .center_y()
+                            .gap(6.0)
+                            .child(
+                                ui::Button::new("Trust & Run")
+                                    .variant(ButtonVariant::Contrast)
+                                    .on_press(move |s: &mut Workspace| {
+                                        if live_mut(s)
+                                            .app
+                                            .run_pending_worktree_setup(&worktree_trust, true)
+                                        {
+                                            crate::runner::open_for(s, worktree_trust.clone());
+                                        }
+                                    })
+                                    .build(k)
+                                    .key("worktree-setup-trust-run"),
+                            )
+                            .child(
+                                ui::Button::new("Run once")
+                                    .variant(ButtonVariant::Outline)
+                                    .on_press(move |s: &mut Workspace| {
+                                        if live_mut(s)
+                                            .app
+                                            .run_pending_worktree_setup(&worktree_once, false)
+                                        {
+                                            crate::runner::open_for(s, worktree_once.clone());
+                                        }
+                                    })
+                                    .build(k)
+                                    .key("worktree-setup-run-once"),
+                            )
+                            .child(
+                                ui::Button::new("Dismiss")
+                                    .variant(ButtonVariant::GhostMuted)
+                                    .on_press(move |s: &mut Workspace| {
+                                        live_mut(s)
+                                            .app
+                                            .dismiss_pending_worktree_setup(&worktree_dismiss);
+                                    })
+                                    .build(k)
+                                    .key("worktree-setup-dismiss"),
+                            ),
+                    ),
+            )
+            .child(
+                text(format!("$ {commands}"))
+                    .font(k.ty.mono)
+                    .color(k.c.text_muted)
+                    .truncate()
+                    .w_full(),
+            ),
+    )
 }

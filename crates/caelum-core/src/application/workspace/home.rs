@@ -74,11 +74,14 @@ impl Workspace {
     }
 
     pub fn home_provider(&self) -> Provider {
-        let preferred = self
-            .home
-            .draft
-            .provider
-            .unwrap_or(self.preferences.default_provider);
+        let preferred = self.home.draft.provider.unwrap_or_else(|| {
+            self.home
+                .draft
+                .project
+                .as_deref()
+                .map(|p| self.project_default_provider(p))
+                .unwrap_or(self.preferences.default_provider)
+        });
         let available = self.available_providers(self.home.draft.project.as_deref());
         if available.is_empty() || available.contains(&preferred) {
             preferred
@@ -100,12 +103,18 @@ impl Workspace {
     }
 
     pub fn home_options(&self) -> Options {
-        if self.home.draft.provider == Some(self.home_provider()) {
+        let provider = self.home_provider();
+        if self.home.draft.provider == Some(provider) {
             self.home.draft.options.clone()
+        } else if let Some(project) = &self.home.draft.project {
+            self.project_options(&Scope {
+                project: project.clone(),
+                provider,
+            })
         } else {
             self.preferences
                 .providers
-                .get(self.home_provider().as_str())
+                .get(provider.as_str())
                 .cloned()
                 .unwrap_or_default()
         }
@@ -164,6 +173,7 @@ impl Workspace {
         self.home.target = Target::Ready;
         self.home.error = None;
         self.home.draft.project = Some(project.clone());
+        self.refresh_project_config(&project);
         if let Some(scope) = self.home_scope() {
             self.refresh_choices_for(scope);
         }

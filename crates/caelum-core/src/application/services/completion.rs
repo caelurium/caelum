@@ -34,6 +34,9 @@ impl Services {
                         .entry((task.project().into(), url.into()))
                         .or_default()
                         .error = Some(error);
+                } else if matches!(task, Task::ProjectConfig { .. }) {
+                    let checkout = self.checkouts.entry(task.project().into()).or_default();
+                    checkout.project_config_error = Some(error);
                 } else if !matches!(
                     task,
                     Task::Shell { .. } | Task::HostStats | Task::InstalledProviders
@@ -100,6 +103,10 @@ impl Services {
             },
             (Task::InstalledProviders, TaskReply::InstalledProviders(providers)) => {
                 self.installed_providers = Some(providers);
+            }
+            (Task::ProjectConfig { .. }, TaskReply::ProjectConfig(config)) => {
+                checkout.project_config = config;
+                checkout.project_config_error = None;
             }
             (Task::Usage { provider, .. }, TaskReply::Usage(usage)) => {
                 checkout.usage.insert(*provider, usage);

@@ -61,6 +61,9 @@ pub enum Task {
     Templates {
         project: String,
     },
+    ProjectConfig {
+        project: String,
+    },
     Directory {
         project: String,
         path: String,
@@ -170,6 +173,7 @@ pub enum Task {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum TaskReply {
     Templates(Vec<crate::templates::Template>),
+    ProjectConfig(Option<crate::project_config::ProjectConfig>),
     Shell(String),
     #[serde(skip)]
     Updates(UpdateCheck),
@@ -208,6 +212,7 @@ macro_rules! project_field {
             Task::Shell { project, .. }
             | Task::Completions { project, .. }
             | Task::Templates { project }
+            | Task::ProjectConfig { project }
             | Task::Image { project, .. }
             | Task::EncodeImage { project, .. }
             | Task::Reveal { project, .. }
@@ -288,6 +293,7 @@ impl Task {
             Self::AttachPullRequest { url, .. } => format!("attach-pr:{url}"),
             Self::Completions { .. } => "completions".into(),
             Self::Templates { .. } => "templates".into(),
+            Self::ProjectConfig { .. } => "project-config".into(),
             Self::Directory { path, .. } => format!("directory:{path}"),
             Self::File { path, .. } => format!("file:{path}"),
             Self::Search { .. } => "search".into(),
@@ -330,6 +336,9 @@ impl Task {
         match self {
             Self::Templates { project } => {
                 crate::templates::load(project).map(TaskReply::Templates)
+            }
+            Self::ProjectConfig { project } => {
+                crate::project_config::load(project).map(TaskReply::ProjectConfig)
             }
             Self::Shell {
                 project,
@@ -606,6 +615,8 @@ pub struct Checkout {
     pub worktrees: Option<GitWorktrees>,
     worktrees_revision: u64,
     pub pull_requests: Vec<GitHubPullRequest>,
+    pub project_config: Option<crate::project_config::ProjectConfig>,
+    pub project_config_error: Option<String>,
     pub error: Option<String>,
 }
 

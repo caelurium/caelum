@@ -160,9 +160,10 @@ impl Workspace {
         if let Some(index) = self.best_project_session(path) {
             self.select(index);
         } else {
+            let provider = self.project_default_provider(path);
             self.new_session(Scope {
                 project: path.into(),
-                provider: self.preferences.default_provider,
+                provider,
             });
         }
         true
@@ -175,9 +176,10 @@ impl Workspace {
             return None;
         }
         let index = self.best_project_session(path).unwrap_or_else(|| {
+            let provider = self.project_default_provider(path);
             self.new_background_session(Scope {
                 project: path.into(),
-                provider: self.preferences.default_provider,
+                provider,
             })
         });
         if !self.sessions[index].loaded() {
@@ -214,9 +216,10 @@ impl Workspace {
             .filter(|&i| usable(i))
             .or_else(|| (0..self.sessions.len()).rev().find(|&i| usable(i)))
             .unwrap_or_else(|| {
+                let provider = self.project_default_provider(path);
                 self.new_background_session(Scope {
                     project: path.into(),
-                    provider: self.preferences.default_provider,
+                    provider,
                 })
             });
         if !self.sessions[index].loaded() {
@@ -310,9 +313,10 @@ impl Workspace {
         if let Some(index) = index {
             self.select(index);
         } else {
+            let provider = self.project_default_provider(path);
             self.new_session(Scope {
                 project: path.into(),
-                provider: self.preferences.default_provider,
+                provider,
             });
         }
         true
@@ -392,6 +396,7 @@ impl Workspace {
                 project: path.clone(),
             });
             if crate::remote::native::checkout_id(&path).is_none() {
+                self.refresh_project_config(&path);
                 self.task(Task::Worktrees {
                     project: path.clone(),
                     directory: self.preferences.worktree_directory.clone(),

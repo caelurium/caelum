@@ -256,6 +256,32 @@ precedence over user templates and provider commands; built-in names are
 reserved. Discovery reads regular `.md` files up to 64 KiB and keeps up to
 128 templates.
 
+### Project config and presets
+
+Add a `.caelum/config.toml` file in a repository root to share per-project
+defaults, worktree setup commands and checkout runner presets:
+
+```toml
+[defaults]
+provider = "codex"
+model = "o3"
+effort = "high"
+
+[worktree]
+setup = ["pnpm install", "direnv allow"]
+
+[[runner.presets]]
+name = "Check"
+command = "make check"
+```
+
+New sessions in the project inherit `[defaults]` when the provider is available.
+Named `[[runner.presets]]` entries appear as quick-run buttons in the checkout
+command runner. Worktree `setup` commands require explicit approval the first
+time a repository's setup list is seen; choosing **Trust & Run** remembers the
+exact command list's fingerprint and runs it automatically for future worktrees
+unless the setup commands change.
+
 Type `/fork` in an idle conversation to branch its history into a new session in
 the same checkout. Press Enter for the newest turn, or use ↑/↓, search, and
 **Earlier turns** to choose a different endpoint. The fork includes the chosen

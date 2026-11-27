@@ -121,7 +121,7 @@ impl Workspace {
     pub(super) fn new_session_slot(&mut self, scope: Scope) -> usize {
         let mut session = Session::new(scope.clone());
         session.record_activity(crate::application::presentation::now());
-        session.options = self.provider_options(&scope).cloned().unwrap_or_default();
+        session.options = self.project_options(&scope);
         if let Some(choices) = self.choices.get(&scope) {
             if session.options.model.is_none() {
                 session.options.model = choices.default_model.clone();
