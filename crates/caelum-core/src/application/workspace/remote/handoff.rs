@@ -307,7 +307,9 @@ impl Workspace {
         h.phase = HandoffPhase::Ready(chat);
         if let Some(id) = self.finish_vm_handoff(destination) {
             let thread = &mut self.remote.saved.checkouts.get_mut(&id).unwrap().thread;
-            thread.awaiting_native = thread.provider == VmProvider::Codex;
+            if thread.provider == VmProvider::Codex {
+                thread.await_native();
+            }
             return true;
         }
         self.handoff.as_mut().unwrap().phase =
@@ -362,17 +364,16 @@ impl Workspace {
             });
         }
         let c = self.remote.saved.checkouts.get_mut(&id).unwrap();
-        c.open_thread(Thread {
-            provider: h.provider,
-            continued: Some(Continuation {
+        c.open_thread(Thread::with_continuation(
+            h.provider,
+            Continuation {
                 id: thread,
                 title: h.title,
                 chat,
                 base: Some(base),
-            }),
-            draft: h.draft,
-            ..Default::default()
-        });
+            },
+            h.draft,
+        ));
         self.remote.feeds.remove(&id);
         self.select_remote(&id);
         Some(id)

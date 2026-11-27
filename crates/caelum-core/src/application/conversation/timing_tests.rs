@@ -344,3 +344,134 @@ fn antigravity_history_reconciliation_adopts_live_chunks_without_duplicating() {
     assert_eq!(assistants[0].id, "acp-assistant-2");
     assert_eq!(output(&conversation, "acp-assistant-2"), 19_500);
 }
+
+#[test]
+fn streaming_deltas_and_utf8_reconcile_match_full_reconciliation() {
+    assert_eq!(
+        reconciliation::reconcile("café — ", "— résumé 🚀"),
+        "café — résumé 🚀"
+    );
+    assert_eq!(reconciliation::reconcile("€€a", "€a€"), "€€a€");
+    assert_eq!(
+        reconciliation::reconcile("hello world", "world!"),
+        "hello world!"
+    );
+
+    let mut conversation = Conversation::default();
+    conversation.put(Entry::new(
+        "codex-msg".into(),
+        EntryKind::Assistant,
+        "Hello ".into(),
+        false,
+    ));
+    conversation.delta("codex-msg".into(), EntryKind::Assistant, "lo ", false);
+    conversation.delta("codex-msg".into(), EntryKind::Assistant, "🌍", false);
+    assert_eq!(conversation.entries[0].text, "Hello 🌍");
+    assert_eq!(conversation.entries[0].stream, "lo 🌍");
+
+    conversation.delta("codex-live".into(), EntryKind::Assistant, "Hel", false);
+    conversation.delta("codex-live".into(), EntryKind::Assistant, "lo ", false);
+    conversation.delta("codex-live".into(), EntryKind::Assistant, "🌍", false);
+    assert_eq!(conversation.entries[1].text, "Hello 🌍");
+    assert_eq!(conversation.entries[1].stream, "Hello 🌍");
+
+    conversation.delta("codex-cmd".into(), EntryKind::Tool, "line 1\n", true);
+    conversation.delta("codex-cmd".into(), EntryKind::Tool, "line 2\n", true);
+    assert_eq!(conversation.entries[2].output, "line 1\nline 2\n");
+    assert_eq!(conversation.entries[2].stream_output, "line 1\nline 2\n");
+}
+
+#[test]
+fn codex_reasoning_deltas_preserve_bucket_ordering_and_summary_precedence() {
+    let mut conversation = Conversation::default();
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/textDelta",
+        &json!({ "itemId": "r1", "contentIndex": 0, "delta": "raw " }),
+    );
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/textDelta",
+        &json!({ "itemId": "r1", "contentIndex": 0, "delta": "thought" }),
+    );
+    assert_eq!(conversation.entries[0].text, "raw thought");
+
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/summaryTextDelta",
+        &json!({ "itemId": "r1", "summaryIndex": 0, "delta": "Part 1" }),
+    );
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/summaryTextDelta",
+        &json!({ "itemId": "r1", "summaryIndex": 0, "delta": "!" }),
+    );
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/summaryTextDelta",
+        &json!({ "itemId": "r1", "summaryIndex": 1, "delta": "Part 2" }),
+    );
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/summaryTextDelta",
+        &json!({ "itemId": "r1", "summaryIndex": 1, "delta": " done" }),
+    );
+    conversation.apply(
+        Provider::Codex,
+        "item/reasoning/summaryTextDelta",
+        &json!({ "itemId": "r1", "summaryIndex": 0, "delta": " (edit)" }),
+    );
+    assert_eq!(
+        conversation.entries[0].text,
+        "Part 1! (edit)\n\nPart 2 done"
+    );
+}
+
+#[test]
+fn in_place_tool_and_item_updates_preserve_order_and_ignore_stale_regressions() {
+    let mut conversation = Conversation::default();
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.started",
+        &json!({ "id": "t1", "name": "write_file", "_created": 100 }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "{\"path\":" }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "\"a.rs\"}" }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.success",
+        &json!({ "id": "t1", "output": "ok", "_created": 250 }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "late" }),
+    );
+
+    assert_eq!(conversation.entries.len(), 1);
+    assert_eq!(conversation.entries[0].id, "opencode-tool-t1");
+    assert_eq!(conversation.entries[0].input, "{\"path\":\"a.rs\"}");
+    assert_eq!(conversation.entries[0].output, "ok");
+    assert!(conversation.entries[0].complete());
+
+    let mut running = Entry::new("codex-item-1".into(), EntryKind::Tool, String::new(), false);
+    running.name = "bash".into();
+    conversation.put(running);
+    let mut done = Entry::new("codex-item-1".into(), EntryKind::Tool, String::new(), true);
+    done.name = "bash".into();
+    done.output = "done".into();
+    conversation.put(done);
+
+    assert_eq!(conversation.entries.len(), 2);
+    assert_eq!(conversation.entries[1].id, "codex-item-1");
+    assert_eq!(conversation.entries[1].output, "done");
+    assert!(conversation.entries[1].complete());
+}

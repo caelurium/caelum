@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.168"
+version = "0.1.177"
 edition = "2021"
 rust-version = "1.95"
 
@@ -28,3 +28,14 @@ debug = 0
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Cargo ignores `[patch.crates-io]` in dependencies; mirror upstream Rune's vendored patches.
+[patch.crates-io]
+accesskit_atspi_common = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+naga = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7" }

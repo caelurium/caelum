@@ -16,8 +16,9 @@ use serde_json::{json, Value};
 use super::{
     lock,
     progress::{ProgressEffect, SessionProgressTracker, REACTIVE_SETTLE_DELAY},
-    protocol, questions, AcpConnection, AntigravityError, AntigravityProvider, EventSubscribers,
-    PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
+    protocol, questions, AcpConnection, AntigravityError, AntigravityProvider, Connection,
+    EventSubscribers, PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME,
+    REQUEST_TIMEOUT,
 };
 use crate::{
     approvals::ApprovalBroker, json_lines::JsonLines, processes::ProcessRegistry,
@@ -40,24 +41,13 @@ impl AntigravityProvider {
         &self,
         project: &crate::projects::Project,
     ) -> Result<Arc<AcpConnection>, AntigravityError> {
-        if self.inner.closed.load(Ordering::Acquire) {
-            return Err(AntigravityError::ConnectionClosed);
+        if let Some(existing) = self.live_connection()? {
+            return Ok(existing);
         }
-        if let Some(existing) = lock(&self.inner.connection).as_ref().cloned() {
-            if existing.alive.load(Ordering::Acquire) {
-                return Ok(existing);
-            }
-        }
-        // Serialize spawning so concurrent startup discovery across projects never launches
-        // overlapping `agy acp --stdio` processes racing on the same OAuth credential store.
+        // One ACP startup at a time protects the shared OAuth credential store.
         let _guard = lock(&self.inner.connect_lock);
-        if self.inner.closed.load(Ordering::Acquire) {
-            return Err(AntigravityError::ConnectionClosed);
-        }
-        if let Some(existing) = lock(&self.inner.connection).as_ref().cloned() {
-            if existing.alive.load(Ordering::Acquire) {
-                return Ok(existing);
-            }
+        if let Some(existing) = self.live_connection()? {
+            return Ok(existing);
         }
         let connection = spawn_connection(
             self.executable(),
@@ -68,13 +58,24 @@ impl AntigravityProvider {
             self.inner.subscribers.clone(),
         )?;
         let mut slot = lock(&self.inner.connection);
-        if self.inner.closed.load(Ordering::Acquire) {
+        if matches!(*slot, Connection::Closed) {
+            drop(slot);
             connection.alive.store(false, Ordering::Release);
             let _ = self.inner.processes.terminate(connection.process_id);
             return Err(AntigravityError::ConnectionClosed);
         }
-        *slot = Some(connection.clone());
+        *slot = Connection::Connected(connection.clone());
         Ok(connection)
+    }
+
+    fn live_connection(&self) -> Result<Option<Arc<AcpConnection>>, AntigravityError> {
+        match &*lock(&self.inner.connection) {
+            Connection::Closed => Err(AntigravityError::ConnectionClosed),
+            Connection::Connected(connection) if connection.alive.load(Ordering::Acquire) => {
+                Ok(Some(connection.clone()))
+            }
+            Connection::Vacant | Connection::Connected(_) => Ok(None),
+        }
     }
 
     pub(super) fn executable(&self) -> Result<PathBuf, AntigravityError> {
@@ -126,13 +127,14 @@ impl AcpConnection {
 
     pub(super) fn send_prompt(
         &self,
+        request: u64,
         session_id: &str,
         params: Value,
     ) -> Result<(), AntigravityError> {
         send_prompt_parts(
             &self.writer,
             &self.pending,
-            &self.next_id,
+            request,
             &self.alive,
             session_id,
             params,
@@ -152,7 +154,7 @@ impl AcpConnection {
 pub(super) fn send_prompt_parts(
     writer: &JsonLines,
     pending: &PendingRequests,
-    next_id: &Arc<AtomicU64>,
+    request: u64,
     alive: &Arc<AtomicBool>,
     session_id: &str,
     params: Value,
@@ -160,17 +162,17 @@ pub(super) fn send_prompt_parts(
     if !alive.load(Ordering::Acquire) {
         return Err(AntigravityError::ConnectionClosed);
     }
-    let id = next_id.fetch_add(1, Ordering::Relaxed);
-    let id_key = id.to_string();
+    let id_key = request.to_string();
     lock(pending).insert(
         id_key.clone(),
         PendingCall::Prompt {
             session_id: session_id.to_owned(),
+            request,
         },
     );
-    if let Err(error) = writer
-        .send(&json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": params }))
-    {
+    if let Err(error) = writer.send(
+        &json!({ "jsonrpc": "2.0", "id": request, "method": "session/prompt", "params": params }),
+    ) {
         lock(pending).remove(&id_key);
         return Err(AntigravityError::Transport(error));
     }
@@ -341,10 +343,19 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                     Some(PendingCall::Reply(sender)) => {
                         let _ = sender.send(result);
                     }
-                    Some(PendingCall::Prompt { session_id }) => {
+                    Some(PendingCall::Prompt {
+                        session_id,
+                        request,
+                    }) => {
+                        let usage = result.as_ref().ok().and_then(|r| r.get("usage")).cloned();
+                        let mut current = lock(&progress);
+                        let Some(effect) = current.on_prompt_replied(&session_id, request, result)
+                        else {
+                            continue;
+                        };
                         let project =
                             resolve_project(&session_projects, Some(&session_id), &default_project);
-                        if let Some(usage) = result.as_ref().ok().and_then(|r| r.get("usage")) {
+                        if let Some(usage) = usage {
                             publish_event(
                                 &subscribers,
                                 AntigravityEvent {
@@ -355,7 +366,6 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                                 },
                             );
                         }
-                        let effect = lock(&progress).on_prompt_replied(&session_id, result);
                         dispatch_progress_effect(
                             &project,
                             effect,
@@ -428,13 +438,20 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
                 PendingCall::Reply(sender) => {
                     let _ = sender.send(Err("Antigravity ACP connection closed".into()));
                 }
-                PendingCall::Prompt { session_id } => {
+                PendingCall::Prompt {
+                    session_id,
+                    request,
+                } => {
+                    let Some(effect) = lock(&progress).on_prompt_replied(
+                        &session_id,
+                        request,
+                        Err("Antigravity ACP connection closed".into()),
+                    ) else {
+                        continue;
+                    };
+                    debug_assert!(matches!(effect, ProgressEffect::TurnCompleted { .. }));
                     let project =
                         resolve_project(&session_projects, Some(&session_id), &default_project);
-                    let _ = lock(&progress).on_prompt_replied(
-                        &session_id,
-                        Err("Antigravity ACP connection closed".into()),
-                    );
                     publish_event(
                         &subscribers,
                         AntigravityEvent {

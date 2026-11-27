@@ -11,7 +11,7 @@ use caelum_core::{
 use rune::{El, ScrollSpec, col, row};
 use rune_kit::{ButtonVariant, Kit, Placement, ScrollBar, popover};
 
-pub(super) enum Inspection {
+pub(crate) enum Inspection {
     Local {
         index: usize,
         link: VmLink,
@@ -21,10 +21,7 @@ pub(super) enum Inspection {
 }
 
 pub(super) fn owner(l: &Live) -> Option<&str> {
-    if l.panels.overlay() != Some(Screen::VmStats) {
-        return None;
-    }
-    match l.remote.inspection.as_ref()? {
+    match l.panels.vm_stats()? {
         Inspection::Local { index, link, home }
             if l.app.linked_vm(*index) == Some(link)
                 && match home {
@@ -53,25 +50,22 @@ pub(super) fn inspect_local(l: &mut Live, index: usize) -> bool {
         return false;
     };
     l.app.dismiss_vm_handoff();
-    l.remote.inspection = Some(Inspection::Local {
+    l.panels.open_vm_stats(Inspection::Local {
         index,
         link,
         home: (l.panels.screen == Screen::Home).then(|| l.app.home.generation()),
     });
-    l.panels.set_overlay(Some(Screen::VmStats));
     l.schedule();
     true
 }
 
 pub(super) fn inspect_remote(l: &mut Live, id: &str) {
-    l.remote.inspection = Some(Inspection::Remote(id.into()));
-    l.panels.set_overlay(Some(Screen::VmStats));
+    l.panels.open_vm_stats(Inspection::Remote(id.into()));
     l.schedule();
 }
 
 pub(crate) fn clear(l: &mut Live) {
     l.app.dismiss_vm_handoff();
-    l.remote.inspection = None;
     l.app.remote.monitor = Monitor::Off;
 }
 
@@ -86,7 +80,7 @@ fn machine(s: &Workspace, k: &Kit, id: &str) -> El {
     let l = live(s);
     let c = &l.app.remote.saved.checkouts[id];
     let mut body = col().w_full().gap(8.0);
-    if let Some(Inspection::Local { index, home, .. }) = l.remote.inspection.as_ref() {
+    if let Some(Inspection::Local { index, home, .. }) = l.panels.vm_stats() {
         let index = *index;
         let source = if home.is_some() {
             HandoffSource::Recent(index)

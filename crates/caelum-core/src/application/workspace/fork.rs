@@ -263,7 +263,7 @@ impl Workspace {
             || s.stopping()
             || s.commanding()
             || s.control_busy()
-            || s.generating
+            || s.generating_side_answer()
             || !s.shells.is_empty()
             || crate::application::subagents::running(&s.conversation.entries) > 0
             || !s.queue.is_empty()
@@ -273,10 +273,6 @@ impl Workspace {
             return Err("Finish active work and resolve queued prompts or input requests before changing history.");
         }
         Ok(key)
-    }
-
-    pub fn open_fork(&mut self, index: usize) -> bool {
-        self.open_history_action(index, HistoryAction::Fork, None)
     }
 
     pub fn open_history_action(

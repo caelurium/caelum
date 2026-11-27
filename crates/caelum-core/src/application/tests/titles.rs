@@ -172,7 +172,12 @@ fn titles_keep_independent_cadences_and_original_project_provider_session_owners
     let same_id = connected(&mut app, Provider::OpenCode, "/b", "one");
     let other_provider = connected(&mut app, Provider::Codex, "/a", "one");
     for turn in 1..=3 {
-        app.apply(codex("/a", "one", "turn/completed", json!({})));
+        app.apply(codex(
+            "/a",
+            "one",
+            "turn/completed",
+            json!({ "turn": { "status": "completed" } }),
+        ));
         succeeded(&mut app, first, turn);
         if turn == 1 {
             succeeded(&mut app, same_project, turn);
@@ -181,8 +186,15 @@ fn titles_keep_independent_cadences_and_original_project_provider_session_owners
     }
     assert_eq!(app.selected, Some(other_provider));
     let pending = requests(&mut app);
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].1, app.sessions[first].key().unwrap());
+    assert_eq!(pending.len(), 2);
+    let open_code_req = pending
+        .iter()
+        .find(|(_, k)| k == &app.sessions[first].key().unwrap())
+        .expect("opencode title request");
+    let codex_req = pending
+        .iter()
+        .find(|(_, k)| k == &app.sessions[other_provider].key().unwrap())
+        .expect("codex title request");
     app.apply(event(
         "/a",
         "one",
@@ -190,7 +202,8 @@ fn titles_keep_independent_cadences_and_original_project_provider_session_owners
         "session.renamed",
         json!({"title":"New direction"}),
     ));
-    app.apply(Event::Completed(pending[0].0, Ok(Reply::Done)));
+    app.apply(Event::Completed(open_code_req.0, Ok(Reply::Done)));
+    app.apply(Event::Completed(codex_req.0, Ok(Reply::Done)));
     assert_eq!(app.sessions[first].title, "New direction");
     for index in [same_project, same_id, other_provider] {
         assert_eq!(app.sessions[index].title, "Original title");
@@ -572,4 +585,103 @@ fn antigravity_manual_rename_disables_automatic_title_regeneration() {
     }
     assert!(requests(&mut app).is_empty());
     assert_eq!(app.sessions[index].title, "Pinned Antigravity Title");
+}
+
+fn codex_succeeded(app: &mut Workspace, index: usize) {
+    let key = app.sessions[index].key().unwrap();
+    app.apply(codex(
+        &key.scope.project,
+        &key.id,
+        "turn/completed",
+        json!({ "turn": { "status": "completed" } }),
+    ));
+}
+
+#[test]
+fn codex_vm_titles_regenerate_after_first_turn_and_then_every_three_turns() {
+    let vm_project = crate::remote::native::project_key("checkout-1");
+    let mut app = Workspace::default();
+    let index = connected(&mut app, Provider::Codex, &vm_project, "thread-vm-1");
+
+    // Turn 1: Codex has no initial auto-title, so RegenerateTitle fires right after turn 1.
+    codex_succeeded(&mut app, index);
+    let pending = requests(&mut app);
+    assert_eq!(pending.len(), 1);
+    let (request, key) = &pending[0];
+    assert_eq!(key, &app.sessions[index].key().unwrap());
+
+    app.apply(codex(
+        &vm_project,
+        "thread-vm-1",
+        "thread/name/updated",
+        json!({ "threadName": "Fix VM Codex Titles" }),
+    ));
+    app.apply(Event::Completed(*request, Ok(Reply::Done)));
+    assert_eq!(app.sessions[index].title, "Fix VM Codex Titles");
+
+    // Turns 2 & 3: wait for the regular 3-turn cadence.
+    codex_succeeded(&mut app, index);
+    assert!(requests(&mut app).is_empty());
+    codex_succeeded(&mut app, index);
+    assert!(requests(&mut app).is_empty());
+
+    // Turn 4 (3 turns after turn 1): regenerates again.
+    codex_succeeded(&mut app, index);
+    let pending = requests(&mut app);
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].1, app.sessions[index].key().unwrap());
+}
+
+#[test]
+fn codex_failed_or_interrupted_turns_do_not_trigger_title_regeneration() {
+    let mut app = Workspace::default();
+    let index = connected(&mut app, Provider::Codex, "/a", "thread-1");
+
+    app.apply(codex(
+        "/a",
+        "thread-1",
+        "turn/completed",
+        json!({ "turn": { "status": "failed", "error": { "message": "boom" } } }),
+    ));
+    app.apply(codex(
+        "/a",
+        "thread-1",
+        "turn/completed",
+        json!({ "turn": { "status": "interrupted" } }),
+    ));
+    assert!(requests(&mut app).is_empty());
+
+    codex_succeeded(&mut app, index);
+    assert_eq!(requests(&mut app).len(), 1);
+}
+
+#[test]
+fn codex_regenerate_title_is_admitted_on_vm_checkouts() {
+    let target = crate::remote::native::NativeTarget {
+        machine: crate::remote::MachineId {
+            host: crate::remote::Host::Boat,
+            account: "acct".into(),
+            id: "dev".into(),
+        },
+        repository: "org/repo".into(),
+        checkout_root: "/home/user/caelum".into(),
+    };
+    let binding = crate::remote::native::Binding::new("checkout-1", &target).unwrap();
+    let command = Command::RegenerateTitle(SessionKey {
+        scope: Scope {
+            project: crate::remote::native::project_key("checkout-1"),
+            provider: Provider::Codex,
+        },
+        id: "thread-vm-1".into(),
+    });
+    let bound = binding
+        .outgoing(command)
+        .expect("VM must admit Codex RegenerateTitle");
+    assert!(matches!(
+        bound,
+        Command::RegenerateTitle(key)
+            if key.scope.project == "/home/user/caelum"
+                && key.scope.provider == Provider::Codex
+                && key.id == "thread-vm-1"
+    ));
 }
