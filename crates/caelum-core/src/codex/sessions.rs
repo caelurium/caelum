@@ -661,7 +661,7 @@ impl CodexProvider {
         }
         let project = self.project(project_path)?;
         let connection = self.connection_for_thread(&project, thread_id)?;
-        connection.request("turn/interrupt", json!({ "threadId": thread_id }))?;
+        connection.interrupt_turn(thread_id)?;
         self.inner.questions.clear(
             PROVIDER_NAME,
             &project.path().to_string_lossy(),
