@@ -108,7 +108,7 @@ impl Workspace {
                         .err()
                         .unwrap_or_else(|| "Unexpected context response".into());
                     if side {
-                        session.side_error = Some(error);
+                        session.set_side_context_error(Some(error));
                     } else {
                         session.attachment_error(name, error);
                     }
@@ -122,7 +122,8 @@ impl Workspace {
                     attachments.push(attachment);
                     true
                 } else {
-                    self.sessions[index].side_error = Some("Attach at most 16 items".into());
+                    self.sessions[index]
+                        .set_side_context_error(Some("Attach at most 16 items".into()));
                     false
                 }
             } else {
@@ -138,6 +139,18 @@ impl Workspace {
                     self.sessions[index].completion_caret = Some(caret);
                 }
             }
+            return;
+        }
+        if let Pending::Open(provider, navigation) = pending {
+            self.complete_project_open(request, provider, navigation, result);
+            return;
+        }
+        if let Pending::Generate(index) = pending {
+            let result = result.and_then(|reply| match reply {
+                Reply::Generated(text) => Ok(text),
+                _ => Err("Unexpected side question response".into()),
+            });
+            self.sessions[index].finish_side_question(request, result);
             return;
         }
         if let Pending::Task(task) = pending {
@@ -157,13 +170,6 @@ impl Workspace {
                     Pending::Control(index) => {
                         self.complete_native_command(index, request, Err(error))
                     }
-                    Pending::Generate(index, _, generation) => {
-                        if self.sessions[index].side_generation == generation {
-                            self.sessions[index].generating = false;
-                            self.sessions[index].side_cancel = None;
-                            self.sessions[index].side_error = Some(error);
-                        }
-                    }
                     Pending::Notify => {}
                     Pending::Load => {
                         self.store_loaded(request, Err(error));
@@ -179,6 +185,8 @@ impl Workspace {
                     | Pending::Fork(_)
                     | Pending::VerifyOpenCodeMove(_)
                     | Pending::Task(_)
+                    | Pending::Open(..)
+                    | Pending::Generate(_)
                     | Pending::Mention { .. }
                     | Pending::Attachment(..)
                     | Pending::RegenerateTitle(..) => {
@@ -193,12 +201,6 @@ impl Workspace {
                         self.complete_delete(index, request, Err(error))
                     }
                     Pending::Details(_) => {}
-                    Pending::Open(_, _) => {
-                        if request == self.latest_open {
-                            self.opening = false;
-                            self.error = Some(error);
-                        }
-                    }
                     Pending::List(scope)
                     | Pending::ListArchived(scope)
                     | Pending::Choices(scope) => {
@@ -245,13 +247,6 @@ impl Workspace {
             }
             (Pending::Control(index), reply) => {
                 self.complete_native_command(index, request, done(reply));
-            }
-            (Pending::Generate(index, prompt, generation), Reply::Generated(text)) => {
-                if self.sessions[index].side_generation == generation {
-                    self.sessions[index].generating = false;
-                    self.sessions[index].side_cancel = None;
-                    self.sessions[index].side_question = Some((prompt, text));
-                }
             }
             (Pending::Notify, Reply::Done) => {}
             (Pending::Details(index), Reply::Details(details)) => {
@@ -424,48 +419,6 @@ impl Workspace {
             (Pending::Archive(index), reply) => self.complete_archive(index, request, done(reply)),
             (Pending::DeleteSession(index), reply) => {
                 self.complete_delete(index, request, done(reply))
-            }
-            (Pending::Open(provider, navigation), Reply::Project(project)) => {
-                if self.closed_since(&project.path, request) {
-                    if request == self.latest_open {
-                        self.opening = false;
-                    }
-                    return;
-                }
-                if !self.projects.iter().any(|p| p.path == project.path) {
-                    self.projects.push(project.clone());
-                }
-
-                let details: Vec<_> = self
-                    .sessions
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, s)| {
-                        self.group_path(&s.scope.project) == self.group_path(&project.path)
-                            && s.remote_id.is_some()
-                            && s.details.is_none()
-                            && !self.detail_queue.contains(i)
-                            && !self
-                                .pending
-                                .values()
-                                .any(|p| matches!(p, Pending::Details(index) if index == i))
-                    })
-                    .map(|(i, _)| i)
-                    .collect();
-                self.detail_queue.extend(details);
-                if request == self.latest_open {
-                    self.opening = false;
-                    if navigation == self.navigation {
-                        self.select_project(&project.path);
-                        if let Some(provider) = provider {
-                            self.project_draft(Scope {
-                                project: project.path.clone(),
-                                provider,
-                            });
-                        }
-                        self.refresh_project();
-                    }
-                }
             }
             (Pending::List(scope), Reply::Sessions(summaries)) => {
                 if self.creating(&scope) {

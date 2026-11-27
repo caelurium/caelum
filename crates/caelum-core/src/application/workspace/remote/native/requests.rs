@@ -34,7 +34,7 @@ impl Workspace {
             session.revision += 1;
             session.queue_paused = true;
             session.usage = Default::default();
-            session.side_cancel = None;
+            session.interrupt_side_question("VM connection closed.");
             session.disconnected = session.remote_id.is_some();
             session.conversation.set_working(false);
         }

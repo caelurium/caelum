@@ -158,9 +158,8 @@ impl Checkout {
             root: self.root.clone(),
             required_base: self
                 .thread
-                .continued
-                .as_ref()
-                .filter(|_| self.thread.conversation.is_none())
+                .continuation()
+                .filter(|_| self.thread.conversation().is_none())
                 .and_then(|c| c.base.clone())
                 .or_else(|| match &self.phase {
                     Phase::Prepare {

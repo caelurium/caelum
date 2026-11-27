@@ -179,7 +179,7 @@ impl Conversation {
             self.note_turn_output(&entry.id);
         }
         if entry.kind() != EntryKind::User
-            && !self.entries.iter().any(|old| {
+            && !self.entries.iter().rev().any(|old| {
                 old.id == entry.id
                     && old.text == entry.text
                     && old.input == entry.input
@@ -190,37 +190,54 @@ impl Conversation {
         {
             self.activity += 1;
         }
-        reconciliation::merge(self, vec![entry], false);
+        reconciliation::put_single(self, entry);
     }
 
     fn delta(&mut self, id: String, kind: EntryKind, delta: &str, output: bool) {
         if delta.is_empty() {
             return;
         }
-        let index = self
-            .entries
-            .iter()
-            .position(|entry| entry.id == id)
-            .unwrap_or_else(|| {
+        let index = match self.entries.iter().rposition(|entry| entry.id == id) {
+            Some(index) => {
+                if kind == EntryKind::Assistant {
+                    self.note_turn_output(&id);
+                }
+                index
+            }
+            None => {
+                if kind == EntryKind::Assistant {
+                    self.note_turn_output(&id);
+                }
                 self.entries
                     .push(Entry::new(id, kind, String::new(), false));
                 self.entries.len() - 1
-            });
-        if kind == EntryKind::Assistant {
-            let id = self.entries[index].id.clone();
-            self.note_turn_output(&id);
-        }
+            }
+        };
         let entry = &mut self.entries[index];
         if entry.complete() {
             return;
         }
         self.activity += 1;
         if output {
+            let prev_len = entry.stream_output.len();
             entry.stream_output.push_str(delta);
-            entry.output = reconciliation::reconcile(&entry.history_output, &entry.stream_output);
+            if entry.history_output.is_empty() && entry.output.len() == prev_len {
+                entry.output.push_str(delta);
+            } else {
+                reconciliation::reconcile_into(
+                    &mut entry.output,
+                    &entry.history_output,
+                    &entry.stream_output,
+                );
+            }
         } else {
+            let prev_len = entry.stream.len();
             entry.stream.push_str(delta);
-            entry.text = reconciliation::reconcile(&entry.history, &entry.stream);
+            if entry.history.is_empty() && entry.text.len() == prev_len {
+                entry.text.push_str(delta);
+            } else {
+                reconciliation::reconcile_into(&mut entry.text, &entry.history, &entry.stream);
+            }
         }
         self.set_working(true);
     }
@@ -323,19 +340,20 @@ impl Conversation {
             "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" => {
                 if let Some(id) = data["itemId"].as_str() {
                     let id = format!("codex-{id}");
-                    if !self.entries.iter().any(|entry| entry.id == id) {
-                        self.entries.push(Entry::new(
-                            id.clone(),
-                            EntryKind::Reasoning,
-                            String::new(),
-                            false,
-                        ));
-                    }
-                    let entry = self
+                    let pos = self
                         .entries
-                        .iter_mut()
-                        .find(|entry| entry.id == id)
-                        .expect("inserted entry");
+                        .iter()
+                        .rposition(|entry| entry.id == id)
+                        .unwrap_or_else(|| {
+                            self.entries.push(Entry::new(
+                                id,
+                                EntryKind::Reasoning,
+                                String::new(),
+                                false,
+                            ));
+                            self.entries.len() - 1
+                        });
+                    let entry = &mut self.entries[pos];
                     if entry.complete() {
                         return;
                     }
@@ -347,20 +365,53 @@ impl Conversation {
                     }]
                     .as_u64()
                     .unwrap_or(0);
+                    let delta = string(&data["delta"]);
+                    let had_summary = entry.reasoning.keys().any(|(s, _)| *s);
+                    let existed = entry.reasoning.contains_key(&(summary, index));
                     entry
                         .reasoning
                         .entry((summary, index))
                         .or_default()
-                        .push_str(string(&data["delta"]));
-                    let has_summary = entry.reasoning.keys().any(|(summary, _)| *summary);
-                    entry.stream = entry
-                        .reasoning
-                        .iter()
-                        .filter(|((summary, _), _)| *summary == has_summary)
-                        .map(|(_, text)| text.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n\n");
-                    entry.text = reconciliation::reconcile(&entry.history, &entry.stream);
+                        .push_str(delta);
+                    let has_summary = had_summary || summary;
+                    let is_tail = summary == has_summary
+                        && index < u64::MAX
+                        && entry
+                            .reasoning
+                            .range((summary, index + 1)..=(summary, u64::MAX))
+                            .next()
+                            .is_none();
+                    let prev_len = entry.stream.len();
+                    if existed && is_tail && had_summary == has_summary {
+                        entry.stream.push_str(delta);
+                        if entry.history.is_empty() && entry.text.len() == prev_len {
+                            entry.text.push_str(delta);
+                        } else {
+                            reconciliation::reconcile_into(
+                                &mut entry.text,
+                                &entry.history,
+                                &entry.stream,
+                            );
+                        }
+                    } else {
+                        entry.stream.clear();
+                        for (i, (_, text)) in entry
+                            .reasoning
+                            .iter()
+                            .filter(|((s, _), _)| *s == has_summary)
+                            .enumerate()
+                        {
+                            if i > 0 {
+                                entry.stream.push_str("\n\n");
+                            }
+                            entry.stream.push_str(text);
+                        }
+                        reconciliation::reconcile_into(
+                            &mut entry.text,
+                            &entry.history,
+                            &entry.stream,
+                        );
+                    }
                     self.set_working(true);
                 }
             }
