@@ -71,15 +71,12 @@ impl GitClient {
             });
         };
 
-        let branch_output = self.run(&project, &["branch", "--show-current"])?;
-        self.require_success(&branch_output, "read current branch")?;
-        let branch = output_text(&branch_output.stdout).trim().to_owned();
-
+        let (branch, changes) = self.project_status_with_branch(&project, &repository_root)?;
         Ok(GitRepositoryStatus {
             project_path: project.path().to_string_lossy().into_owned(),
             repository_root: Some(repository_root.to_string_lossy().into_owned()),
-            branch: (!branch.is_empty()).then_some(branch),
-            changes: self.project_status_changes(&project, &repository_root)?,
+            branch,
+            changes,
         })
     }
 
@@ -129,28 +126,62 @@ impl GitClient {
         let project_prefix = project_relative_prefix(&project, &repository_root)?;
         let repository_relative_path = project_prefix.join(&relative_path);
         let git_path = git_path_string(&repository_relative_path);
-        let changes = self.project_status_changes(&project, &repository_root)?;
-        let change = changes
-            .iter()
-            .find(|change| change.path == file_path)
+        let change = self
+            .file_status_change(&repository_project, &project_prefix, &git_path, file_path)?
             .ok_or_else(|| GitError::NotChanged(file_path.to_owned()))?;
 
-        let staged = self.diff_output(
-            &repository_project,
-            &[
-                "diff",
-                "--cached",
-                "--no-ext-diff",
-                "--no-textconv",
-                "--color=never",
-            ],
-            &git_path,
-        )?;
-        let unstaged = self.diff_output(
-            &repository_project,
-            &["diff", "--no-ext-diff", "--no-textconv", "--color=never"],
-            &git_path,
-        )?;
+        let need_staged = change.index_status != " " && change.index_status != "?";
+        let need_unstaged = change.worktree_status != " " && change.worktree_status != "?";
+        let (staged, unstaged) = if need_staged && need_unstaged {
+            std::thread::scope(|scope| {
+                let staged_handle = scope.spawn(|| {
+                    self.diff_output(
+                        &repository_project,
+                        &[
+                            "diff",
+                            "--cached",
+                            "--no-ext-diff",
+                            "--no-textconv",
+                            "--color=never",
+                        ],
+                        &git_path,
+                    )
+                });
+                let unstaged = self.diff_output(
+                    &repository_project,
+                    &["diff", "--no-ext-diff", "--no-textconv", "--color=never"],
+                    &git_path,
+                )?;
+                let staged = staged_handle.join().expect("staged diff worker panicked")?;
+                Ok::<_, GitError>((staged, unstaged))
+            })?
+        } else {
+            let staged = if need_staged {
+                self.diff_output(
+                    &repository_project,
+                    &[
+                        "diff",
+                        "--cached",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--color=never",
+                    ],
+                    &git_path,
+                )?
+            } else {
+                String::new()
+            };
+            let unstaged = if need_unstaged {
+                self.diff_output(
+                    &repository_project,
+                    &["diff", "--no-ext-diff", "--no-textconv", "--color=never"],
+                    &git_path,
+                )?
+            } else {
+                String::new()
+            };
+            (staged, unstaged)
+        };
         let untracked = if change.index_status == "?" && change.worktree_status == "?" {
             self.untracked_diff(&repository_project, &git_path)?
         } else {
@@ -183,24 +214,23 @@ impl GitClient {
         Ok(Some(canonical_root))
     }
 
-    fn project_status_changes(
+    fn project_status_with_branch(
         &self,
         project: &Project,
         repository_root: &Path,
-    ) -> Result<Vec<GitFileStatus>, GitError> {
+    ) -> Result<(Option<String>, Vec<GitFileStatus>), GitError> {
         let repository_project = Project::open(repository_root)?;
         let project_prefix = project_relative_prefix(project, repository_root)?;
-        let mut arguments = PORCELAIN_STATUS_ARGS
-            .iter()
-            .map(OsString::from)
-            .collect::<Vec<_>>();
+        let mut arguments = Vec::with_capacity(PORCELAIN_STATUS_ARGS.len() + 3);
+        arguments.extend(PORCELAIN_STATUS_ARGS.iter().map(OsString::from));
+        arguments.push(OsString::from("--branch"));
         if !project_prefix.as_os_str().is_empty() {
             arguments.push(OsString::from("--"));
             arguments.push(OsString::from(git_path_string(&project_prefix)));
         }
         let output = self.run_os(&repository_project, &arguments)?;
         self.require_success(&output, "read working-tree status")?;
-        let mut changes = parse_status(&output.stdout)?;
+        let (branch, mut changes) = parse_status_with_branch(&output.stdout)?;
         for change in &mut changes {
             let repository_relative_path = Path::new(&change.path);
             let project_relative_path = if project_prefix.as_os_str().is_empty() {
@@ -225,7 +255,37 @@ impl GitClient {
                 );
             }
         }
-        Ok(changes)
+        Ok((branch, changes))
+    }
+
+    fn file_status_change(
+        &self,
+        repository_project: &Project,
+        project_prefix: &Path,
+        git_path: &str,
+        file_path: &str,
+    ) -> Result<Option<GitFileStatus>, GitError> {
+        let mut arguments = Vec::with_capacity(PORCELAIN_STATUS_ARGS.len() + 2);
+        arguments.extend(PORCELAIN_STATUS_ARGS.iter().map(OsString::from));
+        arguments.push(OsString::from("--"));
+        arguments.push(OsString::from(git_path));
+        let output = self.run_os(repository_project, &arguments)?;
+        self.require_success(&output, "read working-tree status")?;
+        for mut change in parse_status(&output.stdout)? {
+            let repository_relative_path = Path::new(&change.path);
+            let project_relative_path = if project_prefix.as_os_str().is_empty() {
+                repository_relative_path
+            } else {
+                repository_relative_path
+                    .strip_prefix(project_prefix)
+                    .map_err(|_| GitError::OutsideProject(change.path.clone()))?
+            };
+            change.path = git_path_string(project_relative_path);
+            if change.path == file_path {
+                return Ok(Some(change));
+            }
+        }
+        Ok(None)
     }
 
     fn diff_output(
@@ -297,6 +357,13 @@ impl GitClient {
 }
 
 pub(crate) fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError> {
+    parse_status_with_branch(output).map(|(_, changes)| changes)
+}
+
+fn parse_status_with_branch(
+    output: &[u8],
+) -> Result<(Option<String>, Vec<GitFileStatus>), GitError> {
+    let mut branch = None;
     let mut changes = Vec::new();
     let mut offset = 0;
     while offset < output.len() {
@@ -306,6 +373,16 @@ pub(crate) fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError
             .map(|position| offset + position)
             .ok_or(GitError::MalformedStatus)?;
         let record = &output[offset..end];
+        if record.starts_with(b"# ") {
+            if let Some(head) = record.strip_prefix(b"# branch.head ") {
+                let name = String::from_utf8_lossy(head).trim().to_owned();
+                if !name.is_empty() && name != "(detached)" {
+                    branch = Some(name);
+                }
+            }
+            offset = end + 1;
+            continue;
+        }
 
         let (xy, path) = match record.first() {
             Some(b'?') if record.starts_with(b"? ") => (&b"??"[..], &record[2..]),
@@ -333,7 +410,7 @@ pub(crate) fn parse_status(output: &[u8]) -> Result<Vec<GitFileStatus>, GitError
         });
         offset = end + 1;
     }
-    Ok(changes)
+    Ok((branch, changes))
 }
 
 fn output_text(bytes: &[u8]) -> String {
