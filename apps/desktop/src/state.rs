@@ -317,5 +317,8 @@ pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
             tx.wake_after(Duration::from_millis(25));
         }
     }
+    if changed {
+        tx.animated();
+    }
     changed
 }

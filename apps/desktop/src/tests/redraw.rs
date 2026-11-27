@@ -424,3 +424,56 @@ fn background_redraw_profile() {
         );
     }
 }
+
+#[test]
+fn visible_streaming_deltas_request_animated_commits_while_background_and_history_do_not() {
+    for provider in [Provider::Codex, Provider::OpenCode, Provider::Antigravity] {
+        let mut ws = state(provider);
+        let l = ws.live.as_mut().unwrap();
+        let mut tx = rune::Tx::default();
+        l.poll(&mut tx);
+
+        let before = l.stream_snapshot();
+        assert!(l.apply_events([delta(provider, "foreground", "Hello ")]));
+        assert!(
+            l.stream_progressed(&before, false),
+            "{provider:?} foreground streaming delta must animate word reveal and growth"
+        );
+        assert!(
+            !l.stream_progressed(&before, true),
+            "{provider:?} history loads must stay instant"
+        );
+
+        let before_bg = l.stream_snapshot();
+        l.apply_events([delta(provider, "background", "Quiet ")]);
+        assert!(
+            !l.stream_progressed(&before_bg, false),
+            "{provider:?} background-only streaming must not request animated commits"
+        );
+
+        let before_switch = l.stream_snapshot();
+        l.app.select(1);
+        l.apply_events([delta(provider, "background", "Switched ")]);
+        assert!(
+            !l.stream_progressed(&before_switch, false),
+            "{provider:?} session switches must land immediately"
+        );
+    }
+}
+
+#[test]
+fn visible_split_pane_streaming_requests_animated_commits() {
+    let mut ws = state(Provider::Codex);
+    let l = ws.live.as_mut().unwrap();
+    l.window_width.set(1400.0);
+    l.split.push_pane(
+        crate::split::SecondaryPane::Session(1),
+        crate::split::SplitOrientation::Vertical,
+    );
+    let mut tx = rune::Tx::default();
+    l.poll(&mut tx);
+
+    let before = l.stream_snapshot();
+    assert!(l.apply_events([delta(Provider::Codex, "background", "Split chunk ")]));
+    assert!(l.stream_progressed(&before, false));
+}
