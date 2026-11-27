@@ -137,3 +137,43 @@ fn tool_identity_changes_invalidate_previews_with_identical_input() {
     *entry(&mut live, &key) = original;
     assert!(live.sync_patches());
 }
+
+#[test]
+fn scroll_motion_defers_patch_hydration_until_scroll_settles() {
+    let scroll = |y: f32| {
+        let mut pos = rune::ScrollPos::default();
+        pos.offset[1] = y;
+        pos.max[1] = 1000.0;
+        pos
+    };
+    let (mut live, key) = fixture();
+    live.sync_editors();
+    live.visible_entries.clear();
+    live.clock = 1.0;
+    live.reading[0].position.set(scroll(200.0));
+    let mut tx = rune::Tx::default();
+    assert!(!live.sync_patches_for_poll(&mut tx));
+
+    live.visible_entries.insert(key.clone());
+    live.clock = 1.016;
+    live.reading[0].position.set(scroll(240.0));
+    assert!(
+        !live.sync_patches_for_poll(&mut tx),
+        "active scroll must not commit patch hydration mid-scroll"
+    );
+    assert!(!live.patches.contains_key(&key));
+
+    live.clock = 1.05;
+    assert!(
+        !live.sync_patches_for_poll(&mut tx),
+        "hydration waits until the settle deadline elapses"
+    );
+    assert!(!live.patches.contains_key(&key));
+
+    live.clock = 1.1;
+    assert!(
+        live.sync_patches_for_poll(&mut tx),
+        "once scroll settles, visible patches hydrate"
+    );
+    assert!(live.patches.contains_key(&key));
+}

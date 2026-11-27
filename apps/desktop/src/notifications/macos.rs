@@ -1,3 +1,5 @@
+use std::sync::mpsc::{self, SyncSender};
+
 use block2::{DynBlock, RcBlock};
 use caelum_core::application::{Notification, Reply, SessionKey};
 use objc2::{
@@ -50,9 +52,9 @@ define_class!(
 );
 
 pub(super) struct Client {
-    center: Retained<UNUserNotificationCenter>,
-
+    _center: Retained<UNUserNotificationCenter>,
     _delegate: Retained<Delegate>,
+    sender: SyncSender<(u64, Notification)>,
     handle: AppHandle<Workspace>,
 }
 
@@ -68,46 +70,67 @@ impl Client {
         let delegate: Retained<Delegate> =
             unsafe { msg_send![super(Delegate::alloc().set_ivars(handle.clone())), init] };
         center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+        let (sender, receiver) = mpsc::sync_channel::<(u64, Notification)>(64);
+        let worker_handle = handle.clone();
+        let _ = std::thread::Builder::new()
+            .name("caelum-notifications".into())
+            .spawn(move || {
+                let center = UNUserNotificationCenter::currentNotificationCenter();
+                while let Ok((id, notification)) = receiver.recv() {
+                    deliver(&center, &worker_handle, id, notification);
+                }
+            });
         Ok(Self {
-            center,
+            _center: center,
             _delegate: delegate,
+            sender,
             handle,
         })
     }
 
     pub(super) fn send(&self, id: u64, notification: Notification) {
-        let content = content(&notification);
-        let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
-            &NSUUID::new().UUIDString(),
-            &content,
-            None,
-        );
-        let center = self.center.clone();
-        let handle = self.handle.clone();
-        self.center
-            .requestAuthorizationWithOptions_completionHandler(
-                UNAuthorizationOptions::Alert,
-                &RcBlock::new(move |granted: Bool, error: *mut NSError| {
-                    if let Some(error) = error_message(error) {
-                        complete(&handle, id, Err(error));
-                    } else if !granted.as_bool() {
-                        complete(&handle, id, Ok(Reply::Done));
-                    } else {
-                        let handle = handle.clone();
-                        center.addNotificationRequest_withCompletionHandler(
-                            &request,
-                            Some(&RcBlock::new(move |error: *mut NSError| {
-                                complete(
-                                    &handle,
-                                    id,
-                                    error_message(error).map_or(Ok(Reply::Done), Err),
-                                );
-                            })),
-                        );
-                    }
-                }),
-            );
+        if self.sender.try_send((id, notification)).is_err() {
+            complete(&self.handle, id, Err("Notification worker is busy".into()));
+        }
     }
+}
+
+fn deliver(
+    center: &Retained<UNUserNotificationCenter>,
+    handle: &AppHandle<Workspace>,
+    id: u64,
+    notification: Notification,
+) {
+    let content = content(&notification);
+    let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
+        &NSUUID::new().UUIDString(),
+        &content,
+        None,
+    );
+    let center_for_add = center.clone();
+    let handle = handle.clone();
+    center.requestAuthorizationWithOptions_completionHandler(
+        UNAuthorizationOptions::Alert,
+        &RcBlock::new(move |granted: Bool, error: *mut NSError| {
+            if let Some(error) = error_message(error) {
+                complete(&handle, id, Err(error));
+            } else if !granted.as_bool() {
+                complete(&handle, id, Ok(Reply::Done));
+            } else {
+                let handle = handle.clone();
+                center_for_add.addNotificationRequest_withCompletionHandler(
+                    &request,
+                    Some(&RcBlock::new(move |error: *mut NSError| {
+                        complete(
+                            &handle,
+                            id,
+                            error_message(error).map_or(Ok(Reply::Done), Err),
+                        );
+                    })),
+                );
+            }
+        }),
+    );
 }
 
 fn content(notification: &Notification) -> Retained<UNMutableNotificationContent> {
