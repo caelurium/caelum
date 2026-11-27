@@ -98,8 +98,36 @@ pub struct Session {
     pub disconnected: bool,
     options_dirty: bool,
     revision: u64,
-    seen_events: std::collections::VecDeque<String>,
+    seen_events: SeenEvents,
     usage: crate::telemetry::Tracking,
+}
+
+#[derive(Default)]
+struct SeenEvents {
+    order: std::collections::VecDeque<String>,
+    ids: std::collections::HashSet<String>,
+}
+
+impl SeenEvents {
+    fn insert(&mut self, id: &str) -> bool {
+        if self.ids.contains(id) {
+            return false;
+        }
+        let owned = id.to_owned();
+        self.ids.insert(owned.clone());
+        self.order.push_back(owned);
+        if self.order.len() > 512 {
+            if let Some(evicted) = self.order.pop_front() {
+                self.ids.remove(&evicted);
+            }
+        }
+        true
+    }
+
+    fn clear(&mut self) {
+        self.order.clear();
+        self.ids.clear();
+    }
 }
 
 impl Session {

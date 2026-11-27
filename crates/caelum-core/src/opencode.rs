@@ -607,9 +607,11 @@ fn model_id(model: &Value) -> Option<String> {
 }
 
 fn directory_matches(directory: &str, project_path: &Path) -> bool {
-    Path::new(directory)
-        .canonicalize()
-        .is_ok_and(|canonical| canonical == project_path)
+    let path = Path::new(directory);
+    path == project_path
+        || path
+            .canonicalize()
+            .is_ok_and(|canonical| canonical == project_path)
 }
 
 fn valid_session_id(value: &str) -> bool {
