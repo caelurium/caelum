@@ -252,8 +252,7 @@ fn local_excerpt(s: &Workspace, index: usize, k: &Kit) -> Option<(String, Color)
             }
             OverviewActivity::SideQuestion => {
                 let text = session
-                    .side_question
-                    .as_ref()
+                    .side_exchange()
                     .map(|(q, _)| format!("Side question · {}", excerpt(q)))
                     .unwrap_or_else(|| "Answering a side question".into());
                 Some((text, k.c.text_accent))

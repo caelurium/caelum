@@ -52,7 +52,9 @@ pub(super) fn register_from_update(
         if text.trim().is_empty() {
             return Err("Answer before submitting".into());
         }
-        lock(&context.progress).on_prompt_started(&context.session_id);
+        let request = context.next_id.fetch_add(1, Ordering::Relaxed);
+        let mut progress = lock(&context.progress);
+        progress.on_prompt_started(&context.session_id, request);
         transport::publish_event(
             &context.subscribers,
             AntigravityEvent {
@@ -62,10 +64,11 @@ pub(super) fn register_from_update(
                 params: json!({ "sessionId": context.session_id, "turnId":uuid::Uuid::new_v4().to_string(), "_created":crate::application::presentation::now() }),
             },
         );
+        drop(progress);
         if let Err(error) = transport::send_prompt_parts(
             &context.writer,
             &context.pending,
-            &context.next_id,
+            request,
             &context.alive,
             &context.session_id,
             json!({
@@ -73,7 +76,7 @@ pub(super) fn register_from_update(
                 "prompt": [{ "type": "text", "text": text }],
             }),
         ) {
-            lock(&context.progress).on_prompt_send_failed(&context.session_id);
+            lock(&context.progress).on_prompt_send_failed(&context.session_id, request);
             return Err(error.to_string());
         }
         Ok(())

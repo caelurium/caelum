@@ -775,6 +775,8 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
     let server = provider
         .inner
         .lock_servers()
+        .as_ref()
+        .unwrap()
         .get(&Project::open(&project_path).unwrap().path().to_path_buf())
         .unwrap()
         .current()
@@ -783,7 +785,7 @@ fn managed_server_lists_creates_restores_prompts_streams_and_shuts_down() {
 
     let process_id = server.process_id.unwrap();
     provider.release_checkout(&checkout);
-    assert!(provider.inner.lock_servers().is_empty());
+    assert!(provider.inner.lock_servers().as_ref().unwrap().is_empty());
     provider.shutdown();
     assert!(matches!(
         processes.terminate(process_id),

@@ -320,7 +320,7 @@ impl Pending {
             Self::Enqueue(i, _)
             | Self::RemoveQueued(i, _)
             | Self::Control(i)
-            | Self::Generate(i, _, _)
+            | Self::Generate(i)
             | Self::RegenerateTitle(i)
             | Self::Archive(i)
             | Self::DeleteSession(i)

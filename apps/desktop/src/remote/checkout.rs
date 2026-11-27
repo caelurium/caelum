@@ -85,7 +85,6 @@ fn show(s: &mut Workspace, focus_draft: bool) {
     l.panels.set_overlay(None);
     l.panels.screen = Screen::Remote;
     l.session_menu = None;
-    l.remote.inspection = None;
     super::conversation::sync_editor(l);
     super::conversation::set_focus(l, focus_draft);
     l.schedule();
@@ -152,12 +151,9 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
         l.panels.set_overlay(None);
         changed = true;
     }
-    if l.panels.overlay() != Some(Screen::VmStats) {
-        l.remote.inspection = None;
-    }
     if !l.remote.restored && l.app.restored() {
         l.remote.restored = true;
-        if !l.app.opening
+        if !l.app.opening_project()
             && l.app.selected.is_none()
             && let Some(id) = l.app.remote.saved.selected.clone()
         {

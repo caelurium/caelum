@@ -148,7 +148,7 @@ impl Workspace {
         replacement: String,
     ) -> Option<u64> {
         let session = &mut self.sessions[index];
-        if session.attaching > 0 {
+        if session.attaching > 0 || (side && session.side_exchange().is_some()) {
             return None;
         }
         let draft = if side {
@@ -159,9 +159,10 @@ impl Workspace {
         if token.start > token.end || draft.get(token.start..token.end).is_none() {
             return None;
         }
+        let draft = draft.clone();
         session.attaching += 1;
         if side {
-            session.side_error = None;
+            session.set_side_context_error(None);
         } else {
             session.attachment_errors.retain(|(name, _)| *name != path);
         }
@@ -171,7 +172,7 @@ impl Workspace {
             side,
             name: path.clone(),
             generation: session.completion_generation,
-            draft: draft.clone(),
+            draft,
             token: token.clone(),
             replacement,
         };
@@ -181,19 +182,6 @@ impl Workspace {
             Task::File { project, path }
         };
         Some(self.request(Command::Task(task), pending))
-    }
-
-    pub fn dismiss_side_question(&mut self, index: usize) {
-        self.cancel_mentions(index);
-        let session = &mut self.sessions[index];
-        session.side_generation += 1;
-        session.side_cancel = None;
-        session.completion_generation += 1;
-        session.generating = false;
-        session.side_question = None;
-        session.side_error = None;
-        session.side_draft.clear();
-        session.side_attachments.clear();
     }
 
     pub fn cancel_mentions(&mut self, index: usize) {
@@ -212,56 +200,5 @@ impl Workspace {
             .attaching
             .saturating_sub(requests.len());
         self.sessions[index].completion_generation += 1;
-    }
-
-    pub fn ask(&mut self, index: usize, prompt: String) -> bool {
-        let session = &mut self.sessions[index];
-        if !session.scope.provider_available()
-            || session.forgotten()
-            || session.archived()
-            || session.disconnected
-            || session.generating
-            || session.rewinding()
-            || prompt.trim().is_empty()
-        {
-            return false;
-        }
-        let Some(key) = session.key() else {
-            session.error = Some("Start a session before asking a side question".into());
-            return false;
-        };
-        session.generating = true;
-        session.side_error = None;
-        session.side_generation += 1;
-        let generation = session.side_generation;
-        session.side_draft = prompt.clone();
-        session.side_question = Some((prompt.clone(), String::new()));
-        let context =
-            crate::application::composer::with_context(&prompt, &session.side_attachments);
-        let command = if key.scope.provider == Provider::OpenCode {
-            Command::Generate(key, context)
-        } else {
-            let (cancel, until) = tokio::sync::watch::channel(());
-            let text = match crate::side_questions::prompt(&session.conversation, &context) {
-                Ok(text) => text,
-                Err(error) => {
-                    session.generating = false;
-                    session.side_error = Some(error);
-                    return false;
-                }
-            };
-            session.side_cancel = Some(cancel);
-            Command::SideTurn(
-                key,
-                crate::side_questions::Turn {
-                    generation,
-                    text,
-                    model: session.options.model.clone(),
-                    until,
-                },
-            )
-        };
-        self.request(command, Pending::Generate(index, prompt, generation));
-        true
     }
 }
