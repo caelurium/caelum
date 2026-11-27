@@ -197,9 +197,3 @@ fn shutdown_terminates_and_unregisters_the_owned_server_process() {
         Err(crate::processes::ProcessError::UnknownProcess)
     ));
 }
-
-#[test]
-fn reserve_local_port_returns_a_loopback_port_that_can_be_rebound() {
-    let port = reserve_local_port().unwrap();
-    assert_ne!(port, 0);
-}

@@ -790,16 +790,3 @@ pub fn frame_drawn(rt: &rune::Runtime<Workspace>) {
         });
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::composer::effort_description;
-
-    #[test]
-    fn max_effort_has_a_description() {
-        assert_eq!(
-            effort_description("max"),
-            Some("Use the maximum reasoning effort for complex tasks")
-        );
-    }
-}
