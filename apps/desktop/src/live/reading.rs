@@ -81,7 +81,7 @@ impl Live {
                 .is_some_and(caelum_core::application::presentation::entry_visible)
         {
             let row = format!("live-entry-{index}-{}", mark.entry);
-            tx.scroll_center_in_instant(format!("live-rows-{index}"), &row);
+            tx.scroll_center_in_instant(format!("live-transcript-{index}"), &row);
             tx.scroll_key_to(row, mark.inset);
         } else {
             let position = self.reading_position(index);

@@ -323,13 +323,23 @@ fn merge_entry(mut snapshot: Entry, mut current: Entry) -> Entry {
 
 /// Linear-time snapshot/live overlap, including a stream that lags the snapshot.
 pub(super) fn reconcile(snapshot: &str, stream: &str) -> String {
+    let mut result = String::new();
+    reconcile_into(&mut result, snapshot, stream);
+    result
+}
+
+pub(super) fn reconcile_into(target: &mut String, snapshot: &str, stream: &str) {
     if stream.is_empty() || snapshot.contains(stream) {
-        return snapshot.into();
+        target.clear();
+        target.push_str(snapshot);
+        return;
     }
     if snapshot.is_empty() || stream.contains(snapshot) {
-        return stream.into();
+        target.clear();
+        target.push_str(stream);
+        return;
     }
-    let pattern: Vec<_> = stream.chars().collect();
+    let pattern = stream.as_bytes();
     let mut failure = vec![0; pattern.len()];
     let mut matched = 0;
     for index in 1..pattern.len() {
@@ -342,15 +352,17 @@ pub(super) fn reconcile(snapshot: &str, stream: &str) -> String {
         failure[index] = matched;
     }
     matched = 0;
-    for character in snapshot.chars() {
-        while matched > 0 && (matched == pattern.len() || character != pattern[matched]) {
+    for &byte in snapshot.as_bytes() {
+        while matched > 0 && (matched == pattern.len() || byte != pattern[matched]) {
             matched = failure[matched - 1];
         }
-        if character == pattern[matched] {
+        if byte == pattern[matched] {
             matched += 1;
         }
     }
-    let mut result = snapshot.to_owned();
-    result.extend(pattern[matched..].iter());
-    result
+    debug_assert!(stream.is_char_boundary(matched));
+    target.clear();
+    target.reserve(snapshot.len() + stream.len() - matched);
+    target.push_str(snapshot);
+    target.push_str(&stream[matched..]);
 }

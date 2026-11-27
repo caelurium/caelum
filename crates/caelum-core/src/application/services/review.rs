@@ -192,7 +192,11 @@ impl Review {
         self.clear_drafts();
     }
 
-    pub fn edit_details(&mut self, edit: impl FnOnce(&mut GitHubPullRequestDetails)) -> bool {
+    #[cfg(test)]
+    pub(crate) fn edit_details(
+        &mut self,
+        edit: impl FnOnce(&mut GitHubPullRequestDetails),
+    ) -> bool {
         let State::Verified(verified) = &mut self.state else {
             return false;
         };

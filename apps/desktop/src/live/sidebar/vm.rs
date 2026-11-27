@@ -43,7 +43,7 @@ pub(super) fn view(s: &Workspace, k: &Kit, link: &VmLink, position: usize, count
         provider,
         age: &age,
         ink: k.c.text_muted,
-        mark: (t.turn != Turn::Idle)
+        mark: (t.turn() != &Turn::Idle)
             .then(|| icon(&ui::CLOCK, 10.).color(k.c.icon_muted).a11y_hidden()),
     }
     .build(k, bottom, selected, position, count)

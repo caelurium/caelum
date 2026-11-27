@@ -9,9 +9,12 @@ use super::{Panels, Screen};
 
 pub(super) enum Overlay {
     Standard(StandardOverlay),
+    Attachment(Box<crate::composer::Preview>),
     CreateWorktree(Box<crate::worktree::Form>),
+    Image(crate::media::Preview),
     Palette(Box<crate::palette::State>),
     RemoveVm(Removal),
+    VmStats(crate::remote::Inspection),
 }
 
 macro_rules! standard_overlays {
@@ -39,10 +42,8 @@ macro_rules! standard_overlays {
 }
 
 standard_overlays!(
-    Attachment,
     CreateVm,
     Fork,
-    Image,
     Launcher,
     RemotePicker,
     Rename,
@@ -55,7 +56,6 @@ standard_overlays!(
     Timeline,
     Usage,
     VmHandoff,
-    VmStats,
     VmThreads,
     Worktrees,
 );
@@ -69,9 +69,12 @@ impl Overlay {
     fn screen(&self) -> Screen {
         match self {
             Self::Standard(screen) => screen.screen(),
+            Self::Attachment(_) => Screen::Attachment,
+            Self::Image(_) => Screen::Image,
             Self::CreateWorktree(_) => Screen::CreateWorktree,
             Self::Palette(_) => Screen::Palette,
             Self::RemoveVm(_) => Screen::RemoveVm,
+            Self::VmStats(_) => Screen::VmStats,
         }
     }
 }
@@ -82,13 +85,54 @@ impl Panels {
     }
 
     pub fn set_overlay(&mut self, screen: Option<Screen>) {
-        self.overlay = screen
+        let overlay = screen
             .and_then(StandardOverlay::from_screen)
             .map(Overlay::Standard);
+        if overlay.is_none()
+            && let Some(Overlay::Attachment(preview)) = self.overlay.take()
+        {
+            self.attachment_restore = Some(preview.restore);
+        }
+        self.overlay = overlay;
+    }
+
+    pub(crate) fn open_attachment(&mut self, preview: crate::composer::Preview) {
+        self.attachment_restore = None;
+        self.overlay = Some(Overlay::Attachment(Box::new(preview)));
+    }
+
+    pub(crate) fn attachment(&self) -> Option<&crate::composer::Preview> {
+        match &self.overlay {
+            Some(Overlay::Attachment(preview)) => Some(preview),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn take_attachment_restore(&mut self) -> Option<crate::composer::Restore> {
+        self.attachment_restore.take()
+    }
+
+    pub(crate) fn open_image(
+        &mut self,
+        project: String,
+        media: caelum_core::application::presentation::Media,
+    ) {
+        self.overlay = Some(Overlay::Image(crate::media::Preview::new(project, media)));
     }
 
     pub(crate) fn open_worktree(&mut self, form: crate::worktree::Form) {
         self.overlay = Some(Overlay::CreateWorktree(Box::new(form)));
+    }
+
+    pub(crate) fn open_vm_stats(&mut self, inspection: crate::remote::Inspection) {
+        self.overlay = Some(Overlay::VmStats(inspection));
+    }
+
+    pub(crate) fn vm_stats(&self) -> Option<&crate::remote::Inspection> {
+        match &self.overlay {
+            Some(Overlay::VmStats(inspection)) => Some(inspection),
+            _ => None,
+        }
     }
 
     pub(crate) fn open_removal(&mut self, removal: Removal) {
@@ -252,14 +296,33 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
             "Tokens, cost and activity across recorded history.",
             crate::commands::view(s, k, screen, &mut menus),
         ),
-        Screen::Image => (
-            "Image preview",
-            "Fit, zoom and scroll the image.",
-            crate::media::view(s, k),
-        ),
+        Screen::Image => {
+            let Some(Overlay::Image(preview)) = &live(s).panels.overlay else {
+                return;
+            };
+            (
+                "Image preview",
+                "Fit, zoom and scroll the image.",
+                crate::media::view(
+                    s,
+                    k,
+                    &preview.project,
+                    &preview.media.name,
+                    &preview.media.source,
+                    &preview.viewport,
+                ),
+            )
+        }
         Screen::Attachment => {
-            let (title, description) = crate::composer::preview_header(s);
-            (title, description, crate::composer::preview(s, k))
+            let Some(preview) = live(s).panels.attachment() else {
+                return;
+            };
+            let (title, description) = crate::composer::preview_header(preview);
+            (
+                title,
+                description,
+                crate::composer::preview_view(preview, s, k),
+            )
         }
         Screen::Launcher => (
             "New session",
@@ -304,7 +367,13 @@ pub fn overlays(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {
         Screen::Rename => (460.0, 155.0),
         Screen::Stats => (720.0, 620.0),
         Screen::Image => (760.0, 480.0),
-        Screen::Attachment => (760.0, crate::composer::preview_height(s)),
+        Screen::Attachment => (
+            760.0,
+            live(s)
+                .panels
+                .attachment()
+                .map_or(120.0, crate::composer::preview_height),
+        ),
         _ => (660.0, 420.0),
     };
     let available =

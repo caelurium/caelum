@@ -191,7 +191,7 @@ fn changing_the_launch_project_opens_a_codex_vm_with_the_selected_branch() {
     let c = &app.remote.saved.checkouts[app.remote.saved.selected.as_ref().unwrap()];
     assert_eq!(c.thread.provider, VmProvider::Codex);
     assert_eq!(c.branch(), Some("feature/launcher"));
-    assert!(c.thread.conversation.is_none());
+    assert!(c.thread.conversation().is_none());
     let commands = app.commands();
     let [(req, Command::Remote(Operation::Create(..)))] = commands.as_slice() else {
         panic!("{commands:?}")

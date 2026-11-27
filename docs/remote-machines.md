@@ -139,8 +139,7 @@ reasoning, attachments and unpublished Git work stay local.
 
 ## Existing managed Boat chats
 
-Managed conversations from earlier builds remain in **Sessions**. You can also
-right-click the machine and select **Manage VM and Boat conversations…**.
+Managed conversations from earlier builds remain in **Sessions**.
 These conversations use [Boat’s integrated agent API](https://docs.boat.dev/platform-guide/agents.md)
 and keep their existing Boat conversation IDs and provider settings.
 
@@ -233,7 +232,8 @@ now** changes the remaining time without interrupting the turn. **Until stopped*
 keeps billing until you stop the VM; trials require a timer of at most 2 h.
 See [Boat’s auto-stop guide](https://docs.boat.dev/long-running-tasks/auto-stop.md).
 
-For a managed Git commit or push, open **Manage VM and Boat conversations… → Changes**.
+For a managed Git commit or push in a Boat conversation, open **Changes** from
+machine stats or **View remote changes** from the workspace menu.
 Review and commit the VM's tracked and non-ignored new files; **Push
 branch** publishes the reviewed commit to GitHub. In your local project, run
 `git fetch origin` to bring the branch back.

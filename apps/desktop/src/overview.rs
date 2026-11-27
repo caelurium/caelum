@@ -475,7 +475,7 @@ pub(super) fn next_waiting(s: &mut Workspace, tx: &mut Tx) {
         let id = rows[next].clone();
         l.overview.cursor = Some(id.clone());
         l.overview.search.focused = true;
-        tx.scroll_center_in_instant("overview-rows", row_key(&id));
+        tx.scroll_center_in_instant("overview-scroll", row_key(&id));
     }
 }
 
@@ -561,7 +561,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             let l = live_mut(s);
             l.overview.cursor = Some(id.clone());
             l.overview.search.focused = true;
-            tx.scroll_center_in_instant("overview-rows", row_key(&id));
+            tx.scroll_center_in_instant("overview-scroll", row_key(&id));
             true
         }
         Key::Down => {
@@ -570,7 +570,7 @@ pub fn on_key(s: &mut Workspace, ev: &KeyEvent, tx: &mut Tx) -> bool {
             let l = live_mut(s);
             l.overview.cursor = Some(id.clone());
             l.overview.search.focused = true;
-            tx.scroll_center_in_instant("overview-rows", row_key(&id));
+            tx.scroll_center_in_instant("overview-scroll", row_key(&id));
             true
         }
         _ => false,
