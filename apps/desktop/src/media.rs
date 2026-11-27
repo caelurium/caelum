@@ -17,7 +17,41 @@ use std::{
     },
 };
 
+const MAX_DECODED_ENTRIES: usize = 32;
+const MAX_DECODED_BYTES: usize = 64 * 1024 * 1024;
+
 type Decoded = HashMap<u64, (u64, Option<Result<Image, String>>)>;
+
+fn cache_key(data: &str, source_key: Option<(&str, &str)>) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    if let Some((project, source)) = source_key {
+        0u8.hash(&mut hash);
+        project.hash(&mut hash);
+        source.hash(&mut hash);
+        data.len().hash(&mut hash);
+    } else {
+        1u8.hash(&mut hash);
+        let bytes = data.as_bytes();
+        bytes.len().hash(&mut hash);
+        if bytes.len() <= 1024 {
+            bytes.hash(&mut hash);
+        } else {
+            let mid = bytes.len() / 2;
+            bytes[..256].hash(&mut hash);
+            bytes[mid - 128..mid + 128].hash(&mut hash);
+            bytes[bytes.len() - 256..].hash(&mut hash);
+        }
+    }
+    hash.finish()
+}
+
+fn decoded_bytes(entry: &Option<Result<Image, String>>) -> usize {
+    entry
+        .as_ref()
+        .and_then(|res| res.as_ref().ok())
+        .and_then(|img| img.size())
+        .map_or(0, |[w, h]| (w as usize) * (h as usize) * 4)
+}
 
 pub struct State {
     cache: Arc<ImageCache>,
@@ -59,10 +93,13 @@ impl State {
     pub(crate) fn home_background(&self, id: &str, dark: bool) -> Image {
         self.cache.load(crate::home::backgrounds::bytes(id, dark))
     }
-    fn image(&self, data: &str, fixture: bool) -> Result<Option<Image>, String> {
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        data.hash(&mut hash);
-        let id = hash.finish();
+    fn image(
+        &self,
+        data: &str,
+        source_key: Option<(&str, &str)>,
+        fixture: bool,
+    ) -> Result<Option<Image>, String> {
+        let id = cache_key(data, source_key);
         let generation = rune::runtime::commit_generation();
         let mut decoded = self.decoded.lock().unwrap();
         if let Some((used, result)) = decoded.get_mut(&id) {
@@ -70,13 +107,20 @@ impl State {
             return result.clone().transpose();
         }
 
-        if decoded.len() >= 32
-            && let Some(oldest) = decoded
+        let mut total_bytes: usize = decoded.values().map(|(_, res)| decoded_bytes(res)).sum();
+        while decoded.len() >= MAX_DECODED_ENTRIES
+            || (total_bytes >= MAX_DECODED_BYTES && !decoded.is_empty())
+        {
+            let Some(oldest) = decoded
                 .iter()
                 .min_by_key(|(_, (used, _))| used)
                 .map(|(id, _)| *id)
-        {
-            decoded.remove(&oldest);
+            else {
+                break;
+            };
+            if let Some((_, evicted)) = decoded.remove(&oldest) {
+                total_bytes = total_bytes.saturating_sub(decoded_bytes(&evicted));
+            }
         }
         decoded.insert(id, (generation, None));
         drop(decoded);
@@ -161,7 +205,9 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
         .on_press(move |s: &mut Workspace| live_mut(s).app.task(task.clone()))
         .build(k);
     };
-    let image = match live(s).media.image(data, live(s).fixture) {
+    let source_key =
+        (!media.source.starts_with("data:image/")).then_some((project, media.source.as_str()));
+    let image = match live(s).media.image(data, source_key, live(s).fixture) {
         Ok(Some(image)) => image,
         Ok(None) => return ui::skeleton("Loading image", 2, k),
         Err(error) => return ui::notice("Image unavailable", &error, k),
@@ -193,7 +239,10 @@ pub fn thumbnail(s: &Workspace, k: &Kit, project: &str, media: &Media) -> El {
         })
 }
 pub fn attachment_thumbnail(s: &Workspace, k: &Kit, attachment: &Attachment) -> El {
-    let image = match live(s).media.image(&attachment.content, live(s).fixture) {
+    let image = match live(s)
+        .media
+        .image(&attachment.content, None, live(s).fixture)
+    {
         Ok(Some(image)) => image,
         Ok(None) => {
             return ui::caption("…", k)
@@ -238,7 +287,9 @@ pub fn view(s: &Workspace, k: &Kit) -> El {
     let Some(data) = data(s, project, &media.source) else {
         return ui::caption("Image unavailable", k);
     };
-    let image = match live(s).media.image(data, live(s).fixture) {
+    let source_key = (!media.source.starts_with("data:image/"))
+        .then_some((project.as_ref(), media.source.as_str()));
+    let image = match live(s).media.image(data, source_key, live(s).fixture) {
         Ok(Some(image)) => image,
         Ok(None) => return ui::skeleton("Loading image", 3, k),
         Err(error) => return ui::notice("Image unavailable", &error, k),
