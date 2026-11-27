@@ -215,18 +215,7 @@ impl ProviderRuntime {
                 }
             },
             Command::CheckpointFiles(key, from, to) => {
-                if key.scope.provider == Provider::Codex {
-                    return crate::checkpoints::diff_since(&key.scope.project, from)
-                        .map(|diff| Reply::CheckpointFiles(diff.paths));
-                }
-                if key.scope.provider != Provider::OpenCode {
-                    return Err("File restoration is unavailable for this provider.".into());
-                }
-                return self
-                    .opencode
-                    .checkpoint_files(&key.scope.project, &key.id, from, to)
-                    .map(Reply::CheckpointFiles)
-                    .map_err(|e| e.to_string());
+                return self.checkpoint_files(key, from, to);
             }
             Command::Sound(volume) => {
                 #[cfg(target_os = "macos")]
@@ -540,62 +529,7 @@ impl ProviderRuntime {
             Command::RunOpenCodeCommand(key, prompt, options) => {
                 self.run_opencode_command(key, prompt, options)
             }
-            Command::Send(key, prompt, options) => {
-                let excerpt = crate::application::split_context(prompt).0;
-                let checkpoint = crate::checkpoints::capture(&key.scope.project, excerpt)
-                    .ok()
-                    .flatten();
-                let sent = match key.scope.provider {
-                    Provider::Codex => self
-                        .codex
-                        .send_prompt_with_permissions(
-                            &key.scope.project,
-                            &key.id,
-                            prompt,
-                            options.model.as_deref(),
-                            options.effort.as_deref(),
-                            options.permissions,
-                        )
-                        .map_err(|e| e.to_string()),
-                    Provider::OpenCode => {
-                        if let Some(agent) = &options.agent {
-                            self.opencode
-                                .select_agent(&key.scope.project, &key.id, agent)
-                                .map_err(|e| e.to_string())?;
-                        }
-                        self.opencode
-                            .send_prompt_with_options(
-                                &key.scope.project,
-                                &key.id,
-                                prompt,
-                                None,
-                                options.model.as_deref(),
-                                options.effort.as_deref(),
-                            )
-                            .map_err(|e| e.to_string())
-                    }
-                    Provider::Antigravity => self
-                        .antigravity
-                        .send_prompt_with_options(
-                            &key.scope.project,
-                            &key.id,
-                            prompt,
-                            options.model.as_deref(),
-                            options.effort.as_deref(),
-                            options.agent.as_deref(),
-                        )
-                        .map_err(|e| e.to_string()),
-                };
-                return match sent {
-                    Ok(()) => Ok(Reply::Sent(checkpoint)),
-                    Err(error) => {
-                        if let Some(cp) = checkpoint {
-                            crate::checkpoints::prune_ref(&key.scope.project, &cp.ref_name);
-                        }
-                        Err(error)
-                    }
-                };
-            }
+            Command::Send(key, prompt, options) => return self.send_prompt(key, prompt, options),
             Command::Cancel(key) => match key.scope.provider {
                 Provider::Codex => self
                     .codex
