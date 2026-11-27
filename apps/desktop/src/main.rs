@@ -649,12 +649,20 @@ fn view(s: &Workspace, cx: &mut Cx<Workspace>) -> El {
         .sidebar(
             &sidebar_pane,
             |s: &mut Workspace| &mut s.sidebar,
-            sidebar(s, &k),
+            if sidebar_pane.is_open() {
+                sidebar(s, &k)
+            } else {
+                rune::el()
+            },
         )
         .inspector(
             &inspector_pane,
             |s: &mut Workspace| &mut s.inspector,
-            inspector(s, &k),
+            if inspector_pane.is_open() {
+                inspector(s, &k)
+            } else {
+                rune::el()
+            },
         )
         .toolbar(toolbar)
         .titlebar_inset(cx.titlebar_inset())

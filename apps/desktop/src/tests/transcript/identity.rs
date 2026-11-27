@@ -111,7 +111,7 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
         }
     });
     fill(&mut rt, "live-draft-0", "Keep this draft");
-    rt.update(|_, tx| tx.scroll_center_in_instant("live-rows-0", row(0, "answer-25")));
+    rt.update(|_, tx| tx.scroll_center_in_instant("live-transcript-0", row(0, "answer-25")));
     advance(&mut rt, 0.5);
     assert_eq!(rt.scroll_at_bottom("live-transcript-0"), Some(false));
     assert!(shown(&rt, 0, "answer-25"), "initial jump");
@@ -160,7 +160,7 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
     assert_eq!(rt.scroll_at_bottom("live-transcript-0"), Some(false));
 
     click(&mut rt, "live-session-1");
-    rt.update(|_, tx| tx.scroll_center_in_instant("live-rows-1", row(1, "answer-25")));
+    rt.update(|_, tx| tx.scroll_center_in_instant("live-transcript-1", row(1, "answer-25")));
     advance(&mut rt, 0.5);
     click(&mut rt, "copy-response-1-opencode-answer-25");
     assert_eq!(
@@ -168,7 +168,7 @@ fn transcript_keys_keep_updates_pagination_and_navigation_with_their_owner() {
         Some("Session 1, answer 25")
     );
     click(&mut rt, "live-session-0");
-    rt.update(|_, tx| tx.scroll_center_in_instant("live-rows-0", row(0, "answer-25")));
+    rt.update(|_, tx| tx.scroll_center_in_instant("live-transcript-0", row(0, "answer-25")));
     advance(&mut rt, 0.5);
     assert!(shown(&rt, 0, "answer-25"), "return to original session");
     click(&mut rt, "copy-response-0-opencode-answer-25");

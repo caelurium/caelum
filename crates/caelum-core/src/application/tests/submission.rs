@@ -33,7 +33,11 @@ fn queues_wait_for_reconciled_idle_and_stop_requires_explicit_resume() {
     app.cancel(index);
     let (cancel, _) = app.commands().pop().unwrap();
     app.apply(Event::Completed(cancel, Ok(Reply::Done)));
-    let (resume, _) = app.commands().pop().unwrap();
+    let (resume, _) = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Resume(_)))
+        .unwrap();
     app.apply(Event::Completed(
         resume,
         Ok(Reply::Session(summary(sc, "thread"))),
@@ -76,7 +80,11 @@ fn queued_settings_and_edits_during_creation_keep_their_own_options() {
         "turn/completed",
         json!({"turn":{"status":"completed"}}),
     ));
-    let (resume, _) = app.commands().pop().unwrap();
+    let (resume, _) = app
+        .commands()
+        .into_iter()
+        .find(|(_, c)| matches!(c, Command::Resume(_)))
+        .unwrap();
     let mut old = summary(sc, "s");
     old.options.model = Some("first".into());
     app.apply(Event::Completed(resume, Ok(Reply::Session(old))));

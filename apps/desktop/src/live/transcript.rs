@@ -529,8 +529,8 @@ pub(super) fn timeline_row(
         }
         return content.child(crate::context::message(
             item,
-            caelum_core::application::presentation::entry_text(entry),
             index,
+            row_index - 1,
             format!("live-entry-{index}-{row_id}"),
             (entry.kind() == EntryKind::User
                 && !entry.optimistic()

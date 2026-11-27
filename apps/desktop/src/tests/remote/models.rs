@@ -112,7 +112,7 @@ fn choosing_a_then_b_only_submits_the_last_model_on_the_first_send() {
         let app = &mut live_mut(&mut rt.state).app;
         assert!(app.commands().is_empty());
         let t = &app.remote.saved.checkouts[VM].thread;
-        assert!(t.conversation.is_none() && t.lines.is_empty());
+        assert!(t.conversation().is_none() && t.lines.is_empty());
         assert_eq!(t.draft, DRAFT);
         assert_eq!(t.model.as_deref(), expected);
         click(&mut rt, "remote-send");

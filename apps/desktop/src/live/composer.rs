@@ -140,8 +140,8 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
                 .w_full()
                 .center_y()
                 .gap(8.0)
+                .justify_between()
                 .child(usage)
-                .child(rune::el().grow(1.0))
                 .child(actions),
         )
     }

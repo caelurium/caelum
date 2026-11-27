@@ -140,7 +140,7 @@ pub(super) fn view(s: &Workspace, k: &Kit) -> El {
         .max_h((height + 32.0).min(280.0))
         .gap(4.0)
         .child(
-            SidebarHeader::new(if app.opening {
+            SidebarHeader::new(if app.opening_project() {
                 "Opening project…"
             } else {
                 "Projects"

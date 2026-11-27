@@ -171,7 +171,7 @@ impl Workspace {
                     .contains(&query)
                 };
                 for t in c.threads() {
-                    let active = t.turn != Turn::Idle;
+                    let active = t.turn() != &Turn::Idle;
                     let activity_order = matches!(feed, Feed::Sidebar { .. }) && active;
                     if active_only && !active {
                         continue;
