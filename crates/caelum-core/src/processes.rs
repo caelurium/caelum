@@ -84,7 +84,8 @@ impl ProcessRegistry {
 
     /// Reap completed children and return their exit statuses for provider-level
     /// recovery decisions.
-    pub fn poll_exited(&self) -> Result<Vec<(ProcessId, ExitStatus)>, ProcessError> {
+    #[cfg(test)]
+    pub(crate) fn poll_exited(&self) -> Result<Vec<(ProcessId, ExitStatus)>, ProcessError> {
         let mut state = self.lock();
         let mut completed = Vec::new();
         let RegistryState::Open(processes) = &mut *state else {

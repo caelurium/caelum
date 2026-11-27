@@ -275,10 +275,6 @@ impl Workspace {
         Ok(key)
     }
 
-    pub fn open_fork(&mut self, index: usize) -> bool {
-        self.open_history_action(index, HistoryAction::Fork, None)
-    }
-
     pub fn open_history_action(
         &mut self,
         index: usize,

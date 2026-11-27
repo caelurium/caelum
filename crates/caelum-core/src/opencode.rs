@@ -32,6 +32,7 @@ mod tests;
 mod transport;
 
 use permissions::deny_pending_approvals;
+#[cfg(test)]
 use questions::sync_questions;
 use server::service_file;
 use server::ServerSlot;
@@ -463,7 +464,11 @@ impl OpenCodeProvider {
         crate::images::data_url(response).map_err(OpenCodeError::Protocol)
     }
 
-    pub fn refresh_questions(&self, project_path: impl AsRef<Path>) -> Result<(), OpenCodeError> {
+    #[cfg(test)]
+    pub(crate) fn refresh_questions(
+        &self,
+        project_path: impl AsRef<Path>,
+    ) -> Result<(), OpenCodeError> {
         let project = Project::open(project_path)?;
         let server = self.server(&project)?;
         sync_questions(&server, &self.inner.questions, project.path())
