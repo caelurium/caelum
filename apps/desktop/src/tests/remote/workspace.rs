@@ -430,6 +430,11 @@ fn project_vm_group_owns_its_worktree_rows_and_removal_preserves_other_checkouts
     click(&mut rt, "cancel-remove-vm");
     assert!(rt.find("remote-checkout-parked").is_some());
     secondary(&mut rt, "remote-checkout-parked");
+    assert!(
+        rt.elements()
+            .iter()
+            .all(|e| e.text.as_deref() != Some("Manage VM and Boat conversations…"))
+    );
     choose_context(&mut rt, "Remove from project…");
     click(&mut rt, "confirm-remove-vm");
     assert!(rt.find("remote-checkout-parked").is_none());
