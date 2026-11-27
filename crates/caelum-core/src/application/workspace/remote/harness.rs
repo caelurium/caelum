@@ -18,12 +18,12 @@ impl Workspace {
             return false;
         };
         if text.trim().is_empty()
-            || c.thread.awaiting_native
+            || c.thread.awaiting_native()
             || !c.thread.can_prompt_provider()
             || text.len() > Thread::MAX_MESSAGE_BYTES
             || !matches!(c.phase, Phase::Ready { .. })
             || self.remote.jobs.contains_key(id)
-            || c.thread.turn != Turn::Idle
+            || c.thread.turn() != &Turn::Idle
             || self.remote.interrupts.contains_key(id)
         {
             return false;
@@ -39,13 +39,13 @@ impl Workspace {
                     .as_ref()
                     .and(c.thread.effort.as_ref())
                     .cloned(),
-                conversation: c.thread.conversation.clone(),
+                conversation: c.thread.conversation().map(str::to_owned),
                 text: c.thread.prompt(text),
             },
         );
         c.thread.append(Line::new(Speaker::You, text));
         c.thread.record_activity();
-        c.thread.turn = Turn::Submitting;
+        c.thread.begin_submission();
         c.thread.draft.clear();
         self.feed_request(id, op);
         true
@@ -55,13 +55,13 @@ impl Workspace {
         let Some(c) = self.remote.saved.checkouts.get(id) else {
             return;
         };
-        if let (Turn::Submitting, Some(target)) = (&c.thread.turn, c.target()) {
+        if let (Turn::Submitting, Some(target)) = (c.thread.turn(), c.target()) {
             self.feed_request(
                 id,
                 Operation::Recover(
                     target,
                     c.thread.provider,
-                    c.thread.conversation.clone(),
+                    c.thread.conversation().map(str::to_owned),
                     prompt.trim().into(),
                 ),
             );
@@ -76,8 +76,8 @@ impl Workspace {
             return;
         }
         if let Some(c) = self.remote.saved.checkouts.get_mut(id) {
-            if c.thread.turn == Turn::Submitting {
-                c.thread.turn = Turn::Idle;
+            if c.thread.turn() == &Turn::Submitting {
+                c.thread.finish_turn();
                 c.thread.append(Line::new(
                     Speaker::Activity,
                     "Unconfirmed submission dismissed",
@@ -91,10 +91,10 @@ impl Workspace {
         let Some(c) = self.remote.saved.checkouts.get(id) else {
             return;
         };
-        if let (Some(target), Some(run)) = (c.target(), c.thread.turn.run()) {
+        if let (Some(target), Some(run)) = (c.target(), c.thread.turn().run()) {
             self.feed_request(
                 id,
-                Operation::Follow(target, run.clone(), c.thread.cursor.clone()),
+                Operation::Follow(target, run.clone(), c.thread.cursor().map(str::to_owned)),
             );
         }
     }
@@ -118,10 +118,10 @@ impl Workspace {
         let Some(c) = self.remote.saved.checkouts.get(id) else {
             return;
         };
-        if matches!(c.thread.turn, Turn::Stopping(_) | Turn::Finishing(_)) {
+        if matches!(c.thread.turn(), Turn::Stopping(_) | Turn::Finishing(_)) {
             return;
         }
-        if let (Some(target), Some(run)) = (c.target(), c.thread.turn.run()) {
+        if let (Some(target), Some(run)) = (c.target(), c.thread.turn().run()) {
             let request = self.request(
                 Command::Remote(Operation::Interrupt(target, run.clone())),
                 Pending::Remote(Lane::Interrupt(id.into(), run.clone())),
@@ -141,9 +141,9 @@ impl Workspace {
         }
         self.remote.interrupts.remove(id);
         if let Some(c) = self.remote.saved.checkouts.get_mut(id) {
-            if c.thread.turn.run() == Some(run) {
+            if c.thread.turn().run() == Some(run) {
                 match result {
-                    Ok(Outcome::Interrupted) => c.thread.turn = Turn::Stopping(run.clone()),
+                    Ok(Outcome::Interrupted) => c.thread.stop_run(run),
                     Err(error) => c.thread.append(Line::new(Speaker::Activity, error)),
                     _ => {}
                 }
@@ -163,27 +163,25 @@ impl Workspace {
             Ok(Outcome::Accepted(run))
                 if c.other_threads
                     .iter()
-                    .any(|t| t.conversation.as_ref() == Some(&run.conversation)) =>
+                    .any(|t| t.conversation() == Some(run.conversation.as_str())) =>
             {
                 self.remote.feeds.insert(
                     id.into(),
                     Job::Failed("That prompt belongs to another conversation on this VM.".into()),
                 );
             }
-            Ok(Outcome::Accepted(run))
-                if c.thread.turn == Turn::Submitting
-                    && c.thread.provider == run.provider
-                    && c.thread
-                        .conversation
-                        .as_ref()
-                        .is_none_or(|v| v == &run.conversation) =>
-            {
-                c.thread.conversation = Some(run.conversation.clone());
-                c.thread.turn = Turn::Following(run);
-                self.follow_remote(id);
+            Ok(Outcome::Accepted(run)) => {
+                if c.thread.accept_run(run) {
+                    self.follow_remote(id);
+                } else {
+                    self.remote.feeds.insert(
+                        id.into(),
+                        Job::Failed("Unexpected VM conversation response".into()),
+                    );
+                }
             }
-            Ok(Outcome::Rejected(error)) if c.thread.turn == Turn::Submitting => {
-                c.thread.turn = Turn::Idle;
+            Ok(Outcome::Rejected(error)) if c.thread.turn() == &Turn::Submitting => {
+                c.thread.finish_turn();
                 if c.thread
                     .lines
                     .last()
@@ -201,11 +199,11 @@ impl Workspace {
                 }
                 self.remote.feeds.insert(id.into(), Job::Failed(error));
             }
-            Ok(Outcome::Page(page)) if c.thread.turn.run().is_some() => {
+            Ok(Outcome::Page(page)) if c.thread.turn().run().is_some() => {
                 for line in page.lines {
                     c.thread.append(line);
                 }
-                c.thread.cursor = page.cursor;
+                c.thread.record_page(page.cursor, &page.status);
                 if let RunStatus::Ended(status) = page.status {
                     let usage = crate::telemetry::boat(
                         id,
@@ -226,7 +224,7 @@ impl Workspace {
                             line.speaker = Speaker::Tool(ToolState::Reported);
                         }
                     }
-                    c.thread.turn = Turn::Idle;
+                    c.thread.finish_turn();
                     c.thread
                         .append(Line::new(Speaker::Outcome(status), status.label()));
                     self.templates_changed(crate::templates::Target::Boat(id.into()));
@@ -239,14 +237,6 @@ impl Workspace {
                         self.record_usage(row);
                     }
                 } else {
-                    if !matches!(c.thread.turn, Turn::Stopping(_)) {
-                        let run = c.thread.turn.run().unwrap().clone();
-                        c.thread.turn = match page.status {
-                            RunStatus::Queued => Turn::Queued(run),
-                            RunStatus::Finishing => Turn::Finishing(run),
-                            _ => Turn::Following(run),
-                        };
-                    }
                     let delay = if page.more {
                         Duration::ZERO
                     } else {

@@ -92,6 +92,28 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
     l.app.leave_conversation();
     l.app.active_project = None;
     l.app.remote.saved.selected = Some(id.clone());
+    let turn = if name == "remote-working" {
+        Turn::Following(Run {
+            provider: VmProvider::OpenCode,
+            conversation: "thread-example".into(),
+            prompt: "prompt-example".into(),
+            id: "run-example".into(),
+        })
+    } else {
+        Turn::Idle
+    };
+    let thread = serde_json::from_value(serde_json::json!({
+        "conversation": "thread-example",
+        "provider": VmProvider::OpenCode,
+        "turn": turn,
+        "last_activity": l.feed.displayed_at() - 120_000,
+        "lines": [
+            Line::new(Speaker::You, "Add a health check and show me the changes."),
+            Line::new(Speaker::OpenCode, "I added a health check to `src/server.rs`."),
+        ],
+        "draft": "",
+    }))
+    .expect("valid preview thread");
     let mut c = Checkout {
         defaults: None,
         source,
@@ -103,29 +125,15 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
         },
         pinned_stats: true,
         other_threads: vec![],
-        thread: Thread {
-            conversation: Some("thread-example".into()),
-            provider: VmProvider::OpenCode,
-            last_activity: Some(l.feed.displayed_at() - 120_000),
-            lines: vec![
-                Line::new(Speaker::You, "Add a health check and show me the changes."),
-                Line::new(
-                    Speaker::OpenCode,
-                    "I added a health check to `src/server.rs`.",
-                ),
-            ],
-            ..Default::default()
-        },
+        thread,
     };
     match name {
         "remote-trace" => trace::setup(&mut c),
         "remote-model-draft" => {
             use caelum_protocol::{ProviderChoice, ProviderModelChoice};
-            c.thread = Thread {
-                provider: VmProvider::Pi,
-                draft: "Review the changes on this branch.".into(),
-                ..Default::default()
-            };
+            c.thread = Thread::default();
+            c.thread.provider = VmProvider::Pi;
+            c.thread.draft = "Review the changes on this branch.".into();
             let models = [
                 ("example/fast", "Example Fast"),
                 ("example/code", "Example Code"),
@@ -175,12 +183,6 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
                     ..Line::new(Speaker::Tool(ToolState::Running), "Bash")
                 },
             ]);
-            c.thread.turn = Turn::Following(Run {
-                provider: c.thread.provider,
-                conversation: "thread-example".into(),
-                prompt: "prompt-example".into(),
-                id: "run-example".into(),
-            });
         }
         "remote-creating" | "remote-setup-failed" => {
             c.phase = Phase::Create(Plan {
@@ -191,19 +193,24 @@ pub(crate) fn scene(s: &mut Workspace, name: &str) {
             });
             c.thread = Thread::default();
             let job = if name == "remote-creating" {
-                c.thread.continued = Some(Continuation {
-                    id: "health-check-thread".into(),
-                    title: "Add a health check".into(),
-                    chat: Chat {
-                        messages: vec![
-                            Message::User("Where should the health check go?".into()),
-                            Message::Assistant("Add a `/health` route in `src/server.rs`.".into()),
-                        ],
-                        clipped: false,
+                c.thread = Thread::with_continuation(
+                    VmProvider::Codex,
+                    Continuation {
+                        id: "health-check-thread".into(),
+                        title: "Add a health check".into(),
+                        chat: Chat {
+                            messages: vec![
+                                Message::User("Where should the health check go?".into()),
+                                Message::Assistant(
+                                    "Add a `/health` route in `src/server.rs`.".into(),
+                                ),
+                            ],
+                            clipped: false,
+                        },
+                        base: None,
                     },
-                    base: None,
-                });
-                c.thread.draft = "Implement it on this branch.".into();
+                    "Implement it on this branch.".into(),
+                );
                 Job::Busy(1)
             } else {
                 Job::Failed("Create checkout environment: Boat returned HTTP 403. Automatic setup needs environment.write.".into())

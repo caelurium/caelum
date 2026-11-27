@@ -2,7 +2,7 @@ mod compare;
 
 use super::{Pending, Workspace};
 use crate::application::{Command, SavedSession, Snapshot, Store, Task};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 type Requests = Vec<(u64, Command)>;
 
@@ -21,7 +21,7 @@ pub(super) enum State {
 
 pub(super) struct Loaded {
     store: Store,
-    saved: Option<Box<Snapshot>>,
+    saved: Option<Arc<Snapshot>>,
     write: Write,
 }
 
@@ -29,7 +29,7 @@ enum Write {
     Ready,
     Saving {
         request: u64,
-        snapshot: Box<Snapshot>,
+        snapshot: Arc<Snapshot>,
         commands: Requests,
     },
     Failed(String),
@@ -136,10 +136,10 @@ impl Workspace {
             .as_ref()
             .is_none_or(|saved| !self.matches_snapshot(saved))
         {
-            let snapshot = Box::new(self.snapshot());
+            let snapshot = Arc::new(self.snapshot());
             let commands = std::mem::take(&mut self.durable_outgoing);
             let request = self.request(
-                Command::Save(store.clone(), snapshot.clone()),
+                Command::Save(store.clone(), Arc::clone(&snapshot)),
                 Pending::Save,
             );
             if let State::Loaded(loaded) = &mut self.persistence {
@@ -196,7 +196,7 @@ impl Workspace {
         self.persistence = match result {
             Ok(saved) => State::Loaded(Loaded {
                 store: store.clone(),
-                saved: saved.cloned().map(Box::new),
+                saved: saved.cloned().map(Arc::new),
                 write: Write::Ready,
             }),
             Err(error) => State::LoadFailed(error),
