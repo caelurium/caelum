@@ -226,11 +226,20 @@ impl Panels {
     pub fn remember(&self, app: &mut Application) {
         for ((project, path), document) in &self.documents {
             if let Some(offset) = document.position.get() {
-                let saved = app.preferences.files.entry(project.clone()).or_default();
-                saved.scroll.insert(path.clone(), offset);
-                saved
-                    .line
-                    .insert(path.clone(), (offset[1] / 22.0) as usize + 1);
+                let line = (offset[1] / 22.0) as usize + 1;
+                if let Some(saved) = app.preferences.files.get_mut(project) {
+                    if saved.scroll.get(path) == Some(&offset)
+                        && saved.line.get(path) == Some(&line)
+                    {
+                        continue;
+                    }
+                    saved.scroll.insert(path.clone(), offset);
+                    saved.line.insert(path.clone(), line);
+                } else {
+                    let saved = app.preferences.files.entry(project.clone()).or_default();
+                    saved.scroll.insert(path.clone(), offset);
+                    saved.line.insert(path.clone(), line);
+                }
             }
         }
     }
