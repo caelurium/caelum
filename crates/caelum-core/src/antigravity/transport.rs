@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -19,7 +19,10 @@ use super::{
     protocol, questions, AcpConnection, AntigravityError, AntigravityProvider, EventSubscribers,
     PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME, REQUEST_TIMEOUT,
 };
-use crate::{approvals::ApprovalBroker, processes::ProcessRegistry, questions::QuestionBroker};
+use crate::{
+    approvals::ApprovalBroker, json_lines::JsonLines, processes::ProcessRegistry,
+    questions::QuestionBroker,
+};
 
 impl AntigravityProvider {
     /// Whether the Antigravity CLI executable is available on this machine.
@@ -102,10 +105,10 @@ impl AcpConnection {
         let id_key = id.to_string();
         let (sender, receiver) = mpsc::channel();
         lock(&self.pending).insert(id_key.clone(), PendingCall::Reply(sender));
-        if let Err(error) = write_message(
-            &self.writer,
-            &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
-        ) {
+        if let Err(error) = self
+            .writer
+            .send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+        {
             lock(&self.pending).remove(&id_key);
             return Err(AntigravityError::Transport(error));
         }
@@ -140,16 +143,14 @@ impl AcpConnection {
         if !self.alive.load(Ordering::Acquire) {
             return Err(AntigravityError::ConnectionClosed);
         }
-        write_message(
-            &self.writer,
-            &json!({ "jsonrpc": "2.0", "method": method, "params": params }),
-        )
-        .map_err(AntigravityError::Transport)
+        self.writer
+            .send(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+            .map_err(AntigravityError::Transport)
     }
 }
 
 pub(super) fn send_prompt_parts(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     pending: &PendingRequests,
     next_id: &Arc<AtomicU64>,
     alive: &Arc<AtomicBool>,
@@ -167,10 +168,9 @@ pub(super) fn send_prompt_parts(
             session_id: session_id.to_owned(),
         },
     );
-    if let Err(error) = write_message(
-        writer,
-        &json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": params }),
-    ) {
+    if let Err(error) = writer
+        .send(&json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": params }))
+    {
         lock(pending).remove(&id_key);
         return Err(AntigravityError::Transport(error));
     }
@@ -213,7 +213,7 @@ pub(super) fn spawn_connection(
         .register(child)
         .map_err(|e| AntigravityError::Launch(e.to_string()))?;
 
-    let writer = Arc::new(Mutex::new(stdin));
+    let writer = JsonLines::new(stdin);
     let pending = Arc::new(Mutex::new(HashMap::new()));
     let next_id = Arc::new(AtomicU64::new(1));
     let alive = Arc::new(AtomicBool::new(true));
@@ -478,7 +478,7 @@ fn spawn_reader(stdout: std::process::ChildStdout, context: ReaderContext) {
 fn handle_session_update(
     project: &str,
     params: &Value,
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     pending: &PendingRequests,
     next_id: &Arc<AtomicU64>,
     alive: &Arc<AtomicBool>,
@@ -661,7 +661,7 @@ pub(super) fn dispatch_progress_effect(
 }
 
 fn handle_server_request(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
+    writer: &JsonLines,
     approvals: &ApprovalBroker,
     project: &str,
     id: Value,
@@ -669,14 +669,11 @@ fn handle_server_request(
     params: &Value,
 ) {
     if method != "session/request_permission" {
-        let _ = write_message(
-            writer,
-            &json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": { "code": -32601, "message": format!("Method not supported: {method}") }
-            }),
-        );
+        let _ = writer.send(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": { "code": -32601, "message": format!("Method not supported: {method}") }
+        }));
         return;
     }
 
@@ -710,31 +707,15 @@ fn handle_server_request(
         .map(|option_id| json!({ "outcome": "selected", "optionId": option_id }))
         .unwrap_or_else(|| json!({ "outcome": "cancelled" }));
 
-    let _ = write_message(
-        writer,
-        &json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": { "outcome": outcome }
-        }),
-    );
+    let _ = writer.send(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": { "outcome": outcome }
+    }));
 }
 
 pub(super) fn publish_event(subscribers: &EventSubscribers, event: AntigravityEvent) {
     lock(subscribers).retain(|subscriber| subscriber.send(event.clone()).is_ok());
-}
-
-fn write_message(
-    writer: &Arc<Mutex<std::process::ChildStdin>>,
-    value: &Value,
-) -> Result<(), String> {
-    let mut encoded = serde_json::to_string(value).map_err(|e| e.to_string())?;
-    encoded.push('\n');
-    let mut stdin = lock(writer);
-    stdin
-        .write_all(encoded.as_bytes())
-        .and_then(|()| stdin.flush())
-        .map_err(|e| e.to_string())
 }
 
 fn id_to_key(id: &Value) -> String {

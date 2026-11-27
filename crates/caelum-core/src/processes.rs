@@ -1,13 +1,12 @@
 use std::{
     collections::BTreeMap,
     process::{Child, ExitStatus},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Mutex, MutexGuard,
-    },
+    thread::JoinHandle,
 };
 
 use thiserror::Error;
+
+use crate::blocking_actor::BlockingActor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProcessId(u64);
@@ -19,110 +18,120 @@ impl ProcessId {
 }
 
 #[derive(Default)]
-enum RegistryState {
-    #[default]
-    Closed,
-    Open(BTreeMap<ProcessId, ManagedChild>),
+struct RegistryState {
+    next_id: u64,
+    children: BTreeMap<ProcessId, ManagedChild>,
 }
 
 /// Owns child processes so cancellation and application shutdown can reap them.
 /// Providers should build commands from an explicit executable and argument
 /// vector, never by interpolating a request into a shell command.
 pub struct ProcessRegistry {
-    next_id: AtomicU64,
-    state: Mutex<RegistryState>,
+    worker: Option<(BlockingActor<Option<RegistryState>>, JoinHandle<()>)>,
 }
 
 impl Default for ProcessRegistry {
     fn default() -> Self {
         Self {
-            next_id: AtomicU64::default(),
-            state: Mutex::new(RegistryState::Open(BTreeMap::new())),
+            worker: Some(BlockingActor::spawn_joinable(
+                "caelum-processes",
+                Some(RegistryState::default()),
+            )),
         }
     }
 }
 
 impl ProcessRegistry {
+    fn owner(&self) -> &BlockingActor<Option<RegistryState>> {
+        &self
+            .worker
+            .as_ref()
+            .expect("process registry owns its worker")
+            .0
+    }
+
     pub fn register(&self, child: Child) -> Result<ProcessId, ProcessError> {
-        let id = ProcessId(self.next_id.fetch_add(1, Ordering::Relaxed));
         let child = ManagedChild::new(child);
-        let mut state = self.lock();
-        let RegistryState::Open(processes) = &mut *state else {
-            drop(state);
-            let _ = child.terminate();
-            return Err(ProcessError::Closed);
-        };
-        processes.insert(id, child);
-        Ok(id)
+        let result = self
+            .owner()
+            .call(move |state| {
+                let Some(state) = state else {
+                    return Err(child);
+                };
+                let id = ProcessId(state.next_id);
+                state.next_id = state.next_id.wrapping_add(1);
+                state.children.insert(id, child);
+                Ok(id)
+            })
+            .ok_or(ProcessError::Closed)?;
+        result.map_err(|_| ProcessError::Closed)
     }
 
     pub fn terminate(&self, id: ProcessId) -> Result<ExitStatus, ProcessError> {
-        let child = match &mut *self.lock() {
-            RegistryState::Open(processes) => processes.remove(&id),
-            RegistryState::Closed => None,
-        }
-        .ok_or(ProcessError::UnknownProcess)?;
+        let child = self
+            .owner()
+            .call(move |state| state.as_mut().and_then(|state| state.children.remove(&id)))
+            .flatten()
+            .ok_or(ProcessError::UnknownProcess)?;
         child.terminate().map_err(ProcessError::from)
     }
 
     /// Reap a single child process if it has already exited.
     pub fn try_wait_one(&self, id: ProcessId) -> Result<Option<ExitStatus>, ProcessError> {
-        let mut state = self.lock();
-        let RegistryState::Open(processes) = &mut *state else {
-            return Err(ProcessError::Closed);
-        };
-        let status = processes
-            .get_mut(&id)
-            .ok_or(ProcessError::UnknownProcess)?
-            .try_wait()
-            .map_err(ProcessError::from)?;
-        if status.is_some() {
-            processes.remove(&id);
-        }
-        Ok(status)
+        self.owner()
+            .call(move |state| {
+                let state = state.as_mut().ok_or(ProcessError::Closed)?;
+                let status = state
+                    .children
+                    .get_mut(&id)
+                    .ok_or(ProcessError::UnknownProcess)?
+                    .try_wait()?;
+                if status.is_some() {
+                    state.children.remove(&id);
+                }
+                Ok(status)
+            })
+            .ok_or(ProcessError::Closed)?
     }
 
     /// Reap completed children and return their exit statuses for provider-level
     /// recovery decisions.
     #[cfg(test)]
     pub(crate) fn poll_exited(&self) -> Result<Vec<(ProcessId, ExitStatus)>, ProcessError> {
-        let mut state = self.lock();
-        let mut completed = Vec::new();
-        let RegistryState::Open(processes) = &mut *state else {
-            return Ok(completed);
-        };
-        for (id, child) in processes.iter_mut() {
-            if let Some(status) = child.try_wait().map_err(ProcessError::from)? {
-                completed.push((*id, status));
-            }
-        }
-        for (id, _) in &completed {
-            processes.remove(id);
-        }
-        Ok(completed)
+        self.owner()
+            .call(|state| {
+                let mut completed = Vec::new();
+                if let Some(state) = state {
+                    for (id, child) in &mut state.children {
+                        if let Some(status) = child.try_wait()? {
+                            completed.push((*id, status));
+                        }
+                    }
+                    for (id, _) in &completed {
+                        state.children.remove(id);
+                    }
+                }
+                Ok(completed)
+            })
+            .ok_or(ProcessError::Closed)?
     }
 
     /// Stop accepting children and terminate/reap every child that remains.
     pub fn shutdown(&self) {
-        let previous = std::mem::take(&mut *self.lock());
-        let RegistryState::Open(children) = previous else {
-            return;
-        };
-        for (_, child) in children {
-            let _ = child.terminate();
+        if let Some(state) = self.owner().call(Option::take).flatten() {
+            for (_, child) in state.children {
+                let _ = child.terminate();
+            }
         }
-    }
-
-    fn lock(&self) -> MutexGuard<'_, RegistryState> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
 impl Drop for ProcessRegistry {
     fn drop(&mut self) {
-        self.shutdown();
+        if let Some((owner, worker)) = self.worker.take() {
+            drop(owner);
+            let _ = worker.join();
+        }
     }
 }
 
