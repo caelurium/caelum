@@ -346,6 +346,69 @@ fn antigravity_history_reconciliation_adopts_live_chunks_without_duplicating() {
 }
 
 #[test]
+fn antigravity_history_reconciliation_drops_unmatched_completed_live_chunks() {
+    let mut conversation = Conversation::default();
+    conversation.begin_turn(Some("Auto".into()), 1_000);
+    conversation.optimistic("local-1".into(), "Build the feature".into());
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnStarted",
+        &json!({ "_created": 1_100, "model": "Auto" }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "agent_message_chunk",
+        &json!({
+            "content": { "type": "text", "text": "Which option?\n- [1] First\n- [2] Second" }
+        }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnCompleted",
+        &json!({ "_created": 2_000, "awaitingQuestion": true }),
+    );
+    conversation.begin_turn(Some("Auto".into()), 3_000);
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnStarted",
+        &json!({ "_created": 3_100, "model": "Auto" }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "agent_message_chunk",
+        &json!({ "content": { "type": "text", "text": "Finished implementing the feature." } }),
+    );
+    conversation.apply(
+        Provider::Antigravity,
+        "antigravity/turnCompleted",
+        &json!({ "_created": 10_000 }),
+    );
+
+    conversation.history(
+        Provider::Antigravity,
+        &[
+            json!({ "id": "acp-user-1", "type": "user", "text": "Build the feature" }),
+            json!({ "id": "acp-user-2", "type": "user", "text": "First" }),
+            json!({
+                "id": "acp-assistant-3",
+                "type": "assistant",
+                "text": "Finished implementing the feature."
+            }),
+        ],
+        false,
+    );
+
+    let assistants: Vec<_> = conversation
+        .entries
+        .iter()
+        .filter(|e| e.kind() == EntryKind::Assistant)
+        .collect();
+    assert_eq!(assistants.len(), 1);
+    assert_eq!(assistants[0].id, "acp-assistant-3");
+    assert_eq!(assistants[0].text, "Finished implementing the feature.");
+}
+
+#[test]
 fn streaming_deltas_and_utf8_reconcile_match_full_reconciliation() {
     assert_eq!(
         reconciliation::reconcile("café — ", "— résumé 🚀"),

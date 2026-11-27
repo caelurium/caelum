@@ -480,13 +480,21 @@ fn asks_questions_through_broker_and_reads_usage_limits() {
 
     // Wait for the initial turn to finish cleanly (ask_question is NOT a background tool).
     let mut initial_completed = None;
+    let mut initial_text = String::new();
     for _ in 0..30 {
         let event = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        if event.method == "agent_message_chunk" {
+            initial_text.push_str(event.params["content"]["text"].as_str().unwrap_or_default());
+        }
         if event.method == "antigravity/turnCompleted" {
             initial_completed = Some(event);
             break;
         }
     }
+    assert!(
+        initial_text.is_empty(),
+        "fallback ask_question text should be suppressed while the question UI is awaiting: {initial_text:?}"
+    );
     assert_eq!(
         initial_completed.unwrap().params["awaitingQuestion"],
         serde_json::json!(true)
