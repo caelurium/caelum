@@ -398,6 +398,13 @@ impl Workspace {
                 && data["awaitingQuestion"].as_bool().unwrap_or(false);
             let turn_succeeded = (provider == Provider::OpenCode
                 && method == "session.execution.succeeded")
+                || (provider == Provider::Codex
+                    && method == "turn/completed"
+                    && data["turn"]["error"].is_null()
+                    && !matches!(
+                        data["turn"]["status"].as_str(),
+                        Some("failed" | "interrupted" | "cancelled")
+                    ))
                 || (provider == Provider::Antigravity
                     && method == "antigravity/turnCompleted"
                     && !awaiting_question

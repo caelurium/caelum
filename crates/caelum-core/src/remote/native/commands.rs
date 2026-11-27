@@ -13,6 +13,7 @@ pub(super) fn admitted(command: &Command, root: &str) -> bool {
             &s.project
         }
         Command::Rename(k, _)
+        | Command::RegenerateTitle(k)
         | Command::Rewind { key: k, .. }
         | Command::Archive(k, _)
         | Command::DeleteSession(k)

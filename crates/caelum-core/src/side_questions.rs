@@ -98,6 +98,37 @@ pub(crate) fn run(
     execute(&runtime.processes, cmd, root, key, turn, output)
 }
 
+pub(crate) fn run_codex_prompt(
+    processes: &crate::processes::ProcessRegistry,
+    mut cmd: Command,
+    root: &Path,
+    parent: &str,
+    text: String,
+    model: Option<String>,
+) -> Result<String, String> {
+    let (_tx, until) = watch::channel(());
+    let turn = Turn {
+        generation: 0,
+        text,
+        model,
+        until,
+    };
+    let io = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
+    io.block_on(async {
+        let mut wire = wire::Wire::start(&mut cmd, processes)?;
+        let mut ignore = |_: &str| {};
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            codex::ask(&mut wire, root, parent, &turn, &mut ignore),
+        )
+        .await
+        .map_err(|_| "Codex title generation timed out.".to_owned())?
+    })
+}
+
 fn execute(
     processes: &crate::processes::ProcessRegistry,
     mut cmd: Command,

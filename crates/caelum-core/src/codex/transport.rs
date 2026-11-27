@@ -381,7 +381,7 @@ pub(super) fn write_message(writer: &Writer, message: &Value) -> Result<(), Stri
     writer.flush().map_err(|error| error.to_string())
 }
 
-fn publish_event(subscribers: &EventSubscribers, event: CodexEvent) {
+pub(super) fn publish_event(subscribers: &EventSubscribers, event: CodexEvent) {
     subscribers
         .lock()
         .unwrap_or_else(|p| p.into_inner())
