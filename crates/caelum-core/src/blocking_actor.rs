@@ -15,9 +15,13 @@ impl<State> Clone for BlockingActor<State> {
 }
 
 impl<State: Send + 'static> BlockingActor<State> {
-    pub(crate) fn spawn(name: &str, mut state: State) -> Self {
+    pub(crate) fn spawn(name: &str, state: State) -> Self {
+        Self::spawn_joinable(name, state).0
+    }
+
+    pub(crate) fn spawn_joinable(name: &str, mut state: State) -> (Self, thread::JoinHandle<()>) {
         let (sender, mut mailbox) = mpsc::channel::<Job<State>>(32);
-        thread::Builder::new()
+        let worker = thread::Builder::new()
             .name(name.into())
             .spawn(move || {
                 while let Some(job) = mailbox.blocking_recv() {
@@ -25,7 +29,7 @@ impl<State: Send + 'static> BlockingActor<State> {
                 }
             })
             .expect("start blocking actor");
-        Self(sender)
+        (Self(sender), worker)
     }
 
     /// Only call from synchronous code, not from the UI or a Tokio task.

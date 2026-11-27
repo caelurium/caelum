@@ -57,7 +57,7 @@ pub(crate) fn enter(s: &mut Workspace) {
     if let Some(id) = live(s).app.remote.saved.selected.clone()
         && live(s).app.remote.saved.checkouts[&id]
             .thread
-            .awaiting_native
+            .awaiting_native()
     {
         session(s, &id, SessionIntent::Reopen);
         return;
@@ -70,7 +70,7 @@ pub(crate) fn open_session_row(s: &mut Workspace, link: &VmLink) {
     if live_mut(s).app.open_vm_thread(link) {
         if live(s).app.remote.saved.checkouts[&link.checkout]
             .thread
-            .awaiting_native
+            .awaiting_native()
         {
             session(s, &link.checkout, SessionIntent::Reopen);
             return;
@@ -165,7 +165,7 @@ pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
             l.panels.screen = Screen::Remote;
             let thread = &l.app.remote.saved.checkouts[&id].thread;
             if (thread.is_blank() && thread.provider == caelum_core::remote::VmProvider::Codex)
-                || thread.awaiting_native
+                || thread.awaiting_native()
             {
                 l.remote.open_when_ready = Some((id, Open::Native(SessionIntent::Reopen)));
             }

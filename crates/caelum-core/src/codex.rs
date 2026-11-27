@@ -381,7 +381,7 @@ impl CodexProvider {
             use std::io::{BufRead, BufReader};
             (
                 Some(process_id),
-                transport::Writer::Stdio(Mutex::new(stdin)),
+                transport::Writer::Stdio(crate::json_lines::JsonLines::new(stdin)),
                 Box::new(BufReader::new(stdout).lines()) as transport::Messages,
             )
         };

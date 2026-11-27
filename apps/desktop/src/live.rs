@@ -382,7 +382,7 @@ impl Live {
                 .selected
                 .as_ref()
                 .and_then(|id| self.app.remote.saved.checkouts.get(id))
-                .is_some_and(|c| c.thread.turn.run().is_some());
+                .is_some_and(|c| c.thread.turn().run().is_some());
         }
         self.panels.screen == crate::panels::Screen::Conversation
             && self

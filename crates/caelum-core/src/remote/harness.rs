@@ -1,6 +1,8 @@
 use super::{Continuation, Target};
 use serde::{Deserialize, Serialize};
 
+mod state;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VmProvider {
@@ -52,13 +54,9 @@ fn opencode() -> VmProvider {
 /// advanced atomically with its visible messages in the workspace snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub awaiting_native: bool,
     /// A fresh session needs an editor identity before Boat assigns a conversation ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub continued: Option<Continuation>,
     #[serde(default = "opencode")]
     pub provider: VmProvider,
     /// Explicit Boat model ID; `None` delegates to this harness's Boat settings.
@@ -70,9 +68,8 @@ pub struct Thread {
     /// Feed recency, in Unix milliseconds. Older snapshots have no timestamp.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_activity: Option<u64>,
-    pub conversation: Option<String>,
-    pub cursor: Option<String>,
-    pub turn: Turn,
+    #[serde(flatten)]
+    state: state::State,
     pub lines: Vec<Line>,
     pub draft: String,
 }
@@ -81,15 +78,11 @@ impl Default for Thread {
     fn default() -> Self {
         Self {
             local_id: None,
-            awaiting_native: false,
-            continued: None,
             provider: VmProvider::Codex,
             model: None,
             effort: None,
             last_activity: None,
-            conversation: None,
-            cursor: None,
-            turn: Turn::Idle,
+            state: Default::default(),
             lines: Vec::new(),
             draft: String::new(),
         }
@@ -220,7 +213,7 @@ impl Thread {
     pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 
     pub fn can_prompt_provider(&self) -> bool {
-        VmProvider::CHOICES.contains(&self.provider) || self.conversation.is_some()
+        VmProvider::CHOICES.contains(&self.provider) || self.conversation().is_some()
     }
 
     pub(crate) fn for_checkout() -> Self {
@@ -238,17 +231,16 @@ impl Thread {
     pub fn editor_key<'a>(&'a self, checkout: &'a str) -> &'a str {
         self.local_id
             .as_deref()
-            .or_else(|| self.continued.as_ref().map(|c| c.id.as_str()))
+            .or_else(|| self.continuation().map(|c| c.id.as_str()))
             .unwrap_or(checkout)
     }
 
     pub fn is_blank(&self) -> bool {
-        self.continued.is_none()
+        self.continuation().is_none()
             && self.model.is_none()
             && self.effort.is_none()
-            && self.conversation.is_none()
-            && self.cursor.is_none()
-            && self.turn == Turn::Idle
+            && self.conversation().is_none()
+            && self.turn() == &Turn::Idle
             && self.lines.is_empty()
             && self.draft.is_empty()
     }
@@ -261,7 +253,7 @@ impl Thread {
     pub fn title(&self) -> &str {
         self.heading()
             .or_else(|| Self::title_line(&self.draft))
-            .unwrap_or(if self.conversation.is_none() {
+            .unwrap_or(if self.conversation().is_none() {
                 "New VM session"
             } else {
                 "VM conversation"
@@ -269,8 +261,7 @@ impl Thread {
     }
 
     pub fn heading(&self) -> Option<&str> {
-        self.continued
-            .as_ref()
+        self.continuation()
             .map(|c| c.title.as_str())
             .or_else(|| {
                 self.lines
@@ -290,8 +281,8 @@ impl Thread {
     }
 
     pub(crate) fn prompt(&self, text: &str) -> String {
-        if self.conversation.is_none() {
-            if let Some(c) = &self.continued {
+        if self.conversation().is_none() {
+            if let Some(c) = self.continuation() {
                 return c.chat.prompt(text);
             }
         }
