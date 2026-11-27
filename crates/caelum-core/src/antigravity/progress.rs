@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     time::Duration,
 };
 
@@ -23,25 +23,54 @@ pub(super) enum ProgressEffect {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default)]
 enum Phase {
+    #[default]
     Idle,
-    Prompting,
-    WaitingBackground,
-    ReactiveTurn { settle_generation: Option<u64> },
+    Prompting {
+        request: u64,
+        tools: BTreeSet<String>,
+    },
+    Background(ActiveTools),
+    Reactive,
+    Settling(u64),
 }
 
 #[derive(Debug)]
-struct SessionProgress {
-    phase: Phase,
-    active_tools: HashSet<String>,
+struct ActiveTools {
+    first: String,
+    rest: BTreeSet<String>,
 }
 
-impl Default for SessionProgress {
-    fn default() -> Self {
-        Self {
-            phase: Phase::Idle,
-            active_tools: HashSet::new(),
+impl ActiveTools {
+    fn from_set(mut tools: BTreeSet<String>) -> Option<Self> {
+        Some(Self {
+            first: tools.pop_first()?,
+            rest: tools,
+        })
+    }
+
+    fn into_set(mut self) -> BTreeSet<String> {
+        self.rest.insert(self.first);
+        self.rest
+    }
+
+    fn insert(&mut self, tool: &str) {
+        if tool != self.first {
+            self.rest.insert(tool.to_owned());
+        }
+    }
+
+    fn finish(&mut self, tool: &str) -> bool {
+        if tool != self.first {
+            self.rest.remove(tool);
+            return false;
+        }
+        if let Some(next) = self.rest.pop_first() {
+            self.first = next;
+            false
+        } else {
+            true
         }
     }
 }
@@ -50,7 +79,7 @@ impl Default for SessionProgress {
 /// background tools that outlive `session/prompt`, and reactive follow-up turns.
 #[derive(Debug, Default)]
 pub(super) struct SessionProgressTracker {
-    sessions: HashMap<String, SessionProgress>,
+    sessions: HashMap<String, Phase>,
     next_generation: u64,
 }
 
@@ -58,66 +87,69 @@ impl SessionProgressTracker {
     pub(super) fn is_working(&self, session_id: &str) -> bool {
         self.sessions
             .get(session_id)
-            .is_some_and(|session| session.phase != Phase::Idle)
+            .is_some_and(|phase| !matches!(phase, Phase::Idle))
     }
 
     pub(super) fn working_sessions(&self) -> HashSet<String> {
         self.sessions
             .iter()
-            .filter(|(_, session)| session.phase != Phase::Idle)
+            .filter(|(_, phase)| !matches!(phase, Phase::Idle))
             .map(|(id, _)| id.clone())
             .collect()
     }
 
-    pub(super) fn on_prompt_started(&mut self, session_id: &str) {
-        let session = self.sessions.entry(session_id.to_owned()).or_default();
-        session.phase = Phase::Prompting;
+    pub(super) fn on_prompt_started(&mut self, session_id: &str, request: u64) {
+        let phase = self.sessions.entry(session_id.to_owned()).or_default();
+        let tools = match std::mem::take(phase) {
+            Phase::Prompting { tools, .. } => tools,
+            Phase::Background(tools) => tools.into_set(),
+            Phase::Idle | Phase::Reactive | Phase::Settling(_) => BTreeSet::new(),
+        };
+        *phase = Phase::Prompting { request, tools };
     }
 
-    pub(super) fn on_prompt_send_failed(&mut self, session_id: &str) {
-        if let Some(session) = self.sessions.get_mut(session_id) {
-            session.phase = if session.active_tools.is_empty() {
-                Phase::Idle
-            } else {
-                Phase::WaitingBackground
-            };
+    pub(super) fn on_prompt_send_failed(&mut self, session_id: &str, request: u64) {
+        if let Some(phase) = self.sessions.get_mut(session_id) {
+            if matches!(phase, Phase::Prompting { request: current, .. } if *current == request) {
+                promote_background(phase);
+            }
         }
     }
 
     pub(super) fn on_prompt_replied(
         &mut self,
         session_id: &str,
+        request: u64,
         result: Result<Value, String>,
-    ) -> ProgressEffect {
-        let session = self.sessions.entry(session_id.to_owned()).or_default();
-        match result {
-            Err(error) => {
-                session.active_tools.clear();
-                session.phase = Phase::Idle;
-                ProgressEffect::TurnCompleted {
-                    session_id: session_id.to_owned(),
-                    stop_reason: "error".into(),
-                    error: Some(error),
-                }
-            }
-            Ok(res) => {
-                let stop_reason = res["stopReason"].as_str().unwrap_or("end_turn").to_owned();
-                if stop_reason == "end_turn" && !session.active_tools.is_empty() {
-                    session.phase = Phase::WaitingBackground;
-                    ProgressEffect::TurnYielded {
-                        session_id: session_id.to_owned(),
-                    }
-                } else {
-                    session.active_tools.clear();
-                    session.phase = Phase::Idle;
-                    ProgressEffect::TurnCompleted {
-                        session_id: session_id.to_owned(),
-                        stop_reason,
-                        error: None,
-                    }
-                }
-            }
+    ) -> Option<ProgressEffect> {
+        let phase = self.sessions.get_mut(session_id)?;
+        if !matches!(phase, Phase::Prompting { request: current, .. } if *current == request) {
+            return None;
         }
+        let (stop_reason, error) = match result {
+            Err(error) => ("error".into(), Some(error)),
+            Ok(reply) => {
+                let stop_reason = reply["stopReason"]
+                    .as_str()
+                    .unwrap_or("end_turn")
+                    .to_owned();
+                if stop_reason == "end_turn" {
+                    promote_background(phase);
+                    if matches!(phase, Phase::Background(_)) {
+                        return Some(ProgressEffect::TurnYielded {
+                            session_id: session_id.to_owned(),
+                        });
+                    }
+                }
+                (stop_reason, None)
+            }
+        };
+        *phase = Phase::Idle;
+        Some(ProgressEffect::TurnCompleted {
+            session_id: session_id.to_owned(),
+            stop_reason,
+            error,
+        })
     }
 
     pub(super) fn on_session_update(
@@ -131,87 +163,57 @@ impl SessionProgressTracker {
                 if super::questions::is_ask_question(update) {
                     return None;
                 }
-                let tool_id = update["toolCallId"].as_str().filter(|s| !s.is_empty())?;
+                let tool = update["toolCallId"].as_str().filter(|s| !s.is_empty())?;
                 let active = is_tool_update_active(kind, update["status"].as_str());
-                let session = self.sessions.entry(session_id.to_owned()).or_default();
-                if active {
-                    session.active_tools.insert(tool_id.to_owned());
-                    match session.phase {
-                        Phase::Idle => session.phase = Phase::WaitingBackground,
-                        Phase::ReactiveTurn { .. } => {
-                            session.phase = Phase::ReactiveTurn {
-                                settle_generation: None,
-                            };
+                let phase = self.sessions.entry(session_id.to_owned()).or_default();
+                match phase {
+                    Phase::Prompting { tools, .. } => {
+                        if active {
+                            tools.insert(tool.to_owned());
+                        } else {
+                            tools.remove(tool);
                         }
-                        Phase::Prompting | Phase::WaitingBackground => {}
                     }
-                } else {
-                    let was_active = session.active_tools.remove(tool_id);
-                    if session.phase == Phase::WaitingBackground
-                        && session.active_tools.is_empty()
-                        && was_active
-                    {
-                        session.phase = Phase::ReactiveTurn {
-                            settle_generation: None,
-                        };
+                    Phase::Background(tools) => {
+                        if active {
+                            tools.insert(tool);
+                        } else if tools.finish(tool) {
+                            *phase = Phase::Reactive;
+                        }
                     }
+                    Phase::Idle | Phase::Reactive | Phase::Settling(_) if active => {
+                        *phase = Phase::Background(ActiveTools {
+                            first: tool.to_owned(),
+                            rest: BTreeSet::new(),
+                        });
+                    }
+                    _ => {}
                 }
                 None
             }
             "agent_thought_chunk" | "agent_message_chunk" | "plan" => {
-                let session = self.sessions.entry(session_id.to_owned()).or_default();
-                match session.phase {
-                    Phase::Idle => {
-                        session.phase = Phase::ReactiveTurn {
-                            settle_generation: None,
-                        };
-                    }
-                    Phase::ReactiveTurn {
-                        settle_generation: Some(_),
-                    } => {
-                        session.phase = Phase::ReactiveTurn {
-                            settle_generation: None,
-                        };
-                    }
-                    Phase::Prompting
-                    | Phase::WaitingBackground
-                    | Phase::ReactiveTurn {
-                        settle_generation: None,
-                    } => {}
+                let phase = self.sessions.entry(session_id.to_owned()).or_default();
+                if matches!(phase, Phase::Idle | Phase::Settling(_)) {
+                    *phase = Phase::Reactive;
                 }
                 None
             }
             "usage_update" => {
-                let phase = self.sessions.get(session_id)?.phase;
-                let has_active_tools = !self.sessions.get(session_id)?.active_tools.is_empty();
+                let phase = self.sessions.get_mut(session_id)?;
                 match phase {
-                    Phase::WaitingBackground if has_active_tools => {
-                        Some(ProgressEffect::TurnYielded {
-                            session_id: session_id.to_owned(),
-                        })
-                    }
-                    Phase::ReactiveTurn { .. } if has_active_tools => {
-                        if let Some(session) = self.sessions.get_mut(session_id) {
-                            session.phase = Phase::WaitingBackground;
-                        }
-                        Some(ProgressEffect::TurnYielded {
-                            session_id: session_id.to_owned(),
-                        })
-                    }
-                    Phase::ReactiveTurn { .. } => {
+                    Phase::Background(_) => Some(ProgressEffect::TurnYielded {
+                        session_id: session_id.to_owned(),
+                    }),
+                    Phase::Reactive | Phase::Settling(_) => {
                         self.next_generation = self.next_generation.wrapping_add(1).max(1);
                         let generation = self.next_generation;
-                        if let Some(session) = self.sessions.get_mut(session_id) {
-                            session.phase = Phase::ReactiveTurn {
-                                settle_generation: Some(generation),
-                            };
-                        }
+                        *phase = Phase::Settling(generation);
                         Some(ProgressEffect::ScheduleSettle {
                             session_id: session_id.to_owned(),
                             generation,
                         })
                     }
-                    Phase::Idle | Phase::Prompting | Phase::WaitingBackground => None,
+                    Phase::Idle | Phase::Prompting { .. } => None,
                 }
             }
             _ => None,
@@ -223,66 +225,63 @@ impl SessionProgressTracker {
         session_id: &str,
         generation: u64,
     ) -> Option<ProgressEffect> {
-        let session = self.sessions.get_mut(session_id)?;
-        if session.phase
-            == (Phase::ReactiveTurn {
-                settle_generation: Some(generation),
-            })
-            && session.active_tools.is_empty()
-        {
-            session.phase = Phase::Idle;
-            Some(ProgressEffect::TurnCompleted {
-                session_id: session_id.to_owned(),
-                stop_reason: "end_turn".into(),
-                error: None,
-            })
-        } else {
-            None
+        let phase = self.sessions.get_mut(session_id)?;
+        if !matches!(*phase, Phase::Settling(current) if current == generation) {
+            return None;
         }
+        *phase = Phase::Idle;
+        Some(ProgressEffect::TurnCompleted {
+            session_id: session_id.to_owned(),
+            stop_reason: "end_turn".into(),
+            error: None,
+        })
     }
 
     pub(super) fn on_cancel(&mut self, session_id: &str) -> Option<ProgressEffect> {
-        let session = self.sessions.get_mut(session_id)?;
-        match session.phase {
-            Phase::WaitingBackground | Phase::ReactiveTurn { .. } => {
-                session.active_tools.clear();
-                session.phase = Phase::Idle;
-                Some(ProgressEffect::TurnCompleted {
-                    session_id: session_id.to_owned(),
-                    stop_reason: "cancelled".into(),
-                    error: None,
-                })
-            }
-            Phase::Idle | Phase::Prompting => None,
+        let phase = self.sessions.get_mut(session_id)?;
+        if matches!(phase, Phase::Idle | Phase::Prompting { .. }) {
+            return None;
         }
+        *phase = Phase::Idle;
+        Some(ProgressEffect::TurnCompleted {
+            session_id: session_id.to_owned(),
+            stop_reason: "cancelled".into(),
+            error: None,
+        })
     }
 
     pub(super) fn on_replayed_history(&mut self, session_id: &str, active_tools: Vec<String>) {
-        if active_tools.is_empty() {
+        let Some(tools) = ActiveTools::from_set(active_tools.into_iter().collect()) else {
             return;
-        }
-        let session = self.sessions.entry(session_id.to_owned()).or_default();
-        if session.phase == Phase::Idle {
-            session.active_tools.extend(active_tools);
-            session.phase = Phase::WaitingBackground;
+        };
+        let phase = self.sessions.entry(session_id.to_owned()).or_default();
+        if matches!(phase, Phase::Idle) {
+            *phase = Phase::Background(tools);
         }
     }
 
     pub(super) fn on_disconnected(&mut self) -> Vec<ProgressEffect> {
-        let mut effects = Vec::new();
-        for (session_id, session) in self.sessions.drain() {
-            if matches!(
-                session.phase,
-                Phase::WaitingBackground | Phase::ReactiveTurn { .. }
-            ) {
-                effects.push(ProgressEffect::TurnCompleted {
-                    session_id,
-                    stop_reason: "disconnected".into(),
-                    error: Some("Antigravity ACP connection closed".into()),
-                });
-            }
-        }
-        effects
+        self.sessions
+            .drain()
+            .filter(|(_, phase)| {
+                matches!(
+                    phase,
+                    Phase::Background(_) | Phase::Reactive | Phase::Settling(_)
+                )
+            })
+            .map(|(session_id, _)| ProgressEffect::TurnCompleted {
+                session_id,
+                stop_reason: "disconnected".into(),
+                error: Some("Antigravity ACP connection closed".into()),
+            })
+            .collect()
+    }
+}
+
+fn promote_background(phase: &mut Phase) {
+    if let Phase::Prompting { tools, .. } = phase {
+        *phase =
+            ActiveTools::from_set(std::mem::take(tools)).map_or(Phase::Idle, Phase::Background);
     }
 }
 
@@ -304,9 +303,24 @@ mod tests {
     use super::{ProgressEffect, SessionProgressTracker};
 
     #[test]
+    fn a_superseded_prompt_cannot_complete_the_new_turn() {
+        let mut tracker = SessionProgressTracker::default();
+        tracker.on_prompt_started("s1", 1);
+        tracker.on_prompt_started("s1", 2);
+        tracker.on_prompt_send_failed("s1", 1);
+        assert!(tracker.on_prompt_replied("s1", 1, Ok(json!({}))).is_none());
+        assert!(tracker.is_working("s1"));
+        assert!(matches!(
+            tracker.on_prompt_replied("s1", 2, Ok(json!({}))),
+            Some(ProgressEffect::TurnCompleted { .. })
+        ));
+        assert!(!tracker.is_working("s1"));
+    }
+
+    #[test]
     fn synchronous_turn_completes_immediately_on_prompt_reply() {
         let mut tracker = SessionProgressTracker::default();
-        tracker.on_prompt_started("s1");
+        tracker.on_prompt_started("s1", 1);
         assert!(tracker.is_working("s1"));
 
         tracker.on_session_update(
@@ -319,7 +333,9 @@ mod tests {
             "tool_call_update",
             &json!({ "toolCallId": "t1", "status": "completed" }),
         );
-        let effect = tracker.on_prompt_replied("s1", Ok(json!({ "stopReason": "end_turn" })));
+        let effect = tracker
+            .on_prompt_replied("s1", 1, Ok(json!({ "stopReason": "end_turn" })))
+            .unwrap();
         assert_eq!(
             effect,
             ProgressEffect::TurnCompleted {
@@ -334,14 +350,16 @@ mod tests {
     #[test]
     fn background_tool_keeps_session_working_until_reactive_turn_settles() {
         let mut tracker = SessionProgressTracker::default();
-        tracker.on_prompt_started("s1");
+        tracker.on_prompt_started("s1", 1);
         tracker.on_session_update(
             "s1",
             "tool_call",
             &json!({ "toolCallId": "bg1", "status": "in_progress" }),
         );
 
-        let effect = tracker.on_prompt_replied("s1", Ok(json!({ "stopReason": "end_turn" })));
+        let effect = tracker
+            .on_prompt_replied("s1", 1, Ok(json!({ "stopReason": "end_turn" })))
+            .unwrap();
         assert_eq!(
             effect,
             ProgressEffect::TurnYielded {
@@ -408,13 +426,15 @@ mod tests {
     #[test]
     fn chained_background_tool_in_reactive_turn_stays_working() {
         let mut tracker = SessionProgressTracker::default();
-        tracker.on_prompt_started("s1");
+        tracker.on_prompt_started("s1", 1);
         tracker.on_session_update(
             "s1",
             "tool_call",
             &json!({ "toolCallId": "bg1", "status": "in_progress" }),
         );
-        tracker.on_prompt_replied("s1", Ok(json!({ "stopReason": "end_turn" })));
+        tracker
+            .on_prompt_replied("s1", 1, Ok(json!({ "stopReason": "end_turn" })))
+            .unwrap();
         tracker.on_session_update(
             "s1",
             "tool_call_update",
@@ -438,13 +458,15 @@ mod tests {
     #[test]
     fn cancel_during_background_wait_completes_session() {
         let mut tracker = SessionProgressTracker::default();
-        tracker.on_prompt_started("s1");
+        tracker.on_prompt_started("s1", 1);
         tracker.on_session_update(
             "s1",
             "tool_call",
             &json!({ "toolCallId": "bg1", "status": "in_progress" }),
         );
-        tracker.on_prompt_replied("s1", Ok(json!({ "stopReason": "end_turn" })));
+        tracker
+            .on_prompt_replied("s1", 1, Ok(json!({ "stopReason": "end_turn" })))
+            .unwrap();
 
         assert_eq!(
             tracker.on_cancel("s1"),

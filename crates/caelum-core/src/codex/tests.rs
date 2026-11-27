@@ -266,6 +266,8 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
     let nested_connection = provider
         .inner
         .lock_connections()
+        .as_ref()
+        .unwrap()
         .get(&nested)
         .unwrap()
         .stored()
@@ -276,6 +278,8 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
         provider
             .inner
             .lock_connections()
+            .as_ref()
+            .unwrap()
             .get(&nested)
             .unwrap()
             .stored()
@@ -284,7 +288,7 @@ fn checkout_cleanup_rejects_active_turns_and_releases_only_its_connections() {
         nested_connection.process_id
     );
     provider.release_checkout(project.path());
-    assert_eq!(provider.inner.lock_connections().len(), 1);
+    assert_eq!(provider.inner.lock_connections().as_ref().unwrap().len(), 1);
     for connection in [connection, nested_connection] {
         assert!(matches!(
             processes.terminate(connection.process_id.unwrap()),
@@ -405,6 +409,10 @@ fn project_sessions_can_be_listed_started_resumed_and_cancelled() {
     provider
         .cancel_turn(&project_path, "thread-existing")
         .unwrap();
+    provider
+        .send_prompt(&project_path, "thread-new", "stop-before-history")
+        .unwrap();
+    provider.cancel_turn(&project_path, "thread-new").unwrap();
     provider
         .send_prompt_with_options(
             &project_path,

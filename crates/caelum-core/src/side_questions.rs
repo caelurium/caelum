@@ -141,9 +141,14 @@ fn execute(
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
+    // Pipe conversion needs the I/O driver, while registering and reaping
+    // the child must happen outside the async turn.
+    let mut wire = {
+        let _entered = io.enter();
+        wire::Wire::start(&mut cmd, processes)?
+    };
     let mut until = turn.until.clone();
     io.block_on(async {
-        let mut wire = wire::Wire::start(&mut cmd,processes)?;
         let mut last = None;
         let mut publish = |text:&str| {
             if let Some((tx,wake))=output.0.get() {

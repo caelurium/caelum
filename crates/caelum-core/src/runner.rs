@@ -7,7 +7,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::SyncSender,
-        Arc, Mutex, OnceLock,
+        Arc, OnceLock,
     },
     thread,
     time::{Duration, Instant},
@@ -16,8 +16,11 @@ use std::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
+use tokio::sync::mpsc;
+
 use crate::{
     application::{presentation::now, Event},
+    blocking_actor::BlockingActor,
     processes::{ProcessId, ProcessRegistry},
     projects::Project,
 };
@@ -335,7 +338,7 @@ struct ActiveRun {
 #[derive(Clone)]
 pub struct Backend {
     processes: Arc<ProcessRegistry>,
-    active: Arc<Mutex<HashMap<String, ActiveRun>>>,
+    active: BlockingActor<Option<HashMap<String, ActiveRun>>>,
     observer: Arc<OnceLock<Observer>>,
 }
 
@@ -343,7 +346,7 @@ impl Backend {
     pub fn new(processes: Arc<ProcessRegistry>) -> Self {
         Self {
             processes,
-            active: Arc::default(),
+            active: BlockingActor::spawn("caelum-runner", Some(HashMap::new())),
             observer: Arc::default(),
         }
     }
@@ -366,101 +369,93 @@ impl Backend {
             return Err("Command must be between 1 and 8192 bytes.".into());
         }
         let opened = Project::open(project).map_err(|e| e.to_string())?;
-        self.stop_any(project);
+        let backend = self.clone();
+        let run_project = project.to_owned();
+        let command = trimmed.to_owned();
+        let result = self
+            .active
+            .call(move |active| {
+                let active = active.as_mut().ok_or("Command runner is shutting down.")?;
+                backend.start_run(active, run_project, run_id, command, opened)
+            })
+            .ok_or("Command runner has stopped.")?;
+        if let Err(error) = &result {
+            self.emit(RunnerEvent::Failed {
+                project: project.to_owned(),
+                run_id,
+                error: error.clone(),
+            });
+        }
+        result
+    }
 
-        let mut cmd = shell_command(trimmed);
+    fn start_run(
+        &self,
+        active: &mut HashMap<String, ActiveRun>,
+        project: String,
+        run_id: u64,
+        command: String,
+        opened: Project,
+    ) -> Result<(), String> {
+        if let Some(run) = active.remove(&project) {
+            self.terminate(run);
+        }
+
+        let mut cmd = shell_command(&command);
         #[cfg(unix)]
         cmd.process_group(0);
         cmd.current_dir(opened.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = match cmd.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                self.emit(RunnerEvent::Failed {
-                    project: project.to_owned(),
-                    run_id,
-                    error: error.to_string(),
-                });
-                return Err(error.to_string());
-            }
-        };
+        let mut child = cmd.spawn().map_err(|error| error.to_string())?;
         #[cfg(unix)]
         let process_group = child.id() as i32;
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
-        let process = match self.processes.register(child) {
-            Ok(id) => id,
-            Err(error) => {
-                self.emit(RunnerEvent::Failed {
-                    project: project.to_owned(),
-                    run_id,
-                    error: error.to_string(),
-                });
-                return Err(error.to_string());
-            }
-        };
+        let process = self
+            .processes
+            .register(child)
+            .map_err(|error| error.to_string())?;
         let cancelled = Arc::new(AtomicBool::new(false));
-        self.active
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(
-                project.to_owned(),
-                ActiveRun {
-                    run_id,
-                    process,
-                    #[cfg(unix)]
-                    process_group,
-                    cancelled: cancelled.clone(),
-                },
-            );
+        active.insert(
+            project.clone(),
+            ActiveRun {
+                run_id,
+                process,
+                #[cfg(unix)]
+                process_group,
+                cancelled: cancelled.clone(),
+            },
+        );
 
         let backend = self.clone();
-        let project = project.to_owned();
+        let run_project = project.clone();
         let started = Instant::now();
-        thread::Builder::new()
+        let worker = thread::Builder::new()
             .name(format!("caelum-runner-{run_id}"))
             .spawn(move || {
-                let shared = Arc::new(Mutex::new((RingBuffer::default(), Option::<Instant>::None)));
-                let pump = |pipe: Option<Box<dyn Read + Send>>| {
-                    let shared = shared.clone();
-                    let backend = backend.clone();
-                    let project = project.clone();
-                    thread::spawn(move || {
-                        let Some(mut reader) = pipe else { return };
-                        let mut buf = [0u8; 4096];
-                        while let Ok(n) = reader.read(&mut buf) {
-                            if n == 0 {
-                                break;
-                            }
-                            let snapshot = {
-                                let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
-                                guard.0.push(&buf[..n]);
-                                let due =
-                                    guard.1.is_none_or(|last| last.elapsed() >= STREAM_THROTTLE);
-                                if due {
-                                    guard.1 = Some(Instant::now());
-                                    Some((guard.0.text(), guard.0.truncated()))
-                                } else {
-                                    None
-                                }
-                            };
-                            if let Some((output, truncated)) = snapshot {
-                                backend.emit(RunnerEvent::Output {
-                                    project: project.clone(),
-                                    run_id,
-                                    output,
-                                    truncated,
-                                });
-                            }
-                        }
-                    })
-                };
-                let t_out = pump(stdout.map(|s| Box::new(s) as Box<dyn Read + Send>));
-                let t_err = pump(stderr.map(|s| Box::new(s) as Box<dyn Read + Send>));
-                let _ = t_out.join();
-                let _ = t_err.join();
+                let project = run_project;
+                let mut output = RingBuffer::default();
+                let mut last_update: Option<Instant> = None;
+                let (chunks, mut mailbox) = mpsc::channel::<Vec<u8>>(32);
+                let t_out = stdout.map(|pipe| pump_output(pipe, chunks.clone()));
+                let t_err = stderr.map(|pipe| pump_output(pipe, chunks));
+                while let Some(chunk) = mailbox.blocking_recv() {
+                    output.push(&chunk);
+                    if last_update.is_none_or(|last| last.elapsed() >= STREAM_THROTTLE) {
+                        last_update = Some(Instant::now());
+                        backend.emit(RunnerEvent::Output {
+                            project: project.clone(),
+                            run_id,
+                            output: output.text(),
+                            truncated: output.truncated(),
+                        });
+                    }
+                }
+                for pump in t_out.into_iter().chain(t_err) {
+                    let _ = pump.join();
+                }
 
                 let mut code = None;
                 for _ in 0..40 {
@@ -478,66 +473,52 @@ impl Backend {
                         code = status.code();
                     }
                 }
-                {
-                    let mut active = backend.active.lock().unwrap_or_else(|e| e.into_inner());
-                    if active.get(&project).is_some_and(|a| a.run_id == run_id) {
-                        active.remove(&project);
-                    }
-                }
-                let (output, truncated) = {
-                    let guard = shared.lock().unwrap_or_else(|e| e.into_inner());
-                    (guard.0.text(), guard.0.truncated())
-                };
+                backend.take_run(&project, run_id);
                 let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
                 backend.emit(RunnerEvent::Finished {
                     project,
                     run_id,
                     code,
                     duration_ms,
-                    output,
-                    truncated,
+                    output: output.text(),
+                    truncated: output.truncated(),
                     cancelled: cancelled.load(Ordering::Acquire),
                 });
-            })
-            .map_err(|e| e.to_string())?;
+            });
+        if let Err(error) = worker {
+            if let Some(run) = active.remove(&project) {
+                self.terminate(run);
+            }
+            return Err(error.to_string());
+        }
         Ok(())
     }
 
     pub fn stop(&self, project: &str, run_id: u64) {
-        let target = {
-            let mut active = self.active.lock().unwrap_or_else(|e| e.into_inner());
-            if active.get(project).is_some_and(|a| a.run_id == run_id) {
-                active.remove(project)
-            } else {
-                None
-            }
-        };
-        if let Some(run) = target {
+        if let Some(run) = self.take_run(project, run_id) {
             self.terminate(run);
         }
     }
 
-    fn stop_any(&self, project: &str) {
-        let target = self
-            .active
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(project);
-        if let Some(run) = target {
-            self.terminate(run);
-        }
+    fn take_run(&self, project: &str, run_id: u64) -> Option<ActiveRun> {
+        let project = project.to_owned();
+        self.active
+            .call(move |active| {
+                let active = active.as_mut()?;
+                if active.get(&project).is_some_and(|run| run.run_id == run_id) {
+                    active.remove(&project)
+                } else {
+                    None
+                }
+            })
+            .flatten()
     }
 
     pub fn shutdown(&self) {
-        let all: Vec<_> = self
-            .active
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .drain()
-            .map(|(_, v)| v)
-            .collect();
-        for run in all {
-            self.terminate(run);
+        if let Some(active) = self.active.call(Option::take).flatten() {
+            for run in active.into_values() {
+                self.terminate(run);
+            }
         }
     }
 
@@ -550,6 +531,20 @@ impl Backend {
         }
         let _ = self.processes.terminate(run.process);
     }
+}
+
+fn pump_output(
+    mut pipe: impl Read + Send + 'static,
+    chunks: mpsc::Sender<Vec<u8>>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let mut buffer = [0; 4096];
+        while let Ok(n) = pipe.read(&mut buffer) {
+            if n == 0 || chunks.blocking_send(buffer[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    })
 }
 
 fn shell_command(command: &str) -> Command {

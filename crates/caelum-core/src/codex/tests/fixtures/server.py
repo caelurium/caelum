@@ -4,6 +4,7 @@ models = {'thread-existing': 'saved-model'}
 efforts = {'thread-existing': 'low'}
 archived = set()
 deleted = set()
+active_turns = {}
 for raw in sys.stdin:
     request = json.loads(raw)
     method = request.get('method')
@@ -67,8 +68,14 @@ for raw in sys.stdin:
         assert params['cwd'] == os.getcwd()
         result = {'config': {'model': 'configured-model'}}
     elif method == 'thread/turns/list':
-        assert params['itemsView'] == 'full' and params['sortDirection'] == 'desc'
-        if params['limit'] == 1:
+        assert params['itemsView'] in ('full', 'notLoaded') and params['sortDirection'] == 'desc'
+        if params['limit'] == 1 and params['itemsView'] == 'notLoaded':
+            turn = active_turns.get(params['threadId'], {'id': 'turn-1', 'status': 'completed'})
+            if turn['id'] == 'turn-starting':
+                print(json.dumps({'id': request_id, 'error': {'code': -32601, 'message': 'list_turns is not supported yet'}}), flush=True)
+                continue
+            result = {'data': [turn]}
+        elif params['limit'] == 1:
             if os.path.exists('missing-details'):
                 print(json.dumps({'id': request_id, 'error': {'code': -32000, 'message': 'no history yet'}}), flush=True)
                 continue
@@ -94,6 +101,11 @@ for raw in sys.stdin:
             models[params['threadId']] = params['model']
         if params.get('effort'):
             efforts[params['threadId']] = params['effort']
+        if prompt == 'stop-before-history':
+            turn = {'id': 'turn-starting', 'status': 'inProgress'}
+            active_turns[params['threadId']] = turn
+            print(json.dumps({'id': request_id, 'result': {'turn': turn}}), flush=True)
+            continue
         if prompt == 'request-approval':
             print(json.dumps({'id': 'server-approval-1', 'method': 'item/commandExecution/requestApproval', 'params': {'threadId': params['threadId'], 'turnId': 'turn-approval', 'itemId': 'command-1', 'command': ['git', 'status'], 'cwd': '/project', 'availableDecisions': ['accept', 'decline']}}), flush=True)
         if prompt == 'request-question':
@@ -102,8 +114,11 @@ for raw in sys.stdin:
                     {'id': 'choice', 'header': 'Approach', 'question': 'Which approach?', 'options': [{'label': 'Small', 'description': 'Focused change'}, {'label': 'Large', 'description': 'Full rewrite'}]},
                     {'id': 'detail', 'header': 'Detail', 'question': 'Any details?', 'isOther': True, 'isSecret': True, 'options': None}
                 ]}}), flush=True)
-            print(json.dumps({'id': request_id, 'result': {'turn': {'id': 'turn-question', 'status': 'inProgress'}}}), flush=True)
+            turn = {'id': 'turn-question', 'status': 'inProgress'}
+            active_turns[params['threadId']] = turn
+            print(json.dumps({'id': request_id, 'result': {'turn': turn}}), flush=True)
             continue
+        active_turns.pop(params['threadId'], None)
         if prompt == 'resolve-question':
             for question_id in [41, '41']:
                 print(json.dumps({'method': 'serverRequest/resolved', 'params': {'threadId': params['threadId'], 'requestId': question_id}}), flush=True)
@@ -112,6 +127,12 @@ for raw in sys.stdin:
         print(json.dumps({'method': 'turn/completed', 'params': {'turn': {'id': 'turn-1', 'status': 'completed'}}}), flush=True)
         result = {'turn': {'id': 'turn-1', 'status': 'inProgress'}}
     elif method == 'turn/interrupt':
+        turn = active_turns.get(params['threadId'])
+        expected = '' if turn and turn['id'] == 'turn-starting' else turn and turn['id']
+        if turn is None or expected != params.get('turnId'):
+            print(json.dumps({'id': request_id, 'error': {'code': -32602, 'message': 'Expected the active turn ID'}}), flush=True)
+            continue
+        del active_turns[params['threadId']]
         result = {}
     else:
         print(json.dumps({'id': request_id, 'error': {'code': -32601, 'message': 'Unknown method'}}), flush=True)

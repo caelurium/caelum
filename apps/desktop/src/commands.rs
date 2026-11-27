@@ -134,7 +134,7 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
         body = body.child(
             Button::new(format!("{} ×", attachment.label()))
                 .variant(ButtonVariant::GhostMuted)
-                .disabled(session.generating)
+                .disabled(session.generating_side_answer())
                 .on_press(move |s: &mut Workspace| {
                     live_mut(s).app.sessions[index]
                         .side_attachments
@@ -143,12 +143,12 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
                 .build(k),
         );
     }
-    if let Some((question, answer)) = &session.side_question {
+    if let Some((question, answer)) = session.side_exchange() {
         body = body.child(ui::caption(
             caelum_core::application::presentation::visible_text(question),
             k,
         ));
-        if session.generating {
+        if session.generating_side_answer() {
             body = body.child(ui::caption("Answering independently…", k).role("status"));
         }
         if !answer.is_empty() {
@@ -167,24 +167,23 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
                     ),
             );
         }
-        if let Some(error) = &session.side_error {
+        if let Some(error) = session.side_error() {
             body = body.child(ui::caption(error, k).color(k.c.danger.fg));
         }
-        if !session.generating {
+        if !session.generating_side_answer() {
             let copy = caelum_core::application::presentation::visible_text(answer);
             let mut actions = row().gap(8.0).child(
                 Button::new("Edit question")
                     .variant(ButtonVariant::Outline)
                     .on_press(move |s: &mut Workspace| {
                         let l = live_mut(s);
-                        l.app.sessions[index].side_question = None;
-                        l.app.sessions[index].side_error = None;
+                        l.app.sessions[index].edit_side_question();
                         l.commands.side_editor.focused = true;
                     })
                     .build(k)
                     .key("edit-side-question"),
             );
-            if session.side_error.is_some() {
+            if session.side_error().is_some() {
                 actions = actions.child(
                     Button::new("Retry")
                         .variant(ButtonVariant::Contrast)
@@ -210,8 +209,7 @@ pub fn side_view(s: &Workspace, k: &Kit, padding: f32) -> El {
             .child(crate::completion::view(s, k))
             .children(
                 session
-                    .side_error
-                    .as_ref()
+                    .side_error()
                     .map(|error| ui::caption(error, k).color(k.c.danger.fg).wrap()),
             )
             .child(rune::auto_grow(

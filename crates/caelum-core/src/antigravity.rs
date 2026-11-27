@@ -28,6 +28,7 @@ mod transport;
 
 use crate::{
     approvals::ApprovalBroker,
+    json_lines::JsonLines,
     processes::{ProcessId, ProcessRegistry},
     projects::{Project, ProjectError},
     questions::QuestionBroker,
@@ -43,7 +44,7 @@ type ReplayBuffers = Arc<Mutex<HashMap<String, Vec<Value>>>>;
 
 enum PendingCall {
     Reply(Sender<Result<Value, String>>),
-    Prompt { session_id: String },
+    Prompt { session_id: String, request: u64 },
 }
 
 /// Manages a single shared Antigravity ACP (`agy acp --stdio`) connection multiplexed across projects.
@@ -58,15 +59,29 @@ struct ProviderInner {
     approvals: ApprovalBroker,
     questions: QuestionBroker,
     connect_lock: Mutex<()>,
-    connection: Mutex<Option<Arc<AcpConnection>>>,
+    connection: Mutex<Connection>,
     subscribers: EventSubscribers,
     metadata: Mutex<metadata::SessionMetadataStore>,
-    closed: AtomicBool,
+}
+
+enum Connection {
+    Vacant,
+    Connected(Arc<AcpConnection>),
+    Closed,
+}
+
+impl Connection {
+    fn connected(&self) -> Option<&AcpConnection> {
+        match self {
+            Self::Connected(connection) => Some(connection),
+            Self::Vacant | Self::Closed => None,
+        }
+    }
 }
 
 struct AcpConnection {
     process_id: ProcessId,
-    writer: Arc<Mutex<std::process::ChildStdin>>,
+    writer: JsonLines,
     pending: PendingRequests,
     next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
@@ -92,7 +107,7 @@ struct SessionOptionState {
 
 struct ReaderContext {
     pending: PendingRequests,
-    writer: Arc<Mutex<std::process::ChildStdin>>,
+    writer: JsonLines,
     next_id: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
     subscribers: EventSubscribers,
@@ -130,10 +145,9 @@ impl AntigravityProvider {
                 approvals,
                 questions,
                 connect_lock: Mutex::new(()),
-                connection: Mutex::new(None),
+                connection: Mutex::new(Connection::Vacant),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
                 metadata: Mutex::new(metadata::SessionMetadataStore::default()),
-                closed: AtomicBool::new(false),
             }),
         }
     }
@@ -149,8 +163,8 @@ impl AntigravityProvider {
     }
 
     pub fn shutdown(&self) {
-        self.inner.closed.store(true, Ordering::Release);
-        if let Some(connection) = lock(&self.inner.connection).take() {
+        let previous = std::mem::replace(&mut *lock(&self.inner.connection), Connection::Closed);
+        if let Connection::Connected(connection) = previous {
             connection.alive.store(false, Ordering::Release);
             let projects: HashSet<String> = lock(&connection.session_projects)
                 .values()
@@ -268,7 +282,7 @@ impl AntigravityProvider {
                 AntigravityError::Protocol("Antigravity /usage response has no usage data".into())
             })?;
         let tier = lock(&self.inner.connection)
-            .as_ref()
+            .connected()
             .and_then(|conn| lock(&conn.tier).clone());
         let mut usage = data.clone();
         if let Some(obj) = usage.as_object_mut() {
@@ -466,7 +480,7 @@ impl AntigravityProvider {
     ) -> Result<SessionDetails, AntigravityError> {
         let _project = Project::open(project_path)?;
         let changes = lock(&self.inner.connection)
-            .as_ref()
+            .connected()
             .and_then(|conn| lock(&conn.session_changes).get(session_id).cloned());
         Ok(SessionDetails {
             branch: None,
@@ -606,7 +620,9 @@ impl AntigravityProvider {
             &project.path().to_string_lossy(),
             Some(session_id),
         );
-        lock(&connection.progress).on_prompt_started(session_id);
+        let request = connection.next_id.fetch_add(1, Ordering::Relaxed);
+        let mut progress = lock(&connection.progress);
+        progress.on_prompt_started(session_id, request);
         transport::publish_event(
             &self.inner.subscribers,
             AntigravityEvent {
@@ -616,14 +632,16 @@ impl AntigravityProvider {
                 params: json!({ "sessionId": session_id, "turnId":uuid::Uuid::new_v4().to_string(), "_created":crate::application::presentation::now() }),
             },
         );
+        drop(progress);
         if let Err(error) = connection.send_prompt(
+            request,
             session_id,
             json!({
                 "sessionId": session_id,
                 "prompt": blocks,
             }),
         ) {
-            lock(&connection.progress).on_prompt_send_failed(session_id);
+            lock(&connection.progress).on_prompt_send_failed(session_id, request);
             return Err(error);
         }
         Ok(())
