@@ -138,13 +138,6 @@ pub(super) fn launch_pi(s: &mut Workspace, id: &str) {
     }
 }
 
-pub(crate) fn manage(s: &mut Workspace, id: &str) {
-    live_mut(s).app.dismiss_vm_destination(id);
-    dismiss_wait(live_mut(s));
-    live_mut(s).app.select_remote(id);
-    show(s, true);
-}
-
 pub(crate) fn sync(l: &mut Live, tx: &mut Tx) -> bool {
     let mut changed = false;
     if l.panels.overlay() == Some(Screen::VmStats) && super::popup::owner(l).is_none() {

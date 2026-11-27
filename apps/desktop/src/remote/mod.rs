@@ -19,7 +19,6 @@ mod transcript;
 pub(crate) use changes::{inspector, open as open_changes};
 pub(crate) use checkout::enter_new;
 pub(crate) use checkout::launch_source_for;
-pub(crate) use checkout::manage;
 pub(crate) use checkout::open_session_row;
 pub(crate) use checkout::{screen, select, sync};
 pub(crate) use conversation::focus;
