@@ -4,7 +4,7 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::AtomicBool,
         mpsc::{self, Receiver, Sender},
         Arc, Mutex, MutexGuard,
     },
@@ -64,9 +64,8 @@ struct ProviderInner {
     processes: Arc<ProcessRegistry>,
     approvals: ApprovalBroker,
     questions: QuestionBroker,
-    servers: Mutex<HashMap<PathBuf, Arc<ServerSlot>>>,
+    servers: Mutex<Option<HashMap<PathBuf, Arc<ServerSlot>>>>,
     subscribers: EventSubscribers,
-    closed: AtomicBool,
 }
 
 struct OpenCodeServer {
@@ -113,9 +112,8 @@ impl OpenCodeProvider {
                 processes,
                 approvals,
                 questions,
-                servers: Mutex::new(HashMap::new()),
+                servers: Mutex::new(Some(HashMap::new())),
                 subscribers: Arc::new(Mutex::new(Vec::new())),
-                closed: AtomicBool::new(false),
             }),
         }
     }
@@ -131,7 +129,8 @@ impl OpenCodeProvider {
     /// Subscribe to session, tool, permission, and server lifecycle events.
     pub fn subscribe(&self) -> Receiver<OpenCodeEvent> {
         let (sender, receiver) = mpsc::channel();
-        if !self.inner.closed.load(Ordering::Acquire) {
+        let servers = self.inner.lock_servers();
+        if servers.is_some() {
             self.inner.lock_subscribers().push(sender);
         }
         receiver
@@ -473,7 +472,9 @@ impl OpenCodeProvider {
         let servers: Vec<_> = self
             .inner
             .lock_servers()
-            .iter()
+            .as_ref()
+            .into_iter()
+            .flatten()
             .filter(|(path, _)| path.starts_with(checkout))
             .map(|(path, server)| (path.clone(), Arc::clone(server)))
             .collect();
@@ -496,7 +497,10 @@ impl OpenCodeProvider {
 
     pub fn release_checkout(&self, checkout: &Path) {
         let removed = {
-            let mut servers = self.inner.lock_servers();
+            let mut registry = self.inner.lock_servers();
+            let Some(servers) = registry.as_mut() else {
+                return;
+            };
             let paths: Vec<_> = servers
                 .keys()
                 .filter(|path| path.starts_with(checkout))
@@ -521,14 +525,10 @@ impl OpenCodeProvider {
 
     /// Terminate every OpenCode server owned by this provider.
     pub fn shutdown(&self) {
-        if self.inner.closed.swap(true, Ordering::AcqRel) {
+        let Some(servers) = self.inner.lock_servers().take() else {
             return;
-        }
-        deny_pending_approvals(&self.inner.approvals, None, None);
-        let servers = {
-            let mut servers = self.inner.lock_servers();
-            std::mem::take(&mut *servers)
         };
+        deny_pending_approvals(&self.inner.approvals, None, None);
         for (path, server) in servers {
             server.close(&self.inner.processes);
             self.inner
@@ -633,7 +633,7 @@ fn find_opencode_executable() -> Result<PathBuf, OpenCodeError> {
 }
 
 impl ProviderInner {
-    fn lock_servers(&self) -> MutexGuard<'_, HashMap<PathBuf, Arc<ServerSlot>>> {
+    fn lock_servers(&self) -> MutexGuard<'_, Option<HashMap<PathBuf, Arc<ServerSlot>>>> {
         self.servers
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -648,13 +648,16 @@ impl ProviderInner {
 
 impl Drop for ProviderInner {
     fn drop(&mut self) {
-        self.closed.store(true, Ordering::Release);
         deny_pending_approvals(&self.approvals, None, None);
-        let servers = self
+        let Some(servers) = self
             .servers
             .get_mut()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        for (path, server) in std::mem::take(servers) {
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        else {
+            return;
+        };
+        for (path, server) in servers {
             server.close(&self.processes);
             self.questions
                 .clear(PROVIDER_NAME, &path.to_string_lossy(), None);

@@ -87,7 +87,7 @@ impl Session {
         if self.commanding() {
             return Some(OverviewActivity::Command);
         }
-        if self.generating {
+        if self.generating_side_answer() {
             return Some(OverviewActivity::SideQuestion);
         }
         self.inbox

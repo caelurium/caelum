@@ -259,7 +259,7 @@ fn attachment_preview_copies_the_captured_snapshot_and_removal_is_separate() {
     advance(&mut rt, 0.2);
     assert!(element(&rt, "live-draft-0").focused);
     let l = rt.state.live.as_ref().unwrap();
-    assert!(l.composer.preview.is_none());
+    assert!(l.panels.attachment().is_none());
     assert_eq!((l.drafts[0].anchor, l.drafts[0].focus), selected);
     assert_eq!(l.drafts[0].text, prompt);
     assert!((position(&rt, 0) - offset).abs() < 1.0);
@@ -316,12 +316,11 @@ fn image_snapshot_uses_image_viewer_and_session_change_closes_preview() {
             .live
             .as_ref()
             .unwrap()
-            .media
-            .selected
-            .as_ref()
+            .panels
+            .attachment()
             .unwrap()
-            .1
-            .source,
+            .attachment
+            .content,
         snapshot.content
     );
     assert_eq!(
@@ -333,7 +332,15 @@ fn image_snapshot_uses_image_viewer_and_session_change_closes_preview() {
     rt.update(|s, _| s.live.as_mut().unwrap().app.select(1));
     advance(&mut rt, 0.3);
     assert!(rt.find("workspace-dialog").is_none());
-    assert!(rt.state.live.as_ref().unwrap().composer.preview.is_none());
+    assert!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .panels
+            .attachment()
+            .is_none()
+    );
 }
 
 #[test]
