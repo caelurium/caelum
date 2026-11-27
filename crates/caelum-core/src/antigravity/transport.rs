@@ -17,8 +17,8 @@ use super::{
     lock,
     progress::{ProgressEffect, SessionProgressTracker, REACTIVE_SETTLE_DELAY},
     protocol, questions, AcpConnection, AntigravityError, AntigravityProvider, Connection,
-    EventSubscribers, PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT, PROVIDER_NAME,
-    REQUEST_TIMEOUT,
+    EventSubscribers, NeutralDir, PendingCall, PendingRequests, ReaderContext, APPROVAL_TIMEOUT,
+    PROVIDER_NAME, REQUEST_TIMEOUT,
 };
 use crate::{
     approvals::ApprovalBroker, json_lines::JsonLines, processes::ProcessRegistry,
@@ -188,10 +188,13 @@ pub(super) fn spawn_connection(
     subscribers: EventSubscribers,
 ) -> Result<Arc<AcpConnection>, AntigravityError> {
     let executable = executable?;
+    // Spawn the shared ACP front-end in an empty neutral directory with per-session
+    // workers so unrelated repos and their AGENTS.md never leak across sessions.
+    let launch_dir = NeutralDir::create()?;
     let mut command = Command::new(&executable);
     command
-        .args(["acp", "--stdio"])
-        .current_dir(project_path)
+        .args(["acp", "--stdio", "--process-per-session"])
+        .current_dir(&launch_dir.0)
         .env("PATH", crate::executable::path(&executable))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -199,7 +202,7 @@ pub(super) fn spawn_connection(
 
     let mut child = command.spawn().map_err(|error| {
         AntigravityError::Launch(format!(
-            "Could not launch `{}` acp --stdio: {error}",
+            "Could not launch `{}` acp --stdio --process-per-session: {error}",
             executable.display()
         ))
     })?;
@@ -229,6 +232,7 @@ pub(super) fn spawn_connection(
 
     let connection = Arc::new(AcpConnection {
         process_id,
+        _launch_dir: launch_dir,
         writer: writer.clone(),
         pending: pending.clone(),
         next_id: next_id.clone(),
