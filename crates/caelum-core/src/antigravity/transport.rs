@@ -548,6 +548,14 @@ fn handle_session_update(
         }
     }
 
+    if kind == "agent_message_chunk"
+        && session_id
+            .as_deref()
+            .is_some_and(|sid| questions.has_awaiting(PROVIDER_NAME, project, sid))
+    {
+        return;
+    }
+
     if matches!(kind, "user_message_chunk" | "agent_message_chunk") {
         if let Some(sid) = session_id.as_deref() {
             let text = protocol::chunk_text(update);

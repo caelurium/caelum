@@ -55,8 +55,13 @@ pub fn open(s: &mut Workspace) {
     let Some(project) = active_project(s) else {
         return;
     };
+    open_for(s, project);
+}
+
+pub fn open_for(s: &mut Workspace, project: String) {
     let l = live_mut(s);
     l.runner.project = Some(project.clone());
+    l.app.refresh_project_config(&project);
     if l.runner.command.text.trim().is_empty()
         && let Some(last) = l
             .app
@@ -199,6 +204,42 @@ pub fn panel(s: &Workspace, k: &Kit) -> El {
         .gap(12.0)
         .child(ui::caption(project, k).truncate())
         .child(controls);
+
+    if let Some(error) = l.app.project_config_error(project) {
+        body = body.child(
+            text(error)
+                .font(k.ty.small)
+                .color(k.c.warning.fg)
+                .wrap()
+                .key("runner-config-error"),
+        );
+    }
+
+    if let Some(presets) = l
+        .app
+        .project_config(project)
+        .map(|c| c.runner_presets.as_slice())
+        .filter(|p| !p.is_empty())
+    {
+        let mut chips = row().w_full().gap(6.0).wrap().center_y();
+        chips = chips.child(ui::caption("Presets", k));
+        for (i, preset) in presets.iter().enumerate() {
+            let cmd_run = preset.command.clone();
+            chips = chips.child(
+                Button::new(preset.name.clone())
+                    .variant(ButtonVariant::Outline)
+                    .on_press(move |s: &mut Workspace| {
+                        let l = live_mut(s);
+                        l.runner.command.replace_text(cmd_run.clone());
+                        run(s);
+                    })
+                    .build(k)
+                    .help(preset.command.clone())
+                    .key(format!("runner-preset-{i}")),
+            );
+        }
+        body = body.child(chips);
+    }
 
     if let Some(history) = checkout.map(|c| &c.history).filter(|h| !h.is_empty()) {
         let mut chips = row().w_full().gap(6.0).wrap();

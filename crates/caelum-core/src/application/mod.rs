@@ -43,6 +43,7 @@ pub use workspace::HandoffSource;
 pub use workspace::HistoryAction;
 pub use workspace::Home;
 pub use workspace::HomeDraft;
+pub use workspace::PendingWorktreeSetup;
 pub use workspace::ProjectMove;
 pub use workspace::Session;
 pub use workspace::VmDestination;

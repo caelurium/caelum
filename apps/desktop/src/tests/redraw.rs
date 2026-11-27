@@ -477,3 +477,50 @@ fn visible_split_pane_streaming_requests_animated_commits() {
     assert!(l.apply_events([delta(Provider::Codex, "background", "Split chunk ")]));
     assert!(l.stream_progressed(&before, false));
 }
+
+#[test]
+fn codex_reasoning_deltas_and_completing_final_chunk_request_animated_commits() {
+    let mut ws = state(Provider::Codex);
+    let l = ws.live.as_mut().unwrap();
+    let mut tx = rune::Tx::default();
+    l.poll(&mut tx);
+
+    let before_reasoning = l.stream_snapshot();
+    assert!(l.apply_events([Event::Codex(CodexEvent {
+        project_path: "/project".into(),
+        method: "item/reasoning/summaryTextDelta".into(),
+        params: json!({
+            "threadId": "foreground",
+            "itemId": "reasoning-1",
+            "summaryIndex": 0,
+            "delta": "Thinking through the change "
+        }),
+        request_id: None,
+    })]));
+    assert!(l.stream_progressed(&before_reasoning, false));
+
+    let mut tx = rune::Tx::default();
+    let before_final = l.stream_snapshot();
+    l.apply_events([
+        Event::Codex(CodexEvent {
+            project_path: "/project".into(),
+            method: "item/agentMessage/delta".into(),
+            params: json!({
+                "threadId": "foreground",
+                "itemId": "final-answer",
+                "delta": "Done."
+            }),
+            request_id: None,
+        }),
+        Event::Codex(CodexEvent {
+            project_path: "/project".into(),
+            method: "turn/completed".into(),
+            params: json!({
+                "threadId": "foreground",
+                "turn": { "id": "t1" }
+            }),
+            request_id: None,
+        }),
+    ]);
+    assert!(l.finish_stream_poll(&before_final, &mut tx));
+}

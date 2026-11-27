@@ -123,6 +123,7 @@ impl Workspace {
         }
         self.dirty_checkouts.remove(project);
         self.task(git);
+        self.refresh_project_config(project);
         let Some(checkout) = self.services.checkouts.get(project) else {
             return;
         };
@@ -269,7 +270,9 @@ impl Workspace {
 
                 let root = self.group_path(project).to_owned();
                 self.project_roots
-                    .insert(worktree.project.path.clone(), root);
+                    .insert(worktree.project.path.clone(), root.clone());
+                self.refresh_project_config(&worktree.project.path);
+                self.handle_created_worktree_setup(&root, &worktree.project.path);
                 if !self.complete_ci_fix_worktree(request, worktree) {
                     if let Some((provider, _)) = launch.filter(|(_, navigation)| {
                         *navigation == self.navigation && !self.closed_since(project, request)
@@ -292,6 +295,7 @@ impl Workspace {
                 self.remembered_checkouts
                     .retain(|_, i| self.sessions[*i].scope.project != worktree.project.path);
                 self.services.checkouts.remove(&worktree.project.path);
+                self.pending_worktree_setups.remove(&worktree.project.path);
                 if self.active_project.as_ref() == Some(&worktree.project.path) {
                     let destination = root
                         .filter(|root| self.projects.iter().any(|p| &p.path == root))

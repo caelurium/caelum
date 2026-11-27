@@ -2,7 +2,9 @@
 //! should not reformat tool details or disturb a native diff's selection/scroll.
 use super::Live;
 use caelum_core::application::{Entry, EntryKind, presentation::Tool};
+use rune::Tx;
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
@@ -10,11 +12,14 @@ mod tests;
 type Key = (usize, String);
 const MAX_ENTRIES: usize = 48;
 const MAX_BYTES: usize = 4 * 1024 * 1024;
+const SCROLL_SETTLE_SECS: f64 = 0.08;
 
 #[derive(Default)]
 pub(super) struct Inputs {
     values: HashMap<Key, Source>,
     bytes: usize,
+    last_scroll: Option<(usize, u32)>,
+    scroll_settle_at: Option<f64>,
 }
 
 struct Source {
@@ -79,6 +84,42 @@ impl Inputs {
 }
 
 impl Live {
+    pub(super) fn sync_patches_for_poll(&mut self, tx: &mut Tx) -> bool {
+        let current_scroll = (self.panels.screen == crate::panels::Screen::Conversation)
+            .then_some(self.app.selected)
+            .flatten()
+            .filter(|&index| index < self.reading.len())
+            .and_then(|index| {
+                let position = self.reading_position(index);
+                (position.offset[1] < position.max[1] - 1.0)
+                    .then_some((index, position.offset[1].to_bits()))
+            });
+        match (self.patch_inputs.last_scroll, current_scroll) {
+            (Some((prev_index, prev_bits)), Some((index, bits)))
+                if prev_index == index && prev_bits != bits =>
+            {
+                self.patch_inputs.last_scroll = Some((index, bits));
+                self.patch_inputs.scroll_settle_at = Some(self.clock + SCROLL_SETTLE_SECS);
+                tx.wake_after(Duration::from_secs_f64(SCROLL_SETTLE_SECS));
+                return false;
+            }
+            _ => {
+                self.patch_inputs.last_scroll = current_scroll;
+                if current_scroll.is_none() {
+                    self.patch_inputs.scroll_settle_at = None;
+                }
+            }
+        }
+        if let Some(deadline) = self.patch_inputs.scroll_settle_at {
+            if self.clock < deadline {
+                tx.wake_after(Duration::from_secs_f64((deadline - self.clock).max(0.001)));
+                return false;
+            }
+            self.patch_inputs.scroll_settle_at = None;
+        }
+        self.sync_patches()
+    }
+
     pub(super) fn sync_patches(&mut self) -> bool {
         self.patch_inputs.retain(&self.visible_entries);
         let mut changed = false;
