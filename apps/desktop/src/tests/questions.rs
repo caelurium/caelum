@@ -318,8 +318,11 @@ fn long_question_forms_scroll_inside_the_dock_and_keep_actions_visible() {
             }
             let transcript = element(&rt, "live-transcript-0").rect;
             let dock = element(&rt, "question-composer").rect;
-            assert!(transcript[3] > 100.0, "{theme} {size:?}: {transcript:?}");
-            assert!(transcript[1] + transcript[3] <= dock[1] + 1.0);
+            assert!(
+                dock[1] - transcript[1] > 100.0,
+                "{theme} {size:?}: transcript={transcript:?}, dock={dock:?}"
+            );
+            assert!(transcript[1] + transcript[3] >= dock[1] + dock[3] - 1.0);
             let footer = element(&rt, "question-actions").rect;
             let (x, y) = rt.find("question-fields-0-long").unwrap();
             rt.wheel(x, y, -10000.0);

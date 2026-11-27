@@ -12,6 +12,15 @@ use crate::{
     quiet_button, ui,
 };
 
+pub const CLEARANCE: f32 = 188.0;
+
+pub fn overlay(composer: El) -> El {
+    col()
+        .pin(Some(0.0), None, Some(0.0), Some(0.0))
+        .items_center()
+        .child(composer)
+}
+
 #[derive(Default)]
 pub struct Editor {
     pub position: Rc<Cell<ScrollPos>>,
