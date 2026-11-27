@@ -280,13 +280,18 @@ impl Live {
         }
     }
 
-    pub(super) fn finish_stream_poll(&mut self, before: &StreamSnapshot, tx: &mut Tx) {
+    pub(crate) fn finish_stream_poll(&mut self, before: &StreamSnapshot, tx: &mut Tx) -> bool {
         let mut history_loaded = false;
         self.history_lengths.resize(self.app.sessions.len(), 0);
         for (index, session) in self.app.sessions.iter().enumerate() {
             let length = session.conversation.entries.len();
+            let was_working = before
+                .sessions
+                .iter()
+                .any(|&(seen, _, working)| seen == index && working);
             if length != self.history_lengths[index]
                 && !session.working()
+                && !was_working
                 && self.app.selected == Some(index)
             {
                 tx.instant();
@@ -294,8 +299,10 @@ impl Live {
             }
             self.history_lengths[index] = length;
         }
-        if self.stream_progressed(before, history_loaded) {
+        let animate = self.stream_progressed(before, history_loaded);
+        if animate {
             tx.animated();
         }
+        animate
     }
 }
