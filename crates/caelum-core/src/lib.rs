@@ -17,6 +17,7 @@ mod images;
 mod json_lines;
 pub mod opencode;
 pub mod processes;
+pub mod project_config;
 pub mod projects;
 pub mod questions;
 pub mod remote;

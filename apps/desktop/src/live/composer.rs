@@ -166,6 +166,7 @@ pub fn composer(s: &Workspace, k: &Kit, padding: f32, wide: bool, layers: &mut V
         .max_h(180.0)
         .gap(6.0)
         .children(crate::split::composer_target_bar(s, k))
+        .children(crate::worktree::setup_banner(s, k, &session.scope.project))
         .children((activity.is_some() || has_queue).then_some(status))
         .children((!session.shells.is_empty()).then(|| crate::activity::shells(s, k, index)))
         .child(crate::panels::composer_context(s, k, index));

@@ -88,6 +88,7 @@ impl Workspace {
             default_provider,
             worktree_directory,
             worktree_expanded,
+            trusted_worktree_setup,
             providers,
             favorite_models,
             notifications,
@@ -105,6 +106,7 @@ impl Workspace {
             || *default_provider != saved.default_provider
             || *worktree_directory != saved.worktree_directory
             || *worktree_expanded != saved.worktree_expanded
+            || *trusted_worktree_setup != saved.trusted_worktree_setup
             || *providers != saved.providers
             || *favorite_models != saved.favorite_models
             || *notifications != saved.notifications
