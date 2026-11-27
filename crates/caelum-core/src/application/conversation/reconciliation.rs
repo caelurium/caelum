@@ -4,6 +4,45 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use super::super::AttachmentKind;
 use super::{Conversation, Entry, EntryKind};
 
+pub(super) fn put_single(conversation: &mut Conversation, entry: Entry) {
+    if entry.kind() != EntryKind::User
+        && entry.previous_thread.is_none()
+        && !entry.id.starts_with("handoff-")
+    {
+        if let Some(index) = conversation
+            .entries
+            .iter()
+            .rposition(|old| old.previous_thread.is_none() && old.id == entry.id)
+        {
+            let placeholder = Entry::new(String::new(), EntryKind::Tool, String::new(), false);
+            let current = std::mem::replace(&mut conversation.entries[index], placeholder);
+            conversation.entries[index] = merge_entry(entry, current);
+            if subagent_relevant(&conversation.entries[index]) {
+                super::subagents::reconcile(&mut conversation.entries);
+            }
+            return;
+        }
+        let acp_replay = entry.id.starts_with("acp-") && !entry.id.starts_with("acp-live-");
+        if !acp_replay || !conversation.entries.iter().any(is_acp_live) {
+            let entry = snapshot_entry(entry);
+            let reconcile_subagents = subagent_relevant(&entry);
+            conversation.entries.push(entry);
+            if reconcile_subagents {
+                super::subagents::reconcile(&mut conversation.entries);
+            }
+            return;
+        }
+    }
+    merge(conversation, vec![entry], false);
+}
+
+fn subagent_relevant(entry: &Entry) -> bool {
+    entry.name == "subagent"
+        || entry.metadata["source"] == "subagent"
+        || entry.metadata["subagentReport"].is_string()
+        || crate::application::subagents::child_id(entry).is_some()
+}
+
 pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, older: bool) {
     let mut live = std::mem::take(&mut conversation.entries);
     let mut before = conversation.handoff_rows(&mut live, &mut history);

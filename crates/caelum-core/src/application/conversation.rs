@@ -179,7 +179,7 @@ impl Conversation {
             self.note_turn_output(&entry.id);
         }
         if entry.kind() != EntryKind::User
-            && !self.entries.iter().any(|old| {
+            && !self.entries.iter().rev().any(|old| {
                 old.id == entry.id
                     && old.text == entry.text
                     && old.input == entry.input
@@ -190,7 +190,7 @@ impl Conversation {
         {
             self.activity += 1;
         }
-        reconciliation::merge(self, vec![entry], false);
+        reconciliation::put_single(self, entry);
     }
 
     fn delta(&mut self, id: String, kind: EntryKind, delta: &str, output: bool) {

@@ -344,3 +344,52 @@ fn antigravity_history_reconciliation_adopts_live_chunks_without_duplicating() {
     assert_eq!(assistants[0].id, "acp-assistant-2");
     assert_eq!(output(&conversation, "acp-assistant-2"), 19_500);
 }
+
+#[test]
+fn in_place_tool_and_item_updates_preserve_order_and_ignore_stale_regressions() {
+    let mut conversation = Conversation::default();
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.started",
+        &json!({ "id": "t1", "name": "write_file", "_created": 100 }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "{\"path\":" }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "\"a.rs\"}" }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.success",
+        &json!({ "id": "t1", "output": "ok", "_created": 250 }),
+    );
+    conversation.apply(
+        Provider::OpenCode,
+        "session.tool.input.delta",
+        &json!({ "id": "t1", "delta": "late" }),
+    );
+
+    assert_eq!(conversation.entries.len(), 1);
+    assert_eq!(conversation.entries[0].id, "opencode-tool-t1");
+    assert_eq!(conversation.entries[0].input, "{\"path\":\"a.rs\"}");
+    assert_eq!(conversation.entries[0].output, "ok");
+    assert!(conversation.entries[0].complete());
+
+    let mut running = Entry::new("codex-item-1".into(), EntryKind::Tool, String::new(), false);
+    running.name = "bash".into();
+    conversation.put(running);
+    let mut done = Entry::new("codex-item-1".into(), EntryKind::Tool, String::new(), true);
+    done.name = "bash".into();
+    done.output = "done".into();
+    conversation.put(done);
+
+    assert_eq!(conversation.entries.len(), 2);
+    assert_eq!(conversation.entries[1].id, "codex-item-1");
+    assert_eq!(conversation.entries[1].output, "done");
+    assert!(conversation.entries[1].complete());
+}
