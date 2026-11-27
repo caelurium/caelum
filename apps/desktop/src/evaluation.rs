@@ -764,8 +764,7 @@ pub fn scene(state: &mut Workspace, name: &str) {
                 .find_map(|e| e.media.first())
                 .unwrap()
                 .clone();
-            l.media.selected = Some((project.into(), media));
-            l.panels.set_overlay(Some(crate::panels::Screen::Image));
+            l.panels.open_image(project.into(), media);
         }
         return;
     }

@@ -22,15 +22,35 @@ fn preview_turns_become_saved_history_and_boat_receipts_are_untouched() {
     let legacy: Thread = serde_json::from_value(managed).unwrap();
     assert_eq!(legacy.provider, crate::remote::VmProvider::OpenCode);
     assert!(legacy.model.is_none() && legacy.effort.is_none());
-    assert_eq!(legacy.turn.run().unwrap().provider, legacy.provider);
+    assert_eq!(legacy.turn().run().unwrap().provider, legacy.provider);
     for value in [&checkout["thread"], &checkout["other_threads"][0]] {
         let t: Thread = serde_json::from_value(value.clone()).unwrap();
-        assert_eq!(t.turn, Turn::Idle);
-        assert!(t.cursor.is_none() && t.conversation.is_none());
+        assert_eq!(t.turn(), &Turn::Idle);
+        assert!(t.cursor().is_none() && t.conversation().is_none());
         assert_eq!(t.lines.last().unwrap().speaker, Speaker::Activity);
     }
     let t: Thread = serde_json::from_value(checkout["thread"].clone()).unwrap();
     assert_eq!(t.draft, "next VM message");
     assert_eq!(t.lines[0].speaker, Speaker::Tool(ToolState::Reported));
     assert!(!t.lines[0].partial);
+}
+
+#[test]
+fn an_inconsistent_saved_run_requires_reconciliation_before_following() {
+    let saved = json!({
+        "draft": "next prompt",
+        "lines": [],
+        "cursor": "stale-page",
+        "conversation": "selected-chat",
+        "turn": {"Following": {"id": "r", "conversation": "other-chat", "prompt": "p"}},
+    });
+    let restored: Thread = serde_json::from_value(saved).unwrap();
+    assert_eq!(restored.conversation(), Some("selected-chat"));
+    assert_eq!(restored.turn(), &Turn::Submitting);
+    assert!(restored.cursor().is_none());
+    assert_eq!(restored.draft, "next prompt");
+    let encoded = serde_json::to_value(&restored).unwrap();
+    assert_eq!(encoded["conversation"], "selected-chat");
+    assert_eq!(encoded["turn"], "Submitting");
+    assert_eq!(serde_json::from_value::<Thread>(encoded).unwrap(), restored);
 }

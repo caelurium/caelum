@@ -210,14 +210,12 @@ impl Conversation {
         if method.starts_with("session.tool.") {
             if let Some(id) = data["id"].as_str().or(data["partID"].as_str()) {
                 let id = format!("opencode-tool-{id}");
-                let previous = self.entries.iter().find(|entry| entry.id == id);
                 let complete = method.ends_with("success") || method.ends_with("failed");
-                if previous.is_some_and(|entry| entry.complete()) && !complete {
+                let existing = self.entries.iter().rposition(|entry| entry.id == id);
+                let was_complete = existing.is_some_and(|index| self.entries[index].complete());
+                if was_complete && !complete {
                     return;
                 }
-                let mut entry = previous
-                    .cloned()
-                    .unwrap_or_else(|| Entry::new(id, EntryKind::Tool, String::new(), false));
                 let status = if method.ends_with("failed") {
                     "failed"
                 } else if complete {
@@ -225,56 +223,85 @@ impl Conversation {
                 } else {
                     "running"
                 };
-                entry.set_progress(complete, status);
-                if let Some(name) = data["name"].as_str().or(data["tool"].as_str()) {
-                    entry.name = name.into();
-                }
-                if method == "session.tool.input.delta" {
-                    entry.input.push_str(string(&data["delta"]));
-                } else if !data["input"].is_null() {
-                    entry.input = display(&data["input"]);
-                } else if method == "session.tool.input.ended" {
-                    entry.input = display(&data["text"]);
-                }
-                if !data["content"].is_null() {
-                    entry.output = text_content(&data["content"]);
-                    entry.media = presentation::media(&data["content"]);
-                } else if !data["output"].is_null() {
-                    entry.output = display(&data["output"]);
-                } else if let Some(output) = data["metadata"]["output"].as_str() {
-                    entry.output = output.into();
-                }
-                if !data["error"].is_null() {
-                    entry.error = display(&data["error"]);
-                }
-                if !data["metadata"].is_null() {
-                    entry.metadata = data["metadata"].clone();
-                }
-                entry.started_at = entry
-                    .started_at
-                    .or(data["started"].as_u64())
-                    .or(data["_created"].as_u64())
-                    .or_else(|| Some(presentation::now()));
-                if let Some(ended) = data["_created"].as_u64().filter(|_| complete) {
-                    if !entry.metadata.is_object() {
-                        entry.metadata = serde_json::json!({});
+                let apply_update = |entry: &mut Entry| {
+                    entry.set_progress(complete, status);
+                    if let Some(name) = data["name"].as_str().or(data["tool"].as_str()) {
+                        entry.name = name.into();
                     }
-                    entry.metadata["ended"] = ended.into();
-                }
-                subagents::tool(&mut entry);
-                if previous.is_some_and(|old| old.complete()) && !entry.complete() {
-                    return;
-                }
+                    if method == "session.tool.input.delta" {
+                        entry.input.push_str(string(&data["delta"]));
+                    } else if !data["input"].is_null() {
+                        entry.input = display(&data["input"]);
+                    } else if method == "session.tool.input.ended" {
+                        entry.input = display(&data["text"]);
+                    }
+                    if !data["content"].is_null() {
+                        entry.output = text_content(&data["content"]);
+                        entry.media = presentation::media(&data["content"]);
+                    } else if !data["output"].is_null() {
+                        entry.output = display(&data["output"]);
+                    } else if let Some(output) = data["metadata"]["output"].as_str() {
+                        entry.output = output.into();
+                    }
+                    if !data["error"].is_null() {
+                        entry.error = display(&data["error"]);
+                    }
+                    if !data["metadata"].is_null() {
+                        entry.metadata = data["metadata"].clone();
+                    }
+                    entry.started_at = entry
+                        .started_at
+                        .or(data["started"].as_u64())
+                        .or(data["_created"].as_u64())
+                        .or_else(|| Some(presentation::now()));
+                    if let Some(ended) = data["_created"].as_u64().filter(|_| complete) {
+                        if !entry.metadata.is_object() {
+                            entry.metadata = serde_json::json!({});
+                        }
+                        entry.metadata["ended"] = ended.into();
+                    }
+                    subagents::tool(entry);
+                };
+
+                let is_subagent = match existing {
+                    Some(index) if !was_complete => {
+                        let entry = &mut self.entries[index];
+                        apply_update(entry);
+                        entry.name == "subagent"
+                            || entry.metadata["source"] == "subagent"
+                            || entry.metadata["subagentReport"].is_string()
+                            || crate::application::subagents::child_id(entry).is_some()
+                    }
+                    Some(index) => {
+                        let mut entry = self.entries[index].clone();
+                        apply_update(&mut entry);
+                        if !entry.complete() {
+                            return;
+                        }
+                        let is_subagent = entry.name == "subagent"
+                            || entry.metadata["source"] == "subagent"
+                            || entry.metadata["subagentReport"].is_string()
+                            || crate::application::subagents::child_id(&entry).is_some();
+                        self.entries[index] = entry;
+                        is_subagent
+                    }
+                    None => {
+                        let mut entry = Entry::new(id, EntryKind::Tool, String::new(), false);
+                        apply_update(&mut entry);
+                        let is_subagent = entry.name == "subagent"
+                            || entry.metadata["source"] == "subagent"
+                            || entry.metadata["subagentReport"].is_string()
+                            || crate::application::subagents::child_id(&entry).is_some();
+                        self.entries.push(entry);
+                        is_subagent
+                    }
+                };
                 if !complete {
                     self.set_working(true);
                 }
-
-                if let Some(index) = self.entries.iter().position(|e| e.id == entry.id) {
-                    self.entries[index] = entry;
-                } else {
-                    self.entries.push(entry);
+                if is_subagent {
+                    subagents::reconcile(&mut self.entries);
                 }
-                subagents::reconcile(&mut self.entries);
             }
         }
         if data["message"]["type"].is_string() {

@@ -100,7 +100,7 @@ impl Workspace {
 
 impl TurnPreview {
     pub fn managed(thread: &Thread) -> Option<Self> {
-        let label = match thread.turn {
+        let label = match thread.turn() {
             Turn::Idle => return None,
             Turn::Submitting => "Sending",
             Turn::Queued(_) => "Queued",
@@ -116,7 +116,7 @@ impl TurnPreview {
                     text = message_excerpt(&line.text);
                     break;
                 }
-                _ if matches!(thread.turn, Turn::Queued(_) | Turn::Submitting) => continue,
+                _ if matches!(thread.turn(), &Turn::Queued(_) | Turn::Submitting) => continue,
                 Speaker::Tool(ToolState::Running) if !line.text.is_empty() => {
                     text = Some(tool_action(&line.text, line.tool_detail.as_deref()));
                 }

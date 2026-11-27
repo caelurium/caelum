@@ -49,7 +49,7 @@ fn overview_preserves_the_reading_place_and_native_draft_through_escape_and_swit
     fill(&mut rt, "live-draft-0", "Keep this café draft");
     rt.update(|s, tx| {
         s.live.as_mut().unwrap().drafts[0].set_selection(5, 9);
-        tx.scroll_center_in_instant("live-rows-0", "live-entry-0-note-25");
+        tx.scroll_center_in_instant("live-transcript-0", "live-entry-0-note-25");
     });
     advance(&mut rt, 0.5);
     let position = live(&rt.state).reading_position(0).offset[1];

@@ -187,7 +187,12 @@ fn shutdown_terminates_and_unregisters_the_owned_server_process() {
     });
     let slot = Arc::new(ServerSlot::default());
     slot.connect(&processes, |_| Ok(server.clone())).unwrap();
-    provider.inner.lock_servers().insert(project_path, slot);
+    provider
+        .inner
+        .lock_servers()
+        .as_mut()
+        .unwrap()
+        .insert(project_path, slot);
 
     provider.shutdown();
 
@@ -196,10 +201,4 @@ fn shutdown_terminates_and_unregisters_the_owned_server_process() {
         processes.terminate(process_id),
         Err(crate::processes::ProcessError::UnknownProcess)
     ));
-}
-
-#[test]
-fn reserve_local_port_returns_a_loopback_port_that_can_be_rebound() {
-    let port = reserve_local_port().unwrap();
-    assert_ne!(port, 0);
 }

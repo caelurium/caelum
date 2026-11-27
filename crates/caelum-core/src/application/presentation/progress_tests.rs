@@ -72,22 +72,19 @@ fn a_managed_card_follows_the_prompt_boundary_through_queue_tool_and_reply() {
         prompt: "prompt-id".into(),
         id: "run".into(),
     };
-    let mut thread = Thread {
-        turn: Turn::Queued(run.clone()),
-        lines: vec![
-            Line::new(Speaker::You, "Earlier prompt"),
-            Line::new(Speaker::Codex, "Earlier reply"),
-            Line::new(Speaker::Outcome(TurnEnd::Finished), "Done"),
-        ],
-        ..Default::default()
-    };
+    let mut thread = Thread::with_saved_turn(run.provider, None, Turn::Queued(run));
+    thread.lines = vec![
+        Line::new(Speaker::You, "Earlier prompt"),
+        Line::new(Speaker::Codex, "Earlier reply"),
+        Line::new(Speaker::Outcome(TurnEnd::Finished), "Done"),
+    ];
     let preview = |t: &Thread| TurnPreview::managed(t).unwrap().text;
     assert_eq!(preview(&thread), None);
     thread
         .lines
         .push(Line::new(Speaker::You, "Check the timer."));
     assert_eq!(preview(&thread).as_deref(), Some("Check the timer."));
-    thread.turn = Turn::Following(run);
+    thread.record_page(None, &crate::remote::RunStatus::Running);
     thread
         .lines
         .push(Line::new(Speaker::ReasoningSummary, "Reasoning"));

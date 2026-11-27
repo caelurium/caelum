@@ -32,7 +32,7 @@ impl Workspace {
             return None;
         };
         let source = l.tool_source.as_deref()?;
-        if c.thread.conversation.as_deref() != Some(source.conversation.as_str()) {
+        if c.thread.conversation() != Some(source.conversation.as_str()) {
             return None;
         }
         Some((&c.machine()?.key, source, state))

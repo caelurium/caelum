@@ -96,9 +96,21 @@ fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_swi
     assert!(app.sidebar_sessions(None, "", true).is_empty());
 
     assert!(app.overview_sessions("").is_empty());
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Submitting;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .begin_submission();
     assert_eq!(app.overview_sessions(""), std::slice::from_ref(&fresh));
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Idle;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .finish_turn();
 
     let FeedSession::Vm(link) = &prior else {
         panic!()
@@ -106,7 +118,13 @@ fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_swi
     assert!(app.open_vm_thread(link));
     assert_eq!(app.selected_feed_session().as_ref(), Some(&prior));
     assert_eq!(app.sidebar_sessions(None, "", false), expected);
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Submitting;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .begin_submission();
     assert_eq!(
         app.sidebar_sessions(None, "", false),
         [prior.clone(), fresh.clone(), FeedSession::Local(0)]
@@ -116,7 +134,13 @@ fn vm_feed_scopes_and_sorts_drafts_with_local_sessions_without_reordering_on_swi
         app.sidebar_sessions(None, "", false),
         [FeedSession::Local(0), prior.clone(), fresh]
     );
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Idle;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .finish_turn();
     app.sessions[0].conversation.set_working(false);
     assert_eq!(app.sidebar_sessions(None, "", false), expected);
     app.preferences.session_scope = SessionScope::AllProjects;
