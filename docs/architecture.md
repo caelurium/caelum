@@ -11,7 +11,7 @@
   the same Rust providers and project validation.
 
 The root Cargo workspace uses Rust 1.95.0 and one lockfile. Rune/rune-kit are pinned
-to `e5e9ea9abacd20ddfa878cf5e5988430e121aba4`.
+to `anomalyco/rune` at `9396dcb898b906c9b542fa28e728738f882cdfd7`.
 
 ## Application runtime
 
