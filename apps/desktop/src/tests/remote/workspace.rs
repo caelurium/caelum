@@ -39,7 +39,7 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
     click(&mut rt, "new-session");
 
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
-    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert_eq!(c.thread.conversation(), Some("thread-example"));
     let editor = live(&rt.state).app.selected.unwrap();
     let fresh = format!("live-session-{editor}");
     assert_eq!(count(&rt), before + 1);
@@ -60,7 +60,7 @@ fn sessions_sidebar_shows_and_selects_a_new_vm_draft_before_send() {
     click(&mut rt, &original);
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
     assert_eq!(c.thread.draft, "Keep the earlier draft");
-    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert_eq!(c.thread.conversation(), Some("thread-example"));
     assert!(element(&rt, &original).item_selected);
     assert!(!element(&rt, &fresh).item_selected);
 
@@ -97,7 +97,7 @@ fn vm_launcher_opens_pi_without_submitting_or_replacing_the_previous_chat() {
     assert_eq!(l.panels.screen, Screen::Remote);
     let checkout = &l.app.remote.saved.checkouts[id];
     assert_eq!(checkout.thread.provider, VmProvider::Pi);
-    assert!(checkout.thread.conversation.is_none());
+    assert!(checkout.thread.conversation().is_none());
     assert_eq!(checkout.other_threads[0].draft, "Keep my old draft");
     assert!(l.app.commands().iter().all(|(_, c)| !matches!(
         c,
@@ -195,10 +195,7 @@ fn a_vm_launch_from_home_checks_its_chosen_worktree_and_keeps_the_boat_chat_park
     let l = live_mut(&mut rt.state);
     assert!(l.app.selected.is_none());
     assert_eq!(
-        l.app.remote.saved.checkouts[id]
-            .thread
-            .conversation
-            .as_deref(),
+        l.app.remote.saved.checkouts[id].thread.conversation(),
         Some("thread-example")
     );
     assert!(l.app.commands().iter().all(|(_, c)| !matches!(
@@ -222,7 +219,7 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     let fresh = c.thread.editor_key(id).to_owned();
     assert_ne!(fresh, id);
     assert!(
-        c.thread.conversation.is_none() && c.thread.lines.is_empty() && c.thread.draft.is_empty()
+        c.thread.conversation().is_none() && c.thread.lines.is_empty() && c.thread.draft.is_empty()
     );
     assert_eq!(c.other_threads[0].draft, "Keep my draft");
     assert!(
@@ -241,7 +238,7 @@ fn a_fresh_vm_session_parks_the_draft_and_only_starts_on_send() {
     click(&mut rt, "vm-threads");
     click(&mut rt, "vm-thread-checkout-example");
     let c = &live(&rt.state).app.remote.saved.checkouts[id];
-    assert_eq!(c.thread.conversation.as_deref(), Some("thread-example"));
+    assert_eq!(c.thread.conversation(), Some("thread-example"));
     assert_eq!(c.thread.draft, "Keep my draft");
     assert_eq!(c.thread.provider, VmProvider::OpenCode);
     assert_eq!(c.other_threads[0].provider, VmProvider::Codex);
@@ -430,6 +427,11 @@ fn project_vm_group_owns_its_worktree_rows_and_removal_preserves_other_checkouts
     click(&mut rt, "cancel-remove-vm");
     assert!(rt.find("remote-checkout-parked").is_some());
     secondary(&mut rt, "remote-checkout-parked");
+    assert!(
+        rt.elements()
+            .iter()
+            .all(|e| e.text.as_deref() != Some("Manage VM and Boat conversations…"))
+    );
     choose_context(&mut rt, "Remove from project…");
     click(&mut rt, "confirm-remove-vm");
     assert!(rt.find("remote-checkout-parked").is_none());

@@ -17,16 +17,28 @@ pub struct Editor {
     pub position: Rc<Cell<ScrollPos>>,
 }
 
-pub struct Preview {
-    pub owner: usize,
+pub(crate) struct Preview {
+    pub restore: Restore,
     pub attachment: Attachment,
+    view: PreviewView,
+}
+
+pub(crate) struct Restore {
+    pub owner: usize,
     offset: f32,
+}
+
+enum PreviewView {
+    Snapshot,
+    Image {
+        project: String,
+        viewport: crate::media::Viewport,
+    },
 }
 
 #[derive(Default)]
 pub struct State {
     pub editors: Vec<Editor>,
-    pub preview: Option<Preview>,
     selected: Option<usize>,
 }
 
@@ -58,22 +70,21 @@ pub fn open(s: &mut Workspace, index: usize, id: &str) {
     else {
         return;
     };
-    if attachment.kind == AttachmentKind::Image {
-        l.media.selected = Some((
-            l.app.sessions[index].scope.project.clone(),
-            caelum_core::application::presentation::Media {
-                name: attachment.label(),
-                source: attachment.content.clone(),
-            },
-        ));
-        l.media.zoom = None;
-    }
-    l.composer.preview = Some(Preview {
-        owner: index,
+    let view = match attachment.kind {
+        AttachmentKind::Image => PreviewView::Image {
+            project: l.app.sessions[index].scope.project.clone(),
+            viewport: Default::default(),
+        },
+        AttachmentKind::File | AttachmentKind::PullRequest => PreviewView::Snapshot,
+    };
+    l.panels.open_attachment(Preview {
+        restore: Restore {
+            owner: index,
+            offset: l.composer.editors[index].position.get().offset[1],
+        },
         attachment,
-        offset: l.composer.editors[index].position.get().offset[1],
+        view,
     });
-    l.panels.set_overlay(Some(Screen::Attachment));
 }
 
 pub fn sync(l: &mut crate::live::Live, tx: &mut Tx) -> bool {
@@ -93,16 +104,17 @@ pub fn sync(l: &mut crate::live::Live, tx: &mut Tx) -> bool {
         }
         changed = true;
     }
-    if l.composer.preview.as_ref().is_some_and(|preview| {
-        Some(preview.owner) != l.app.selected || l.panels.overlay() != Some(Screen::Attachment)
-    }) {
-        let preview = l.composer.preview.take().unwrap();
-        if l.panels.overlay() == Some(Screen::Attachment) {
-            l.panels.set_overlay(None);
-        }
-        if l.app.selected == Some(preview.owner) && l.panels.overlay().is_none() {
+    if l.panels
+        .attachment()
+        .is_some_and(|preview| Some(preview.restore.owner) != l.app.selected)
+    {
+        l.panels.set_overlay(None);
+        changed = true;
+    }
+    if let Some(restore) = l.panels.take_attachment_restore() {
+        if l.app.selected == Some(restore.owner) && l.panels.overlay().is_none() {
             l.focus();
-            tx.scroll_to_y("composer-editor", preview.offset);
+            tx.scroll_to_y("composer-editor", restore.offset);
         }
         changed = true;
     }
@@ -239,13 +251,17 @@ pub fn attachments(s: &Workspace, k: &Kit, index: usize) -> El {
     body
 }
 
-pub fn preview(s: &Workspace, k: &Kit) -> El {
-    let Some(preview) = &live(s).composer.preview else {
-        return col();
-    };
+pub(crate) fn preview_view(preview: &Preview, s: &Workspace, k: &Kit) -> El {
     let attachment = &preview.attachment;
-    if attachment.kind == AttachmentKind::Image {
-        return crate::media::view(s, k);
+    if let PreviewView::Image { project, viewport } = &preview.view {
+        return crate::media::view(
+            s,
+            k,
+            project,
+            &attachment.label(),
+            &attachment.content,
+            viewport,
+        );
     }
     let content = snapshot_content(attachment);
     let count = content.lines().count();
@@ -299,21 +315,7 @@ pub fn preview(s: &Workspace, k: &Kit) -> El {
         )
 }
 
-fn snapshot_content(attachment: &Attachment) -> String {
-    if attachment.kind == AttachmentKind::PullRequest {
-        serde_json::from_str::<serde_json::Value>(&attachment.content)
-            .ok()
-            .and_then(|value| serde_json::to_string_pretty(&value).ok())
-            .unwrap_or_else(|| attachment.content.clone())
-    } else {
-        attachment.content.clone()
-    }
-}
-
-pub fn preview_header(s: &Workspace) -> (&str, &str) {
-    let Some(preview) = &live(s).composer.preview else {
-        return ("Attachment", "");
-    };
+pub(crate) fn preview_header(preview: &Preview) -> (&str, &str) {
     match preview.attachment.kind {
         AttachmentKind::Image => ("Image preview", ""),
         AttachmentKind::PullRequest => ("Pull request snapshot", &preview.attachment.path),
@@ -328,14 +330,23 @@ pub fn preview_header(s: &Workspace) -> (&str, &str) {
     }
 }
 
-pub fn preview_height(s: &Workspace) -> f32 {
-    let Some(preview) = &live(s).composer.preview else {
-        return 120.0;
-    };
-    if preview.attachment.kind == AttachmentKind::Image {
-        return 480.0;
+pub(crate) fn preview_height(preview: &Preview) -> f32 {
+    match preview.view {
+        PreviewView::Image { .. } => 480.0,
+        PreviewView::Snapshot => {
+            let lines = snapshot_content(&preview.attachment).lines().count();
+            (lines as f32 * 20.0 + 24.0).clamp(84.0, 420.0) + 56.0
+        }
     }
-    let lines = snapshot_content(&preview.attachment).lines().count();
+}
 
-    (lines as f32 * 20.0 + 24.0).clamp(84.0, 420.0) + 56.0
+fn snapshot_content(attachment: &Attachment) -> String {
+    if attachment.kind == AttachmentKind::PullRequest {
+        serde_json::from_str::<serde_json::Value>(&attachment.content)
+            .ok()
+            .and_then(|value| serde_json::to_string_pretty(&value).ok())
+            .unwrap_or_else(|| attachment.content.clone())
+    } else {
+        attachment.content.clone()
+    }
 }

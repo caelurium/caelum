@@ -5,7 +5,7 @@ use crate::remote::{Job, Machine, Phase, Thread, Turn};
 impl Workspace {
     pub fn can_switch_vm_thread(&self, id: &str) -> bool {
         self.remote.saved.checkouts.get(id).is_some_and(|c| {
-            c.thread.turn == Turn::Idle
+            c.thread.turn() == &Turn::Idle
                 && !matches!(
                     c.phase,
                     Phase::Create(_)
@@ -61,11 +61,10 @@ impl Workspace {
                 c.thread.record_activity();
             }
         } else {
-            c.open_thread(Thread {
-                local_id: Some(uuid::Uuid::new_v4().to_string()),
-                provider,
-                ..Default::default()
-            });
+            let mut thread = Thread::default();
+            thread.local_id = Some(uuid::Uuid::new_v4().to_string());
+            thread.provider = provider;
+            c.open_thread(thread);
         }
         self.remote.feeds.remove(id);
         if self.remote.saved.selected.as_deref() != Some(id) {

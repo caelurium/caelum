@@ -372,13 +372,15 @@ fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touc
     app.remote.saved.selected = None;
     app.select(i);
     app.remote.jobs.clear();
+    let thread = &mut app.remote.saved.checkouts.get_mut(&id).unwrap().thread;
     let run = Run {
-        provider: VmProvider::OpenCode,
+        provider: thread.provider,
         conversation: "conv".into(),
         prompt: "prompt".into(),
         id: "run".into(),
     };
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Following(run.clone());
+    thread.begin_submission();
+    assert!(thread.accept_run(run.clone()));
     app.monitor_remote(Some(&id), Instant::now());
     let Monitor::Loading { request: stale, .. } = app.remote.monitor else {
         panic!()
@@ -405,7 +407,7 @@ fn restored_local_link_opens_its_own_parked_thread_and_timer_changes_do_not_touc
     ));
     let c = &app.remote.saved.checkouts[&id];
     assert_eq!(c.machine().unwrap().auto_stop_unix, Some(86_400));
-    assert_eq!(c.thread.turn, Turn::Following(run));
+    assert_eq!(c.thread.turn(), &Turn::Following(run));
     assert_eq!(app.selected, Some(i));
     assert!(app.remote.saved.selected.is_none());
 }
@@ -468,7 +470,7 @@ fn pi_handoff_publishes_from_main_and_survives_restore_without_replaying_chat_af
     ));
     assert!(app.enter_confirmed_vm());
     let id = app.remote.saved.selected.clone().unwrap();
-    assert!(!app.remote.saved.checkouts[&id].thread.awaiting_native);
+    assert!(!app.remote.saved.checkouts[&id].thread.awaiting_native());
     assert_eq!(app.sessions[i].draft, "New laptop draft");
     assert_eq!(app.sessions[i].attachments.len(), 1);
     let creates = app.commands();
@@ -637,11 +639,9 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
         req,
         Ok(Reply::Remote(prepared_vm(m.clone(), "existing"))),
     ));
-    let original = Thread {
-        conversation: Some("original".into()),
-        draft: "VM draft".into(),
-        ..Default::default()
-    };
+    let mut original =
+        Thread::with_saved_turn(VmProvider::Codex, Some("original".into()), Turn::Idle);
+    original.draft = "VM draft".into();
     app.remote.saved.checkouts.get_mut(&id).unwrap().thread = original.clone();
     app.home_select_project(source().project);
     app.home.draft.text = "From Home".into();
@@ -655,16 +655,28 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     assert!(app.begin_vm_handoff(HandoffSource::HomeDraft));
     app.remote.picker = Some(Picker::Ready(source()));
     let destination = || VmDestination::Existing(m.clone());
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Submitting;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .begin_submission();
     assert!(app.finish_vm_handoff(destination()).is_none());
-    app.remote.saved.checkouts.get_mut(&id).unwrap().thread.turn = Turn::Idle;
+    app.remote
+        .saved
+        .checkouts
+        .get_mut(&id)
+        .unwrap()
+        .thread
+        .finish_turn();
     assert_eq!(app.finish_vm_handoff(destination()), Some(id.clone()));
     assert_eq!(app.home.draft.text, "From Home");
     assert_eq!(app.sessions[i].draft, "Next step");
     let checkout = &app.remote.saved.checkouts[&id];
     assert_eq!(checkout.other_threads, std::slice::from_ref(&original));
     assert_eq!(checkout.thread.draft, "From Home");
-    assert!(checkout.thread.conversation.is_none());
+    assert!(checkout.thread.conversation().is_none());
     let new_key = checkout.thread.editor_key(&id).to_owned();
     let (req, _) = app
         .commands()
@@ -713,10 +725,10 @@ fn home_can_continue_on_an_existing_idle_machine_without_overwriting_its_thread(
     assert!(app.commands().is_empty());
     assert!(app.remote.saved.checkouts[&id]
         .thread
-        .conversation
+        .conversation()
         .is_none());
     assert_eq!(
-        app.remote.saved.checkouts[&id].thread.turn,
-        Turn::Submitting
+        app.remote.saved.checkouts[&id].thread.turn(),
+        &Turn::Submitting
     );
 }
