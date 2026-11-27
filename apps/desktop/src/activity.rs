@@ -93,7 +93,7 @@ pub fn shells(s: &Workspace, k: &Kit, index: usize) -> El {
     crate::shells::view(s, k, index)
 }
 
-pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
+pub fn tool(s: &Workspace, k: &Kit, reduced: bool, index: usize, entry: &Entry) -> El {
     if let Some(task) = caelum_core::application::subagents::Subagent::from_entry(entry) {
         return crate::subagents::view(s, k, index, entry, &task);
     }
@@ -451,10 +451,14 @@ pub fn tool(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
     }
     if expanded {
         if reasoning {
+            let streaming = !entry.complete() && live(s).app.sessions[index].working();
             content = content.child(
                 Markdown::new(caelum_core::application::presentation::entry_text(entry))
                     .selectable(true)
+                    .streaming(streaming)
+                    .reveal(if reduced { 0.0 } else { 0.12 })
                     .render(&theme::markdown(k))
+                    .key(format!("reasoning-md-{index}-{row_id}"))
                     .pl(27.0),
             );
         } else {
@@ -630,7 +634,7 @@ fn tool_output(
     .key(key)
 }
 
-pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
+pub fn compaction(s: &Workspace, k: &Kit, reduced: bool, index: usize, entry: &Entry) -> El {
     let outcome = if entry.error.is_empty() {
         caelum_core::application::presentation::outcome(entry.status(), entry.complete())
     } else {
@@ -725,10 +729,12 @@ pub fn compaction(s: &Workspace, k: &Kit, index: usize, entry: &Entry) -> El {
                     Markdown::new(summary)
                         .selectable(true)
                         .streaming(!entry.complete())
+                        .reveal(if reduced { 0.0 } else { 0.12 })
                         .on_link_tx(move |s: &mut Workspace, url, tx| {
                             panels::open_link(s, index, url, tx)
                         })
-                        .render(&theme::markdown(k)),
+                        .render(&theme::markdown(k))
+                        .key(format!("compaction-md-{index}-{row_id}")),
                 ),
         );
     }

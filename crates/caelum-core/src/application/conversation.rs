@@ -366,6 +366,9 @@ impl Conversation {
                     .as_u64()
                     .unwrap_or(0);
                     let delta = string(&data["delta"]);
+                    if !delta.is_empty() {
+                        self.activity += 1;
+                    }
                     let had_summary = entry.reasoning.keys().any(|(s, _)| *s);
                     let existed = entry.reasoning.contains_key(&(summary, index));
                     entry

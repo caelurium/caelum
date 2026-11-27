@@ -76,6 +76,8 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
             acp_existing.insert(history_index, entry);
         } else if ids.contains(entry.id.as_str()) {
             existing.insert(entry.id.clone(), entry);
+        } else if !older && !history.is_empty() && is_acp_live(&entry) && entry.complete() {
+            continue;
         } else if index < insertion {
             before.push(entry);
         } else {

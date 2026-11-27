@@ -9,6 +9,7 @@ mod history;
 mod home;
 mod notifications;
 mod persistence;
+mod project_config;
 mod projects;
 mod provider_switch;
 mod queue;
@@ -31,6 +32,7 @@ pub use fork::ForkPoint;
 pub use fork::HistoryAction;
 pub use home::Home;
 pub use home::HomeDraft;
+pub use project_config::PendingWorktreeSetup;
 pub use projects::ProjectMove;
 pub use remote::handoff::HandoffPhase;
 pub use remote::handoff::HandoffSource;
@@ -347,6 +349,7 @@ pub struct Workspace {
     project_open: Option<u64>,
     launches: HashMap<u64, (Provider, u64)>,
     pending_ci_fixes: HashMap<u64, review::PendingCiFix>,
+    pending_worktree_setups: std::collections::BTreeMap<String, PendingWorktreeSetup>,
     remembered: HashMap<String, usize>,
     remembered_checkouts: HashMap<String, usize>,
     managed_worktrees: BTreeSet<String>,
