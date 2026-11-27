@@ -54,7 +54,7 @@ fn create(app: &mut Workspace, source: &SessionKey, boundary: ForkBoundary) -> u
 #[test]
 fn opencode_fork_across_a_page_break_keeps_the_full_selected_exchange_and_does_not_copy_drafts() {
     let (mut app, source) = parent(Provider::OpenCode);
-    assert!(app.open_fork(0));
+    assert!(app.open_history_action(0, HistoryAction::Fork, None));
     provider_page(
         &mut app,
         vec![
@@ -109,7 +109,7 @@ fn opencode_fork_across_a_page_break_keeps_the_full_selected_exchange_and_does_n
 fn codex_fork_reuses_a_discovered_child_and_does_not_navigate_after_dismissal_or_navigation() {
     for navigate in [true, false] {
         let (mut app, source) = parent(Provider::Codex);
-        assert!(app.open_fork(0));
+        assert!(app.open_history_action(0, HistoryAction::Fork, None));
         provider_page(
             &mut app,
             vec![
@@ -151,7 +151,7 @@ fn codex_fork_reuses_a_discovered_child_and_does_not_navigate_after_dismissal_or
 #[test]
 fn fork_checks_admission_again_and_failures_do_not_change_the_parent() {
     let (mut app, source) = parent(Provider::OpenCode);
-    assert!(app.open_fork(0));
+    assert!(app.open_history_action(0, HistoryAction::Fork, None));
     provider_page(
         &mut app,
         vec![json!({"id":"msg_a","type":"user","text":"Prompt"})],

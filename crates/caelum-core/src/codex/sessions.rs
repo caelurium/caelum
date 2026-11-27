@@ -441,17 +441,7 @@ impl CodexProvider {
         thread_id: &str,
         prompt: &str,
     ) -> Result<(), CodexError> {
-        self.send_prompt_with_model(project_path, thread_id, prompt, None)
-    }
-
-    pub fn send_prompt_with_model(
-        &self,
-        project_path: impl AsRef<Path>,
-        thread_id: &str,
-        prompt: &str,
-        model: Option<&str>,
-    ) -> Result<(), CodexError> {
-        self.send_prompt_with_options(project_path, thread_id, prompt, model, None)
+        self.send_prompt_with_options(project_path, thread_id, prompt, None, None)
     }
 
     pub fn send_prompt_with_options(
