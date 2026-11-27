@@ -9,7 +9,7 @@ description = "Caelum's native coding workspace"
 
 [dependencies]
 bytemuck = { version = "1.25", features = ["derive"] }
-rune = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7", default-features = false, features = ["accessibility", "metal-backend", "native-file-dialog"] }
+rune = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7", default-features = false, features = ["accessibility", "metal-backend", "native-file-dialog", "tooling"] }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "9396dcb898b906c9b542fa28e728738f882cdfd7", features = ["markdown"] }
 serde.workspace = true
 serde_json.workspace = true
