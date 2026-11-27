@@ -175,9 +175,10 @@ impl ProviderRuntime {
                     .antigravity
                     .regenerate_title(&key.scope.project, &key.id)
                     .map_err(|e| e.to_string()),
-                Provider::Codex => {
-                    Err("Codex does not support regenerating session titles.".into())
-                }
+                Provider::Codex => self
+                    .codex
+                    .regenerate_title(&key.scope.project, &key.id)
+                    .map_err(|e| e.to_string()),
             },
             Command::Rename(key, title) => match key.scope.provider {
                 Provider::Codex => self
@@ -450,7 +451,7 @@ impl ProviderRuntime {
                                 scope: scope.clone(),
                                 id: s.thread.id,
                             },
-                            title: s.thread.name.unwrap_or(s.thread.preview),
+                            title: crate::codex::thread_title(s.thread.name, s.thread.preview),
                             updated_at: s.thread.updated_at.map(|at| at.saturating_mul(1000)),
                             working: s.thread.is_working,
                             options: Options {
@@ -499,7 +500,7 @@ impl ProviderRuntime {
                         .resume_session(&key.scope.project, &key.id)
                         .map(|s| Summary {
                             key: key.clone(),
-                            title: s.thread.name.unwrap_or(s.thread.preview),
+                            title: crate::codex::thread_title(s.thread.name, s.thread.preview),
                             updated_at: s.thread.updated_at.map(|at| at.saturating_mul(1000)),
                             working: s.thread.is_working,
                             options: Options {

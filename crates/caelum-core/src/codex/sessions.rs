@@ -710,7 +710,12 @@ impl CodexConnection {
         }
     }
 
-    fn owned_thread(&self, project: &Project, id: &str, idle: bool) -> Result<Value, CodexError> {
+    pub(super) fn owned_thread(
+        &self,
+        project: &Project,
+        id: &str,
+        idle: bool,
+    ) -> Result<Value, CodexError> {
         let mut value = self.request("thread/read", json!({"threadId":id}))?;
         let thread = value
             .get_mut("thread")
