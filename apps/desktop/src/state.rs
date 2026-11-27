@@ -271,6 +271,7 @@ impl Workspace {
 
 pub fn poll(s: &mut Workspace, now: f64, tx: &mut Tx) -> bool {
     if let Some(live) = &mut s.live {
+        live.clock = now;
         if !s.sidebar.is_open() {
             live.feed.hidden();
         }

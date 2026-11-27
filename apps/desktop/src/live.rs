@@ -99,6 +99,7 @@ pub struct Live {
     last_completion: Option<(String, String)>,
     review_refresh: Option<((String, String), std::time::Instant)>,
     shell_refresh: Option<std::time::Instant>,
+    pub(crate) clock: f64,
     wake: Option<Waker>,
 }
 
@@ -160,6 +161,7 @@ impl Live {
             last_completion: None,
             review_refresh: None,
             shell_refresh: None,
+            clock: 0.0,
             wake: None,
         }
     }
@@ -540,7 +542,7 @@ impl Live {
         changed |= crate::remote::sync(self, tx);
         changed |= crate::remote::native::poll(self);
         changed |= self.app.acknowledge();
-        changed |= self.sync_patches();
+        changed |= self.sync_patches_for_poll(tx);
         if self.last_selected != self.app.selected
             && let Some(index) = self.app.selected
         {
