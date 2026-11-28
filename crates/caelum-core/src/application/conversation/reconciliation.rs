@@ -57,7 +57,7 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
     } else {
         acp_adoptions(&live, &history, &optimistic)
     };
-    let mut optimistic_context = BTreeMap::new();
+    let mut optimistic_context: BTreeMap<usize, Vec<Entry>> = BTreeMap::new();
     let mut acp_existing = BTreeMap::new();
     let insertion = live
         .iter()
@@ -71,7 +71,10 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
     let mut existing = BTreeMap::new();
     for (index, entry) in live.drain(..).enumerate() {
         if let Some(&history_index) = optimistic.get(&index) {
-            optimistic_context.insert(history_index, entry);
+            optimistic_context
+                .entry(history_index)
+                .or_default()
+                .push(entry);
         } else if let Some(&history_index) = acp_live.get(&index) {
             acp_existing.insert(history_index, entry);
         } else if ids.contains(entry.id.as_str()) {
@@ -85,8 +88,10 @@ pub(super) fn merge(conversation: &mut Conversation, mut history: Vec<Entry>, ol
         }
     }
     for (index, mut snapshot) in history.into_iter().enumerate() {
-        if let Some(optimistic) = optimistic_context.remove(&index) {
-            preserve_optimistic_context(&mut snapshot, &optimistic);
+        if let Some(adopted) = optimistic_context.remove(&index) {
+            for optimistic in &adopted {
+                preserve_optimistic_context(&mut snapshot, optimistic);
+            }
         }
         let entry = match existing
             .remove(&snapshot.id)
@@ -161,6 +166,7 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
         .collect();
     let mut matches = BTreeMap::new();
     let mut end = history.len();
+    let mut merged_acp: Option<(usize, usize)> = None;
 
     for (index, entry) in live
         .iter()
@@ -168,6 +174,13 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
         .rev()
         .filter(|(_, e)| e.optimistic())
     {
+        if let Some((history_index, byte_end)) = merged_acp {
+            if let Some(pos) = acp_merged_match(&history[history_index], entry, byte_end) {
+                matches.insert(index, history_index);
+                merged_acp = Some((history_index, pos));
+                continue;
+            }
+        }
         if let Some(history_index) = history[..end].iter().rposition(|snapshot| {
             positions
                 .get(snapshot.id.as_str())
@@ -176,9 +189,51 @@ fn adoptions(live: &[Entry], history: &[Entry]) -> BTreeMap<usize, usize> {
         }) {
             matches.insert(index, history_index);
             end = history_index;
+            merged_acp = None;
+            continue;
+        }
+        if let Some((history_index, pos)) =
+            history[..end]
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(history_index, snapshot)| {
+                    positions
+                        .get(snapshot.id.as_str())
+                        .is_none_or(|&known| known >= index)
+                        .then(|| acp_merged_match(snapshot, entry, snapshot.text.len()))
+                        .flatten()
+                        .map(|pos| (history_index, pos))
+                })
+        {
+            matches.insert(index, history_index);
+            end = history_index;
+            merged_acp = Some((history_index, pos));
         }
     }
     matches
+}
+
+fn acp_merged_match(history: &Entry, optimistic: &Entry, byte_end: usize) -> Option<usize> {
+    if history.kind() != EntryKind::User
+        || optimistic.kind() != EntryKind::User
+        || !history.id.starts_with("acp-user-")
+        || history.started_at.is_some()
+        || !history.media.is_empty()
+    {
+        return None;
+    }
+    let (history_text, history_attachments) = super::super::split_context(&history.text);
+    if !history_attachments.is_empty() {
+        return None;
+    }
+    let (optimistic_text, _) = super::super::split_context(&optimistic.text);
+    let needle = optimistic_text.trim();
+    if needle.is_empty() {
+        return None;
+    }
+    let limit = byte_end.min(history_text.len());
+    history_text[..limit].rfind(needle)
 }
 
 fn optimistic_matches(history: &Entry, optimistic: &Entry) -> bool {
