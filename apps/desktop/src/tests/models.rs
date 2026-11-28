@@ -707,3 +707,110 @@ fn settings_provider_and_composer_choices_apply_to_first_send() {
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].options.model.as_deref(), Some("first"));
 }
+
+#[test]
+fn shift_tab_cycles_agents_in_split_view_unfocused_and_home() {
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let opencode_scope = l.app.sessions[1].scope.clone();
+        l.app.choices.insert(
+            opencode_scope,
+            serde_json::from_value(serde_json::json!({
+                "models": [{"id":"m1","name":"Model 1","efforts":[],"defaultEffort":null}],
+                "agents": [{"id":"build","name":"Build"},{"id":"plan","name":"Plan"}],
+                "defaultModel": "m1"
+            }))
+            .unwrap(),
+        );
+        l.app.sessions[1].options.agent = Some("build".into());
+        l.app.select(0);
+        crate::split::open_session(s, 1, crate::split::SplitOrientation::Vertical);
+    });
+    advance(&mut rt, 0.2);
+
+    let shift_tab = Mods {
+        shift: true,
+        ..Default::default()
+    };
+    // Secondary split pane cycles repeatedly without losing focus to the primary pane.
+    key(&mut rt, Key::Tab, shift_tab);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[1]
+            .options
+            .agent
+            .as_deref(),
+        Some("plan")
+    );
+    assert!(element(&rt, "live-draft-1").focused);
+    key(&mut rt, Key::Tab, shift_tab);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[1]
+            .options
+            .agent
+            .as_deref(),
+        Some("build")
+    );
+    assert!(element(&rt, "live-draft-1").focused);
+
+    // Works even when the composer input is not focused.
+    rt.update(|s, _| {
+        for draft in &mut s.live.as_mut().unwrap().drafts {
+            draft.focused = false;
+        }
+    });
+    advance(&mut rt, 0.1);
+    key(&mut rt, Key::Tab, shift_tab);
+    assert_eq!(
+        rt.state.live.as_ref().unwrap().app.sessions[1]
+            .options
+            .agent
+            .as_deref(),
+        Some("plan")
+    );
+    assert!(element(&rt, "live-draft-1").focused);
+
+    // Home screen cycles agents for the active Home scope too.
+    rt.update(|s, _| {
+        crate::home::open(s);
+        let l = s.live.as_mut().unwrap();
+        l.app
+            .home_set_provider(caelum_core::application::Provider::OpenCode);
+        if let Some(scope) = l.app.home_scope() {
+            l.app.choices.insert(
+                scope,
+                serde_json::from_value(serde_json::json!({
+                    "models": [{"id":"m1","name":"Model 1","efforts":[],"defaultEffort":null}],
+                    "agents": [{"id":"build","name":"Build"},{"id":"plan","name":"Plan"}],
+                    "defaultModel": "m1"
+                }))
+                .unwrap(),
+            );
+        }
+    });
+    advance(&mut rt, 0.2);
+    key(&mut rt, Key::Tab, shift_tab);
+    assert_eq!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .app
+            .home_options()
+            .agent
+            .as_deref(),
+        Some("build")
+    );
+    key(&mut rt, Key::Tab, shift_tab);
+    assert_eq!(
+        rt.state
+            .live
+            .as_ref()
+            .unwrap()
+            .app
+            .home_options()
+            .agent
+            .as_deref(),
+        Some("plan")
+    );
+}

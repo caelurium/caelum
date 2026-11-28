@@ -202,6 +202,7 @@ fn composer(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> El {
                 .children(controls::provider(s, k, layers))
                 .child(controls::model(s, k))
                 .children(controls::effort(s, k, layers))
+                .children(controls::agent(s, k, layers))
                 .child(el().grow(1.0))
                 .child(crate::remote::handoff_button(s, k, None))
                 .child(

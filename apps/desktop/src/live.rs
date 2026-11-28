@@ -212,8 +212,10 @@ impl Live {
         if crate::questions::focus(self) {
             return;
         }
-        if let Some(index) = self.app.selected {
-            self.drafts[index].focused = true;
+        if let Some(index) = crate::split::composer_target(self).or(self.app.selected) {
+            for (i, draft) in self.drafts.iter_mut().enumerate() {
+                draft.focused = i == index;
+            }
         }
     }
 

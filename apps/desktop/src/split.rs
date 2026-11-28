@@ -319,8 +319,11 @@ pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
     match pane {
         ActivePane::Primary => {
             if let Some(i) = l.app.selected {
-                if let Some(project) = l.app.sessions.get(i).map(|s| s.scope.project.clone()) {
-                    l.app.focus_project_context(&project);
+                if let Some(scope) = l.app.sessions.get(i).map(|s| s.scope.clone()) {
+                    l.app.focus_project_context(&scope.project);
+                    if !l.app.choices.contains_key(&scope) {
+                        l.app.refresh_choices_for(scope);
+                    }
                 }
                 if let Some(draft) = l.drafts.get_mut(i) {
                     draft.focused = true;
@@ -330,8 +333,11 @@ pub fn focus_pane(s: &mut Workspace, pane: ActivePane) {
         }
         ActivePane::Secondary => {
             if let Some(SecondaryPane::Session(i)) = l.split.visible_secondary().cloned() {
-                if let Some(project) = l.app.sessions.get(i).map(|s| s.scope.project.clone()) {
-                    l.app.focus_project_context(&project);
+                if let Some(scope) = l.app.sessions.get(i).map(|s| s.scope.clone()) {
+                    l.app.focus_project_context(&scope.project);
+                    if !l.app.choices.contains_key(&scope) {
+                        l.app.refresh_choices_for(scope);
+                    }
                 }
                 if let Some(draft) = l.drafts.get_mut(i) {
                     draft.focused = true;
