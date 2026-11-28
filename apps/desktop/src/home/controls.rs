@@ -305,3 +305,39 @@ pub(super) fn effort(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> Option<El>
             .max_w(140.0),
     )
 }
+
+pub(super) fn agent(s: &Workspace, k: &Kit, layers: &mut Vec<El>) -> Option<El> {
+    let l = live(s);
+    let options = l.app.home_options();
+    let scope = l.app.home_scope()?;
+    let choices = l.app.choices.get(&scope)?;
+    if choices.agents.is_empty() {
+        return None;
+    }
+    let mut agents = vec![Choice::new("", "Default agent")];
+    agents.extend(
+        choices
+            .agents
+            .iter()
+            .map(|a| Choice::new(&a.id, crate::select::choice_label(a))),
+    );
+    Some(
+        Select::choices("home-agent", agents)
+            .label("Agent")
+            .current(Some(options.agent.as_deref().unwrap_or("")))
+            .open(l.home.menu == Menu::Agent)
+            .on_toggle(|s| toggle_menu(s, Menu::Agent))
+            .on_close(close_menu)
+            .on_choose(|s: &mut Workspace, value, _| {
+                let l = live_mut(s);
+                let mut options = l.app.home_options();
+                options.agent = (!value.is_empty()).then(|| value.into());
+                l.app.home.draft.provider = Some(l.app.home_provider());
+                l.app.home.draft.options = options;
+                l.home.menu = Menu::Closed;
+                l.focus();
+            })
+            .build(k, layers)
+            .max_w(140.0),
+    )
+}

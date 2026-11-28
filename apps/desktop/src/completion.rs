@@ -6,7 +6,7 @@ use crate::{
     live::{live, live_mut},
     ui,
 };
-use caelum_core::application::{Completion, CompletionKind, Provider, Task};
+use caelum_core::application::{Completion, CompletionKind, Task};
 use owner::EditorOwner;
 use rune::{El, Key, KeyEvent, ScrollSpec, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{Kit, Placement, ScrollBar, popover};
@@ -308,6 +308,15 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.live.is_none() {
         return false;
     }
+    if event.key == Key::Tab
+        && event.mods.shift
+        && !event.mods.cmd
+        && !event.mods.ctrl
+        && !event.mods.alt
+        && cycle_agent(s)
+    {
+        return true;
+    }
     let Some(editor) = editor(s) else {
         return false;
     };
@@ -376,35 +385,76 @@ pub fn on_key(s: &mut Workspace, event: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
     }
-    if event.key == Key::Tab
-        && event.mods.shift
-        && !event.mods.cmd
-        && !event.mods.ctrl
-        && !event.mods.alt
+    let _ = live_mut(s);
+    false
+}
+
+fn cycle_agent(s: &mut Workspace) -> bool {
+    let l = live(s);
+    if l.panels.overlay().is_some()
+        || l.models.is_open()
+        || editor(s).is_some_and(|e| e.preedit().is_some())
     {
-        let l = live_mut(s);
-        let session = &mut l.app.sessions[index];
-        if session.scope.provider == Provider::OpenCode
-            && !session.archived()
-            && !session.forgotten()
-            && !session.archiving()
-            && let Some(choices) = l.app.choices.get(&session.scope)
-            && !choices.agents.is_empty()
-        {
+        return false;
+    }
+    match l.panels.screen {
+        crate::panels::Screen::Home => {
+            let Some(scope) = l.app.home_scope() else {
+                return false;
+            };
+            let Some(choices) = l.app.choices.get(&scope) else {
+                return false;
+            };
+            if choices.agents.is_empty() {
+                return false;
+            }
+            let current = l.app.home_options().agent;
+            let next = choices
+                .agents
+                .iter()
+                .position(|a| Some(&a.id) == current.as_ref())
+                .map_or(0, |i| (i + 1) % choices.agents.len());
+            let next_id = choices.agents[next].id.clone();
+            let l = live_mut(s);
+            let mut options = l.app.home_options();
+            options.agent = Some(next_id);
+            l.app.home.draft.provider = Some(l.app.home_provider());
+            l.app.home.draft.options = options;
+            l.focus();
+            true
+        }
+        crate::panels::Screen::Conversation => {
+            let Some(index) = crate::split::composer_target(l) else {
+                return false;
+            };
+            if crate::questions::active(l, index).is_some() || l.commands.side_owner == Some(index)
+            {
+                return false;
+            }
+            let session = &l.app.sessions[index];
+            if session.archived() || session.forgotten() || session.archiving() {
+                return false;
+            }
+            let Some(choices) = l.app.choices.get(&session.scope) else {
+                return false;
+            };
+            if choices.agents.is_empty() {
+                return false;
+            }
             let next = choices
                 .agents
                 .iter()
                 .position(|a| Some(&a.id) == session.options.agent.as_ref())
                 .map_or(0, |i| (i + 1) % choices.agents.len());
-            session.options.agent = Some(choices.agents[next].id.clone());
+            let next_id = choices.agents[next].id.clone();
+            let l = live_mut(s);
+            l.app.sessions[index].options.agent = Some(next_id);
             l.app.options_changed(index);
             l.focus();
-            return true;
+            true
         }
+        _ => false,
     }
-
-    let _ = live_mut(s);
-    false
 }
 
 pub fn overlay(s: &Workspace, k: &Kit, layers: &mut Vec<El>) {

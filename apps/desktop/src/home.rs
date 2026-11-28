@@ -24,6 +24,7 @@ enum Menu {
     Projects,
     Provider,
     Effort,
+    Agent,
 }
 
 pub(crate) struct Background {
