@@ -12,10 +12,17 @@ use crate::{
     quiet_button, ui,
 };
 
-pub const CLEARANCE: f32 = 188.0;
+pub const MIN_CLEARANCE: f32 = 188.0;
+const CLEARANCE_GAP: f32 = 24.0;
+
+pub fn clearance() -> f32 {
+    rune::memo::window_layout("composer-overlay")
+        .map_or(MIN_CLEARANCE, |r| (r[3] + CLEARANCE_GAP).max(MIN_CLEARANCE))
+}
 
 pub fn overlay(composer: El) -> El {
     col()
+        .key("composer-overlay")
         .pin(Some(0.0), None, Some(0.0), Some(0.0))
         .items_center()
         .child(composer)
