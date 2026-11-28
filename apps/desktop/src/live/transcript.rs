@@ -68,9 +68,11 @@ pub fn transcript_for(
     }
     let prefix = if split { "split" } else { "live" };
     let peaceful = live.app.preferences.peaceful_mode;
+    let clearance = crate::composer::clearance();
     let mut version = DefaultHasher::new();
     index.hash(&mut version);
     peaceful.hash(&mut version);
+    (clearance.round() as u32).hash(&mut version);
     let visible: Rc<Vec<_>> = Rc::new(
         live.app.sessions[index]
             .conversation
@@ -693,7 +695,7 @@ pub(super) fn timeline_row(
                 .child(super::approval_rules::actions(live, prompt, k)),
         );
     }
-    content.pb(12.0 + crate::composer::CLEARANCE)
+    content.pb(12.0 + crate::composer::clearance())
 }
 
 fn dismissible_notice(

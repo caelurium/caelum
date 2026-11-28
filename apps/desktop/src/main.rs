@@ -183,7 +183,7 @@ fn transcript(
         .max_w(840.0)
         .px(padding)
         .pt(28.0)
-        .pb(28.0 + composer::CLEARANCE)
+        .pb(28.0 + composer::clearance())
         .gap(28.0);
     if s.active().turns.is_empty() {
         content = content.child(

@@ -248,6 +248,61 @@ fn antigravity_text_only_history_adopts_optimistic_image_prompts_in_order() {
 }
 
 #[test]
+fn antigravity_merged_user_replay_adopts_all_optimistic_image_prompts_in_order() {
+    let first_image = Attachment::image("first.png".into(), b"\x89PNG\r\n\x1a\nfirst").unwrap();
+    let second_image = Attachment::image("second.png".into(), b"\x89PNG\r\n\x1a\nsecond").unwrap();
+    let third_image = Attachment::image("third.png".into(), b"\x89PNG\r\n\x1a\nthird").unwrap();
+    let first_prompt = super::super::composer::with_context(
+        "Initial prompt with details",
+        std::slice::from_ref(&first_image),
+    );
+    let second_prompt = super::super::composer::with_context(
+        "here is an additional example",
+        std::slice::from_ref(&second_image),
+    );
+    let third_prompt = super::super::composer::with_context(
+        "Here is another example",
+        std::slice::from_ref(&third_image),
+    );
+
+    let mut conversation = Conversation::default();
+    conversation.optimistic("local-1".into(), first_prompt);
+    conversation.optimistic("local-2".into(), second_prompt);
+    conversation.optimistic("local-3".into(), third_prompt);
+    conversation.history(
+        Provider::Antigravity,
+        &[
+            json!({
+                "id": "acp-user-1",
+                "type": "user",
+                "text": "Initial prompt with detailshere is an additional exampleHere is another example"
+            }),
+            json!({
+                "id": "acp-assistant-2",
+                "type": "assistant",
+                "text": "Fixed all three cases."
+            }),
+        ],
+        false,
+    );
+
+    assert!(conversation.entries.iter().all(|e| !e.optimistic()));
+    assert_eq!(
+        conversation
+            .entries
+            .iter()
+            .map(|e| e.kind())
+            .collect::<Vec<_>>(),
+        vec![EntryKind::User, EntryKind::Assistant]
+    );
+    let attachments = split_context(&conversation.entries[0].text).1;
+    assert_eq!(attachments.len(), 3);
+    assert_eq!(attachments[0].content, first_image.content);
+    assert_eq!(attachments[1].content, second_image.content);
+    assert_eq!(attachments[2].content, third_image.content);
+}
+
+#[test]
 fn delayed_history_preserves_live_tool_output_snapshots() {
     let mut conversation = Conversation::default();
     let history = vec![json!({"id":"message","type":"assistant","content":[{
