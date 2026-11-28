@@ -307,3 +307,47 @@ fn growing_composer_floats_over_transcript_without_shrinking_panes() {
         right_after[1] + right_after[3] >= split_composer_after[1] + split_composer_after[3] - 1.0
     );
 }
+
+#[test]
+fn tall_composer_maintains_bottom_clearance_above_composer_when_at_bottom() {
+    use caelum_core::application::Provider;
+
+    let mut rt = live_runtime_size((1280.0, 900.0));
+    rt.update(|s, _| {
+        let l = s.live.as_mut().unwrap();
+        let scope = l.app.sessions[0].scope.clone();
+        l.app.project_draft(scope);
+        l.sync_editors();
+        let turns: Vec<_> = (0..12)
+            .map(|n| {
+                serde_json::json!({
+                    "id": format!("turn-{n}"),
+                    "status": "completed",
+                    "items": [
+                        { "id": format!("user-{n}"), "type": "userMessage", "content": [{ "text": format!("Prompt {n}") }] },
+                        { "id": format!("reply-{n}"), "type": "agentMessage", "text": format!("Response {n} with enough text to fill the viewport.") }
+                    ]
+                })
+            })
+            .collect();
+        l.app.sessions[0]
+            .conversation
+            .history(Provider::Codex, &turns, false);
+        l.app.select(0);
+    });
+    advance(&mut rt, 0.3);
+
+    fill(
+        &mut rt,
+        "live-draft-0",
+        &"Long multiline prompt line\n".repeat(12),
+    );
+    advance(&mut rt, 0.3);
+
+    let last = element(&rt, "live-entry-0-codex-reply-11").rect;
+    let composer = element(&rt, "message-composer").rect;
+    assert!(
+        composer[1] - (last[1] + last[3]) >= 20.0,
+        "expected comfortable gap between last message and tall composer: last={last:?}, composer={composer:?}"
+    );
+}

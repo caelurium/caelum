@@ -98,7 +98,9 @@ pub(super) fn view(
             _ => None,
         })
         .flatten();
+    let clearance = crate::composer::clearance();
     pending.is_some().hash(&mut identities);
+    (clearance.round() as u32).hash(&mut identities);
     let viewport = col()
         .key(format!("remote-transcript-{owner}"))
         .role("region")
@@ -181,10 +183,7 @@ pub(super) fn view(
                     },
                     move |s: &Workspace, i| {
                         if i == tail {
-                            return rune::el()
-                                .w_full()
-                                .h(crate::composer::CLEARANCE)
-                                .a11y_hidden();
+                            return rune::el().w_full().h(clearance).a11y_hidden();
                         }
                         let Some(c) = live(s)
                             .app
